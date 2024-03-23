@@ -91,6 +91,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             tokenizer](https://github.com/google-research/pegasus/blob/939830367bcf411193d2b5eca2f2f90f3f9260ca/pegasus/ops/pretrain_parsing_ops.cc#L66)
             that uses the tokens 2 - 104 only for pretraining
     """
+
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
@@ -143,6 +144,8 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         # is different from default, we must rebuild the vocab
         from_slow = kwargs.pop("from_slow", None)
         from_slow = from_slow or str(pad_token) != "<pad>" or str(eos_token) != "</s>" or str(unk_token) != "<unk>"
+
+        kwargs.pop("added_tokens_decoder", {})
 
         super().__init__(
             vocab_file,

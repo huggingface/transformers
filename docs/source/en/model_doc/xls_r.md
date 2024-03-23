@@ -34,14 +34,18 @@ language identification. Moreover, we show that with sufficient model size, cros
 English-only pretraining when translating English speech into other languages, a setting which favors monolingual
 pretraining. We hope XLS-R can help to improve speech processing tasks for many more languages of the world.*
 
-Tips:
+Relevant checkpoints can be found under https://huggingface.co/models?other=xls_r.
+
+The original code can be found [here](https://github.com/pytorch/fairseq/tree/master/fairseq/models/wav2vec).
+
+## Usage tips
 
 - XLS-R is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
 - XLS-R model was trained using connectionist temporal classification (CTC) so the model output has to be decoded using
   [`Wav2Vec2CTCTokenizer`].
 
-Relevant checkpoints can be found under https://huggingface.co/models?other=xls_r.
+<Tip>
 
-XLS-R's architecture is based on the Wav2Vec2 model, so one can refer to [Wav2Vec2's documentation page](wav2vec2).
+XLS-R's architecture is based on the Wav2Vec2 model, refer to [Wav2Vec2's documentation page](wav2vec2) for API reference.
 
-The original code can be found [here](https://github.com/pytorch/fairseq/tree/master/fairseq/models/wav2vec).
+</Tip>

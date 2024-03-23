@@ -45,7 +45,9 @@ language processing tasks, including pushing the GLUE score to 80.5% (7.7% point
 accuracy to 86.7% (4.6% absolute improvement), SQuAD v1.1 question answering Test F1 to 93.2 (1.5 point absolute
 improvement) and SQuAD v2.0 Test F1 to 83.1 (5.1 point absolute improvement).*
 
-Tips:
+This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://github.com/google-research/bert).
+
+## Usage tips
 
 - BERT is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
   the left.
@@ -58,10 +60,6 @@ Tips:
     * the same token with probability 0.1
     
 - The model must predict the original sentence, but has a second objective: inputs are two sentences A and B (with a separation token in between). With probability 50%, the sentences are consecutive in the corpus, in the remaining 50% they are not related. The model has to predict if the sentences are consecutive or not.
-
-
-
-This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://github.com/google-research/bert).
 
 ## Resources
 
@@ -81,7 +79,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 <PipelineTag pipeline="token-classification"/>
 
 - A blog post on how to use [Hugging Face Transformers with Keras: Fine-tune a non-English BERT for Named Entity Recognition](https://www.philschmid.de/huggingface-transformers-keras-tf).
-- A notebook for [Finetuning BERT for named-entity recognition](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/Custom_Named_Entity_Recognition_with_BERT_only_first_wordpiece.ipynb) using only the first wordpiece of each word in the word label during tokenization. To propagate the label of the word to all wordpieces, see this [version](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/BERT/Custom_Named_Entity_Recognition_with_BERT.ipynb) of the notebook instead.
+- A notebook for [Finetuning BERT for named-entity recognition](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/BERT/Custom_Named_Entity_Recognition_with_BERT_only_first_wordpiece.ipynb) using only the first wordpiece of each word in the word label during tokenization. To propagate the label of the word to all wordpieces, see this [version](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/BERT/Custom_Named_Entity_Recognition_with_BERT.ipynb) of the notebook instead.
 - [`BertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb).
 - [`TFBertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
 - [`FlaxBertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/token-classification).
@@ -137,13 +135,22 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
+<frameworkcontent>
+<pt>
+
 ## BertTokenizerFast
 
 [[autodoc]] BertTokenizerFast
 
+</pt>
+<tf>
+
 ## TFBertTokenizer
 
 [[autodoc]] TFBertTokenizer
+
+</tf>
+</frameworkcontent>
 
 ## Bert specific outputs
 
@@ -152,6 +159,10 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] models.bert.modeling_tf_bert.TFBertForPreTrainingOutput
 
 [[autodoc]] models.bert.modeling_flax_bert.FlaxBertForPreTrainingOutput
+
+
+<frameworkcontent>
+<pt>
 
 ## BertModel
 
@@ -198,6 +209,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] BertForQuestionAnswering
     - forward
 
+</pt>
+<tf>
+
 ## TFBertModel
 
 [[autodoc]] TFBertModel
@@ -243,6 +257,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] TFBertForQuestionAnswering
     - call
 
+</tf>
+<jax>
+
 ## FlaxBertModel
 
 [[autodoc]] FlaxBertModel
@@ -287,3 +304,8 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] FlaxBertForQuestionAnswering
     - __call__
+
+</jax>
+</frameworkcontent>
+
+

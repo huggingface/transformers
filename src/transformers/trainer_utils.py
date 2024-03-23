@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Utilities for the Trainer and TFTrainer class. Should be independent from PyTorch and TensorFlow.
+PyTorch-independent utilities for the Trainer class.
 """
 
 import copy
@@ -37,7 +37,7 @@ from .utils import (
     is_torch_cuda_available,
     is_torch_mps_available,
     is_torch_npu_available,
-    is_torch_tpu_available,
+    is_torch_xla_available,
     is_torch_xpu_available,
     requires_backends,
 )
@@ -82,12 +82,15 @@ def enable_full_determinism(seed: int, warn_only: bool = False):
         tf.config.experimental.enable_op_determinism()
 
 
-def set_seed(seed: int):
+def set_seed(seed: int, deterministic: bool = False):
     """
     Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` and/or `tf` (if installed).
 
     Args:
-        seed (`int`): The seed to set.
+        seed (`int`):
+            The seed to set.
+        deterministic (`bool`, *optional*, defaults to `False`):
+            Whether to use deterministic algorithms where available. Can slow down training.
     """
     random.seed(seed)
     np.random.seed(seed)
@@ -95,6 +98,8 @@ def set_seed(seed: int):
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
         # ^^ safe to call this function even if cuda is not available
+        if deterministic:
+            torch.use_deterministic_algorithms(True)
     if is_torch_npu_available():
         torch.npu.manual_seed_all(seed)
     if is_torch_xpu_available():
@@ -103,6 +108,34 @@ def set_seed(seed: int):
         import tensorflow as tf
 
         tf.random.set_seed(seed)
+        if deterministic:
+            tf.config.experimental.enable_op_determinism()
+
+
+def neftune_post_forward_hook(module, input, output):
+    """
+    Implements the NEFTune forward pass for the model using forward hooks. Note this works only for torch.nn.Embedding
+    layers. This method is slightly adapted from the original source code that can be found here:
+    https://github.com/neelsjain/NEFTune Simply add it to your model as follows:
+    ```python
+    model = ...
+    model.embed_tokens.neftune_noise_alpha = 0.1
+    model.embed_tokens.register_forward_hook(neftune_post_forward_hook)
+    ```
+    Args:
+        module (`torch.nn.Module`):
+            The embedding module where the hook is attached. Note that you need to set `module.neftune_noise_alpha` to
+            the desired noise alpha value.
+        input (`torch.Tensor`):
+            The input tensor to the model.
+        output (`torch.Tensor`):
+            The output tensor of the model (i.e. the embeddings).
+    """
+    if module.training:
+        dims = torch.tensor(output.size(1) * output.size(2))
+        mag_norm = module.neftune_noise_alpha / torch.sqrt(dims)
+        output = output + torch.zeros_like(output).uniform_(-mag_norm, mag_norm)
+    return output
 
 
 class EvalPrediction:
@@ -314,7 +347,7 @@ def is_main_process(local_rank):
     Whether or not the current process is the local process, based on `xm.get_ordinal()` (for TPUs) first, then on
     `local_rank`.
     """
-    if is_torch_tpu_available(check_device=True):
+    if is_torch_xla_available():
         import torch_xla.core.xla_model as xm
 
         return xm.get_ordinal() == 0
@@ -325,7 +358,7 @@ def total_processes_number(local_rank):
     """
     Return the number of processes launched in parallel. Works with `torch.distributed` and TPUs.
     """
-    if is_torch_tpu_available(check_device=True):
+    if is_torch_xla_available():
         import torch_xla.core.xla_model as xm
 
         return xm.xrt_world_size()
@@ -347,6 +380,7 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None, num_token
     - split: name to prefix metric (like train, eval, test...)
     - start_time: operation start time
     - num_samples: number of samples processed
+    - num_steps: number of steps processed
     - num_tokens: number of tokens processed
     """
     runtime = time.time() - start_time
@@ -435,6 +469,11 @@ class TrainerMemoryTracker:
 
             self.torch = torch
             self.gpu = {}
+        elif is_torch_npu_available():
+            import torch
+
+            self.torch = torch
+            self.gpu = {}
         else:
             self.torch = None
 
@@ -491,6 +530,11 @@ class TrainerMemoryTracker:
             elif is_torch_xpu_available():
                 self.torch.xpu.reset_peak_memory_stats()
                 self.torch.xpu.empty_cache()
+            elif is_torch_npu_available():
+                self.torch.npu.reset_peak_memory_stats()
+                self.torch.npu.empty_cache()
+            elif is_torch_mps_available():
+                self.torch.mps.empty_cache()
 
         # gpu
         if self.torch is not None:
@@ -498,6 +542,10 @@ class TrainerMemoryTracker:
                 self.gpu_mem_used_at_start = self.torch.cuda.memory_allocated()
             elif is_torch_xpu_available():
                 self.gpu_mem_used_at_start = self.torch.xpu.memory_allocated()
+            elif is_torch_npu_available():
+                self.gpu_mem_used_at_start = self.torch.npu.memory_allocated()
+            elif is_torch_mps_available():
+                self.gpu_mem_used_at_start = self.torch.mps.current_allocated_memory()
 
         # cpu
         self.cpu_mem_used_at_start = self.cpu_mem_used()
@@ -525,6 +573,10 @@ class TrainerMemoryTracker:
                 self.torch.cuda.empty_cache()
             elif is_torch_xpu_available():
                 self.torch.xpu.empty_cache()
+            elif is_torch_npu_available():
+                self.torch.npu.empty_cache()
+            elif is_torch_mps_available():
+                self.torch.mps.empty_cache()
 
         # concepts:
         # - alloc_delta:  the difference of allocated memory between the end and the start
@@ -539,6 +591,14 @@ class TrainerMemoryTracker:
             elif is_torch_xpu_available():
                 self.gpu_mem_used_now = self.torch.xpu.memory_allocated()
                 self.gpu_mem_used_peak = self.torch.xpu.max_memory_allocated()
+            elif is_torch_npu_available():
+                self.gpu_mem_used_now = self.torch.npu.memory_allocated()
+                self.gpu_mem_used_peak = self.torch.npu.max_memory_allocated()
+            elif is_torch_mps_available():
+                self.gpu_mem_used_now = self.torch.mps.current_allocated_memory()
+                # self.torch.mps.max_memory_allocated() does not exist yet
+                self.gpu_mem_used_peak = None
+
             else:
                 raise ValueError("No available GPU device found!")
 
@@ -546,8 +606,11 @@ class TrainerMemoryTracker:
                 "begin": self.gpu_mem_used_at_start,
                 "end": self.gpu_mem_used_now,
                 "alloc": (self.gpu_mem_used_now - self.gpu_mem_used_at_start),
-                "peaked": max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now),
             }
+            if self.gpu_mem_used_peak is not None:
+                self.gpu[self.cur_stage]["peaked"] = max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now)
+            else:
+                self.gpu[self.cur_stage]["peaked"] = "Not available"
 
         # cpu
         self.cpu_mem_used_now = self.cpu_mem_used()
@@ -686,6 +749,8 @@ class FSDPOption(ExplicitEnum):
     FULL_SHARD = "full_shard"
     SHARD_GRAD_OP = "shard_grad_op"
     NO_SHARD = "no_shard"
+    HYBRID_SHARD = "hybrid_shard"
+    HYBRID_SHARD_ZERO2 = "hybrid_shard_zero2"
     OFFLOAD = "offload"
     AUTO_WRAP = "auto_wrap"
 
@@ -727,3 +792,42 @@ class RemoveColumnsCollator:
     def __call__(self, features: List[dict]):
         features = [self._remove_columns(feature) for feature in features]
         return self.data_collator(features)
+
+
+def check_target_module_exists(optim_target_modules, key: str, return_is_regex: bool = False):
+    """A helper method to check if the passed module's key name matches any of the target modules in the optim_target_modules.
+
+    Args:
+        optim_target_modules (`Union[str, List[str]]`):
+            A list of strings to try to match. Can be also a full string.
+        key (`str`):
+            A key to search any matches in optim_target_modules
+        return_is_regex (`bool`):
+            If set to `True`, the method will return whether the passed `optim_target_modules`
+            is a regex or not.
+
+    Returns:
+        `bool` : True of match object if key matches any target modules from config, False or
+        None if no match found
+        `bool` : If the matched target module is a regex to silence out the warnings in Trainer
+        for extra modules being found (only if `target_module_found=True` for an array of regex).
+    """
+    target_module_found = False
+    is_regex = False
+
+    if isinstance(optim_target_modules, str):
+        target_module_found = bool(re.fullmatch(optim_target_modules, key))
+        is_regex = True if not optim_target_modules == key else False
+    elif key in optim_target_modules:  # from here, target_module_found must be a list of str
+        # this module is specified directly in target_modules
+        target_module_found = True
+    elif any(target_key in key for target_key in optim_target_modules):
+        target_module_found = True
+    elif any(bool(re.fullmatch(optim_target_module, key)) for optim_target_module in optim_target_modules):
+        target_module_found = True
+        is_regex = True
+
+    if return_is_regex:
+        return target_module_found, is_regex
+
+    return target_module_found

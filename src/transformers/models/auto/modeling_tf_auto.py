@@ -39,6 +39,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("clip", "TFCLIPModel"),
         ("convbert", "TFConvBertModel"),
         ("convnext", "TFConvNextModel"),
+        ("convnextv2", "TFConvNextV2Model"),
         ("ctrl", "TFCTRLModel"),
         ("cvt", "TFCvtModel"),
         ("data2vec-vision", "TFData2VecVisionModel"),
@@ -200,6 +201,7 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image-classsification
         ("convnext", "TFConvNextForImageClassification"),
+        ("convnextv2", "TFConvNextV2ForImageClassification"),
         ("cvt", "TFCvtForImageClassification"),
         ("data2vec-vision", "TFData2VecVisionForImageClassification"),
         ("deit", ("TFDeiTForImageClassification", "TFDeiTForImageClassificationWithTeacher")),
@@ -619,7 +621,9 @@ class TFAutoModelForSeq2SeqLM(_BaseAutoModelClass):
 
 
 TFAutoModelForSeq2SeqLM = auto_class_update(
-    TFAutoModelForSeq2SeqLM, head_doc="sequence-to-sequence language modeling", checkpoint_for_example="t5-base"
+    TFAutoModelForSeq2SeqLM,
+    head_doc="sequence-to-sequence language modeling",
+    checkpoint_for_example="google-t5/t5-base",
 )
 
 

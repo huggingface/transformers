@@ -17,7 +17,14 @@
 import unittest
 
 from transformers import MegaConfig, is_torch_available
-from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    TestCasePlus,
+    is_flaky,
+    require_torch,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -528,6 +535,18 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.model_tester = MegaModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MegaConfig, hidden_size=37)
 
+    # TODO: @ydshieh
+    @is_flaky(description="Sometimes gives `AssertionError` on expected outputs")
+    def test_pipeline_fill_mask(self):
+        super().test_pipeline_fill_mask()
+
+    # TODO: @ydshieh
+    @is_flaky(
+        description="Sometimes gives `RuntimeError: probability tensor contains either `inf`, `nan` or element < 0`"
+    )
+    def test_pipeline_text_generation(self):
+        super().test_pipeline_text_generation()
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -619,12 +638,12 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_sequence_length_beyond_max_positions(*config_and_inputs)
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_ids, _, attention_mask, *_ = self.model_tester.prepare_config_and_inputs_for_decoder()
         # attention_mask = torch.LongTensor(input_ids.ne(1)).to(torch_device)
         model = MegaForCausalLM(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 

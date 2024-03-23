@@ -24,6 +24,7 @@ from torch import nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
 
+from .trainer_pt_utils import LayerWiseDummyOptimizer, LayerWiseDummyScheduler
 from .trainer_utils import SchedulerType
 from .utils import logging
 from .utils.versions import require_version
@@ -53,19 +54,22 @@ def get_constant_schedule(optimizer: Optimizer, last_epoch: int = -1):
     return LambdaLR(optimizer, _get_constant_lambda, last_epoch=last_epoch)
 
 
-def get_reduce_on_plateau_schedule(optimizer: Optimizer):
+def get_reduce_on_plateau_schedule(optimizer: Optimizer, **kwargs):
     """
     Create a schedule with a constant learning rate that decreases when a metric has stopped improving.
 
     Args:
         optimizer ([`~torch.optim.Optimizer`]):
             The optimizer for which to schedule the learning rate.
+        kwargs (`dict`, *optional*):
+            Extra parameters to be passed to the scheduler. See `torch.optim.lr_scheduler.ReduceLROnPlateau`
+            for possible parameters.
 
     Return:
         `torch.optim.lr_scheduler.ReduceLROnPlateau` with the appropriate schedule.
     """
 
-    return ReduceLROnPlateau(optimizer)
+    return ReduceLROnPlateau(optimizer, **kwargs)
 
 
 def _get_constant_schedule_with_warmup_lr_lambda(current_step: int, *, num_warmup_steps: int):
@@ -314,7 +318,7 @@ def get_inverse_sqrt_schedule(
     # https://github.com/google-research/big_vision/blob/f071ce68852d56099437004fd70057597a95f6ef/big_vision/utils.py#L930
 
     if timescale is None:
-        timescale = num_warmup_steps
+        timescale = num_warmup_steps or 10_000
 
     lr_lambda = partial(_get_inverse_sqrt_schedule_lr_lambda, num_warmup_steps=num_warmup_steps, timescale=timescale)
     return LambdaLR(optimizer, lr_lambda, last_epoch=last_epoch)
@@ -337,6 +341,7 @@ def get_scheduler(
     optimizer: Optimizer,
     num_warmup_steps: Optional[int] = None,
     num_training_steps: Optional[int] = None,
+    scheduler_specific_kwargs: Optional[dict] = None,
 ):
     """
     Unified API to get any scheduler from its name.
@@ -352,11 +357,47 @@ def get_scheduler(
         num_training_steps (`int``, *optional*):
             The number of training steps to do. This is not required by all schedulers (hence the argument being
             optional), the function will raise an error if it's unset and the scheduler type requires it.
+        scheduler_specific_kwargs (`dict`, *optional*):
+            Extra parameters for schedulers such as cosine with restarts. Mismatched scheduler types and scheduler
+            parameters will cause the scheduler function to raise a TypeError.
     """
     name = SchedulerType(name)
     schedule_func = TYPE_TO_SCHEDULER_FUNCTION[name]
-    if name == SchedulerType.CONSTANT or name == SchedulerType.REDUCE_ON_PLATEAU:
+
+    # If a `LayerWiseDummyOptimizer` is passed we extract the optimizer dict and
+    # recursively call `get_scheduler` to get the proper schedulers on each parameter
+    if optimizer is not None and isinstance(optimizer, LayerWiseDummyOptimizer):
+        optimizer_dict = optimizer.optimizer_dict
+        scheduler_dict = {}
+
+        for param in optimizer_dict.keys():
+            scheduler_dict[param] = get_scheduler(
+                name,
+                optimizer=optimizer_dict[param],
+                num_warmup_steps=num_warmup_steps,
+                num_training_steps=num_training_steps,
+            )
+
+        def scheduler_hook(param):
+            # Since the optimizer hook has been already attached we only need to
+            # attach the scheduler hook
+            if param.grad is not None:
+                scheduler_dict[param].step()
+
+        for param in optimizer_dict.keys():
+            if param.requires_grad:
+                param.register_post_accumulate_grad_hook(scheduler_hook)
+
+        return LayerWiseDummyScheduler()
+
+    if name == SchedulerType.CONSTANT:
         return schedule_func(optimizer)
+
+    if scheduler_specific_kwargs is None:
+        scheduler_specific_kwargs = {}
+
+    if name == SchedulerType.REDUCE_ON_PLATEAU:
+        return schedule_func(optimizer, **scheduler_specific_kwargs)
 
     # All other schedulers require `num_warmup_steps`
     if num_warmup_steps is None:
@@ -372,7 +413,12 @@ def get_scheduler(
     if num_training_steps is None:
         raise ValueError(f"{name} requires `num_training_steps`, please provide that argument.")
 
-    return schedule_func(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
+    return schedule_func(
+        optimizer,
+        num_warmup_steps=num_warmup_steps,
+        num_training_steps=num_training_steps,
+        **scheduler_specific_kwargs,
+    )
 
 
 class AdamW(Optimizer):

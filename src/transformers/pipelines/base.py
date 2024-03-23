@@ -34,7 +34,17 @@ from ..image_processing_utils import BaseImageProcessor
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import ModelOutput, add_end_docstrings, infer_framework, is_tf_available, is_torch_available, logging
+from ..utils import (
+    ModelOutput,
+    add_end_docstrings,
+    infer_framework,
+    is_tf_available,
+    is_torch_available,
+    is_torch_cuda_available,
+    is_torch_npu_available,
+    is_torch_xpu_available,
+    logging,
+)
 
 
 GenericTensor = Union[List["GenericTensor"], "torch.Tensor", "tf.Tensor"]
@@ -693,14 +703,33 @@ class _ScikitCompat(ABC):
         raise NotImplementedError()
 
 
-PIPELINE_INIT_ARGS = r"""
+def build_pipeline_init_args(
+    has_tokenizer: bool = False,
+    has_feature_extractor: bool = False,
+    has_image_processor: bool = False,
+    supports_binary_output: bool = True,
+) -> str:
+    docstring = r"""
     Arguments:
         model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
+            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow."""
+    if has_tokenizer:
+        docstring += r"""
         tokenizer ([`PreTrainedTokenizer`]):
             The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
-            [`PreTrainedTokenizer`].
+            [`PreTrainedTokenizer`]."""
+    if has_feature_extractor:
+        docstring += r"""
+        feature_extractor ([`SequenceFeatureExtractor`]):
+            The feature extractor that will be used by the pipeline to encode data for the model. This object inherits from
+            [`SequenceFeatureExtractor`]."""
+    if has_image_processor:
+        docstring += r"""
+        image_processor ([`BaseImageProcessor`]):
+            The image processor that will be used by the pipeline to encode data for the model. This object inherits from
+            [`BaseImageProcessor`]."""
+    docstring += r"""
         modelcard (`str` or [`ModelCard`], *optional*):
             Model card attributed to the model for this pipeline.
         framework (`str`, *optional*):
@@ -723,10 +752,22 @@ PIPELINE_INIT_ARGS = r"""
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (`int`, *optional*, defaults to -1):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id. You can pass native `torch.device` or a `str` too.
+            the associated CUDA device id. You can pass native `torch.device` or a `str` too
+        torch_dtype (`str` or `torch.dtype`, *optional*):
+            Sent directly as `model_kwargs` (just a simpler shortcut) to use the available precision for this model
+            (`torch.float16`, `torch.bfloat16`, ... or `"auto"`)"""
+    if supports_binary_output:
+        docstring += r"""
         binary_output (`bool`, *optional*, defaults to `False`):
-            Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
-"""
+            Flag indicating if the output the pipeline should happen in a serialized format (i.e., pickle) or as
+            the raw output data e.g. text."""
+    return docstring
+
+
+PIPELINE_INIT_ARGS = build_pipeline_init_args(
+    has_tokenizer=True, has_feature_extractor=True, has_image_processor=True, supports_binary_output=True
+)
+
 
 if is_torch_available():
     from transformers.pipelines.pt_utils import (
@@ -737,7 +778,7 @@ if is_torch_available():
     )
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True, has_feature_extractor=True, has_image_processor=True))
 class Pipeline(_ScikitCompat):
     """
     The Pipeline class is the class from which all pipelines inherit. Refer to this class for methods shared across
@@ -792,10 +833,6 @@ class Pipeline(_ScikitCompat):
                 "discard the `device` argument when creating your pipeline object."
             )
 
-        # We shouldn't call `model.to()` for models loaded with accelerate
-        if self.framework == "pt" and device is not None and not (isinstance(device, int) and device < 0):
-            self.model.to(device)
-
         if device is None:
             if hf_device_map is not None:
                 # Take the first device used by `accelerate`.
@@ -805,17 +842,36 @@ class Pipeline(_ScikitCompat):
 
         if is_torch_available() and self.framework == "pt":
             if isinstance(device, torch.device):
+                if device.type == "xpu" and not is_torch_xpu_available(check_device=True):
+                    raise ValueError(f'{device} is not available, you should use device="cpu" instead')
                 self.device = device
             elif isinstance(device, str):
+                if "xpu" in device and not is_torch_xpu_available(check_device=True):
+                    raise ValueError(f'{device} is not available, you should use device="cpu" instead')
                 self.device = torch.device(device)
             elif device < 0:
                 self.device = torch.device("cpu")
-            else:
+            elif is_torch_cuda_available():
                 self.device = torch.device(f"cuda:{device}")
+            elif is_torch_npu_available():
+                self.device = torch.device(f"npu:{device}")
+            elif is_torch_xpu_available(check_device=True):
+                self.device = torch.device(f"xpu:{device}")
+            else:
+                raise ValueError(f"{device} unrecognized or not available.")
         else:
             self.device = device if device is not None else -1
         self.torch_dtype = torch_dtype
         self.binary_output = binary_output
+
+        # We shouldn't call `model.to()` for models loaded with accelerate
+        if (
+            self.framework == "pt"
+            and self.device is not None
+            and not (isinstance(self.device, int) and self.device < 0)
+            and hf_device_map is None
+        ):
+            self.model.to(self.device)
 
         # Update config and generation_config with task specific parameters
         task_specific_params = self.model.config.task_specific_params
@@ -829,6 +885,16 @@ class Pipeline(_ScikitCompat):
         self._num_workers = kwargs.pop("num_workers", None)
         self._preprocess_params, self._forward_params, self._postprocess_params = self._sanitize_parameters(**kwargs)
 
+        # Pipelines calling `generate`: if the tokenizer has a pad token but the model doesn't, set it in the
+        # forward params so that `generate` is aware of the pad token.
+        if (
+            self.tokenizer is not None
+            and self.model.can_generate()
+            and self.tokenizer.pad_token_id is not None
+            and self.model.generation_config.pad_token_id is None
+        ):
+            self._forward_params["pad_token_id"] = self.tokenizer.pad_token_id
+
         if self.image_processor is None and self.feature_extractor is not None:
             if isinstance(self.feature_extractor, BaseImageProcessor):
                 # Backward compatible change, if users called
@@ -836,7 +902,7 @@ class Pipeline(_ScikitCompat):
                 # then we should keep working
                 self.image_processor = self.feature_extractor
 
-    def save_pretrained(self, save_directory: str, safe_serialization: bool = False):
+    def save_pretrained(self, save_directory: str, safe_serialization: bool = True):
         """
         Save the pipeline's model and tokenizer.
 
@@ -844,7 +910,7 @@ class Pipeline(_ScikitCompat):
             save_directory (`str`):
                 A path to the directory where to saved. It will be created if it doesn't exist.
             safe_serialization (`str`):
-                Whether to save the model using `safetensors` or the traditional way for PyTorch or Tensorflow
+                Whether to save the model using `safetensors` or the traditional way for PyTorch or Tensorflow.
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -953,8 +1019,6 @@ class Pipeline(_ScikitCompat):
         elif isinstance(inputs, tuple):
             return tuple([self._ensure_tensor_on_device(item, device) for item in inputs])
         elif isinstance(inputs, torch.Tensor):
-            if device == torch.device("cpu") and inputs.dtype in {torch.float16, torch.bfloat16}:
-                inputs = inputs.float()
             return inputs.to(device)
         else:
             return inputs
@@ -992,9 +1056,9 @@ class Pipeline(_ScikitCompat):
     def _sanitize_parameters(self, **pipeline_parameters):
         """
         _sanitize_parameters will be called with any excessive named arguments from either `__init__` or `__call__`
-        methods. It should return 3 dictionnaries of the resolved parameters used by the various `preprocess`,
-        `forward` and `postprocess` methods. Do not fill dictionnaries if the caller didn't specify a kwargs. This
-        let's you keep defaults in function signatures, which is more "natural".
+        methods. It should return 3 dictionaries of the resolved parameters used by the various `preprocess`,
+        `forward` and `postprocess` methods. Do not fill dictionaries if the caller didn't specify a kwargs. This
+        lets you keep defaults in function signatures, which is more "natural".
 
         It is not meant to be called directly, it will be automatically called and the final parameters resolved by
         `__init__` and `__call__`
@@ -1098,7 +1162,7 @@ class Pipeline(_ScikitCompat):
 
         self.call_count += 1
         if self.call_count > 10 and self.framework == "pt" and self.device.type == "cuda":
-            warnings.warn(
+            logger.warning_once(
                 "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please use a"
                 " dataset",
                 UserWarning,

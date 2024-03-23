@@ -26,6 +26,9 @@ The abstract from the paper is the following:
 
 This model was contributed by [Matthijs](https://huggingface.co/Matthijs), [Patrick Von Platen](https://huggingface.co/patrickvonplaten) and [Arthur Zucker](https://huggingface.co/ArthurZ). 
 The original code can be found [here](https://github.com/facebookresearch/encodec).
+
+## Usage example 
+
 Here is a quick example of how to encode and decode an audio using this model:
 
 ```python 
@@ -44,7 +47,6 @@ Here is a quick example of how to encode and decode an audio using this model:
 >>> # or the equivalent with a forward pass
 >>> audio_values = model(inputs["input_values"], inputs["padding_mask"]).audio_values
 ```
-
 
 ## EncodecConfig
 

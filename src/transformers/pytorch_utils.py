@@ -19,7 +19,7 @@ from packaging import version
 from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
-from .utils import is_torch_tpu_available, logging
+from .utils import is_torch_xla_available, logging
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
@@ -28,12 +28,11 @@ logger = logging.get_logger(__name__)
 
 parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
 
+is_torch_greater_or_equal_than_2_2 = parsed_torch_version_base >= version.parse("2.2")
 is_torch_greater_or_equal_than_2_1 = parsed_torch_version_base >= version.parse("2.1")
 is_torch_greater_or_equal_than_2_0 = parsed_torch_version_base >= version.parse("2.0")
+is_torch_greater_or_equal_than_1_13 = parsed_torch_version_base >= version.parse("1.13")
 is_torch_greater_or_equal_than_1_12 = parsed_torch_version_base >= version.parse("1.12")
-is_torch_greater_or_equal_than_1_11 = parsed_torch_version_base >= version.parse("1.11")
-is_torch_less_than_1_11 = parsed_torch_version_base < version.parse("1.11")
-is_torch_1_8_0 = parsed_torch_version_base == version.parse("1.8.0")
 
 
 def softmax_backward_data(parent, grad_output, output, dim, self):
@@ -44,10 +43,7 @@ def softmax_backward_data(parent, grad_output, output, dim, self):
 
     from torch import _softmax_backward_data
 
-    if is_torch_less_than_1_11:
-        return _softmax_backward_data(grad_output, output, parent.dim, self)
-    else:
-        return _softmax_backward_data(grad_output, output, parent.dim, self.dtype)
+    return _softmax_backward_data(grad_output, output, parent.dim, self.dtype)
 
 
 def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) -> nn.Linear:
@@ -286,7 +282,7 @@ def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
     guaranteed to be unique and constant for this tensor's storage during its lifetime. Two tensor storages with
     non-overlapping lifetimes may have the same id.
     """
-    if tensor.device.type == "xla" and is_torch_tpu_available():
+    if tensor.device.type == "xla" and is_torch_xla_available():
         # NOTE: xla tensors dont have storage
         # use some other unique id to distinguish.
         # this is a XLA tensor, it must be created using torch_xla's

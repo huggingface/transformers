@@ -63,7 +63,7 @@ class HubertConfig(PretrainedConfig):
         attention_dropout(`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         final_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for the final projection layer of [`Wav2Vec2ForCTC`].
+            The dropout probability for the final projection layer of [`Wav2Vec2ForCTC`].
         layerdrop (`float`, *optional*, defaults to 0.1):
             The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
             details.
@@ -159,6 +159,7 @@ class HubertConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "hubert"
 
     def __init__(

@@ -107,6 +107,7 @@ class AutoformerModelTester:
             cardinality=[self.cardinality],
             embedding_dimension=[self.embedding_dimension],
             moving_average=self.moving_average,
+            scaling="std",  # we need std to get non-zero `loc`
         )
 
     def prepare_autoformer_inputs_dict(self, config):
@@ -236,6 +237,24 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     @unittest.skip(reason="Model has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     # # Input is 'static_categorical_features' not 'input_ids'

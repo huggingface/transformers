@@ -29,14 +29,16 @@ import sys
 import tempfile
 import time
 import unittest
+from collections import defaultdict
 from collections.abc import Mapping
+from functools import wraps
 from io import StringIO
 from pathlib import Path
 from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
 from unittest import mock
+from unittest.mock import patch
 
-import huggingface_hub
-import requests
+import urllib3
 
 from transformers import logging as transformers_logging
 
@@ -52,6 +54,8 @@ from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     is_accelerate_available,
     is_apex_available,
+    is_aqlm_available,
+    is_auto_awq_available,
     is_auto_gptq_available,
     is_bitsandbytes_available,
     is_bs4_available,
@@ -65,6 +69,8 @@ from .utils import (
     is_flax_available,
     is_fsdp_available,
     is_ftfy_available,
+    is_g2p_en_available,
+    is_galore_torch_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -84,7 +90,9 @@ from .utils import (
     is_pytesseract_available,
     is_pytest_available,
     is_pytorch_quantization_available,
+    is_quanto_available,
     is_rjieba_available,
+    is_sacremoses_available,
     is_safetensors_available,
     is_scipy_available,
     is_sentencepiece_available,
@@ -92,6 +100,7 @@ from .utils import (
     is_soundfile_availble,
     is_spacy_available,
     is_sudachi_available,
+    is_sudachi_projection_available,
     is_tensorflow_probability_available,
     is_tensorflow_text_available,
     is_tf2onnx_available,
@@ -105,9 +114,10 @@ from .utils import (
     is_torch_fp16_available_on_device,
     is_torch_neuroncore_available,
     is_torch_npu_available,
+    is_torch_sdpa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
-    is_torch_tpu_available,
+    is_torch_xla_available,
     is_torch_xpu_available,
     is_torchaudio_available,
     is_torchdynamo_available,
@@ -130,9 +140,9 @@ if is_pytest_available():
         _is_mocked,
         _patch_unwrap_mock_aware,
         get_optionflags,
-        import_path,
     )
     from _pytest.outcomes import skip
+    from _pytest.pathlib import import_path
     from pytest import DoctestItem
 else:
     Module = object
@@ -316,6 +326,14 @@ def require_bs4(test_case):
     return unittest.skipUnless(is_bs4_available(), "test requires BeautifulSoup4")(test_case)
 
 
+def require_galore_torch(test_case):
+    """
+    Decorator marking a test that requires GaLore. These tests are skipped when GaLore isn't installed.
+    https://github.com/jiaweizzhao/GaLore
+    """
+    return unittest.skipUnless(is_galore_torch_available(), "test requires GaLore")(test_case)
+
+
 def require_cv2(test_case):
     """
     Decorator marking a test that requires OpenCV.
@@ -360,6 +378,13 @@ def require_fsdp(test_case, min_version: str = "1.12.0"):
     return unittest.skipUnless(is_fsdp_available(min_version), f"test requires torch version >= {min_version}")(
         test_case
     )
+
+
+def require_g2p_en(test_case):
+    """
+    Decorator marking a test that requires g2p_en. These tests are skipped when SentencePiece isn't installed.
+    """
+    return unittest.skipUnless(is_g2p_en_available(), "test requires g2p_en")(test_case)
 
 
 def require_safetensors(test_case):
@@ -436,6 +461,29 @@ def require_flash_attn(test_case):
 
     """
     return unittest.skipUnless(is_flash_attn_2_available(), "test requires Flash Attention")(test_case)
+
+
+def require_torch_sdpa(test_case):
+    """
+    Decorator marking a test that requires PyTorch's SDPA.
+
+    These tests are skipped when requirements are not met (torch version).
+    """
+    return unittest.skipUnless(is_torch_sdpa_available(), "test requires PyTorch SDPA")(test_case)
+
+
+def require_read_token(fn):
+    """
+    A decorator that loads the HF token for tests that require to load gated models.
+    """
+    token = os.getenv("HF_HUB_READ_TOKEN")
+
+    @wraps(fn)
+    def _inner(*args, **kwargs):
+        with patch("huggingface_hub.utils._headers.get_token", return_value=token):
+            return fn(*args, **kwargs)
+
+    return _inner
 
 
 def require_peft(test_case):
@@ -523,6 +571,13 @@ def require_sentencepiece(test_case):
     Decorator marking a test that requires SentencePiece. These tests are skipped when SentencePiece isn't installed.
     """
     return unittest.skipUnless(is_sentencepiece_available(), "test requires SentencePiece")(test_case)
+
+
+def require_sacremoses(test_case):
+    """
+    Decorator marking a test that requires Sacremoses. These tests are skipped when Sacremoses isn't installed.
+    """
+    return unittest.skipUnless(is_sacremoses_available(), "test requires Sacremoses")(test_case)
 
 
 def require_seqio(test_case):
@@ -688,11 +743,11 @@ def require_torch_up_to_2_accelerators(test_case):
     (test_case)
 
 
-def require_torch_tpu(test_case):
+def require_torch_xla(test_case):
     """
-    Decorator marking a test that requires a TPU (in PyTorch).
+    Decorator marking a test that requires TorchXLA (in PyTorch).
     """
-    return unittest.skipUnless(is_torch_tpu_available(check_device=False), "test requires PyTorch TPU")(test_case)
+    return unittest.skipUnless(is_torch_xla_available(), "test requires TorchXLA")(test_case)
 
 
 def require_torch_neuroncore(test_case):
@@ -763,6 +818,19 @@ if is_torch_available():
 
     if "TRANSFORMERS_TEST_DEVICE" in os.environ:
         torch_device = os.environ["TRANSFORMERS_TEST_DEVICE"]
+        if torch_device == "cuda" and not torch.cuda.is_available():
+            raise ValueError(
+                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but CUDA is unavailable. Please double-check your testing environment."
+            )
+        if torch_device == "xpu" and not is_torch_xpu_available():
+            raise ValueError(
+                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but XPU is unavailable. Please double-check your testing environment."
+            )
+        if torch_device == "npu" and not is_torch_npu_available():
+            raise ValueError(
+                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but NPU is unavailable. Please double-check your testing environment."
+            )
+
         try:
             # try creating device to see if provided device is valid
             _ = torch.device(torch_device)
@@ -935,11 +1003,26 @@ def require_apex(test_case):
     return unittest.skipUnless(is_apex_available(), "test requires apex")(test_case)
 
 
+def require_aqlm(test_case):
+    """
+    Decorator marking a test that requires aqlm
+    """
+    return unittest.skipUnless(is_aqlm_available(), "test requires aqlm")(test_case)
+
+
 def require_bitsandbytes(test_case):
     """
-    Decorator for bits and bytes (bnb) dependency
+    Decorator marking a test that requires the bitsandbytes library. Will be skipped when the library or its hard dependency torch is not installed.
     """
-    return unittest.skipUnless(is_bitsandbytes_available(), "test requires bnb")(test_case)
+    if is_bitsandbytes_available() and is_torch_available():
+        try:
+            import pytest
+
+            return pytest.mark.bitsandbytes(test_case)
+        except ImportError:
+            return test_case
+    else:
+        return unittest.skip("test requires bitsandbytes and torch")(test_case)
 
 
 def require_optimum(test_case):
@@ -961,6 +1044,20 @@ def require_auto_gptq(test_case):
     Decorator for auto_gptq dependency
     """
     return unittest.skipUnless(is_auto_gptq_available(), "test requires auto-gptq")(test_case)
+
+
+def require_auto_awq(test_case):
+    """
+    Decorator for auto_awq dependency
+    """
+    return unittest.skipUnless(is_auto_awq_available(), "test requires autoawq")(test_case)
+
+
+def require_quanto(test_case):
+    """
+    Decorator for quanto dependency
+    """
+    return unittest.skipUnless(is_quanto_available(), "test requires quanto")(test_case)
 
 
 def require_phonemizer(test_case):
@@ -1014,6 +1111,15 @@ def require_sudachi(test_case):
     Decorator marking a test that requires sudachi
     """
     return unittest.skipUnless(is_sudachi_available(), "test requires sudachi")(test_case)
+
+
+def require_sudachi_projection(test_case):
+    """
+    Decorator marking a test that requires sudachi_projection
+    """
+    return unittest.skipUnless(is_sudachi_projection_available(), "test requires sudachi which supports projection")(
+        test_case
+    )
 
 
 def require_jumanpp(test_case):
@@ -1272,7 +1378,7 @@ def LoggingLevel(level):
 
     ```python
     with LoggingLevel(logging.INFO):
-        AutoModel.from_pretrained("gpt2")  # calls logger.info() several times
+        AutoModel.from_pretrained("openai-community/gpt2")  # calls logger.info() several times
     ```
     """
     orig_level = transformers_logging.get_verbosity()
@@ -1558,7 +1664,7 @@ class TestCasePlus(unittest.TestCase):
         Example:
 
         ```
-        one_liner_str = 'from transformers import AutoModel; AutoModel.from_pretrained("t5-large")'
+        one_liner_str = 'from transformers import AutoModel; AutoModel.from_pretrained("google-t5/t5-large")'
         max_rss = self.python_one_liner_max_rss(one_liner_str)
         ```
         """
@@ -1975,32 +2081,40 @@ def run_command(command: List[str], return_stdout=False):
 class RequestCounter:
     """
     Helper class that will count all requests made online.
+
+    Might not be robust if urllib3 changes its logging format but should be good enough for us.
+
+    Usage:
+    ```py
+    with RequestCounter() as counter:
+        _ = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+    assert counter["GET"] == 0
+    assert counter["HEAD"] == 1
+    assert counter.total_calls == 1
+    ```
     """
 
     def __enter__(self):
-        self.head_request_count = 0
-        self.get_request_count = 0
-        self.other_request_count = 0
-
-        # Mock `get_session` to count HTTP calls.
-        self.old_get_session = huggingface_hub.utils._http.get_session
-        self.session = requests.Session()
-        self.session.request = self.new_request
-        huggingface_hub.utils._http.get_session = lambda: self.session
+        self._counter = defaultdict(int)
+        self.patcher = patch.object(urllib3.connectionpool.log, "debug", wraps=urllib3.connectionpool.log.debug)
+        self.mock = self.patcher.start()
         return self
 
-    def __exit__(self, *args, **kwargs):
-        huggingface_hub.utils._http.get_session = self.old_get_session
+    def __exit__(self, *args, **kwargs) -> None:
+        for call in self.mock.call_args_list:
+            log = call.args[0] % call.args[1:]
+            for method in ("HEAD", "GET", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"):
+                if method in log:
+                    self._counter[method] += 1
+                    break
+        self.patcher.stop()
 
-    def new_request(self, method, **kwargs):
-        if method == "GET":
-            self.get_request_count += 1
-        elif method == "HEAD":
-            self.head_request_count += 1
-        else:
-            self.other_request_count += 1
+    def __getitem__(self, key: str) -> int:
+        return self._counter[key]
 
-        return requests.request(method=method, **kwargs)
+    @property
+    def total_calls(self) -> int:
+        return sum(self._counter.values())
 
 
 def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, description: Optional[str] = None):

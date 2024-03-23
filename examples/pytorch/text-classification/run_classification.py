@@ -48,7 +48,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.35.0.dev0")
+check_min_version("4.40.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
@@ -83,7 +83,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "The name of the text column in the input dataset or a CSV/JSON file. "
-                'If not specified, will use the "sentence" column for single/multi-label classifcation task.'
+                'If not specified, will use the "sentence" column for single/multi-label classification task.'
             )
         },
     )
@@ -121,7 +121,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "The name of the label column in the input dataset or a CSV/JSON file. "
-                'If not specified, will use the "label" column for single/multi-label classifcation task'
+                'If not specified, will use the "label" column for single/multi-label classification task'
             )
         },
     )
@@ -247,7 +247,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
                 "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
                 "execute code present on the Hub on your local machine."
             )
@@ -260,7 +260,7 @@ class ModelArguments:
 
 
 def get_label_list(raw_dataset, split="train") -> List[str]:
-    """Get the list of labels from a mutli-label dataset"""
+    """Get the list of labels from a multi-label dataset"""
 
     if isinstance(raw_dataset[split]["label"][0], list):
         label_list = [label for sample in raw_dataset[split]["label"] for label in sample]
@@ -318,7 +318,7 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
         + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
@@ -343,7 +343,7 @@ def main():
 
     # Get the datasets: you can either provide your own CSV/JSON training and evaluation files, or specify a dataset name
     # to load from huggingface/datasets. In ether case, you can specify a the key of the column(s) containing the text and
-    # the key of the column containing the label. If multiple columns are specified for the text, they will be joined togather
+    # the key of the column containing the label. If multiple columns are specified for the text, they will be joined together
     # for the actual text value.
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
@@ -396,7 +396,7 @@ def main():
             )
 
     # See more about loading any type of standard or custom dataset at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     if data_args.remove_splits is not None:
         for split in data_args.remove_splits.split(","):
@@ -404,7 +404,7 @@ def main():
             raw_datasets.pop(split)
 
     if data_args.train_split_name is not None:
-        logger.info(f"using {data_args.validation_split_name} as validation set")
+        logger.info(f"using {data_args.train_split_name} as train set")
         raw_datasets["train"] = raw_datasets[data_args.train_split_name]
         raw_datasets.pop(data_args.train_split_name)
 
@@ -545,7 +545,7 @@ def main():
                 "run. You can ignore this if you are doing finetuning."
             )
         model.config.label2id = label_to_id
-        model.config.id2label = {id: label for label, id in config.label2id.items()}
+        model.config.id2label = {id: label for label, id in label_to_id.items()}
     elif not is_regression:  # classification, but not training
         logger.info("using label infos in the model config")
         logger.info("label2id: {}".format(model.config.label2id))
@@ -633,23 +633,23 @@ def main():
 
     if data_args.metric_name is not None:
         metric = (
-            evaluate.load(data_args.metric_name, config_name="multilabel")
+            evaluate.load(data_args.metric_name, config_name="multilabel", cache_dir=model_args.cache_dir)
             if is_multi_label
-            else evaluate.load(data_args.metric_name)
+            else evaluate.load(data_args.metric_name, cache_dir=model_args.cache_dir)
         )
         logger.info(f"Using metric {data_args.metric_name} for evaluation.")
     else:
         if is_regression:
-            metric = evaluate.load("mse")
+            metric = evaluate.load("mse", cache_dir=model_args.cache_dir)
             logger.info("Using mean squared error (mse) as regression score, you can use --metric_name to overwrite.")
         else:
             if is_multi_label:
-                metric = evaluate.load("f1", config_name="multilabel")
+                metric = evaluate.load("f1", config_name="multilabel", cache_dir=model_args.cache_dir)
                 logger.info(
                     "Using multilabel F1 for multi-label classification task, you can use --metric_name to overwrite."
                 )
             else:
-                metric = evaluate.load("accuracy")
+                metric = evaluate.load("accuracy", cache_dir=model_args.cache_dir)
                 logger.info("Using accuracy as classification score, you can use --metric_name to overwrite.")
 
     def compute_metrics(p: EvalPrediction):

@@ -31,6 +31,7 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import (
+    backend_empty_cache,
     is_pipeline_test,
     is_torch_available,
     require_tf,
@@ -42,9 +43,6 @@ from transformers.testing_utils import (
 from .test_pipelines_common import ANY
 
 
-DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
-
-
 @is_pipeline_test
 class ConversationalPipelineTests(unittest.TestCase):
     def tearDown(self):
@@ -52,9 +50,7 @@ class ConversationalPipelineTests(unittest.TestCase):
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
         if is_torch_available():
-            import torch
-
-            torch.cuda.empty_cache()
+            backend_empty_cache(torch_device)
 
     model_mapping = dict(
         list(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items())
@@ -77,14 +73,14 @@ class ConversationalPipelineTests(unittest.TestCase):
 
     def run_pipeline_test(self, conversation_agent, _):
         # Simple
-        outputs = conversation_agent(Conversation("Hi there!"), max_new_tokens=20)
+        outputs = conversation_agent(Conversation("Hi there!"), max_new_tokens=5)
         self.assertEqual(
             outputs,
             Conversation([{"role": "user", "content": "Hi there!"}, {"role": "assistant", "content": ANY(str)}]),
         )
 
         # Single list
-        outputs = conversation_agent([Conversation("Hi there!")], max_new_tokens=20)
+        outputs = conversation_agent([Conversation("Hi there!")], max_new_tokens=5)
         self.assertEqual(
             outputs,
             Conversation([{"role": "user", "content": "Hi there!"}, {"role": "assistant", "content": ANY(str)}]),
@@ -96,7 +92,7 @@ class ConversationalPipelineTests(unittest.TestCase):
         self.assertEqual(len(conversation_1), 1)
         self.assertEqual(len(conversation_2), 1)
 
-        outputs = conversation_agent([conversation_1, conversation_2], max_new_tokens=20)
+        outputs = conversation_agent([conversation_1, conversation_2], max_new_tokens=5)
         self.assertEqual(outputs, [conversation_1, conversation_2])
         self.assertEqual(
             outputs,
@@ -118,7 +114,7 @@ class ConversationalPipelineTests(unittest.TestCase):
 
         # One conversation with history
         conversation_2.add_message({"role": "user", "content": "Why do you recommend it?"})
-        outputs = conversation_agent(conversation_2, max_new_tokens=20)
+        outputs = conversation_agent(conversation_2, max_new_tokens=5)
         self.assertEqual(outputs, conversation_2)
         self.assertEqual(
             outputs,
@@ -136,12 +132,12 @@ class ConversationalPipelineTests(unittest.TestCase):
     @slow
     def test_integration_torch_conversation(self):
         # When
-        conversation_agent = pipeline(task="conversational", device=DEFAULT_DEVICE_NUM)
+        conversation_agent = pipeline(task="conversational", device=torch_device)
         conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
         conversation_2 = Conversation("What's the last book you have read?")
         # Then
-        self.assertEqual(len(conversation_1.past_user_inputs), 1)
-        self.assertEqual(len(conversation_2.past_user_inputs), 1)
+        self.assertEqual(len(conversation_1.past_user_inputs), 0)
+        self.assertEqual(len(conversation_2.past_user_inputs), 0)
         # When
         result = conversation_agent([conversation_1, conversation_2], do_sample=False, max_length=1000)
         # Then
@@ -168,10 +164,10 @@ class ConversationalPipelineTests(unittest.TestCase):
     @slow
     def test_integration_torch_conversation_truncated_history(self):
         # When
-        conversation_agent = pipeline(task="conversational", min_length_for_response=24, device=DEFAULT_DEVICE_NUM)
+        conversation_agent = pipeline(task="conversational", min_length_for_response=24, device=torch_device)
         conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
         # Then
-        self.assertEqual(len(conversation_1.past_user_inputs), 1)
+        self.assertEqual(len(conversation_1.past_user_inputs), 0)
         # When
         result = conversation_agent(conversation_1, do_sample=False, max_length=36)
         # Then
@@ -246,9 +242,7 @@ These are just a few of the many attractions that Paris has to offer. With so mu
             ],
         )
         inputs = tokenizer._build_conversation_input_ids(conversation)
-        # fmt: off
-        EXPECTED_INPUTS_IDS = [ 1, 518, 25580, 29962, 3532, 14816, 29903, 6778, 13, 3492, 526, 263, 8444, 29892, 3390, 1319, 322, 15993, 20255, 29889, 29849, 1234, 408, 1371, 3730, 408, 1950, 29892, 1550, 1641, 9109, 29889, 29871, 3575, 6089, 881, 451, 3160, 738, 10311, 1319, 29892, 443, 621, 936, 29892, 11021, 391, 29892, 7916, 391, 29892, 304, 27375, 29892, 18215, 29892, 470, 27302, 2793, 29889, 3529, 9801, 393, 596, 20890, 526, 5374, 635, 443, 5365, 1463, 322, 6374, 297, 5469, 29889, 13, 13, 3644, 263, 1139, 947, 451, 1207, 738, 4060, 29892, 470, 338, 451, 2114, 1474, 16165, 261, 296, 29892, 5649, 2020, 2012, 310, 22862, 1554, 451, 1959, 29889, 960, 366, 1016, 29915, 29873, 1073, 278, 1234, 304, 263, 1139, 29892, 3113, 1016, 29915, 29873, 6232, 2089, 2472, 29889, 13, 29966, 829, 14816, 29903, 6778, 13, 13, 29902, 626, 2675, 304, 3681, 29892, 825, 881, 306, 1074, 29973, 518, 29914, 25580, 29962, 3681, 29892, 278, 7483, 310, 3444, 29892, 338, 2998, 363, 967, 380, 27389, 11258, 29892, 1616, 19133, 29879, 29892, 15839, 2982, 22848, 29892, 322, 6017, 7716, 25005, 29889, 2266, 526, 777, 310, 278, 2246, 19650, 1953, 304, 1074, 297, 3681, 29901, 13, 13, 29896, 29889, 450, 382, 2593, 295, 23615, 29901, 450, 9849, 293, 382, 2593, 295, 23615, 338, 697, 310, 278, 1556, 5936, 13902, 2982, 22848, 297, 278, 3186, 322, 16688, 2078, 271, 400, 5086, 8386, 310, 278, 4272, 29889, 13, 29906, 29889, 450, 4562, 12675, 6838, 29901, 450, 4562, 12675, 338, 697, 310, 278, 3186, 29915, 29879, 10150, 322, 1556, 13834, 19133, 29879, 29892, 27261, 385, 21210, 573, 4333, 310, 1616, 322, 24238, 29879, 29892, 3704, 278, 2598, 29874, 29420, 29889, 13, 29941, 29889, 24337, 29899, 29928, 420, 315, 21471, 29901, 910, 9560, 274, 21471, 338, 697, 310, 278, 1556, 13834, 2982, 22848, 297, 3681, 322, 338, 2998, 363, 967, 22883, 293, 11258, 322, 380, 27389, 380, 7114, 12917, 5417, 29889, 13, 13, 1349, 968, 526, 925, 263, 2846, 310, 278, 1784, 19650, 1953, 393, 3681, 756, 304, 5957, 29889, 2973, 577, 1568, 304, 1074, 322, 437, 29892, 372, 29915, 29879, 694, 4997, 393, 3681, 338, 697, 310, 278, 1556, 5972, 6282, 391, 15422, 800, 297, 278, 3186, 29889, 29871, 2, 1, 518, 25580, 29962, 1724, 338, 577, 2107, 1048, 396, 29896, 29973, 518, 29914, 25580, 29962]
-        # fmt: on
+        EXPECTED_INPUTS_IDS = [ 1, 518, 25580, 29962, 3532, 14816, 29903, 6778, 13, 3492, 526, 263, 8444, 29892, 3390, 1319, 322, 15993, 20255, 29889, 29849, 1234, 408, 1371, 3730, 408, 1950, 29892, 1550, 1641, 9109, 29889, 29871, 3575, 6089, 881, 451, 3160, 738, 10311, 1319, 29892, 443, 621, 936, 29892, 11021, 391, 29892, 7916, 391, 29892, 304, 27375, 29892, 18215, 29892, 470, 27302, 2793, 29889, 3529, 9801, 393, 596, 20890, 526, 5374, 635, 443, 5365, 1463, 322, 6374, 297, 5469, 29889, 13, 13, 3644, 263, 1139, 947, 451, 1207, 738, 4060, 29892, 470, 338, 451, 2114, 1474, 16165, 261, 296, 29892, 5649, 2020, 2012, 310, 22862, 1554, 451, 1959, 29889, 960, 366, 1016, 29915, 29873, 1073, 278, 1234, 304, 263, 1139, 29892, 3113, 1016, 29915, 29873, 6232, 2089, 2472, 29889, 13, 29966, 829, 14816, 29903, 6778, 13, 13, 29902, 626, 2675, 304, 3681, 29892, 825, 881, 306, 1074, 29973, 518, 29914, 25580, 29962, 3681, 29892, 278, 7483, 310, 3444, 29892, 338, 2998, 363, 967, 380, 27389, 11258, 29892, 1616, 19133, 29879, 29892, 15839, 2982, 22848, 29892, 322, 6017, 7716, 25005, 29889, 2266, 526, 777, 310, 278, 2246, 19650, 1953, 304, 1074, 297, 3681, 29901, 13, 13, 29896, 29889, 450, 382, 2593, 295, 23615, 29901, 450, 9849, 293, 382, 2593, 295, 23615, 338, 697, 310, 278, 1556, 5936, 13902, 2982, 22848, 297, 278, 3186, 322, 16688, 2078, 271, 400, 5086, 8386, 310, 278, 4272, 29889, 13, 29906, 29889, 450, 4562, 12675, 6838, 29901, 450, 4562, 12675, 338, 697, 310, 278, 3186, 29915, 29879, 10150, 322, 1556, 13834, 19133, 29879, 29892, 27261, 385, 21210, 573, 4333, 310, 1616, 322, 24238, 29879, 29892, 3704, 278, 2598, 29874, 29420, 29889, 13, 29941, 29889, 24337, 29899, 29928, 420, 315, 21471, 29901, 910, 9560, 274, 21471, 338, 697, 310, 278, 1556, 13834, 2982, 22848, 297, 3681, 322, 338, 2998, 363, 967, 22883, 293, 11258, 322, 380, 27389, 380, 7114, 12917, 5417, 29889, 13, 13, 1349, 968, 526, 925, 263, 2846, 310, 278, 1784, 19650, 1953, 393, 3681, 756, 304, 5957, 29889, 2973, 577, 1568, 304, 1074, 322, 437, 29892, 372, 29915, 29879, 694, 4997, 393, 3681, 338, 697, 310, 278, 1556, 5972, 6282, 391, 15422, 800, 297, 278, 3186, 29889, 29871, 2, 1, 518, 25580, 29962, 1724, 338, 577, 2107, 1048, 396, 29896, 29973, 518, 29914, 25580, 29962]  # fmt: skip
         self.assertEqual(inputs, EXPECTED_INPUTS_IDS)
 
         model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
@@ -374,13 +368,13 @@ These are just a few of the many attractions that Paris has to offer. With so mu
         # When
         tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot_small-90M")
         model = AutoModelForSeq2SeqLM.from_pretrained("facebook/blenderbot_small-90M")
-        conversation_agent = ConversationalPipeline(model=model, tokenizer=tokenizer, device=DEFAULT_DEVICE_NUM)
+        conversation_agent = ConversationalPipeline(model=model, tokenizer=tokenizer, device=torch_device)
 
         conversation_1 = Conversation("My name is Sarah and I live in London")
         conversation_2 = Conversation("Going to the movies tonight, What movie would you recommend? ")
         # Then
-        self.assertEqual(len(conversation_1.past_user_inputs), 1)
-        self.assertEqual(len(conversation_2.past_user_inputs), 1)
+        self.assertEqual(len(conversation_1.past_user_inputs), 0)
+        self.assertEqual(len(conversation_2.past_user_inputs), 0)
         # When
         result = conversation_agent([conversation_1, conversation_2], do_sample=False, max_length=1000)
         # Then

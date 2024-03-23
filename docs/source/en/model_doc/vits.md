@@ -16,7 +16,6 @@ specific language governing permissions and limitations under the License.
 
 The VITS model was proposed in [Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech](https://arxiv.org/abs/2106.06103) by Jaehyeon Kim, Jungil Kong, Juhee Son.
 
-
 VITS (**V**ariational **I**nference with adversarial learning for end-to-end **T**ext-to-**S**peech) is an end-to-end 
 speech synthesis model that predicts a speech waveform conditional on an input text sequence. It is a conditional variational 
 autoencoder (VAE) comprised of a posterior encoder, decoder, and conditional prior.
@@ -42,7 +41,7 @@ as these checkpoints use the same architecture and a slightly modified tokenizer
 
 This model was contributed by [Matthijs](https://huggingface.co/Matthijs) and [sanchit-gandhi](https://huggingface.co/sanchit-gandhi). The original code can be found [here](https://github.com/jaywalnut310/vits).
 
-## Model Usage
+## Usage examples
 
 Both the VITS and MMS-TTS checkpoints can be used with the same API. Since the flow-based model is non-deterministic, it 
 is good practice to set a seed to ensure reproducibility of the outputs. For languages with a Roman alphabet, 

@@ -108,6 +108,7 @@ class MobileBertConfig(PretrainedConfig):
     Attributes: pretrained_config_archive_map (Dict[str, str]): A dictionary containing all the available pre-trained
     checkpoints.
     """
+
     pretrained_config_archive_map = MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "mobilebert"
 

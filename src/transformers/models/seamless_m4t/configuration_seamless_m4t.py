@@ -223,7 +223,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         variance_predictor_kernel_size (`int`, *optional*, defaults to 3):
             Kernel size of the duration predictor. Applies to the vocoder only.
         var_pred_dropout (`float`, *optional*, defaults to 0.5):
-            The dropout probabilitiy of the duration predictor. Applies to the vocoder only.
+            The dropout probability of the duration predictor. Applies to the vocoder only.
         vocoder_offset (`int`, *optional*, defaults to 4):
             Offset the unit token ids by this number to account for symbol tokens. Applies to the vocoder only.
 
@@ -239,6 +239,7 @@ class SeamlessM4TConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "seamless_m4t"
 
     def __init__(

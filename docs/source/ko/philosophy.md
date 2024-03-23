@@ -54,7 +54,7 @@ rendered properly in your Markdown viewer.
 
 이 라이브러리는 각 모델에 대해 세 가지 유형의 클래스를 기반으로 구축되었습니다:
 
-- **모델 클래스**는 라이브러리에서 제공하는 사전 훈련된 가중치와 함께 작동하는 PyTorch 모델([torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)), Keras 모델([tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)), JAX/Flax 모델([flax.linen.Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html))일 수 있습니다.
+- **모델 클래스**는 라이브러리에서 제공하는 사전 훈련된 가중치와 함께 작동하는 PyTorch 모델([torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)), Keras 모델([tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)), JAX/Flax 모델([flax.linen.Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html))일 수 있습니다.
 - **구성 클래스**는 모델을 구축하는 데 필요한 하이퍼파라미터(예: 레이어 수 및 은닉 크기)를 저장합니다. 구성 클래스를 직접 인스턴스화할 필요는 없습니다. 특히, 수정 없이 고 사전 학습된 모델을 사용하는 경우 모델을 생성하면 모델의 일부인 구성을 자동으로 인스턴스화됩니다.
 - **전처리 클래스**는 원시 데이터를 모델이 수용하는 형식으로 변환합니다. [Tokenizer](main_classes/tokenizer)는 각 모델의 어휘를 저장하고, 문자열을 토큰 임베딩 인덱스 리스트로 인코딩하고 디코딩하기 위한 메소드를 제공합니다. [Image processors](main_classes/image_processor)는 비전 입력을 전처리하고, [feature extractors](main_classes/feature_extractor)는 오디오 입력을 전처리하며, [processor](main_classes/processors)는 멀티모달 입력을 처리합니다.
 

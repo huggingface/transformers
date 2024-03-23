@@ -87,7 +87,7 @@ DistilBertConfig {
 사전 학습된 모델 속성은 [`~PretrainedConfig.from_pretrained`] 함수에서 수정할 수 있습니다:
 
 ```py
->>> my_config = DistilBertConfig.from_pretrained("distilbert-base-uncased", activation="relu", attention_dropout=0.4)
+>>> my_config = DistilBertConfig.from_pretrained("distilbert/distilbert-base-uncased", activation="relu", attention_dropout=0.4)
 ```
 
 모델 구성이 만족스러우면 [`~PretrainedConfig.save_pretrained`]로 저장할 수 있습니다. 설정 파일은 지정된 작업 경로에 JSON 파일로 저장됩니다:
@@ -110,7 +110,7 @@ configuration 파일을 딕셔너리로 저장하거나 사용자 정의 configu
 
 ## 모델[[model]]
 
-다음 단계는 [모델(model)](main_classes/models)을 만드는 것입니다. 느슨하게 아키텍처라고도 불리는 모델은 각 계층이 수행하는 동작과 발생하는 작업을 정의합니다. configuration의 `num_hidden_layers`와 같은 속성은 아키텍처를 정의하는 데 사용됩니다. 모든 모델은 기본 클래스 [`PreTrainedModel`]과 입력 임베딩 크기 조정 및 셀프 어텐션 헤드 가지 치기와 같은 몇 가지 일반적인 메소드를 공유합니다. 또한 모든 모델은 [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html), [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) 또는 [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/flax.linen.html#module)의 서브클래스이기도 합니다. 즉, 모델은 각 프레임워크의 사용법과 호환됩니다.
+다음 단계는 [모델(model)](main_classes/models)을 만드는 것입니다. 느슨하게 아키텍처라고도 불리는 모델은 각 계층이 수행하는 동작과 발생하는 작업을 정의합니다. configuration의 `num_hidden_layers`와 같은 속성은 아키텍처를 정의하는 데 사용됩니다. 모든 모델은 기본 클래스 [`PreTrainedModel`]과 입력 임베딩 크기 조정 및 셀프 어텐션 헤드 가지 치기와 같은 몇 가지 일반적인 메소드를 공유합니다. 또한 모든 모델은 [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html), [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) 또는 [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html)의 서브클래스이기도 합니다. 즉, 모델은 각 프레임워크의 사용법과 호환됩니다.
 
 <frameworkcontent>
 <pt>
@@ -128,13 +128,13 @@ configuration 파일을 딕셔너리로 저장하거나 사용자 정의 configu
 사전 학습된 모델을 [`~PreTrainedModel.from_pretrained`]로 생성합니다:
 
 ```py
->>> model = DistilBertModel.from_pretrained("distilbert-base-uncased")
+>>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 🤗 Transformers에서 제공한 모델의 사전 학습된 가중치를 사용하는 경우 기본 모델 configuration을 자동으로 불러옵니다. 그러나 원하는 경우 기본 모델 configuration 속성의 일부 또는 전부를 사용자 지정으로 바꿀 수 있습니다:
 
 ```py
->>> model = DistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
+>>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
 </pt>
 <tf>
@@ -152,13 +152,13 @@ configuration 파일을 딕셔너리로 저장하거나 사용자 정의 configu
 사전 학습된 모델을 [`~TFPreTrainedModel.from_pretrained`]로 생성합니다:
 
 ```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased")
+>>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 🤗 Transformers에서 제공한 모델의 사전 학습된 가중치를 사용하는 경우 기본 모델 configuration을 자동으로 불러옵니다. 그러나 원하는 경우 기본 모델 configuration 속성의 일부 또는 전부를 사용자 지정으로 바꿀 수 있습니다:
 
 ```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
+>>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
 </tf>
 </frameworkcontent>
@@ -174,7 +174,7 @@ configuration 파일을 딕셔너리로 저장하거나 사용자 정의 configu
 ```py
 >>> from transformers import DistilBertForSequenceClassification
 
->>> model = DistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> model = DistilBertForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 다른 모델 헤드로 전환하여 이 체크포인트를 다른 작업에 쉽게 재사용할 수 있습니다. 질의응답 작업의 경우, [`DistilBertForQuestionAnswering`] 모델 헤드를 사용할 수 있습니다. 질의응답 헤드는 숨겨진 상태 출력 위에 선형 레이어가 있다는 점을 제외하면 시퀀스 분류 헤드와 유사합니다.
@@ -182,7 +182,7 @@ configuration 파일을 딕셔너리로 저장하거나 사용자 정의 configu
 ```py
 >>> from transformers import DistilBertForQuestionAnswering
 
->>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+>>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 </pt>
 <tf>
@@ -191,7 +191,7 @@ configuration 파일을 딕셔너리로 저장하거나 사용자 정의 configu
 ```py
 >>> from transformers import TFDistilBertForSequenceClassification
 
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 다른 모델 헤드로 전환하여 이 체크포인트를 다른 작업에 쉽게 재사용할 수 있습니다. 질의응답 작업의 경우, [`TFDistilBertForQuestionAnswering`] 모델 헤드를 사용할 수 있습니다. 질의응답 헤드는 숨겨진 상태 출력 위에 선형 레이어가 있다는 점을 제외하면 시퀀스 분류 헤드와 유사합니다.
@@ -199,7 +199,7 @@ configuration 파일을 딕셔너리로 저장하거나 사용자 정의 configu
 ```py
 >>> from transformers import TFDistilBertForQuestionAnswering
 
->>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+>>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 </tf>
 </frameworkcontent>
@@ -231,7 +231,7 @@ configuration 파일을 딕셔너리로 저장하거나 사용자 정의 configu
 ```py
 >>> from transformers import DistilBertTokenizer
 
->>> slow_tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+>>> slow_tokenizer = DistilBertTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 [`DistilBertTokenizerFast`] 클래스로 빠른 토크나이저를 생성합니다:
@@ -239,7 +239,7 @@ configuration 파일을 딕셔너리로 저장하거나 사용자 정의 configu
 ```py
 >>> from transformers import DistilBertTokenizerFast
 
->>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
+>>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 <Tip>

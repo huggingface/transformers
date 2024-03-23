@@ -47,7 +47,9 @@ via a decoder. Empirically, with comparable or fewer FLOPs, Funnel-Transformer o
 a wide variety of sequence-level prediction tasks, including text classification, language understanding, and reading
 comprehension.*
 
-Tips:
+This model was contributed by [sgugger](https://huggingface.co/sgugger). The original code can be found [here](https://github.com/laiguokun/Funnel-Transformer).
+
+## Usage tips
 
 - Since Funnel Transformer uses pooling, the sequence length of the hidden states changes after each block of layers. This way, their length is divided by 2, which speeds up the computation of the next hidden states.
   The base model therefore has a final sequence length that is a quarter of the original one. This model can be used
@@ -62,9 +64,7 @@ Tips:
   [`FunnelBaseModel`], [`FunnelForSequenceClassification`] and
   [`FunnelForMultipleChoice`].
 
-This model was contributed by [sgugger](https://huggingface.co/sgugger). The original code can be found [here](https://github.com/laiguokun/Funnel-Transformer).
-
-## Documentation resources
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
@@ -94,6 +94,9 @@ This model was contributed by [sgugger](https://huggingface.co/sgugger). The ori
 [[autodoc]] models.funnel.modeling_funnel.FunnelForPreTrainingOutput
 
 [[autodoc]] models.funnel.modeling_tf_funnel.TFFunnelForPreTrainingOutput
+
+<frameworkcontent>
+<pt>
 
 ## FunnelBaseModel
 
@@ -135,6 +138,9 @@ This model was contributed by [sgugger](https://huggingface.co/sgugger). The ori
 [[autodoc]] FunnelForQuestionAnswering
     - forward
 
+</pt>
+<tf>
+
 ## TFFunnelBaseModel
 
 [[autodoc]] TFFunnelBaseModel
@@ -174,3 +180,6 @@ This model was contributed by [sgugger](https://huggingface.co/sgugger). The ori
 
 [[autodoc]] TFFunnelForQuestionAnswering
     - call
+
+</tf>
+</frameworkcontent>

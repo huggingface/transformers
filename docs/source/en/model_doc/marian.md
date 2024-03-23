@@ -25,14 +25,11 @@ rendered properly in your Markdown viewer.
 </a>
 </div>
 
-**Bugs:** If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=sshleifer&labels=&template=bug-report.md&title)
-and assign @patrickvonplaten.
+## Overview
 
-Translations should be similar, but not identical to output in the test set linked to in each model card.
+A framework for translation models, using the same models as BART. Translations should be similar, but not identical to output in the test set linked to in each model card.
+This model was contributed by [sshleifer](https://huggingface.co/sshleifer).
 
-Tips:
-
-- A framework for translation models, using the same models as BART.
 
 ## Implementation Notes
 
@@ -49,7 +46,7 @@ Tips:
   - the model starts generating with `pad_token_id` (which has 0 as a token_embedding) as the prefix (Bart uses
     `<s/>`),
 - Code to bulk convert models can be found in `convert_marian_to_pytorch.py`.
-- This model was contributed by [sshleifer](https://huggingface.co/sshleifer).
+
 
 ## Naming
 
@@ -165,7 +162,7 @@ Example of translating english to many romance languages, using old-style 2 char
  'Y esto al español']
 ```
 
-## Documentation resources
+## Resources
 
 - [Translation task guide](../tasks/translation)
 - [Summarization task guide](../tasks/summarization)
@@ -179,6 +176,9 @@ Example of translating english to many romance languages, using old-style 2 char
 
 [[autodoc]] MarianTokenizer
     - build_inputs_with_special_tokens
+
+<frameworkcontent>
+<pt>
 
 ## MarianModel
 
@@ -195,6 +195,9 @@ Example of translating english to many romance languages, using old-style 2 char
 [[autodoc]] MarianForCausalLM
     - forward
 
+</pt>
+<tf>
+
 ## TFMarianModel
 
 [[autodoc]] TFMarianModel
@@ -205,6 +208,9 @@ Example of translating english to many romance languages, using old-style 2 char
 [[autodoc]] TFMarianMTModel
     - call
 
+</tf>
+<jax>
+
 ## FlaxMarianModel
 
 [[autodoc]] FlaxMarianModel
@@ -214,3 +220,6 @@ Example of translating english to many romance languages, using old-style 2 char
 
 [[autodoc]] FlaxMarianMTModel
     - __call__
+
+</jax>
+</frameworkcontent>

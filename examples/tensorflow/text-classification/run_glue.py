@@ -48,7 +48,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.35.0.dev0")
+check_min_version("4.40.0.dev0")
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -184,7 +184,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
                 "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
                 "execute code present on the Hub on your local machine."
             )
@@ -265,13 +265,13 @@ def main():
     # Downloading and loading a dataset from the hub. In distributed training, the load_dataset function guarantee
     # that only one local process can concurrently download the dataset.
     datasets = load_dataset(
-        "glue",
+        "nyu-mll/glue",
         data_args.task_name,
         cache_dir=model_args.cache_dir,
         token=model_args.token,
     )
     # See more about loading any type of standard or custom dataset at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     is_regression = data_args.task_name == "stsb"
     if not is_regression:
@@ -379,7 +379,7 @@ def main():
     # endregion
 
     # region Metric function
-    metric = evaluate.load("glue", data_args.task_name)
+    metric = evaluate.load("glue", data_args.task_name, cache_dir=model_args.cache_dir)
 
     def compute_metrics(preds, label_ids):
         preds = preds["logits"]
@@ -477,7 +477,7 @@ def main():
                 adam_global_clipnorm=training_args.max_grad_norm,
             )
         else:
-            optimizer = "adam"  # Just write anything because we won't be using it
+            optimizer = "sgd"  # Just write anything because we won't be using it
         if is_regression:
             metrics = []
         else:

@@ -74,8 +74,8 @@ El [`pipeline`] acepta cualquier modelo del [Model Hub](https://huggingface.co/m
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
->>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
+>>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
 ```
 
 Crea un [`pipeline`] para tu tarea y específica el modelo y el tokenizador que cargaste:

@@ -1254,9 +1254,7 @@ class FlavaModel(FlavaPreTrainedModel):
         ...     text=["a photo of a cat", "a photo of a dog"], max_length=77, padding="max_length", return_tensors="pt"
         ... )
         >>> text_features = model.get_text_features(**inputs)
-        ```""".format(
-            _CHECKPOINT_FOR_DOC
-        )
+        ```""".format(_CHECKPOINT_FOR_DOC)
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1305,9 +1303,7 @@ class FlavaModel(FlavaPreTrainedModel):
         >>> inputs = processor(images=image, return_tensors="pt")
 
         >>> image_features = model.get_image_features(**inputs)
-        ```""".format(
-            _CHECKPOINT_FOR_DOC
-        )
+        ```""".format(_CHECKPOINT_FOR_DOC)
         image_outputs = self.image_model(
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,
@@ -1419,8 +1415,18 @@ class FlavaModel(FlavaPreTrainedModel):
         multimodal_embeddings = None
         multimodal_output = None
         if image_mm_projection is not None and text_mm_projection is not None and not skip_multimodal_encoder:
+            if attention_mask is not None:
+                batch_size, seq_len, _ = image_mm_projection.shape
+                if self.multimodal_model.use_cls_token:
+                    seq_len += 1
+                attention_mask_image = torch.ones(batch_size, seq_len, device=image_mm_projection.device)
+                attention_multimodal = torch.cat([attention_mask_image, attention_mask], dim=1)
+            else:
+                attention_multimodal = None
             multimodal_input = torch.cat([image_mm_projection, text_mm_projection], dim=1)
-            multimodal_output = self.multimodal_model(multimodal_input, return_dict=return_dict)
+            multimodal_output = self.multimodal_model(
+                multimodal_input, attention_mask=attention_multimodal, return_dict=return_dict
+            )
             multimodal_embeddings = multimodal_output[0]
 
         if not return_dict:
@@ -1583,9 +1589,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
 
         >>> outputs = model.get_codebook_indices(**inputs)
         ```
-        """.format(
-            _CHECKPOINT_FOR_CODEBOOK_DOC
-        )
+        """.format(_CHECKPOINT_FOR_CODEBOOK_DOC)
         z_logits = self.blocks(pixel_values)
         return torch.argmax(z_logits, axis=1)
 
@@ -1620,9 +1624,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         >>> print(outputs.shape)
         (1, 196)
         ```
-        """.format(
-            _CHECKPOINT_FOR_CODEBOOK_DOC
-        )
+        """.format(_CHECKPOINT_FOR_CODEBOOK_DOC)
         if len(pixel_values.shape) != 4:
             raise ValueError(f"input shape {pixel_values.shape} is not 4d")
         if pixel_values.shape[1] != self.input_channels:
@@ -1957,6 +1959,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
 
                 if mim_labels is not None:
                     mim_labels = mim_labels[pos_mask]
+                    bool_masked_pos = bool_masked_pos[pos_mask]
 
         # MMM Image Loss
         if multimodal_masked_embeddings is not None and self.mmm_image_weight > 0:
@@ -1964,8 +1967,6 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
             end_index = image_masked_embeddings.size(1) - 1
             sequence_for_image = sequence_for_image[:, 2 : 2 + end_index, :]
 
-            if pos_mask is not None:
-                sequence_for_image = sequence_for_image[pos_mask]
             if mim_labels is not None:
                 mim_labels = self._resize_to_2d(mim_labels)
                 bool_masked_pos = self._resize_to_2d(bool_masked_pos)
@@ -1987,8 +1988,6 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         if multimodal_masked_embeddings is not None and self.mmm_text_weight > 0:
             sequence_for_text = multimodal_masked_embeddings
             sequence_for_text = sequence_for_text[:, -text_masked_embeddings.size(1) :, :]
-            if pos_mask is not None:
-                sequence_for_text = sequence_for_text[pos_mask]
 
             if mlm_labels is not None:
                 mlm_labels = self._resize_to_2d(mlm_labels)

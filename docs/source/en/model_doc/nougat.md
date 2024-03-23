@@ -33,7 +33,7 @@ alt="drawing" width="600"/>
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found
 [here](https://github.com/facebookresearch/nougat).
 
-Tips:
+## Usage tips
 
 - The quickest way to get started with Nougat is by checking the [tutorial
   notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Nougat), which show how to use the model
@@ -88,6 +88,12 @@ into a single instance to both extract the input features and decode the predict
 ```
 
 See the [model hub](https://huggingface.co/models?filter=nougat) to look for Nougat checkpoints.
+
+<Tip>
+
+The model is identical to [Donut](donut) in terms of architecture.
+
+</Tip>
 
 ## NougatImageProcessor
 

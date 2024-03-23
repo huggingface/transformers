@@ -1,8 +1,9 @@
 import uuid
+import warnings
 from typing import Any, Dict, List, Union
 
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 if is_tf_available():
@@ -54,6 +55,7 @@ class Conversation:
 
         # This block deals with the legacy args - new code should just totally
         # avoid past_user_inputs and generated_responses
+        self._num_processed_user_inputs = 0
         generated_responses = deprecated_kwargs.pop("generated_responses", None)
         past_user_inputs = deprecated_kwargs.pop("past_user_inputs", None)
         if generated_responses is not None and past_user_inputs is None:
@@ -114,10 +116,11 @@ class Conversation:
 
     def mark_processed(self):
         """
-        This is a legacy method that no longer has any effect, as the Conversation no longer distinguishes between
-        processed and unprocessed user input.
+        This is a legacy method, as the Conversation no longer distinguishes between processed and unprocessed user
+        input. We set a counter here to keep behaviour mostly backward-compatible, but in general you should just read
+        the messages directly when writing new code.
         """
-        pass
+        self._num_processed_user_inputs = len(self._user_messages)
 
     def __iter__(self):
         for message in self.messages:
@@ -163,7 +166,17 @@ class Conversation:
     @property
     def past_user_inputs(self):
         # This is a legacy property for backwards compatibility. It is recommended to just directly access
-        # conversation.messages instead.
+        # conversation.messages instead. The modern class does not care about which messages are "processed"
+        # or not.
+        if not self._user_messages:
+            return []
+        # In the past, the most recent user message had to be mark_processed() before being included
+        # in past_user_messages. The class essentially had a single-message buffer, representing messages that
+        # had not yet been replied to. This is no longer the case, but we mimic the behaviour in this property
+        # for backward compatibility.
+        if self.messages[-1]["role"] != "user" or self._num_processed_user_inputs == len(self._user_messages):
+            return self._user_messages
+
         return self._user_messages[:-1]
 
     @property
@@ -180,13 +193,10 @@ class Conversation:
 
 
 @add_end_docstrings(
-    PIPELINE_INIT_ARGS,
+    build_pipeline_init_args(has_tokenizer=True),
     r"""
         min_length_for_response (`int`, *optional*, defaults to 32):
-            The minimum length (in number of tokens) for a response.
-        minimum_tokens (`int`, *optional*, defaults to 10):
-            The minimum length of tokens to leave for a response.
-    """,
+            The minimum length (in number of tokens) for a response.""",
 )
 class ConversationalPipeline(Pipeline):
     """
@@ -196,17 +206,19 @@ class ConversationalPipeline(Pipeline):
 
     ```python
     >>> from transformers import pipeline, Conversation
+    # Any model with a chat template can be used in a ConversationalPipeline.
 
-    >>> chatbot = pipeline(model="microsoft/DialoGPT-medium")
-    >>> conversation = Conversation("Going to the movies tonight - any suggestions?")
+    >>> chatbot = pipeline(model="facebook/blenderbot-400M-distill")
+    >>> # Conversation objects initialized with a string will treat it as a user message
+    >>> conversation = Conversation("I'm looking for a movie - what's your favourite one?")
     >>> conversation = chatbot(conversation)
-    >>> conversation.generated_responses[-1]
-    'The Big Lebowski'
+    >>> conversation.messages[-1]["content"]
+    "I don't really have a favorite movie, but I do like action movies. What about you?"
 
-    >>> conversation.add_user_input("Is it an action movie?")
+    >>> conversation.add_message({"role": "user", "content": "That's interesting, why do you like action movies?"})
     >>> conversation = chatbot(conversation)
-    >>> conversation.generated_responses[-1]
-    "It's a comedy."
+    >>> conversation.messages[-1]["content"]
+    " I think it's just because they're so fast-paced and action-fantastic."
     ```
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
@@ -214,28 +226,26 @@ class ConversationalPipeline(Pipeline):
     This conversational pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"conversational"`.
 
-    The models that this pipeline can use are models that have been fine-tuned on a multi-turn conversational task,
-    currently: *'microsoft/DialoGPT-small'*, *'microsoft/DialoGPT-medium'*, *'microsoft/DialoGPT-large'*. See the
-    up-to-date list of available models on
-    [huggingface.co/models](https://huggingface.co/models?filter=conversational).
+    This pipeline can be used with any model that has a [chat
+    template](https://huggingface.co/docs/transformers/chat_templating) set.
     """
 
     def __init__(self, *args, **kwargs):
+        warnings.warn(
+            "`ConversationalPipeline` is now deprecated, and the functionality has been moved to the standard `text-generation` pipeline, which now accepts lists of message dicts as well as strings. This class will be removed in v4.42.",
+            DeprecationWarning,
+        )
         super().__init__(*args, **kwargs)
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-    def _sanitize_parameters(
-        self, min_length_for_response=None, minimum_tokens=None, clean_up_tokenization_spaces=None, **generate_kwargs
-    ):
+    def _sanitize_parameters(self, min_length_for_response=None, clean_up_tokenization_spaces=None, **generate_kwargs):
         preprocess_params = {}
         forward_params = {}
         postprocess_params = {}
 
         if min_length_for_response is not None:
             preprocess_params["min_length_for_response"] = min_length_for_response
-        if minimum_tokens is not None:
-            forward_params["minimum_tokens"] = minimum_tokens
 
         if "max_length" in generate_kwargs:
             forward_params["max_length"] = generate_kwargs["max_length"]
@@ -256,7 +266,7 @@ class ConversationalPipeline(Pipeline):
                 Conversation to generate responses for. Inputs can also be passed as a list of dictionaries with `role`
                 and `content` keys - in this case, they will be converted to `Conversation` objects automatically.
                 Multiple conversations in either format may be passed as a list.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
                 Whether or not to clean up the potential extra spaces in the text output.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
@@ -288,7 +298,7 @@ class ConversationalPipeline(Pipeline):
             input_ids = tf.constant([input_ids])
         return {"input_ids": input_ids, "conversation": conversation}
 
-    def _forward(self, model_inputs, minimum_tokens=10, **generate_kwargs):
+    def _forward(self, model_inputs, **generate_kwargs):
         n = model_inputs["input_ids"].shape[1]
         conversation = model_inputs.pop("conversation")
         if "max_length" not in generate_kwargs and "max_new_tokens" not in generate_kwargs:

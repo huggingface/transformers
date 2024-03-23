@@ -35,6 +35,8 @@ from ...image_transforms import (
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
+    AnnotationFormat,
+    AnnotationType,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -43,12 +45,12 @@ from ...image_utils import (
     is_scaled_image,
     make_list_of_images,
     to_numpy_array,
-    valid_coco_detection_annotations,
-    valid_coco_panoptic_annotations,
     valid_images,
+    validate_annotations,
+    validate_kwargs,
+    validate_preprocess_arguments,
 )
 from ...utils import (
-    ExplicitEnum,
     TensorType,
     is_flax_available,
     is_jax_tensor,
@@ -77,15 +79,7 @@ if is_scipy_available():
 
 logger = logging.get_logger(__name__)
 
-AnnotationType = Dict[str, Union[int, str, List[Dict]]]
-
-
-class AnnotionFormat(ExplicitEnum):
-    COCO_DETECTION = "coco_detection"
-    COCO_PANOPTIC = "coco_panoptic"
-
-
-SUPPORTED_ANNOTATION_FORMATS = (AnnotionFormat.COCO_DETECTION, AnnotionFormat.COCO_PANOPTIC)
+SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_max_height_width
@@ -107,7 +101,6 @@ def get_max_height_width(
     return (max_height, max_width)
 
 
-# Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
 def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, int]:
     """
     Computes the output image size given the input image size and the desired output size.
@@ -127,16 +120,17 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, in
         if max_original_size / min_original_size * size > max_size:
             size = int(round(max_size * min_original_size / max_original_size))
 
-    if (height <= width and height == size) or (width <= height and width == size):
-        return height, width
-
-    if width < height:
-        ow = size
-        oh = int(size * height / width)
-    else:
-        oh = size
-        ow = int(size * width / height)
-    return (oh, ow)
+    if width < height and width != size:
+        height = int(size * height / width)
+        width = size
+    elif height < width and height != size:
+        width = int(size * width / height)
+        height = size
+    width_mod = np.mod(width, 16)
+    height_mod = np.mod(height, 16)
+    width = width - width_mod
+    height = height - height_mod
+    return (height, width)
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_resize_output_image_size
@@ -152,9 +146,9 @@ def get_resize_output_image_size(
     image size is computed by keeping the aspect ratio of the input image size.
 
     Args:
-        image_size (`Tuple[int, int]`):
-            The input image size.
-        size (`int`):
+        input_image (`np.ndarray`):
+            The image to resize.
+        size (`int` or `Tuple[int, int]` or `List[int]`):
             The desired output size.
         max_size (`int`, *optional*):
             The maximum allowed output size.
@@ -329,10 +323,13 @@ def prepare_coco_detection_annotation(
 
     if annotations and "keypoints" in annotations[0]:
         keypoints = [obj["keypoints"] for obj in annotations]
+        # Converting the filtered keypoints list to a numpy array
         keypoints = np.asarray(keypoints, dtype=np.float32)
+        # Apply the keep mask here to filter the relevant annotations
+        keypoints = keypoints[keep]
         num_keypoints = keypoints.shape[0]
         keypoints = keypoints.reshape((-1, 3)) if num_keypoints else keypoints
-        new_target["keypoints"] = keypoints[keep]
+        new_target["keypoints"] = keypoints
 
     if return_segmentation_masks:
         segmentation_masks = [obj["segmentation"] for obj in annotations]
@@ -701,15 +698,16 @@ class YolosImageProcessor(BaseImageProcessor):
             Standard deviation values to use when normalizing the image. Can be a single value or a list of values, one
             for each channel. Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `True`):
-            Controls whether to pad the image to the largest image in a batch and create a pixel mask. Can be
-            overridden by the `do_pad` parameter in the `preprocess` method.
+            Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
+            method. If `True` will pad the images in the batch to the largest height and width in the batch.
+            Padding will be applied to the bottom and right of the image with zeros.
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
 
     def __init__(
         self,
-        format: Union[str, AnnotionFormat] = AnnotionFormat.COCO_DETECTION,
+        format: Union[str, AnnotationFormat] = AnnotationFormat.COCO_DETECTION,
         do_resize: bool = True,
         size: Dict[str, int] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
@@ -718,6 +716,7 @@ class YolosImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
+        do_convert_annotations: Optional[bool] = None,
         do_pad: bool = True,
         **kwargs,
     ) -> None:
@@ -736,6 +735,10 @@ class YolosImageProcessor(BaseImageProcessor):
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
 
+        # Backwards compatibility
+        if do_convert_annotations is None:
+            do_convert_annotations = do_normalize
+
         super().__init__(**kwargs)
         self.format = format
         self.do_resize = do_resize
@@ -744,9 +747,30 @@ class YolosImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
+        self.do_convert_annotations = do_convert_annotations
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
+        self._valid_processor_keys = [
+            "images",
+            "annotations",
+            "return_segmentation_masks",
+            "masks_path",
+            "do_resize",
+            "size",
+            "resample",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "do_convert_annotations",
+            "do_pad",
+            "format",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     @classmethod
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.from_dict with Detr->Yolos
@@ -768,7 +792,7 @@ class YolosImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         target: Dict,
-        format: Optional[AnnotionFormat] = None,
+        format: Optional[AnnotationFormat] = None,
         return_segmentation_masks: bool = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -778,12 +802,12 @@ class YolosImageProcessor(BaseImageProcessor):
         """
         format = format if format is not None else self.format
 
-        if format == AnnotionFormat.COCO_DETECTION:
+        if format == AnnotationFormat.COCO_DETECTION:
             return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
             target = prepare_coco_detection_annotation(
                 image, target, return_segmentation_masks, input_data_format=input_data_format
             )
-        elif format == AnnotionFormat.COCO_PANOPTIC:
+        elif format == AnnotationFormat.COCO_PANOPTIC:
             return_segmentation_masks = True if return_segmentation_masks is None else return_segmentation_masks
             target = prepare_coco_panoptic_annotation(
                 image,
@@ -921,18 +945,64 @@ class YolosImageProcessor(BaseImageProcessor):
     def normalize_annotation(self, annotation: Dict, image_size: Tuple[int, int]) -> Dict:
         """
         Normalize the boxes in the annotation from `[top_left_x, top_left_y, bottom_right_x, bottom_right_y]` to
-        `[center_x, center_y, width, height]` format.
+        `[center_x, center_y, width, height]` format and from absolute to relative pixel values.
         """
         return normalize_annotation(annotation, image_size=image_size)
+
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._update_annotation_for_padded_image
+    def _update_annotation_for_padded_image(
+        self,
+        annotation: Dict,
+        input_image_size: Tuple[int, int],
+        output_image_size: Tuple[int, int],
+        padding,
+        update_bboxes,
+    ) -> Dict:
+        """
+        Update the annotation for a padded image.
+        """
+        new_annotation = {}
+        new_annotation["size"] = output_image_size
+
+        for key, value in annotation.items():
+            if key == "masks":
+                masks = value
+                masks = pad(
+                    masks,
+                    padding,
+                    mode=PaddingMode.CONSTANT,
+                    constant_values=0,
+                    input_data_format=ChannelDimension.FIRST,
+                )
+                masks = safe_squeeze(masks, 1)
+                new_annotation["masks"] = masks
+            elif key == "boxes" and update_bboxes:
+                boxes = value
+                boxes *= np.asarray(
+                    [
+                        input_image_size[1] / output_image_size[1],
+                        input_image_size[0] / output_image_size[0],
+                        input_image_size[1] / output_image_size[1],
+                        input_image_size[0] / output_image_size[0],
+                    ]
+                )
+                new_annotation["boxes"] = boxes
+            elif key == "size":
+                new_annotation["size"] = output_image_size
+            else:
+                new_annotation[key] = value
+        return new_annotation
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._pad_image
     def _pad_image(
         self,
         image: np.ndarray,
         output_size: Tuple[int, int],
+        annotation: Optional[Dict[str, Any]] = None,
         constant_values: Union[float, Iterable[float]] = 0,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        update_bboxes: bool = True,
     ) -> np.ndarray:
         """
         Pad an image with zeros to the given size.
@@ -951,16 +1021,22 @@ class YolosImageProcessor(BaseImageProcessor):
             data_format=data_format,
             input_data_format=input_data_format,
         )
-        return padded_image
+        if annotation is not None:
+            annotation = self._update_annotation_for_padded_image(
+                annotation, (input_height, input_width), (output_height, output_width), padding, update_bboxes
+            )
+        return padded_image, annotation
 
     def pad(
         self,
         images: List[np.ndarray],
+        annotations: Optional[List[Dict[str, Any]]] = None,
         constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        update_bboxes: bool = True,
     ) -> BatchFeature:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
@@ -969,6 +1045,9 @@ class YolosImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to pad.
+            annotations (`List[Dict[str, any]]`, *optional*):
+                Annotations to pad along with the images. If provided, the bounding boxes will be updated to match the
+                padded images.
             constant_values (`float` or `Iterable[float]`, *optional*):
                 The value to use for the padding if `mode` is `"constant"`.
             return_pixel_mask (`bool`, *optional*, defaults to `True`):
@@ -984,19 +1063,29 @@ class YolosImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
+            update_bboxes (`bool`, *optional*, defaults to `True`):
+                Whether to update the bounding boxes in the annotations to match the padded images. If the
+                bounding boxes have not been converted to relative coordinates and `(centre_x, centre_y, width, height)`
+                format, the bounding boxes will not be updated.
         """
         pad_size = get_max_height_width(images, input_data_format=input_data_format)
 
-        padded_images = [
-            self._pad_image(
+        annotation_list = annotations if annotations is not None else [None] * len(images)
+        padded_images = []
+        padded_annotations = []
+        for image, annotation in zip(images, annotation_list):
+            padded_image, padded_annotation = self._pad_image(
                 image,
                 pad_size,
+                annotation,
                 constant_values=constant_values,
                 data_format=data_format,
                 input_data_format=input_data_format,
+                update_bboxes=update_bboxes,
             )
-            for image in images
-        ]
+            padded_images.append(padded_image)
+            padded_annotations.append(padded_annotation)
+
         data = {"pixel_values": padded_images}
 
         if return_pixel_mask:
@@ -1006,7 +1095,14 @@ class YolosImageProcessor(BaseImageProcessor):
             ]
             data["pixel_mask"] = masks
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
+
+        if annotations is not None:
+            encoded_inputs["labels"] = [
+                BatchFeature(annotation, tensor_type=return_tensors) for annotation in padded_annotations
+            ]
+
+        return encoded_inputs
 
     def preprocess(
         self,
@@ -1022,8 +1118,9 @@ class YolosImageProcessor(BaseImageProcessor):
         do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        do_convert_annotations: Optional[bool] = None,
         do_pad: Optional[bool] = None,
-        format: Optional[Union[str, AnnotionFormat]] = None,
+        format: Optional[Union[str, AnnotationFormat]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -1037,12 +1134,12 @@ class YolosImageProcessor(BaseImageProcessor):
                 Image or batch of images to preprocess. Expects a single or batch of images with pixel values ranging
                 from 0 to 255. If passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
-                List of annotations associated with the image or batch of images. If annotionation is for object
+                List of annotations associated with the image or batch of images. If annotation is for object
                 detection, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
                 - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
                   dictionary. An image can have no annotations, in which case the list should be empty.
-                If annotionation is for segmentation, the annotations should be a dictionary with the following keys:
+                If annotation is for segmentation, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
                 - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
                   An image can have no segments, in which case the list should be empty.
@@ -1067,9 +1164,14 @@ class YolosImageProcessor(BaseImageProcessor):
                 Mean to use when normalizing the image.
             image_std (`float` or `List[float]`, *optional*, defaults to self.image_std):
                 Standard deviation to use when normalizing the image.
+            do_convert_annotations (`bool`, *optional*, defaults to self.do_convert_annotations):
+                Whether to convert the annotations to the format expected by the model. Converts the bounding
+                boxes from the format `(top_left_x, top_left_y, width, height)` to `(center_x, center_y, width, height)`
+                and in relative coordinates.
             do_pad (`bool`, *optional*, defaults to self.do_pad):
-                Whether to pad the image.
-            format (`str` or `AnnotionFormat`, *optional*, defaults to self.format):
+                Whether to pad the image. If `True` will pad the images in the batch to the largest image in the batch
+                and create a pixel mask. Padding will be applied to the bottom and right of the image with zeros.
+            format (`str` or `AnnotationFormat`, *optional*, defaults to self.format):
                 Format of the annotations.
             return_tensors (`str` or `TensorType`, *optional*, defaults to self.return_tensors):
                 Type of tensors to return. If `None`, will return the list of images.
@@ -1106,19 +1208,32 @@ class YolosImageProcessor(BaseImageProcessor):
         do_normalize = self.do_normalize if do_normalize is None else do_normalize
         image_mean = self.image_mean if image_mean is None else image_mean
         image_std = self.image_std if image_std is None else image_std
+        do_convert_annotations = (
+            self.do_convert_annotations if do_convert_annotations is None else do_convert_annotations
+        )
         do_pad = self.do_pad if do_pad is None else do_pad
         format = self.format if format is None else format
-
-        if do_resize is not None and size is None:
-            raise ValueError("Size and max_size must be specified if do_resize is True.")
-
-        if do_rescale is not None and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize is not None and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         images = make_list_of_images(images)
+
+        if not valid_images(images):
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+        # Here the pad() method pads using the max of (width, height) and does not need to be validated.
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
+
         if annotations is not None and isinstance(annotations, dict):
             annotations = [annotations]
 
@@ -1127,34 +1242,13 @@ class YolosImageProcessor(BaseImageProcessor):
                 f"The number of images ({len(images)}) and annotations ({len(annotations)}) do not match."
             )
 
-        if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
-
-        format = AnnotionFormat(format)
+        format = AnnotationFormat(format)
         if annotations is not None:
-            if format == AnnotionFormat.COCO_DETECTION and not valid_coco_detection_annotations(annotations):
-                raise ValueError(
-                    "Invalid COCO detection annotations. Annotations must a dict (single image) of list of dicts "
-                    "(batch of images) with the following keys: `image_id` and `annotations`, with the latter "
-                    "being a list of annotations in the COCO format."
-                )
-            elif format == AnnotionFormat.COCO_PANOPTIC and not valid_coco_panoptic_annotations(annotations):
-                raise ValueError(
-                    "Invalid COCO panoptic annotations. Annotations must a dict (single image) of list of dicts "
-                    "(batch of images) with the following keys: `image_id`, `file_name` and `segments_info`, with "
-                    "the latter being a list of annotations in the COCO format."
-                )
-            elif format not in SUPPORTED_ANNOTATION_FORMATS:
-                raise ValueError(
-                    f"Unsupported annotation format: {format} must be one of {SUPPORTED_ANNOTATION_FORMATS}"
-                )
+            validate_annotations(format, SUPPORTED_ANNOTATION_FORMATS, annotations)
 
         if (
             masks_path is not None
-            and format == AnnotionFormat.COCO_PANOPTIC
+            and format == AnnotationFormat.COCO_PANOPTIC
             and not isinstance(masks_path, (pathlib.Path, str))
         ):
             raise ValueError(
@@ -1224,26 +1318,34 @@ class YolosImageProcessor(BaseImageProcessor):
             images = [
                 self.normalize(image, image_mean, image_std, input_data_format=input_data_format) for image in images
             ]
-            if annotations is not None:
-                annotations = [
-                    self.normalize_annotation(annotation, get_image_size(image))
-                    for annotation, image in zip(annotations, images)
-                ]
+
+        if do_convert_annotations and annotations is not None:
+            annotations = [
+                self.normalize_annotation(annotation, get_image_size(image, input_data_format))
+                for annotation, image in zip(annotations, images)
+            ]
 
         if do_pad:
-            data = self.pad(images, data_format=data_format, input_data_format=input_data_format)
+            # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
+            encoded_inputs = self.pad(
+                images,
+                annotations=annotations,
+                return_pixel_mask=False,
+                data_format=data_format,
+                input_data_format=input_data_format,
+                update_bboxes=do_convert_annotations,
+                return_tensors=return_tensors,
+            )
         else:
             images = [
                 to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
                 for image in images
             ]
-            data = {"pixel_values": images}
-
-        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
-        if annotations is not None:
-            encoded_inputs["labels"] = [
-                BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
-            ]
+            encoded_inputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+            if annotations is not None:
+                encoded_inputs["labels"] = [
+                    BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
+                ]
 
         return encoded_inputs
 

@@ -47,7 +47,7 @@ from .configuration_xlm_roberta_xl import XLMRobertaXLConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "xlm-roberta-xlarge"
+_CHECKPOINT_FOR_DOC = "facebook/xlm-roberta-xl"
 _CONFIG_FOR_DOC = "XLMRobertaXLConfig"
 
 XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -653,7 +653,7 @@ XLM_ROBERTA_XL_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare XLM-RoBERTa-xlarge Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare XLM-RoBERTa-XL Model transformer outputting raw hidden-states without any specific head on top.",
     XLM_ROBERTA_XL_START_DOCSTRING,
 )
 class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
@@ -833,7 +833,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
 
 
 @add_start_docstrings(
-    """XLM-RoBERTa-xlarge Model with a `language modeling` head on top for CLM fine-tuning.""",
+    """XLM-RoBERTa-XL Model with a `language modeling` head on top for CLM fine-tuning.""",
     XLM_ROBERTA_XL_START_DOCSTRING,
 )
 class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel):
@@ -906,10 +906,10 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel):
         >>> from transformers import AutoTokenizer, RobertaForCausalLM, RobertaConfig
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("roberta-base")
-        >>> config = RobertaConfig.from_pretrained("roberta-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base")
+        >>> config = RobertaConfig.from_pretrained("FacebookAI/roberta-base")
         >>> config.is_decoder = True
-        >>> model = RobertaForCausalLM.from_pretrained("roberta-base", config=config)
+        >>> model = RobertaForCausalLM.from_pretrained("FacebookAI/roberta-base", config=config)
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> prediction_logits = outputs.logits
@@ -990,7 +990,7 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel):
 
 
 @add_start_docstrings(
-    """XLM-RoBERTa-xlarge Model with a `language modeling` head on top.""", XLM_ROBERTA_XL_START_DOCSTRING
+    """XLM-RoBERTa-XL Model with a `language modeling` head on top.""", XLM_ROBERTA_XL_START_DOCSTRING
 )
 class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
@@ -1081,7 +1081,7 @@ class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
 
 
 class XLMRobertaXLLMHead(nn.Module):
-    """XLM-Roberta-xlarge Head for masked language modeling."""
+    """XLM-RoBERTa-XL Head for masked language modeling."""
 
     def __init__(self, config):
         super().__init__()
@@ -1109,7 +1109,7 @@ class XLMRobertaXLLMHead(nn.Module):
 
 @add_start_docstrings(
     """
-    XLM-RoBERTa-xlarge Model transformer with a sequence classification/regression head on top (a linear layer on top
+    XLM-RoBERTa-XL Model transformer with a sequence classification/regression head on top (a linear layer on top
     of the pooled output) e.g. for GLUE tasks.
     """,
     XLM_ROBERTA_XL_START_DOCSTRING,
@@ -1203,7 +1203,7 @@ class XLMRobertaXLForSequenceClassification(XLMRobertaXLPreTrainedModel):
 
 @add_start_docstrings(
     """
-    XLM-Roberta-xlarge Model with a multiple choice classification head on top (a linear layer on top of the pooled
+    XLM-RoBERTa-XL Model with a multiple choice classification head on top (a linear layer on top of the pooled
     output and a softmax) e.g. for RocStories/SWAG tasks.
     """,
     XLM_ROBERTA_XL_START_DOCSTRING,
@@ -1294,7 +1294,7 @@ class XLMRobertaXLForMultipleChoice(XLMRobertaXLPreTrainedModel):
 
 @add_start_docstrings(
     """
-    XLM-Roberta-xlarge Model with a token classification head on top (a linear layer on top of the hidden-states
+    XLM-RoBERTa-XL Model with a token classification head on top (a linear layer on top of the hidden-states
     output) e.g. for Named-Entity-Recognition (NER) tasks.
     """,
     XLM_ROBERTA_XL_START_DOCSTRING,
@@ -1405,7 +1405,7 @@ class XLMRobertaXLClassificationHead(nn.Module):
 
 @add_start_docstrings(
     """
-    XLM-Roberta-xlarge Model with a span classification head on top for extractive question-answering tasks like SQuAD
+    XLM-RoBERTa-XL Model with a span classification head on top for extractive question-answering tasks like SQuAD
     (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     XLM_ROBERTA_XL_START_DOCSTRING,

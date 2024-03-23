@@ -15,11 +15,10 @@
 """ Testing suite for the PyTorch MobileNetV2 model. """
 
 
-import inspect
 import unittest
 
 from transformers import MobileNetV2Config
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -196,7 +195,7 @@ class MobileNetV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": MobileNetV2Model,
+            "image-feature-extraction": MobileNetV2Model,
             "image-classification": MobileNetV2ForImageClassification,
             "image-segmentation": MobileNetV2ForSemanticSegmentation,
         }
@@ -227,18 +226,6 @@ class MobileNetV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     @unittest.skip(reason="MobileNetV2 does not output attentions")
     def test_attention_outputs(self):
         pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -283,6 +270,10 @@ class MobileNetV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         for model_name in MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = MobileNetV2Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @is_flaky(description="is_flaky https://github.com/huggingface/transformers/issues/29516")
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
 
 
 # We will verify our results on an image of cute cats

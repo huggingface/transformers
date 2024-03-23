@@ -25,11 +25,13 @@ from ...tokenization_utils import (
     TextInput,
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import PaddingStrategy, logging
-from .tokenization_seamless_m4t import (
-    SeamlessM4TTokenizer,
-)
+from ...utils import PaddingStrategy, is_sentencepiece_available, logging
 
+
+if is_sentencepiece_available():
+    from .tokenization_seamless_m4t import SeamlessM4TTokenizer
+else:
+    SeamlessM4TTokenizer = None
 
 logger = logging.get_logger(__name__)
 

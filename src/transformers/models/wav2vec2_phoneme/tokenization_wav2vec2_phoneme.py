@@ -247,7 +247,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text, **kwargs):
         """
-        Converts a string in a sequence of tokens (string), using the tokenizer.
+        Converts a string into a sequence of tokens (string), using the tokenizer.
         """
 
         # make sure whitespace is stripped to prevent <unk>

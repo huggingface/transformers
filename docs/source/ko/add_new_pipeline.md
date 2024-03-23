@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # 어떻게 사용자 정의 파이프라인을 생성하나요? [[how-to-create-a-custom-pipeline]]
 
-이 가이드에서는 사용자 정의 파이프라인을 어떻게 생성하고 [허브](hf.co/models)에 공유하거나 🤗 Transformers 라이브러리에 추가하는 방법을 살펴보겠습니다.
+이 가이드에서는 사용자 정의 파이프라인을 어떻게 생성하고 [허브](https://hf.co/models)에 공유하거나 🤗 Transformers 라이브러리에 추가하는 방법을 살펴보겠습니다.
 
 먼저 파이프라인이 수용할 수 있는 원시 입력을 결정해야 합니다.
 문자열, 원시 바이트, 딕셔너리 또는 가장 원하는 입력일 가능성이 높은 것이면 무엇이든 가능합니다.

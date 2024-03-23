@@ -100,27 +100,13 @@ transformers-cli convert --model_type gpt \
 Aqui está um exemplo do processo de conversão para um modelo OpenAI GPT-2 pré-treinado (consulte [aqui](https://github.com/openai/gpt-2))
 
 ```bash
-export OPENAI_GPT2_CHECKPOINT_PATH=/path/to/gpt2/pretrained/weights
+export OPENAI_GPT2_CHECKPOINT_PATH=/path/to/openai-community/gpt2/pretrained/weights
 
-transformers-cli convert --model_type gpt2 \
+transformers-cli convert --model_type openai-community/gpt2 \
   --tf_checkpoint $OPENAI_GPT2_CHECKPOINT_PATH \
   --pytorch_dump_output $PYTORCH_DUMP_OUTPUT \
   [--config OPENAI_GPT2_CONFIG] \
   [--finetuning_task_name OPENAI_GPT2_FINETUNED_TASK]
-```
-
-## Transformer-XL
-
-Aqui está um exemplo do processo de conversão para um modelo Transformer-XL pré-treinado (consulte [aqui](https://github.com/kimiyoung/transformer-xl/tree/master/tf#obtain-and-evaluate-pretrained-modelos-sota))
-
-```bash
-export TRANSFO_XL_CHECKPOINT_FOLDER_PATH=/path/to/transfo/xl/checkpoint
-
-transformers-cli convert --model_type transfo_xl \
-  --tf_checkpoint $TRANSFO_XL_CHECKPOINT_FOLDER_PATH \
-  --pytorch_dump_output $PYTORCH_DUMP_OUTPUT \
-  [--config TRANSFO_XL_CONFIG] \
-  [--finetuning_task_name TRANSFO_XL_FINETUNED_TASK]
 ```
 
 ## XLNet

@@ -43,12 +43,12 @@ Laden Sie zunächst den Datensatz [Yelp Reviews](https://huggingface.co/datasets
  'text': 'My expectations for McDonalds are t rarely high. But for one to still fail so spectacularly...that takes something special!\\nThe cashier took my friends\'s order, then promptly ignored me. I had to force myself in front of a cashier who opened his register to wait on the person BEHIND me. I waited over five minutes for a gigantic order that included precisely one kid\'s meal. After watching two people who ordered after me be handed their food, I asked where mine was. The manager started yelling at the cashiers for \\"serving off their orders\\" when they didn\'t have their food. But neither cashier was anywhere near those controls, and the manager was the one serving food to customers and clearing the boards.\\nThe manager was rude when giving me my order. She didn\'t make sure that I had everything ON MY RECEIPT, and never even had the decency to apologize that I felt I was getting poor service.\\nI\'ve eaten at various McDonalds restaurants for over 30 years. I\'ve worked at more than one location. I expect bad days, bad moods, and the occasional mistake. But I have yet to have a decent experience at this store. It will remain a place I avoid unless someone in my party needs to avoid illness from low blood sugar. Perhaps I should go back to the racially biased service of Steak n Shake instead!'}
 ```
 
-Wie Sie nun wissen, benötigen Sie einen Tokenizer, um den Text zu verarbeiten und eine Auffüll- und Abschneidungsstrategie einzubauen, um mit variablen Sequenzlängen umzugehen. Um Ihren Datensatz in einem Schritt zu verarbeiten, verwenden Sie die 🤗 Methode Datasets [`map`](https://huggingface.co/docs/datasets/process.html#map), um eine Vorverarbeitungsfunktion auf den gesamten Datensatz anzuwenden:
+Wie Sie nun wissen, benötigen Sie einen Tokenizer, um den Text zu verarbeiten und eine Auffüll- und Abschneidungsstrategie einzubauen, um mit variablen Sequenzlängen umzugehen. Um Ihren Datensatz in einem Schritt zu verarbeiten, verwenden Sie die 🤗 Methode Datasets [`map`](https://huggingface.co/docs/datasets/process#map), um eine Vorverarbeitungsfunktion auf den gesamten Datensatz anzuwenden:
 
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 
 
 >>> def tokenize_function(examples):
@@ -86,7 +86,7 @@ Beginnen Sie mit dem Laden Ihres Modells und geben Sie die Anzahl der erwarteten
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
+>>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
 ```
 
 <Tip>
@@ -187,7 +187,7 @@ Wir können sie also ohne Tokenisierung direkt in ein NumPy-Array konvertieren!
 ```py
 from transformers import AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 tokenized_data = tokenizer(dataset["text"], return_tensors="np", padding=True)
 # Tokenizer returns a BatchEncoding, but we convert that to a dict for Keras
 tokenized_data = dict(tokenized_data)
@@ -202,7 +202,7 @@ from transformers import TFAutoModelForSequenceClassification
 from tensorflow.keras.optimizers import Adam
 
 # Load and compile our model
-model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased")
+model = TFAutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased")
 # Lower learning rates are often better for fine-tuning transformers
 model.compile(optimizer=Adam(3e-5))
 
@@ -229,10 +229,10 @@ tf.data"-Pipeline schreiben können, wenn Sie wollen, haben wir zwei bequeme Met
 - [`~TFPreTrainedModel.prepare_tf_dataset`]: Dies ist die Methode, die wir in den meisten Fällen empfehlen. Da es sich um eine Methode
 Ihres Modells ist, kann sie das Modell inspizieren, um automatisch herauszufinden, welche Spalten als Modelleingaben verwendet werden können, und
 verwirft die anderen, um einen einfacheren, leistungsfähigeren Datensatz zu erstellen.
-- [~datasets.Dataset.to_tf_dataset`]: Diese Methode ist eher auf niedriger Ebene angesiedelt und ist nützlich, wenn Sie genau kontrollieren wollen, wie
+- [`~datasets.Dataset.to_tf_dataset`]: Diese Methode ist eher auf niedriger Ebene angesiedelt und ist nützlich, wenn Sie genau kontrollieren wollen, wie
 Dataset erstellt wird, indem man genau angibt, welche `columns` und `label_cols` einbezogen werden sollen.
 
-Bevor Sie [~TFPreTrainedModel.prepare_tf_dataset`] verwenden können, müssen Sie die Tokenizer-Ausgaben als Spalten zu Ihrem Datensatz hinzufügen, wie in
+Bevor Sie [`~TFPreTrainedModel.prepare_tf_dataset`] verwenden können, müssen Sie die Tokenizer-Ausgaben als Spalten zu Ihrem Datensatz hinzufügen, wie in
 dem folgenden Codebeispiel:
 
 ```py
@@ -333,7 +333,7 @@ Laden Sie Ihr Modell mit der Anzahl der erwarteten Kennzeichnungen:
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
+>>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
 ```
 
 ### Optimierer und Lernratensteuerung

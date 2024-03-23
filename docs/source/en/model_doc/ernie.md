@@ -23,7 +23,7 @@ including [ERNIE1.0](https://arxiv.org/abs/1904.09223), [ERNIE2.0](https://ojs.a
 
 These models are contributed by [nghuyong](https://huggingface.co/nghuyong) and the official code can be found in [PaddleNLP](https://github.com/PaddlePaddle/PaddleNLP) (in PaddlePaddle).
 
-### How to use
+### Usage example
 Take `ernie-1.0-base-zh` as an example:
 
 ```Python
@@ -32,7 +32,7 @@ tokenizer = AutoTokenizer.from_pretrained("nghuyong/ernie-1.0-base-zh")
 model = AutoModel.from_pretrained("nghuyong/ernie-1.0-base-zh")
 ```
 
-### Supported Models
+### Model checkpoints
 
 |     Model Name      | Language |           Description           |
 |:-------------------:|:--------:|:-------------------------------:|
@@ -51,7 +51,7 @@ You can find all the supported models from huggingface's model hub: [huggingface
 repo: [PaddleNLP](https://paddlenlp.readthedocs.io/zh/latest/model_zoo/transformers/ERNIE/contents.html)
 and [ERNIE](https://github.com/PaddlePaddle/ERNIE/blob/repro).
 
-## Documentation resources
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)

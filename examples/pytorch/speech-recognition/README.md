@@ -100,7 +100,7 @@ of **0.35**.
 The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface.co/transformers/main/model_doc/xlsr_wav2vec2.html) on [Common Voice](https://huggingface.co/datasets/common_voice) using 8 GPUs in half-precision.
 
 ```bash
-python -m torch.distributed.launch \
+torchrun \
 	--nproc_per_node 8 run_speech_recognition_ctc.py \
 	--dataset_name="common_voice" \
 	--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
@@ -134,7 +134,7 @@ of **0.36**.
 
 ### Multi GPU CTC with Dataset Streaming
 
-The following command shows how to use [Dataset Streaming mode](https://huggingface.co/docs/datasets/dataset_streaming.html)
+The following command shows how to use [Dataset Streaming mode](https://huggingface.co/docs/datasets/dataset_streaming)
 to fine-tune [XLS-R](https://huggingface.co/transformers/main/model_doc/xls_r.html) 
 on [Common Voice](https://huggingface.co/datasets/common_voice) using 4 GPUs in half-precision.
 
@@ -147,7 +147,7 @@ However, the `--shuffle_buffer_size` argument controls how many examples we can 
 
 
 ```bash
-**python -m torch.distributed.launch \
+**torchrun \
 	--nproc_per_node 4 run_speech_recognition_ctc_streaming.py \
 	--dataset_name="common_voice" \
 	--model_name_or_path="facebook/wav2vec2-xls-r-300m" \
@@ -277,7 +277,7 @@ language or concept the adapter layers shall be trained. The adapter weights wil
 accordingly be called `adapter.{<target_language}.safetensors`.
 
 Let's run an example script. Make sure to be logged in so that your model can be directly uploaded to the Hub.
-```
+```bash
 huggingface-cli login
 ```
 
@@ -404,7 +404,7 @@ If training on a different language, you should be sure to change the `language`
 #### Multi GPU Whisper Training
 The following example shows how to fine-tune the [Whisper small](https://huggingface.co/openai/whisper-small) checkpoint on the Hindi subset of [Common Voice 11](https://huggingface.co/datasets/mozilla-foundation/common_voice_11_0) using 2 GPU devices in half-precision:
 ```bash
-python -m torch.distributed.launch \
+torchrun \
  	--nproc_per_node 2 run_speech_recognition_seq2seq.py \
 	--model_name_or_path="openai/whisper-small" \
 	--dataset_name="mozilla-foundation/common_voice_11_0" \
@@ -446,7 +446,7 @@ A very common use case is to leverage a pretrained speech encoder model,
 
 By pairing a pretrained speech model with a pretrained text model, the warm-started model has prior knowledge of both the source audio and target text domains. However, the cross-attention weights between the encoder and decoder are randomly initialised. Thus, the model requires fine-tuning to learn the cross-attention weights and align the encoder mapping with that of the decoder. We can perform this very fine-tuning procedure using the example script.
 
-As an example, let's instantiate a *Wav2Vec2-2-Bart* model with the `SpeechEnocderDecoderModel` framework. First create an empty repo on `hf.co`:
+As an example, let's instantiate a *Wav2Vec2-2-Bart* model with the `SpeechEncoderDecoderModel` framework. First create an empty repo on `hf.co`:
 
 ```bash
 huggingface-cli repo create wav2vec2-2-bart-base
@@ -506,7 +506,7 @@ Having warm-started the speech-encoder-decoder model under `<your-user-name>/wav
 In the script [`run_speech_recognition_seq2seq`], we load the warm-started model, 
 feature extractor, and tokenizer, process a speech recognition dataset, 
 and subsequently make use of the [`Seq2SeqTrainer`](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.Seq2SeqTrainer) to train our system.
-Note that it is important to align the target transcriptions with the decoder's vocabulary. For example, the [`Librispeech`](https://huggingface.co/datasets/librispeech_asr) dataset only contains captilized letters in the transcriptions,
+Note that it is important to align the target transcriptions with the decoder's vocabulary. For example, the [`Librispeech`](https://huggingface.co/datasets/librispeech_asr) dataset only contains capitalized letters in the transcriptions,
 whereas BART was pretrained mostly on normalized text. Thus, it is recommended to add the argument 
 `--do_lower_case` to the fine-tuning script when using a warm-started `SpeechEncoderDecoderModel`. 
 The model is fine-tuned on the standard cross-entropy language modeling
@@ -572,7 +572,7 @@ cross-entropy loss of **0.405** and word error rate of **0.0728**.
 The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface.co/transformers/main/model_doc/xlsr_wav2vec2.html) on [Common Voice](https://huggingface.co/datasets/common_voice) using 8 GPUs in half-precision.
 
 ```bash
-python -m torch.distributed.launch \
+torchrun \
  	--nproc_per_node 8 run_speech_recognition_seq2seq.py \
 	--dataset_name="librispeech_asr" \
 	--model_name_or_path="./" \

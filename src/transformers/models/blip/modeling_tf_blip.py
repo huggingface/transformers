@@ -27,6 +27,7 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     get_initializer,
     get_tf_activation,
+    keras,
     keras_serializable,
     shape_list,
     unpack_inputs,
@@ -63,7 +64,7 @@ TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # Copied from transformers.models.clip.modeling_tf_clip.contrastive_loss
 def contrastive_loss(logits: tf.Tensor) -> tf.Tensor:
     return tf.math.reduce_mean(
-        tf.keras.metrics.sparse_categorical_crossentropy(
+        keras.metrics.sparse_categorical_crossentropy(
             y_true=tf.range(shape_list(logits)[0]), y_pred=logits, from_logits=True
         )
     )
@@ -108,8 +109,8 @@ class TFBlipForConditionalGenerationModelOutput(ModelOutput):
     logits: Tuple[tf.Tensor] | None = None
     image_embeds: tf.Tensor | None = None
     last_hidden_state: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
     @property
     def decoder_logits(self):
@@ -150,8 +151,8 @@ class TFBlipTextVisionModelOutput(ModelOutput):
     loss: tf.Tensor | None = None
     image_embeds: tf.Tensor | None = None
     last_hidden_state: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -191,9 +192,9 @@ class TFBlipImageTextMatchingModelOutput(ModelOutput):
     loss: tf.Tensor | None = None
     image_embeds: tf.Tensor | None = None
     last_hidden_state: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
     vision_pooler_output: tf.Tensor | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
     question_embeds: Tuple[tf.Tensor] | None = None
 
 
@@ -234,7 +235,7 @@ class TFBlipOutput(ModelOutput):
         )
 
 
-class TFBlipVisionEmbeddings(tf.keras.layers.Layer):
+class TFBlipVisionEmbeddings(keras.layers.Layer):
     def __init__(self, config: BlipVisionConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -242,7 +243,7 @@ class TFBlipVisionEmbeddings(tf.keras.layers.Layer):
         self.image_size = config.image_size
         self.patch_size = config.patch_size
 
-        self.patch_embedding = tf.keras.layers.Conv2D(
+        self.patch_embedding = keras.layers.Conv2D(
             filters=self.embed_dim,
             kernel_size=self.patch_size,
             strides=self.patch_size,
@@ -254,7 +255,7 @@ class TFBlipVisionEmbeddings(tf.keras.layers.Layer):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         self.class_embedding = self.add_weight(
             shape=(1, 1, self.embed_dim),
             initializer=get_initializer(self.config.initializer_range),
@@ -268,7 +269,13 @@ class TFBlipVisionEmbeddings(tf.keras.layers.Layer):
             trainable=True,
             name="position_embedding",
         )
-        super().build(input_shape)
+
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "patch_embedding", None) is not None:
+            with tf.name_scope(self.patch_embedding.name):
+                self.patch_embedding.build([None, None, None, 3])
 
     def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
         # Input is channels-first, we transpose. PyTorch transposes after the conv because PyTorch
@@ -285,7 +292,7 @@ class TFBlipVisionEmbeddings(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.clip.modeling_tf_clip.TFCLIPTextEmbeddings with CLIP->Blip
-class TFBlipTextEmbeddings(tf.keras.layers.Layer):
+class TFBlipTextEmbeddings(keras.layers.Layer):
     def __init__(self, config: BlipTextConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -343,7 +350,7 @@ class TFBlipTextEmbeddings(tf.keras.layers.Layer):
         return final_embeddings
 
 
-class TFBlipAttention(tf.keras.layers.Layer):
+class TFBlipAttention(keras.layers.Layer):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config, **kwargs):
@@ -358,13 +365,13 @@ class TFBlipAttention(tf.keras.layers.Layer):
                 f" {self.num_heads})."
             )
         self.scale = self.head_dim**-0.5
-        self.dropout = tf.keras.layers.Dropout(config.attention_dropout, name="dropout")
+        self.dropout = keras.layers.Dropout(config.attention_dropout, name="dropout")
 
-        self.qkv = tf.keras.layers.Dense(
+        self.qkv = keras.layers.Dense(
             3 * self.embed_dim, kernel_initializer=get_initializer(config.initializer_range), name="qkv"
         )
 
-        self.projection = tf.keras.layers.Dense(
+        self.projection = keras.layers.Dense(
             self.embed_dim, kernel_initializer=get_initializer(config.initializer_range), name="projection"
         )
 
@@ -412,8 +419,22 @@ class TFBlipAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dropout", None) is not None:
+            with tf.name_scope(self.dropout.name):
+                self.dropout.build(None)
+        if getattr(self, "qkv", None) is not None:
+            with tf.name_scope(self.qkv.name):
+                self.qkv.build([None, None, self.embed_dim])
+        if getattr(self, "projection", None) is not None:
+            with tf.name_scope(self.projection.name):
+                self.projection.build([None, None, self.embed_dim])
 
-class TFBlipMLP(tf.keras.layers.Layer):
+
+class TFBlipMLP(keras.layers.Layer):
     def __init__(self, config: BlipConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -422,12 +443,13 @@ class TFBlipMLP(tf.keras.layers.Layer):
         in_proj_std = (config.hidden_size**-0.5) * ((2 * config.num_hidden_layers) ** -0.5)
         fc_std = (2 * config.hidden_size) ** -0.5
 
-        self.fc1 = tf.keras.layers.Dense(
+        self.fc1 = keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(fc_std), name="fc1"
         )
-        self.fc2 = tf.keras.layers.Dense(
+        self.fc2 = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(in_proj_std), name="fc2"
         )
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.fc1(inputs=hidden_states)
@@ -435,15 +457,26 @@ class TFBlipMLP(tf.keras.layers.Layer):
         hidden_states = self.fc2(inputs=hidden_states)
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "fc1", None) is not None:
+            with tf.name_scope(self.fc1.name):
+                self.fc1.build([None, None, self.config.hidden_size])
+        if getattr(self, "fc2", None) is not None:
+            with tf.name_scope(self.fc2.name):
+                self.fc2.build([None, None, self.config.intermediate_size])
 
-class TFBlipEncoderLayer(tf.keras.layers.Layer):
+
+class TFBlipEncoderLayer(keras.layers.Layer):
     def __init__(self, config: BlipConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.hidden_size
         self.self_attn = TFBlipAttention(config, name="self_attn")
-        self.layer_norm1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1")
+        self.layer_norm1 = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1")
         self.mlp = TFBlipMLP(config, name="mlp")
-        self.layer_norm2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2")
+        self.layer_norm2 = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2")
 
     def call(
         self,
@@ -485,6 +518,23 @@ class TFBlipEncoderLayer(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attn", None) is not None:
+            with tf.name_scope(self.self_attn.name):
+                self.self_attn.build(None)
+        if getattr(self, "layer_norm1", None) is not None:
+            with tf.name_scope(self.layer_norm1.name):
+                self.layer_norm1.build([None, None, self.embed_dim])
+        if getattr(self, "mlp", None) is not None:
+            with tf.name_scope(self.mlp.name):
+                self.mlp.build(None)
+        if getattr(self, "layer_norm2", None) is not None:
+            with tf.name_scope(self.layer_norm2.name):
+                self.layer_norm2.build([None, None, self.embed_dim])
+
 
 class TFBlipPreTrainedModel(TFPreTrainedModel):
     """
@@ -502,7 +552,7 @@ BLIP_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -565,7 +615,7 @@ BLIP_INPUTS_DOCSTRING = r"""
 
 
 @keras_serializable
-class TFBlipEncoder(tf.keras.layers.Layer):
+class TFBlipEncoder(keras.layers.Layer):
     config_class = BlipConfig
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -645,6 +695,15 @@ class TFBlipEncoder(tf.keras.layers.Layer):
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 class TFBlipVisionModel(TFBlipPreTrainedModel):
     main_input_name = "pixel_values"
@@ -656,7 +715,8 @@ class TFBlipVisionModel(TFBlipPreTrainedModel):
 
         self.embeddings = TFBlipVisionEmbeddings(config, name="embeddings")
         self.encoder = TFBlipEncoder(config, name="encoder")
-        self.post_layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="post_layernorm")
+        self.post_layernorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="post_layernorm")
+        self.embed_dim = config.hidden_size
 
     def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
@@ -724,8 +784,22 @@ class TFBlipVisionModel(TFBlipPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "post_layernorm", None) is not None:
+            with tf.name_scope(self.post_layernorm.name):
+                self.post_layernorm.build([None, None, self.embed_dim])
 
-class TFBlipMainLayer(tf.keras.layers.Layer):
+
+class TFBlipMainLayer(keras.layers.Layer):
     config_class = BlipConfig
 
     def __init__(self, config: BlipConfig, *args, **kwargs):
@@ -753,13 +827,13 @@ class TFBlipMainLayer(tf.keras.layers.Layer):
         self.text_model = TFBlipTextModel(text_config, name="text_model")
         self.vision_model = TFBlipVisionModel(vision_config, name="vision_model")
 
-        self.visual_projection = tf.keras.layers.Dense(
+        self.visual_projection = keras.layers.Dense(
             self.projection_dim,
             use_bias=False,
             kernel_initializer=get_initializer(config.initializer_range),
             name="visual_projection",
         )
-        self.text_projection = tf.keras.layers.Dense(
+        self.text_projection = keras.layers.Dense(
             self.projection_dim,
             use_bias=False,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -772,10 +846,25 @@ class TFBlipMainLayer(tf.keras.layers.Layer):
         self.logit_scale = self.add_weight(
             name="logit_scale",
             shape=[],
-            initializer=tf.keras.initializers.Constant(self.config.logit_scale_init_value),
+            initializer=keras.initializers.Constant(self.config.logit_scale_init_value),
             trainable=True,
         )
-        super().build(input_shape)
+
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "text_model", None) is not None:
+            with tf.name_scope(self.text_model.name):
+                self.text_model.build(None)
+        if getattr(self, "vision_model", None) is not None:
+            with tf.name_scope(self.vision_model.name):
+                self.vision_model.build(None)
+        if getattr(self, "visual_projection", None) is not None:
+            with tf.name_scope(self.visual_projection.name):
+                self.visual_projection.build([None, None, self.vision_embed_dim])
+        if getattr(self, "text_projection", None) is not None:
+            with tf.name_scope(self.text_projection.name):
+                self.text_projection.build([None, None, self.text_embed_dim])
 
     @unpack_inputs
     def call(
@@ -995,6 +1084,14 @@ class TFBlipModel(TFBlipPreTrainedModel):
 
         return image_features
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "blip", None) is not None:
+            with tf.name_scope(self.blip.name):
+                self.blip.build(None)
+
 
 @add_start_docstrings(
     """
@@ -1020,7 +1117,7 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
         self.decoder_input_ids = config.text_config.bos_token_id
         self.decoder_pad_token_id = config.text_config.pad_token_id
 
-    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+    def get_input_embeddings(self) -> keras.layers.Layer:
         return self.vision_model.embeddings.patch_embedding
 
     @unpack_inputs
@@ -1075,7 +1172,7 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
             attention_mask=attention_mask,
             encoder_hidden_states=image_embeds,
             labels=labels,
-            return_dict=return_dict,
+            return_dict=False,
             training=training,
         )
 
@@ -1083,12 +1180,19 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
             outputs = (outputs[0], outputs[1], image_embeds, vision_outputs[0]) + vision_outputs[2:]
             return tuple(output for output in outputs if output is not None)
 
-        if outputs.loss is not None and outputs.loss.shape.rank == 0:
-            outputs.loss = tf.reshape(outputs.loss, (1,))
+        if labels is not None:
+            loss = outputs[0]
+            logits = outputs[1]
+        else:
+            loss = None
+            logits = outputs[0]
+
+        if loss is not None and loss.shape.rank == 0:
+            loss = tf.reshape(loss, (1,))
 
         return TFBlipForConditionalGenerationModelOutput(
-            loss=outputs.loss,
-            logits=outputs.logits,
+            loss=loss,
+            logits=logits,
             image_embeds=image_embeds,
             last_hidden_state=vision_outputs.last_hidden_state,
             hidden_states=vision_outputs.hidden_states,
@@ -1168,6 +1272,17 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "vision_model", None) is not None:
+            with tf.name_scope(self.vision_model.name):
+                self.vision_model.build(None)
+        if getattr(self, "text_decoder", None) is not None:
+            with tf.name_scope(self.text_decoder.name):
+                self.text_decoder.build(None)
+
 
 @add_start_docstrings(
     """
@@ -1193,7 +1308,7 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
         self.decoder_pad_token_id = config.text_config.pad_token_id
         self.decoder_start_token_id = config.text_config.bos_token_id
 
-    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+    def get_input_embeddings(self) -> keras.layers.Layer:
         return self.vision_model.embeddings.patch_embedding
 
     # Adapted from transformers.models.t5.modeling_tf_t5.TFT5PreTrainedModel._shift_right
@@ -1409,6 +1524,20 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "vision_model", None) is not None:
+            with tf.name_scope(self.vision_model.name):
+                self.vision_model.build(None)
+        if getattr(self, "text_encoder", None) is not None:
+            with tf.name_scope(self.text_encoder.name):
+                self.text_encoder.build(None)
+        if getattr(self, "text_decoder", None) is not None:
+            with tf.name_scope(self.text_decoder.name):
+                self.text_decoder.build(None)
+
 
 @add_start_docstrings(
     """
@@ -1429,21 +1558,21 @@ class TFBlipForImageTextRetrieval(TFBlipPreTrainedModel):
         self.text_encoder = TFBlipTextModel(config.text_config, name="text_encoder", add_pooling_layer=False)
 
         # vision projection layer
-        self.vision_proj = tf.keras.layers.Dense(
+        self.vision_proj = keras.layers.Dense(
             config.image_text_hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="vision_proj",
         )
 
         # text projection layer
-        self.text_proj = tf.keras.layers.Dense(
+        self.text_proj = keras.layers.Dense(
             config.image_text_hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="text_proj",
         )
 
         # image text matching head
-        self.itm_head = tf.keras.layers.Dense(
+        self.itm_head = keras.layers.Dense(
             2, kernel_initializer=get_initializer(config.initializer_range), name="itm_head"
         )
 
@@ -1457,8 +1586,9 @@ class TFBlipForImageTextRetrieval(TFBlipPreTrainedModel):
             if not hasattr(config, "decoder_start_token_id")
             else config.decoder_start_token_id
         )
+        self.config = config
 
-    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+    def get_input_embeddings(self) -> keras.layers.Layer:
         return self.vision_model.embeddings.patch_embedding
 
     @unpack_inputs
@@ -1558,3 +1688,23 @@ class TFBlipForImageTextRetrieval(TFBlipPreTrainedModel):
             attentions=vision_outputs.attentions,
             question_embeds=question_embeds,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "vision_model", None) is not None:
+            with tf.name_scope(self.vision_model.name):
+                self.vision_model.build(None)
+        if getattr(self, "text_encoder", None) is not None:
+            with tf.name_scope(self.text_encoder.name):
+                self.text_encoder.build(None)
+        if getattr(self, "vision_proj", None) is not None:
+            with tf.name_scope(self.vision_proj.name):
+                self.vision_proj.build([None, None, self.config.vision_config.hidden_size])
+        if getattr(self, "text_proj", None) is not None:
+            with tf.name_scope(self.text_proj.name):
+                self.text_proj.build([None, None, self.config.text_config.hidden_size])
+        if getattr(self, "itm_head", None) is not None:
+            with tf.name_scope(self.itm_head.name):
+                self.itm_head.build([None, None, self.config.text_config.hidden_size])

@@ -91,6 +91,7 @@ class PoolFormerConfig(PretrainedConfig):
     >>> configuration = model.config
     ```
     """
+
     model_type = "poolformer"
 
     def __init__(

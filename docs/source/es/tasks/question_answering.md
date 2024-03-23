@@ -23,7 +23,7 @@ La respuesta a preguntas devuelve una respuesta a partir de una pregunta dada. E
 - Extractiva: extraer la respuesta a partir del contexto dado.
 - Abstractiva: generar una respuesta que responda correctamente la pregunta a partir del contexto dado.
 
-Esta guía te mostrará como hacer fine-tuning de [DistilBERT](https://huggingface.co/distilbert-base-uncased) en el dataset [SQuAD](https://huggingface.co/datasets/squad) para responder preguntas de forma extractiva.
+Esta guía te mostrará como hacer fine-tuning de [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) en el dataset [SQuAD](https://huggingface.co/datasets/squad) para responder preguntas de forma extractiva.
 
 <Tip>
 
@@ -64,7 +64,7 @@ Carga el tokenizer de DistilBERT para procesar los campos `question` (pregunta) 
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Hay algunos pasos de preprocesamiento específicos para la tarea de respuesta a preguntas que debes tener en cuenta:
@@ -164,7 +164,7 @@ Carga el modelo DistilBERT con [`AutoModelForQuestionAnswering`]:
 ```py
 >>> from transformers import AutoModelForQuestionAnswering, TrainingArguments, Trainer
 
->>> model = AutoModelForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+>>> model = AutoModelForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 <Tip>
@@ -247,7 +247,7 @@ Carga el modelo DistilBERT con [`TFAutoModelForQuestionAnswering`]:
 ```py
 >>> from transformers import TFAutoModelForQuestionAnswering
 
->>> model = TFAutoModelForQuestionAnswering("distilbert-base-uncased")
+>>> model = TFAutoModelForQuestionAnswering("distilbert/distilbert-base-uncased")
 ```
 
 Configura el modelo para entrenarlo con [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):

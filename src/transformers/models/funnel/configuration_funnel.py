@@ -96,6 +96,7 @@ class FunnelConfig(PretrainedConfig):
         pool_q_only (`bool`, *optional*, defaults to `True`):
             Whether or not to apply the pooling only to the query or to query, key and values for the attention layers.
     """
+
     model_type = "funnel"
     attribute_map = {
         "hidden_size": "d_model",

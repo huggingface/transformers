@@ -33,14 +33,14 @@ performance gains are maintained when pretrained on larger datasets (\eg ImageNe
 ImageNet-22k, our CvT-W24 obtains a top-1 accuracy of 87.7\% on the ImageNet-1k val set. Finally, our results show that the positional encoding, 
 a crucial component in existing Vision Transformers, can be safely removed in our model, simplifying the design for higher resolution vision tasks.*
 
-Tips:
+This model was contributed by [anugunj](https://huggingface.co/anugunj). The original code can be found [here](https://github.com/microsoft/CvT).
+
+## Usage tips
 
 - CvT models are regular Vision Transformers, but trained with convolutions. They outperform the [original model (ViT)](vit) when fine-tuned on ImageNet-1K and CIFAR-100.
 - You can check out demo notebooks regarding inference as well as fine-tuning on custom data [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer) (you can just replace [`ViTFeatureExtractor`] by [`AutoImageProcessor`] and [`ViTForImageClassification`] by [`CvtForImageClassification`]).
 - The available checkpoints are either (1) pre-trained on [ImageNet-22k](http://www.image-net.org/) (a collection of 14 million images and 22k classes) only, (2) also fine-tuned on ImageNet-22k or (3) also fine-tuned on [ImageNet-1k](http://www.image-net.org/challenges/LSVRC/2012/) (also referred to as ILSVRC 2012, a collection of 1.3 million
   images and 1,000 classes).
-
-This model was contributed by [anugunj](https://huggingface.co/anugunj). The original code can be found [here](https://github.com/microsoft/CvT).
 
 ## Resources
 
@@ -57,6 +57,9 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] CvtConfig
 
+<frameworkcontent>
+<pt>
+
 ## CvtModel
 
 [[autodoc]] CvtModel
@@ -66,6 +69,9 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] CvtForImageClassification
     - forward
+
+</pt>
+<tf>
 
 ## TFCvtModel
 
@@ -77,3 +83,5 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] TFCvtForImageClassification
     - call
 
+</tf>
+</frameworkcontent>

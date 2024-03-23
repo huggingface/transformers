@@ -105,6 +105,7 @@ class CodeGenConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "codegen"
     attribute_map = {
         "max_position_embeddings": "n_positions",

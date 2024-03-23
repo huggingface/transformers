@@ -53,7 +53,7 @@ class MptModelTester:
         use_labels=True,
         use_mc_token_ids=True,
         vocab_size=99,
-        hidden_size=32,
+        hidden_size=48,
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
@@ -383,6 +383,12 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     def test_mpt_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mpt_model(*config_and_inputs)
+
+    def test_mpt_model_alibi_tensor(self):
+        # test creation of alibi tensor when num heads is not a power of two
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs[0].n_heads = 6
         self.model_tester.create_and_check_mpt_model(*config_and_inputs)
 
     def test_mpt_model_past(self):

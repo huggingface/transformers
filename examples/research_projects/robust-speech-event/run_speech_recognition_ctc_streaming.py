@@ -395,7 +395,7 @@ def main():
     # so we just need to set the correct target sampling rate and normalize the input
     # via the `feature_extractor`
     feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, token=data_args.use_auth_token
     )
 
     if training_args.do_train:
@@ -403,7 +403,7 @@ def main():
             path=data_args.dataset_name,
             name=data_args.dataset_config_name,
             split=data_args.train_split_name,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
             streaming=True,
             sampling_rate=feature_extractor.sampling_rate,
         )
@@ -431,7 +431,7 @@ def main():
             path=data_args.dataset_name,
             name=data_args.dataset_config_name,
             split=data_args.eval_split_name,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
             streaming=True,
             sampling_rate=feature_extractor.sampling_rate,
         )
@@ -465,7 +465,7 @@ def main():
     # 3. Next, let's load the config as we might need it to create
     # the tokenizer
     config = AutoConfig.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, token=data_args.use_auth_token
     )
 
     # 4. Now we can instantiate the tokenizer and model
@@ -481,7 +481,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_name_or_path,
         config=config,
-        use_auth_token=data_args.use_auth_token,
+        token=data_args.use_auth_token,
     )
 
     # adapt config
@@ -509,7 +509,7 @@ def main():
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         config=config,
-        use_auth_token=data_args.use_auth_token,
+        token=data_args.use_auth_token,
     )
 
     # freeze encoder

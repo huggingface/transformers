@@ -22,7 +22,7 @@ A multiple choice task is similar to question answering, except several candidat
 
 This guide will show you how to:
 
-1. Finetune [BERT](https://huggingface.co/bert-base-uncased) on the `regular` configuration of the [SWAG](https://huggingface.co/datasets/swag) dataset to select the best answer given multiple options and some context.
+1. Finetune [BERT](https://huggingface.co/google-bert/bert-base-uncased) on the `regular` configuration of the [SWAG](https://huggingface.co/datasets/swag) dataset to select the best answer given multiple options and some context.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -90,7 +90,7 @@ The next step is to load a BERT tokenizer to process the sentence starts and the
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 ```
 
 The preprocessing function you want to create needs to:
@@ -253,7 +253,7 @@ You're ready to start training your model now! Load BERT with [`AutoModelForMult
 ```py
 >>> from transformers import AutoModelForMultipleChoice, TrainingArguments, Trainer
 
->>> model = AutoModelForMultipleChoice.from_pretrained("bert-base-uncased")
+>>> model = AutoModelForMultipleChoice.from_pretrained("google-bert/bert-base-uncased")
 ```
 
 At this point, only three steps remain:
@@ -317,7 +317,7 @@ Then you can load BERT with [`TFAutoModelForMultipleChoice`]:
 ```py
 >>> from transformers import TFAutoModelForMultipleChoice
 
->>> model = TFAutoModelForMultipleChoice.from_pretrained("bert-base-uncased")
+>>> model = TFAutoModelForMultipleChoice.from_pretrained("google-bert/bert-base-uncased")
 ```
 
 Convert your datasets to the `tf.data.Dataset` format with [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:

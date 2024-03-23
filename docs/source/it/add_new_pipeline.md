@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Come creare una pipeline personalizzata?
 
-In questa guida, scopriremo come creare una pipeline personalizzata e condividerla sull' [Hub](hf.co/models) o aggiungerla nella libreria
+In questa guida, scopriremo come creare una pipeline personalizzata e condividerla sull' [Hub](https://hf.co/models) o aggiungerla nella libreria
 Transformers.
 
 Innanzitutto, è necessario decidere gli input grezzi che la pipeline sarà in grado di accettare. Possono essere strings, raw bytes,

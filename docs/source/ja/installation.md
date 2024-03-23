@@ -135,10 +135,10 @@ Python環境は次回の実行時に🤗 Transformersの`main`バージョンを
 
 ## condaでのインストール
 
-`huggingface`のcondaチャンネルからインストールします:
+`conda-forge`のcondaチャンネルからインストールします:
 
 ```bash
-conda install -c huggingface transformers
+conda install conda-forge::transformers
 ```
 
 ## キャッシュの設定
@@ -168,14 +168,14 @@ conda install -c huggingface transformers
 例えば、外部インスタンスに対してファイアウォールで保護された通常のネットワーク上でプログラムを実行する場合、通常以下のようなコマンドで実行することになります:
 
 ```bash
-python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
 オフラインインスタンスでこの同じプログラムを実行します:
 
 ```bash
 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
-python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
 このスクリプトは、ローカルファイルのみを検索することが分かっているので、ハングアップしたりタイムアウトを待ったりすることなく実行されるはずです。

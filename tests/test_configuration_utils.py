@@ -142,7 +142,7 @@ class ConfigPushToHubTester(unittest.TestCase):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
-        config.push_to_hub("valid_org/test-config-org", use_auth_token=self._token)
+        config.push_to_hub("valid_org/test-config-org", token=self._token)
 
         new_config = BertConfig.from_pretrained("valid_org/test-config-org")
         for k, v in config.to_dict().items():
@@ -154,9 +154,7 @@ class ConfigPushToHubTester(unittest.TestCase):
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(
-                tmp_dir, repo_id="valid_org/test-config-org", push_to_hub=True, use_auth_token=self._token
-            )
+            config.save_pretrained(tmp_dir, repo_id="valid_org/test-config-org", push_to_hub=True, token=self._token)
 
         new_config = BertConfig.from_pretrained("valid_org/test-config-org")
         for k, v in config.to_dict().items():
@@ -167,7 +165,7 @@ class ConfigPushToHubTester(unittest.TestCase):
         CustomConfig.register_for_auto_class()
         config = CustomConfig(attribute=42)
 
-        config.push_to_hub("test-dynamic-config", use_auth_token=self._token)
+        config.push_to_hub("test-dynamic-config", token=self._token)
 
         # This has added the proper auto_map field to the config
         self.assertDictEqual(config.auto_map, {"AutoConfig": "custom_configuration.CustomConfig"})
@@ -200,7 +198,14 @@ class ConfigTestUtils(unittest.TestCase):
         missing_keys = [key for key in base_config.__dict__ if key not in config_common_kwargs]
         # If this part of the test fails, you have arguments to addin config_common_kwargs above.
         self.assertListEqual(
-            missing_keys, ["is_encoder_decoder", "_name_or_path", "_commit_hash", "transformers_version"]
+            missing_keys,
+            [
+                "is_encoder_decoder",
+                "_name_or_path",
+                "_commit_hash",
+                "_attn_implementation_internal",
+                "transformers_version",
+            ],
         )
         keys_with_defaults = [key for key, value in config_common_kwargs.items() if value == getattr(base_config, key)]
         if len(keys_with_defaults) > 0:
@@ -243,14 +248,8 @@ class ConfigTestUtils(unittest.TestCase):
             # This check we did call the fake head request
             mock_head.assert_called()
 
-    def test_legacy_load_from_url(self):
-        # This test is for deprecated behavior and can be removed in v5
-        _ = BertConfig.from_pretrained(
-            "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/config.json"
-        )
-
     def test_local_versioning(self):
-        configuration = AutoConfig.from_pretrained("bert-base-cased")
+        configuration = AutoConfig.from_pretrained("google-bert/bert-base-cased")
         configuration.configuration_files = ["config.4.0.0.json"]
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -291,3 +290,19 @@ class ConfigTestUtils(unittest.TestCase):
         old_transformers.configuration_utils.__version__ = "v3.0.0"
         old_configuration = old_transformers.models.auto.AutoConfig.from_pretrained(repo)
         self.assertEqual(old_configuration.hidden_size, 768)
+
+    def test_saving_config_with_custom_generation_kwargs_raises_warning(self):
+        config = BertConfig(min_length=3)  # `min_length = 3` is a non-default generation kwarg
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertLogs("transformers.configuration_utils", level="WARNING") as logs:
+                config.save_pretrained(tmp_dir)
+            self.assertEqual(len(logs.output), 1)
+            self.assertIn("min_length", logs.output[0])
+
+    def test_has_non_default_generation_parameters(self):
+        config = BertConfig()
+        self.assertFalse(config._has_non_default_generation_parameters())
+        config = BertConfig(min_length=3)
+        self.assertTrue(config._has_non_default_generation_parameters())
+        config = BertConfig(min_length=0)  # `min_length = 0` is a default generation kwarg
+        self.assertFalse(config._has_non_default_generation_parameters())

@@ -16,6 +16,144 @@ rendered properly in your Markdown viewer.
 
 # Debugging
 
+Training on multiple GPUs can be a tricky endeavor whether you're running into installation issues or communication problems between your GPUs. This debugging guide covers some issues you may run into and how to resolve them.
+
+## DeepSpeed CUDA installation
+
+If you're using DeepSpeed, you've probably already installed it with the following command.
+
+```bash
+pip install deepspeed
+```
+
+DeepSpeed compiles CUDA C++ code and it can be a potential source of errors when building PyTorch extensions that require CUDA. These errors depend on how CUDA is installed on your system, and this section focuses on PyTorch built with *CUDA 10.2*.
+
+<Tip>
+
+For any other installation issues, please [open an issue](https://github.com/microsoft/DeepSpeed/issues) with the DeepSpeed team.
+
+</Tip>
+
+### Non-identical CUDA toolkits
+
+PyTorch comes with its own CUDA toolkit, but to use DeepSpeed with PyTorch, you need to have an identical version of CUDA installed system-wide. For example, if you installed PyTorch with `cudatoolkit==10.2` in your Python environment, then you'll also need to have CUDA 10.2 installed system-wide. If you don't have CUDA installed system-wide, you should install it first.
+
+The exact location may vary from system to system, but `usr/local/cuda-10.2` is the most common location on many Unix systems. When CUDA is correctly setup and added to your `PATH` environment variable, you can find the installation location with the following command:
+
+```bash
+which nvcc
+```
+
+### Multiple CUDA toolkits
+
+You may also have more than one CUDA toolkit installed system-wide.
+
+```bash
+/usr/local/cuda-10.2
+/usr/local/cuda-11.0
+```
+
+Typically, package installers set the paths to whatever the last version was installed. If the package build fails because it can't find the right CUDA version (despite it being installed system-wide already), then you need to configure the `PATH` and `LD_LIBRARY_PATH` environment variables to point to the correct path.
+
+Take a look at the contents of these environment variables first:
+
+```bash
+echo $PATH
+echo $LD_LIBRARY_PATH
+```
+
+`PATH` lists the locations of the executables and `LD_LIBRARY_PATH` lists where to look for shared libraries. Earlier entries are prioritized over later ones, and `:` is used to separate multiple entries. To tell the build program where to find the specific CUDA toolkit you want, insert the correct path to list first. This command prepends rather than overwrites the existing values.
+
+```bash
+# adjust the version and full path if needed
+export PATH=/usr/local/cuda-10.2/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:$LD_LIBRARY_PATH
+```
+
+In addition, you should also check the directories you assign actually exist. The `lib64` sub-directory contains various CUDA `.so` objects (like `libcudart.so`) and while it is unlikely your system names them differently, you should check the actual names and change them accordingly.
+
+### Older CUDA versions
+
+Sometimes, older CUDA versions may refuse to build with newer compilers. For example, if you have `gcc-9` but CUDA wants `gcc-7`. Usually, installing the latest CUDA toolkit enables support for the newer compiler.
+
+You could also install an older version of the compiler in addition to the one you're currently using (or it may already be installed but it's not used by default and the build system can't see it). To resolve this, you can create a symlink to give the build system visibility to the older compiler.
+
+```bash
+# adapt the path to your system
+sudo ln -s /usr/bin/gcc-7  /usr/local/cuda-10.2/bin/gcc
+sudo ln -s /usr/bin/g++-7  /usr/local/cuda-10.2/bin/g++
+```
+
+### Prebuild
+
+If you're still having issues with installing DeepSpeed or if you're building DeepSpeed at run time, you can try to prebuild the DeepSpeed modules before installing them. To make a local build for DeepSpeed:
+
+```bash
+git clone https://github.com/microsoft/DeepSpeed/
+cd DeepSpeed
+rm -rf build
+TORCH_CUDA_ARCH_LIST="8.6" DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 pip install . \
+--global-option="build_ext" --global-option="-j8" --no-cache -v \
+--disable-pip-version-check 2>&1 | tee build.log
+```
+
+<Tip>
+
+To use NVMe offload, add the `DS_BUILD_AIO=1` parameter to the build command and make sure you install the libaio-dev package system-wide.
+
+</Tip>
+
+Next, you'll have to specify your GPU's architecture by editing the `TORCH_CUDA_ARCH_LIST` variable (find a complete list of NVIDIA GPUs and their corresponding architectures on this [page](https://developer.nvidia.com/cuda-gpus)). To check the PyTorch version that corresponds to your architecture, run the following command:
+
+```bash
+python -c "import torch; print(torch.cuda.get_arch_list())"
+```
+
+Find the architecture for a GPU with the following command:
+
+<hfoptions id="arch">
+<hfoption id="same GPUs">
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python -c "import torch; print(torch.cuda.get_device_capability())"
+```
+
+</hfoption>
+<hfoption id="specific GPU">
+
+To find the architecture for GPU `0`:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python -c "import torch; \
+print(torch.cuda.get_device_properties(torch.device('cuda')))
+"_CudaDeviceProperties(name='GeForce RTX 3090', major=8, minor=6, total_memory=24268MB, multi_processor_count=82)"
+```
+
+This means your GPU architecture is `8.6`.
+
+</hfoption>
+</hfoptions>
+
+If you get `8, 6`, then you can set `TORCH_CUDA_ARCH_LIST="8.6"`. For multiple GPUs with different architectures, list them like `TORCH_CUDA_ARCH_LIST="6.1;8.6"`.
+
+It is also possible to not specify `TORCH_CUDA_ARCH_LIST` and the build program automatically queries the GPU architecture of the build. However, it may or may not match the actual GPU on the target machine which is why it is better to explicitly specify the correct architecture.
+
+For training on multiple machines with the same setup, you'll need to make a binary wheel:
+
+```bash
+git clone https://github.com/microsoft/DeepSpeed/
+cd DeepSpeed
+rm -rf build
+TORCH_CUDA_ARCH_LIST="8.6" DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 \
+python setup.py build_ext -j8 bdist_wheel
+```
+
+This command generates a binary wheel that'll look something like `dist/deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl`. Now you can install this wheel locally or on another machine.
+
+```bash
+pip install deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl
+```
+
 ## Multi-GPU Network Issues Debug
 
 When training or inferencing with `DistributedDataParallel` and multiple GPU, if you run into issue of inter-communication between processes and/or nodes, you can use the following script to diagnose network issues.

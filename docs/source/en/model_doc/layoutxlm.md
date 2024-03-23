@@ -33,6 +33,10 @@ introduce a multilingual form understanding benchmark dataset named XFUN, which 
 for each language. Experiment results show that the LayoutXLM model has significantly outperformed the existing SOTA
 cross-lingual pre-trained models on the XFUN dataset.*
 
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/microsoft/unilm).
+
+## Usage tips and examples
+
 One can directly plug in the weights of LayoutXLM into a LayoutLMv2 model, like so:
 
 ```python
@@ -56,10 +60,10 @@ Similar to LayoutLMv2, you can use [`LayoutXLMProcessor`] (which internally appl
 [`LayoutXLMTokenizer`]/[`LayoutXLMTokenizerFast`] in sequence) to prepare all
 data for the model.
 
+<Tip>
+
 As LayoutXLM's architecture is equivalent to that of LayoutLMv2, one can refer to [LayoutLMv2's documentation page](layoutlmv2) for all tips, code examples and notebooks.
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/microsoft/unilm).
-
+</Tip>
 
 ## LayoutXLMTokenizer
 

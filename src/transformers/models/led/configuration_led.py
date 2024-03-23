@@ -97,6 +97,7 @@ class LEDConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "led"
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",

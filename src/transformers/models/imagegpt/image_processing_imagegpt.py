@@ -29,6 +29,8 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
 
@@ -101,6 +103,18 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         self.resample = resample
         self.do_normalize = do_normalize
         self.do_color_quantize = do_color_quantize
+        self._valid_processor_keys = [
+            "images",
+            "do_resize",
+            "size",
+            "resample",
+            "do_normalize",
+            "do_color_quantize",
+            "clusters",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
     def resize(
@@ -237,14 +251,21 @@ class ImageGPTImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if do_resize and size is None or resample is None:
-            raise ValueError("Size and resample must be specified if do_resize is True.")
+        # Here, normalize() is using a constant factor to divide pixel values.
+        # hence, the method does not need iamge_mean and image_std.
+        validate_preprocess_arguments(
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
 
         if do_color_quantize and clusters is None:
             raise ValueError("Clusters must be specified if do_color_quantize is True.")

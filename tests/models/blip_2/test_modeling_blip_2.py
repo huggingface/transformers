@@ -23,9 +23,16 @@ import numpy as np
 import requests
 
 from transformers import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_multi_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -186,6 +193,18 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="Blip2VisionModel has no base class and is not available in MODEL_MAPPING")
@@ -372,6 +391,7 @@ class Blip2ForConditionalGenerationDecoderOnlyModelTester:
         self.vision_model_tester = Blip2VisionModelTester(parent, **vision_kwargs)
         self.qformer_model_tester = Blip2QFormerModelTester(parent, **qformer_kwargs)
         self.text_model_tester = Blip2TextModelDecoderOnlyTester(parent, **text_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
 
@@ -415,7 +435,7 @@ class Blip2ForConditionalGenerationDecoderOnlyModelTester:
 
 
 @require_torch
-class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unittest.TestCase):
+class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
@@ -598,6 +618,7 @@ class Blip2ModelTester:
         self.vision_model_tester = Blip2VisionModelTester(parent, **vision_kwargs)
         self.qformer_model_tester = Blip2QFormerModelTester(parent, **qformer_kwargs)
         self.text_model_tester = Blip2TextModelTester(parent, **text_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
 
@@ -663,7 +684,7 @@ class Blip2ModelTester:
 
 
 @require_torch
-class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration, Blip2Model) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -849,7 +870,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         prompt = "Question: which city is this? Answer:"
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
 
-        predictions = model.generate(**inputs)
+        # max_length for BLIP includes prompt length from now on, use max_new_tokens
+        predictions = model.generate(**inputs, max_new_tokens=11)
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
@@ -922,8 +944,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(predictions[0].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
         self.assertEqual(predictions[1].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
 
-    @require_torch_multi_gpu
-    def test_inference_opt_multi_gpu(self):
+    @require_torch_multi_accelerator
+    def test_inference_opt_multi_accelerator(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
         model = Blip2ForConditionalGeneration.from_pretrained(
             "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16, device_map="balanced"
@@ -954,8 +976,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(generated_text, "it's not a city, it's a beach")
 
-    @require_torch_multi_gpu
-    def test_inference_t5_multi_gpu(self):
+    @require_torch_multi_accelerator
+    def test_inference_t5_multi_accelerator(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
         device_map = device_map = {
             "query_tokens": 0,

@@ -43,6 +43,29 @@ class TextToAudioPipeline(Pipeline):
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
+    <Tip>
+
+    You can specify parameters passed to the model by using [`TextToAudioPipeline.__call__.forward_params`] or
+    [`TextToAudioPipeline.__call__.generate_kwargs`].
+
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small", framework="pt")
+
+    >>> # diversify the music generation by adding randomness with a high temperature and set a maximum music length
+    >>> generate_kwargs = {
+    ...     "do_sample": True,
+    ...     "temperature": 0.7,
+    ...     "max_new_tokens": 35,
+    ... }
+
+    >>> outputs = music_generator("Techno music with high melodic riffs", generate_kwargs=generate_kwargs)
+    ```
+
+    </Tip>
 
     This pipeline can currently be loaded from [`pipeline`] using the following task identifiers: `"text-to-speech"` or
     `"text-to-audio"`.
@@ -107,11 +130,26 @@ class TextToAudioPipeline(Pipeline):
     def _forward(self, model_inputs, **kwargs):
         # we expect some kwargs to be additional tensors which need to be on the right device
         kwargs = self._ensure_tensor_on_device(kwargs, device=self.device)
+        forward_params = kwargs["forward_params"]
+        generate_kwargs = kwargs["generate_kwargs"]
 
         if self.model.can_generate():
-            output = self.model.generate(**model_inputs, **kwargs)
+            # we expect some kwargs to be additional tensors which need to be on the right device
+            generate_kwargs = self._ensure_tensor_on_device(generate_kwargs, device=self.device)
+
+            # generate_kwargs get priority over forward_params
+            forward_params.update(generate_kwargs)
+
+            output = self.model.generate(**model_inputs, **forward_params)
         else:
-            output = self.model(**model_inputs, **kwargs)[0]
+            if len(generate_kwargs):
+                raise ValueError(
+                    f"""You're using the `TextToAudioPipeline` with a forward-only model, but `generate_kwargs` is non empty.
+                                 For forward-only TTA models, please use `forward_params` instead of of
+                                 `generate_kwargs`. For reference, here are the `generate_kwargs` used here:
+                                 {generate_kwargs.keys()}"""
+                )
+            output = self.model(**model_inputs, **forward_params)[0]
 
         if self.vocoder is not None:
             # in that case, the output is a spectrogram that needs to be converted into a waveform
@@ -126,8 +164,14 @@ class TextToAudioPipeline(Pipeline):
         Args:
             text_inputs (`str` or `List[str]`):
                 The text(s) to generate.
-            forward_params (*optional*):
-                Parameters passed to the model generation/forward method.
+            forward_params (`dict`, *optional*):
+                Parameters passed to the model generation/forward method. `forward_params` are always passed to the
+                underlying model.
+            generate_kwargs (`dict`, *optional*):
+                The dictionary of ad-hoc parametrization of `generate_config` to be used for the generation call. For a
+                complete overview of generate, check the [following
+                guide](https://huggingface.co/docs/transformers/en/main_classes/text_generation). `generate_kwargs` are
+                only passed to the underlying model if the latter is a generative model.
 
         Return:
             A `dict` or a list of `dict`: The dictionaries have two keys:
@@ -141,14 +185,18 @@ class TextToAudioPipeline(Pipeline):
         self,
         preprocess_params=None,
         forward_params=None,
+        generate_kwargs=None,
     ):
+        params = {
+            "forward_params": forward_params if forward_params else {},
+            "generate_kwargs": generate_kwargs if generate_kwargs else {},
+        }
+
         if preprocess_params is None:
             preprocess_params = {}
-        if forward_params is None:
-            forward_params = {}
         postprocess_params = {}
 
-        return preprocess_params, forward_params, postprocess_params
+        return preprocess_params, params, postprocess_params
 
     def postprocess(self, waveform):
         output_dict = {}

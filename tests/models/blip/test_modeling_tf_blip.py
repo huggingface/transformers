@@ -44,6 +44,7 @@ if is_tf_available():
         TFBlipTextModel,
         TFBlipVisionModel,
     )
+    from transformers.modeling_tf_utils import keras
     from transformers.models.blip.modeling_tf_blip import TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -172,9 +173,9 @@ class TFBlipVisionModelTest(TFModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (tf.keras.layers.Layer))
+            self.assertIsInstance(model.get_input_embeddings(), (keras.layers.Layer))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Layer))
+            self.assertTrue(x is None or isinstance(x, keras.layers.Layer))
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

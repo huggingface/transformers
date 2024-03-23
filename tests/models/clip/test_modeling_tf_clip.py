@@ -38,6 +38,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFCLIPModel, TFCLIPTextModel, TFCLIPVisionModel, TFSharedEmbeddings
+    from transformers.modeling_tf_utils import keras
     from transformers.models.clip.modeling_tf_clip import TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -151,9 +152,9 @@ class TFCLIPVisionModelTest(TFModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (tf.keras.layers.Layer))
+            self.assertIsInstance(model.get_input_embeddings(), (keras.layers.Layer))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Layer))
+            self.assertTrue(x is None or isinstance(x, keras.layers.Layer))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -283,7 +284,7 @@ class TFCLIPVisionModelTest(TFModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=True)
                 saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
-                model = tf.keras.models.load_model(saved_model_dir)
+                model = keras.models.load_model(saved_model_dir)
                 outputs = model(class_inputs_dict)
                 output_hidden_states = outputs["hidden_states"]
                 output_attentions = outputs["attentions"]
@@ -443,7 +444,7 @@ class TFCLIPTextModelTest(TFModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=True)
                 saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
-                model = tf.keras.models.load_model(saved_model_dir)
+                model = keras.models.load_model(saved_model_dir)
                 outputs = model(class_inputs_dict)
                 output_hidden_states = outputs["hidden_states"]
                 output_attentions = outputs["attentions"]
@@ -565,7 +566,7 @@ class TFCLIPModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             and module_member_name[: -len("MainLayer")] == model_class.__name__[: -len("Model")]
             for module_member in (getattr(module, module_member_name),)
             if isinstance(module_member, type)
-            and tf.keras.layers.Layer in module_member.__bases__
+            and keras.layers.Layer in module_member.__bases__
             and getattr(module_member, "_keras_serializable", False)
         }
         for main_layer_class in tf_main_layer_classes:
@@ -579,17 +580,17 @@ class TFCLIPModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 main_layer = main_layer_class(config)
 
             symbolic_inputs = {
-                name: tf.keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
+                name: keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
             }
 
-            model = tf.keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
+            model = keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
             outputs = model(inputs_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 filepath = os.path.join(tmpdirname, "keras_model.h5")
                 model.save(filepath)
                 if "T5" in main_layer_class.__name__:
-                    model = tf.keras.models.load_model(
+                    model = keras.models.load_model(
                         filepath,
                         custom_objects={
                             main_layer_class.__name__: main_layer_class,
@@ -597,10 +598,10 @@ class TFCLIPModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                         },
                     )
                 else:
-                    model = tf.keras.models.load_model(
+                    model = keras.models.load_model(
                         filepath, custom_objects={main_layer_class.__name__: main_layer_class}
                     )
-                assert isinstance(model, tf.keras.Model)
+                assert isinstance(model, keras.Model)
                 after_outputs = model(inputs_dict)
                 self.assert_outputs_same(after_outputs, outputs)
 

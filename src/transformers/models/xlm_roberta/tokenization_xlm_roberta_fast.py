@@ -36,46 +36,46 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": 
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "xlm-roberta-base": "https://huggingface.co/xlm-roberta-base/resolve/main/sentencepiece.bpe.model",
-        "xlm-roberta-large": "https://huggingface.co/xlm-roberta-large/resolve/main/sentencepiece.bpe.model",
-        "xlm-roberta-large-finetuned-conll02-dutch": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll02-dutch/resolve/main/sentencepiece.bpe.model"
+        "FacebookAI/xlm-roberta-base": "https://huggingface.co/FacebookAI/xlm-roberta-base/resolve/main/sentencepiece.bpe.model",
+        "FacebookAI/xlm-roberta-large": "https://huggingface.co/FacebookAI/xlm-roberta-large/resolve/main/sentencepiece.bpe.model",
+        "FacebookAI/xlm-roberta-large-finetuned-conll02-dutch": (
+            "https://huggingface.co/FacebookAI/xlm-roberta-large-finetuned-conll02-dutch/resolve/main/sentencepiece.bpe.model"
         ),
-        "xlm-roberta-large-finetuned-conll02-spanish": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll02-spanish/resolve/main/sentencepiece.bpe.model"
+        "FacebookAI/xlm-roberta-large-finetuned-conll02-spanish": (
+            "https://huggingface.co/FacebookAI/xlm-roberta-large-finetuned-conll02-spanish/resolve/main/sentencepiece.bpe.model"
         ),
-        "xlm-roberta-large-finetuned-conll03-english": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll03-english/resolve/main/sentencepiece.bpe.model"
+        "FacebookAI/xlm-roberta-large-finetuned-conll03-english": (
+            "https://huggingface.co/FacebookAI/xlm-roberta-large-finetuned-conll03-english/resolve/main/sentencepiece.bpe.model"
         ),
-        "xlm-roberta-large-finetuned-conll03-german": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll03-german/resolve/main/sentencepiece.bpe.model"
+        "FacebookAI/xlm-roberta-large-finetuned-conll03-german": (
+            "https://huggingface.co/FacebookAI/xlm-roberta-large-finetuned-conll03-german/resolve/main/sentencepiece.bpe.model"
         ),
     },
     "tokenizer_file": {
-        "xlm-roberta-base": "https://huggingface.co/xlm-roberta-base/resolve/main/tokenizer.json",
-        "xlm-roberta-large": "https://huggingface.co/xlm-roberta-large/resolve/main/tokenizer.json",
-        "xlm-roberta-large-finetuned-conll02-dutch": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll02-dutch/resolve/main/tokenizer.json"
+        "FacebookAI/xlm-roberta-base": "https://huggingface.co/FacebookAI/xlm-roberta-base/resolve/main/tokenizer.json",
+        "FacebookAI/xlm-roberta-large": "https://huggingface.co/FacebookAI/xlm-roberta-large/resolve/main/tokenizer.json",
+        "FacebookAI/xlm-roberta-large-finetuned-conll02-dutch": (
+            "https://huggingface.co/FacebookAI/xlm-roberta-large-finetuned-conll02-dutch/resolve/main/tokenizer.json"
         ),
-        "xlm-roberta-large-finetuned-conll02-spanish": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll02-spanish/resolve/main/tokenizer.json"
+        "FacebookAI/xlm-roberta-large-finetuned-conll02-spanish": (
+            "https://huggingface.co/FacebookAI/xlm-roberta-large-finetuned-conll02-spanish/resolve/main/tokenizer.json"
         ),
-        "xlm-roberta-large-finetuned-conll03-english": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll03-english/resolve/main/tokenizer.json"
+        "FacebookAI/xlm-roberta-large-finetuned-conll03-english": (
+            "https://huggingface.co/FacebookAI/xlm-roberta-large-finetuned-conll03-english/resolve/main/tokenizer.json"
         ),
-        "xlm-roberta-large-finetuned-conll03-german": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll03-german/resolve/main/tokenizer.json"
+        "FacebookAI/xlm-roberta-large-finetuned-conll03-german": (
+            "https://huggingface.co/FacebookAI/xlm-roberta-large-finetuned-conll03-german/resolve/main/tokenizer.json"
         ),
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "xlm-roberta-base": 512,
-    "xlm-roberta-large": 512,
-    "xlm-roberta-large-finetuned-conll02-dutch": 512,
-    "xlm-roberta-large-finetuned-conll02-spanish": 512,
-    "xlm-roberta-large-finetuned-conll03-english": 512,
-    "xlm-roberta-large-finetuned-conll03-german": 512,
+    "FacebookAI/xlm-roberta-base": 512,
+    "FacebookAI/xlm-roberta-large": 512,
+    "FacebookAI/xlm-roberta-large-finetuned-conll02-dutch": 512,
+    "FacebookAI/xlm-roberta-large-finetuned-conll02-spanish": 512,
+    "FacebookAI/xlm-roberta-large-finetuned-conll03-english": 512,
+    "FacebookAI/xlm-roberta-large-finetuned-conll03-german": 512,
 }
 
 

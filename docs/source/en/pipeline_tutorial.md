@@ -185,7 +185,7 @@ def data():
         yield f"My example {i}"
 
 
-pipe = pipeline(model="gpt2", device=0)
+pipe = pipeline(model="openai-community/gpt2", device=0)
 generated_characters = 0
 for out in pipe(data()):
     generated_characters += len(out[0]["generated_text"])
@@ -314,4 +314,30 @@ pipe = pipeline(model="facebook/opt-1.3b", device_map="auto", model_kwargs={"loa
 output = pipe("This is a cool example!", do_sample=True, top_p=0.95)
 ```
 
-Note that you can replace the checkpoint with any of the Hugging Face model that supports large model loading such as BLOOM!
+Note that you can replace the checkpoint with any Hugging Face model that supports large model loading, such as BLOOM.
+
+## Creating web demos from pipelines with `gradio`
+
+Pipelines are automatically supported in [Gradio](https://github.com/gradio-app/gradio/), a library that makes creating beautiful and user-friendly machine learning apps on the web a breeze. First, make sure you have Gradio installed:
+
+```
+pip install gradio
+```
+
+Then, you can create a web demo around an image classification pipeline (or any other pipeline) in a single line of code by calling Gradio's [`Interface.from_pipeline`](https://www.gradio.app/docs/interface#interface-from-pipeline) function to launch the pipeline. This creates an intuitive drag-and-drop interface in your browser:
+
+```py
+from transformers import pipeline
+import gradio as gr
+
+pipe = pipeline("image-classification", model="google/vit-base-patch16-224")
+
+gr.Interface.from_pipeline(pipe).launch()
+```
+
+
+![](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/panda-classification.png)
+
+By default, the web demo runs on a local server. If you'd like to share it with others, you can generate a temporary public
+link by setting `share=True` in `launch()`. You can also host your demo on [Hugging Face Spaces](https://huggingface.co/spaces) for a permanent link. 
+

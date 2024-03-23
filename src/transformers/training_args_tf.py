@@ -25,6 +25,8 @@ logger = logging.get_logger(__name__)
 if is_tf_available():
     import tensorflow as tf
 
+    from .modeling_tf_utils import keras
+
 
 @dataclass
 class TFTrainingArguments(TrainingArguments):
@@ -92,6 +94,8 @@ class TFTrainingArguments(TrainingArguments):
             Total number of training epochs to perform.
         max_steps (`int`, *optional*, defaults to -1):
             If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
+            For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
+            `max_steps` is reached.
         warmup_ratio (`float`, *optional*, defaults to 0.0):
             Ratio of total training steps used for a linear warmup from 0 to `learning_rate`.
         warmup_steps (`int`, *optional*, defaults to 0):
@@ -193,7 +197,7 @@ class TFTrainingArguments(TrainingArguments):
 
         # Set to float16 at first
         if self.fp16:
-            tf.keras.mixed_precision.set_global_policy("mixed_float16")
+            keras.mixed_precision.set_global_policy("mixed_float16")
 
         if self.no_cuda:
             strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
@@ -214,7 +218,7 @@ class TFTrainingArguments(TrainingArguments):
             if tpu:
                 # Set to bfloat16 in case of TPU
                 if self.fp16:
-                    tf.keras.mixed_precision.set_global_policy("mixed_bfloat16")
+                    keras.mixed_precision.set_global_policy("mixed_bfloat16")
 
                 tf.config.experimental_connect_to_cluster(tpu)
                 tf.tpu.experimental.initialize_tpu_system(tpu)

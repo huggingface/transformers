@@ -35,7 +35,7 @@ in the toxic content detection task under human-made attacks.*
 
 This model was contributed by [weiweishi](https://huggingface.co/weiweishi).
 
-## Documentation resources
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
@@ -49,7 +49,6 @@ This model was contributed by [weiweishi](https://huggingface.co/weiweishi).
 [[autodoc]] RoCBertConfig
     - all
 
-
 ## RoCBertTokenizer
 
 [[autodoc]] RoCBertTokenizer
@@ -58,30 +57,25 @@ This model was contributed by [weiweishi](https://huggingface.co/weiweishi).
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
-
 ## RoCBertModel
 
 [[autodoc]] RoCBertModel
     - forward
-
 
 ## RoCBertForPreTraining
 
 [[autodoc]] RoCBertForPreTraining
     - forward
 
-
 ## RoCBertForCausalLM
 
 [[autodoc]] RoCBertForCausalLM
     - forward
 
-
 ## RoCBertForMaskedLM
 
 [[autodoc]] RoCBertForMaskedLM
     - forward
-
 
 ## RoCBertForSequenceClassification
 
@@ -93,12 +87,10 @@ This model was contributed by [weiweishi](https://huggingface.co/weiweishi).
 [[autodoc]] transformers.RoCBertForMultipleChoice
     - forward
 
-
 ## RoCBertForTokenClassification
 
 [[autodoc]] transformers.RoCBertForTokenClassification
     - forward
-
 
 ## RoCBertForQuestionAnswering
 

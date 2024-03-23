@@ -90,6 +90,7 @@ class LiltConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "lilt"
 
     def __init__(

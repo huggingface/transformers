@@ -25,15 +25,15 @@ The abstract from the paper is the following:
 
 *fairseq is an open-source sequence modeling toolkit that allows researchers and developers to train custom models for translation, summarization, language modeling, and other text generation tasks. The toolkit is based on PyTorch and supports distributed training across multiple GPUs and machines. We also support fast mixed-precision training and inference on modern GPUs.*
 
-Tips:
+This model was contributed by [andreasmaden](https://huggingface.co/andreasmadsen).
+The original code can be found [here](https://github.com/princeton-nlp/DinkyTrain).
+
+## Usage tips
 
 - The implementation is the same as [Roberta](roberta) except instead of using _Add and Norm_ it does _Norm and Add_. _Add_ and _Norm_ refers to the Addition and LayerNormalization as described in [Attention Is All You Need](https://arxiv.org/abs/1706.03762).
 - This is identical to using the `--encoder-normalize-before` flag in [fairseq](https://fairseq.readthedocs.io/).
 
-This model was contributed by [andreasmaden](https://huggingface.co/andreasmaden).
-The original code can be found [here](https://github.com/princeton-nlp/DinkyTrain).
-
-## Documentation resources
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
@@ -45,6 +45,9 @@ The original code can be found [here](https://github.com/princeton-nlp/DinkyTrai
 ## RobertaPreLayerNormConfig
 
 [[autodoc]] RobertaPreLayerNormConfig
+
+<frameworkcontent>
+<pt>
 
 ## RobertaPreLayerNormModel
 
@@ -81,6 +84,9 @@ The original code can be found [here](https://github.com/princeton-nlp/DinkyTrai
 [[autodoc]] RobertaPreLayerNormForQuestionAnswering
     - forward
 
+</pt>
+<tf>
+
 ## TFRobertaPreLayerNormModel
 
 [[autodoc]] TFRobertaPreLayerNormModel
@@ -116,6 +122,9 @@ The original code can be found [here](https://github.com/princeton-nlp/DinkyTrai
 [[autodoc]] TFRobertaPreLayerNormForQuestionAnswering
     - call
 
+</tf>
+<jax>
+
 ## FlaxRobertaPreLayerNormModel
 
 [[autodoc]] FlaxRobertaPreLayerNormModel
@@ -150,3 +159,6 @@ The original code can be found [here](https://github.com/princeton-nlp/DinkyTrai
 
 [[autodoc]] FlaxRobertaPreLayerNormForQuestionAnswering
     - __call__
+
+</jax>
+</frameworkcontent>

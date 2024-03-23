@@ -32,7 +32,9 @@ that leverage DialoGPT generate more relevant, contentful and context-consistent
 systems. The pre-trained model and training pipeline are publicly released to facilitate research into neural response
 generation and the development of more intelligent open-domain dialogue systems.*
 
-Tips:
+The original code can be found [here](https://github.com/microsoft/DialoGPT).
+
+## Usage tips
 
 - DialoGPT is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather
   than the left.
@@ -47,7 +49,8 @@ follow the OpenAI GPT-2 to model a multiturn dialogue session as a long text and
 modeling. We first concatenate all dialog turns within a dialogue session into a long text x_1,..., x_N (N is the
 sequence length), ended by the end-of-text token.* For more information please confer to the original paper.
 
+<Tip>
 
-DialoGPT's architecture is based on the GPT2 model, so one can refer to [GPT2's documentation page](gpt2).
+DialoGPT's architecture is based on the GPT2 model, refer to [GPT2's documentation page](gpt2) for API reference and examples.
 
-The original code can be found [here](https://github.com/microsoft/DialoGPT).
+</Tip>

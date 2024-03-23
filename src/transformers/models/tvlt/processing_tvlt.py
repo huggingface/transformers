@@ -32,6 +32,7 @@ class TvltProcessor(ProcessorMixin):
         feature_extractor (`TvltFeatureExtractor`):
             An instance of [`TvltFeatureExtractor`]. The feature extractor is a required input.
     """
+
     attributes = ["image_processor", "feature_extractor"]
     image_processor_class = "TvltImageProcessor"
     feature_extractor_class = "TvltFeatureExtractor"

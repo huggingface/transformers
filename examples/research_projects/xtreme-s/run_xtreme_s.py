@@ -502,7 +502,7 @@ def main():
             data_args.dataset_name,
             config_name,
             split=data_args.train_split_name,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
             cache_dir=model_args.cache_dir,
         )
 
@@ -528,7 +528,7 @@ def main():
             data_args.dataset_name,
             config_name,
             split=data_args.eval_split_name,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
             cache_dir=model_args.cache_dir,
         )
 
@@ -540,7 +540,7 @@ def main():
             data_args.dataset_name,
             config_name,
             split=data_args.predict_split_name,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
             cache_dir=model_args.cache_dir,
         )
 
@@ -595,7 +595,7 @@ def main():
     # 3. Next, let's load the config as we might need it to create
     # the tokenizer
     config = AutoConfig.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, token=data_args.use_auth_token
     )
 
     if is_text_target:
@@ -651,11 +651,11 @@ def main():
     if is_text_target:
         tokenizer = AutoTokenizer.from_pretrained(
             tokenizer_name_or_path,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
             **tokenizer_kwargs,
         )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, token=data_args.use_auth_token
     )
 
     # adapt config
@@ -694,14 +694,14 @@ def main():
             model_args.model_name_or_path,
             cache_dir=model_args.cache_dir,
             config=config,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
         )
     elif config.is_encoder_decoder:
         model = AutoModelForSpeechSeq2Seq.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=model_args.cache_dir,
             config=config,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
         )
         if model.config.decoder_start_token_id is None:
             raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
@@ -710,7 +710,7 @@ def main():
             model_args.model_name_or_path,
             cache_dir=model_args.cache_dir,
             config=config,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
         )
 
     # freeze encoder

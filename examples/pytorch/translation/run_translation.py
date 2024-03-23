@@ -53,7 +53,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.35.0.dev0")
+check_min_version("4.40.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/translation/requirements.txt")
 
@@ -109,7 +109,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
                 "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
                 "execute code present on the Hub on your local machine."
             )
@@ -217,7 +217,7 @@ class DataTrainingArguments:
         },
     )
     num_beams: Optional[int] = field(
-        default=None,
+        default=1,
         metadata={
             "help": (
                 "Number of beams to use for evaluation. This argument will be passed to ``model.generate``, "
@@ -311,17 +311,17 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
         + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
 
     if data_args.source_prefix is None and model_args.model_name_or_path in [
-        "t5-small",
-        "t5-base",
-        "t5-large",
-        "t5-3b",
-        "t5-11b",
+        "google-t5/t5-small",
+        "google-t5/t5-base",
+        "google-t5/t5-large",
+        "google-t5/t5-3b",
+        "google-t5/t5-11b",
     ]:
         logger.warning(
             "You're running a t5 model but didn't provide a source prefix, which is expected, e.g. with "
@@ -374,8 +374,12 @@ def main():
         if data_args.test_file is not None:
             data_files["test"] = data_args.test_file
             extension = data_args.test_file.split(".")[-1]
+        if extension == "jsonl":
+            builder_name = "json"  # the "json" builder reads both .json and .jsonl files
+        else:
+            builder_name = extension  # e.g. "parquet"
         raw_datasets = load_dataset(
-            extension,
+            builder_name,
             data_files=data_files,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
@@ -464,6 +468,19 @@ def main():
     # Get the language codes for input/target.
     source_lang = data_args.source_lang.split("_")[0]
     target_lang = data_args.target_lang.split("_")[0]
+
+    # Check the whether the source target length fits in the model, if it has absolute positional embeddings
+    if (
+        hasattr(model.config, "max_position_embeddings")
+        and not hasattr(model.config, "relative_attention_max_distance")
+        and model.config.max_position_embeddings < data_args.max_source_length
+    ):
+        raise ValueError(
+            f"`--max_source_length` is set to {data_args.max_source_length}, but the model only has"
+            f" {model.config.max_position_embeddings} position encodings. Consider either reducing"
+            f" `--max_source_length` to {model.config.max_position_embeddings} or using a model with larger position "
+            "embeddings"
+        )
 
     # Temporarily set max_target_length for training.
     max_target_length = data_args.max_target_length
@@ -560,7 +577,7 @@ def main():
         )
 
     # Metric
-    metric = evaluate.load("sacrebleu")
+    metric = evaluate.load("sacrebleu", cache_dir=model_args.cache_dir)
 
     def postprocess_text(preds, labels):
         preds = [pred.strip() for pred in preds]

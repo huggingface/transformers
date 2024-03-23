@@ -55,7 +55,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        image_processor = CLIPImageProcessor(use_square_size=True)
+        image_processor = CLIPImageProcessor()
 
         # We have a SentencePiece fixture for testing
         slow_tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB)

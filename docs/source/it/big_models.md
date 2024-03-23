@@ -42,7 +42,7 @@ Puoi controllare la dimensione massima dopo la frammentazione con il parametro `
 ```py
 from transformers import AutoModel
 
-model = AutoModel.from_pretrained("bert-base-cased")
+model = AutoModel.from_pretrained("google-bert/bert-base-cased")
 ```
 
 Se tu salvi usando [`~PreTrainedModel.save_pretrained`], avrai una nuova cartella con due file: il config del modello e i suoi pesi:

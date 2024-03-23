@@ -15,11 +15,9 @@
 """ Testing suite for the PyTorch SegFormer model. """
 
 
-import inspect
 import unittest
 
 from transformers import SegformerConfig, is_torch_available, is_vision_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -31,11 +29,11 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_MAPPING,
         SegformerForImageClassification,
         SegformerForSemanticSegmentation,
         SegformerModel,
     )
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
     from transformers.models.segformer.modeling_segformer import SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -172,7 +170,7 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": SegformerModel,
+            "image-feature-extraction": SegformerModel,
             "image-classification": SegformerForImageClassification,
             "image-segmentation": SegformerForSemanticSegmentation,
         }
@@ -211,18 +209,6 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     @unittest.skip("SegFormer does not have get_input_embeddings method and get_output_embeddings methods")
     def test_model_common_attributes(self):
         pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -337,7 +323,7 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in get_values(MODEL_MAPPING):
+            if model_class.__name__ in MODEL_MAPPING_NAMES.values():
                 continue
 
             model = model_class(config)

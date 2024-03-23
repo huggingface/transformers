@@ -109,6 +109,7 @@ class SqueezeBertConfig(PretrainedConfig):
     Attributes: pretrained_config_archive_map (Dict[str, str]): A dictionary containing all the available pre-trained
     checkpoints.
     """
+
     pretrained_config_archive_map = SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "squeezebert"
 

@@ -34,7 +34,7 @@ For example, consider these two sequences:
 ```python
 >>> from transformers import BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
 >>> sequence_a = "This is a short sequence."
 >>> sequence_b = "This is a rather long sequence. It is at least longer than the sequence A."
@@ -100,7 +100,7 @@ reading the whole sentence but using a mask inside the model to hide the future 
 
 ### channel
 
-Color images are made up of some combination of values in three channels - red, green, and blue (RGB) - and grayscale images only have one channel. In 🤗 Transformers, the channel can be the first or last dimension of an image's tensor: [`n_channels`, `height`, `width`] or [`height`, `width`, `n_channels`].
+Color images are made up of some combination of values in three channels: red, green, and blue (RGB) and grayscale images only have one channel. In 🤗 Transformers, the channel can be the first or last dimension of an image's tensor: [`n_channels`, `height`, `width`] or [`height`, `width`, `n_channels`].
 
 ### connectionist temporal classification (CTC)
 
@@ -116,6 +116,7 @@ A type of layer in a neural network where the input matrix is multiplied element
 
 Parallelism technique for training on multiple GPUs where the same setup is replicated multiple times, with each instance 
 receiving a distinct data slice. The processing is done in parallel and all setups are synchronized at the end of each training step.
+
 Learn more about how DataParallel works [here](perf_train_gpu_many#dataparallel-vs-distributeddataparallel).
 
 ### decoder input IDs
@@ -158,15 +159,14 @@ The process of selecting and transforming raw data into a set of features that a
 
 In each residual attention block in transformers the self-attention layer is usually followed by 2 feed forward layers.
 The intermediate embedding size of the feed forward layers is often bigger than the hidden size of the model (e.g., for
-`bert-base-uncased`).
+`google-bert/bert-base-uncased`).
 
 For an input of size `[batch_size, sequence_length]`, the memory required to store the intermediate feed forward
 embeddings `[batch_size, sequence_length, config.intermediate_size]` can account for a large fraction of the memory
 use. The authors of [Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451) noticed that since the
 computation is independent of the `sequence_length` dimension, it is mathematically equivalent to compute the output
 embeddings of both feed forward layers `[batch_size, config.hidden_size]_0, ..., [batch_size, config.hidden_size]_n`
-individually and concat them afterward to `[batch_size, sequence_length, config.hidden_size]` with `n =
-sequence_length`, which trades increased computation time against reduced memory use, but yields a mathematically
+individually and concat them afterward to `[batch_size, sequence_length, config.hidden_size]` with `n = sequence_length`, which trades increased computation time against reduced memory use, but yields a mathematically
 **equivalent** result.
 
 For models employing the function [`apply_chunking_to_forward`], the `chunk_size` defines the number of output
@@ -187,7 +187,7 @@ The model head refers to the last layer of a neural network that accepts the raw
 
   * [`GPT2ForSequenceClassification`] is a sequence classification head - a linear layer - on top of the base [`GPT2Model`].
   * [`ViTForImageClassification`] is an image classification head - a linear layer on top of the final hidden state of the `CLS` token - on top of the base [`ViTModel`].
-  * [`Wav2Vec2ForCTC`] ia a language modeling head with [CTC](#connectionist-temporal-classification-(CTC)) on top of the base [`Wav2Vec2Model`].
+  * [`Wav2Vec2ForCTC`] is a language modeling head with [CTC](#connectionist-temporal-classification-ctc) on top of the base [`Wav2Vec2Model`].
 
 ## I
 
@@ -212,7 +212,7 @@ tokenizer, which is a [WordPiece](https://arxiv.org/pdf/1609.08144.pdf) tokenize
 ```python
 >>> from transformers import BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
 >>> sequence = "A Titan RTX has 24GB of VRAM"
 ```
@@ -232,9 +232,7 @@ is added for "RA" and "M":
 ['A', 'Titan', 'R', '##T', '##X', 'has', '24', '##GB', 'of', 'V', '##RA', '##M']
 ```
 
-These tokens can then be converted into IDs which are understandable by the model. This can be done by directly feeding
-the sentence to the tokenizer, which leverages the Rust implementation of [🤗
-Tokenizers](https://github.com/huggingface/tokenizers) for peak performance.
+These tokens can then be converted into IDs which are understandable by the model. This can be done by directly feeding the sentence to the tokenizer, which leverages the Rust implementation of [🤗 Tokenizers](https://github.com/huggingface/tokenizers) for peak performance.
 
 ```python
 >>> inputs = tokenizer(sequence)
@@ -383,7 +381,7 @@ self-supervised objective, which can be reading the text and trying to predict t
 modeling](#causal-language-modeling)) or masking some words and trying to predict them (see [masked language
 modeling](#masked-language-modeling-mlm)). 
 
-  Speech and vision models have their own pretraining objectives. For example, Wav2Vec2 is a speech model pretrained on a contrastive task which requires the model to identify the "true" speech representation from a set of "false" speech representations. On the other hand, BEiT is a vision model pretrained on a masked image modeling task which masks some of the image patches and requires the model to predict the masked patches (similar to the masked language modeling objective).
+Speech and vision models have their own pretraining objectives. For example, Wav2Vec2 is a speech model pretrained on a contrastive task which requires the model to identify the "true" speech representation from a set of "false" speech representations. On the other hand, BEiT is a vision model pretrained on a masked image modeling task which masks some of the image patches and requires the model to predict the masked patches (similar to the masked language modeling objective).
 
 ## R
 
@@ -424,7 +422,7 @@ Models that generate a new sequence from an input, like translation models, or s
 
 ### Sharded DDP
 
-Another name for the foundational [ZeRO](#zero-redundancy-optimizer--zero-) concept as used by various other implementations of ZeRO.
+Another name for the foundational [ZeRO](#zero-redundancy-optimizer-zero) concept as used by various other implementations of ZeRO.
 
 ### stride
 
@@ -469,7 +467,7 @@ arguments (and not a list, like before) like this:
 ```python
 >>> from transformers import BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 >>> sequence_a = "HuggingFace is based in NYC"
 >>> sequence_b = "Where is HuggingFace based?"
 
@@ -518,7 +516,7 @@ A form of model training in which data provided to the model is not labeled. Uns
 
 ### Zero Redundancy Optimizer (ZeRO)
 
-Parallelism technique which performs sharding of the tensors somewhat similar to [TensorParallel](#tensorparallel--tp-), 
+Parallelism technique which performs sharding of the tensors somewhat similar to [TensorParallel](#tensor-parallelism-tp), 
 except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model doesn't need 
 to be modified. This method also supports various offloading techniques to compensate for limited GPU memory. 
 Learn more about ZeRO [here](perf_train_gpu_many#zero-data-parallelism).

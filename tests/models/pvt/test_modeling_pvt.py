@@ -15,15 +15,14 @@
 """ Testing suite for the PyTorch Pvt model. """
 
 
-import inspect
 import unittest
 
 from transformers import is_torch_available, is_vision_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import (
     require_accelerate,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
+    require_torch_fp16,
     slow,
     torch_device,
 )
@@ -36,7 +35,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import MODEL_MAPPING, PvtConfig, PvtForImageClassification, PvtImageProcessor, PvtModel
+    from transformers import PvtConfig, PvtForImageClassification, PvtImageProcessor, PvtModel
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
     from transformers.models.pvt.modeling_pvt import PVT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -158,7 +158,7 @@ def prepare_img():
 class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (PvtModel, PvtForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": PvtModel, "image-classification": PvtForImageClassification}
+        {"image-feature-extraction": PvtModel, "image-classification": PvtForImageClassification}
         if is_torch_available()
         else {}
     )
@@ -243,7 +243,7 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in get_values(MODEL_MAPPING):
+            if model_class.__name__ in MODEL_MAPPING_NAMES.values():
                 continue
             model = model_class(config)
             model.to(torch_device)
@@ -251,18 +251,6 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     @slow
     def test_model_from_pretrained(self):
@@ -318,7 +306,8 @@ class PvtModelIntegrationTest(unittest.TestCase):
 
     @slow
     @require_accelerate
-    @require_torch_gpu
+    @require_torch_accelerator
+    @require_torch_fp16
     def test_inference_fp16(self):
         r"""
         A small test to make sure that inference work in half precision without any problem.

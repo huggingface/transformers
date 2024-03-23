@@ -86,6 +86,13 @@ class CodeGenTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
+class CohereTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class ConvBertTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
@@ -164,6 +171,13 @@ class FNetTokenizerFast(metaclass=DummyObject):
 
 
 class FunnelTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
+class GemmaTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):
@@ -331,6 +345,13 @@ class PegasusTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
+class Qwen2TokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class RealmTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
@@ -388,6 +409,13 @@ class SqueezeBertTokenizerFast(metaclass=DummyObject):
 
 
 class T5TokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
+class UdopTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):

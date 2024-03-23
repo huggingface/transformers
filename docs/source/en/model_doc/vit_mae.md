@@ -32,7 +32,15 @@ enables us to train large models efficiently and effectively: we accelerate trai
 models that generalize well: e.g., a vanilla ViT-Huge model achieves the best accuracy (87.8%) among methods that use only ImageNet-1K data. Transfer performance in downstream
 tasks outperforms supervised pre-training and shows promising scaling behavior.*
 
-Tips:
+<img src="https://user-images.githubusercontent.com/11435359/146857310-f258c86c-fde6-48e8-9cee-badd2b21bd2c.png"
+alt="drawing" width="600"/> 
+
+<small> MAE architecture. Taken from the <a href="https://arxiv.org/abs/2111.06377">original paper.</a> </small>
+
+This model was contributed by [nielsr](https://huggingface.co/nielsr). TensorFlow version of the model was contributed by [sayakpaul](https://github.com/sayakpaul) and 
+[ariG23498](https://github.com/ariG23498) (equal contribution). The original code can be found [here](https://github.com/facebookresearch/mae). 
+
+## Usage tips
 
 - MAE (masked auto encoding) is a method for self-supervised pre-training of Vision Transformers (ViTs). The pre-training objective is relatively simple:
 by masking a large portion (75%) of the image patches, the model must reconstruct raw pixel values. One can use [`ViTMAEForPreTraining`] for this purpose.
@@ -43,14 +51,6 @@ fine-tuning, one can directly plug in the weights into a [`ViTForImageClassifica
 consists of Transformer blocks) takes as input. Each mask token is a shared, learned vector that indicates the presence of a missing patch to be predicted. Fixed
 sin/cos position embeddings are added both to the input of the encoder and the decoder.
 - For a visual understanding of how MAEs work you can check out this [post](https://keras.io/examples/vision/masked_image_modeling/).
-
-<img src="https://user-images.githubusercontent.com/11435359/146857310-f258c86c-fde6-48e8-9cee-badd2b21bd2c.png"
-alt="drawing" width="600"/> 
-
-<small> MAE architecture. Taken from the <a href="https://arxiv.org/abs/2111.06377">original paper.</a> </small>
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr). TensorFlow version of the model was contributed by [sayakpaul](https://github.com/sayakpaul) and 
-[ariG23498](https://github.com/ariG23498) (equal contribution). The original code can be found [here](https://github.com/facebookresearch/mae). 
 
 ## Resources
 
@@ -65,26 +65,31 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] ViTMAEConfig
 
+<frameworkcontent>
+<pt>
 
 ## ViTMAEModel
 
 [[autodoc]] ViTMAEModel
     - forward
 
-
 ## ViTMAEForPreTraining
 
 [[autodoc]] transformers.ViTMAEForPreTraining
     - forward
 
+</pt>
+<tf>
 
 ## TFViTMAEModel
 
 [[autodoc]] TFViTMAEModel
     - call
 
-
 ## TFViTMAEForPreTraining
 
 [[autodoc]] transformers.TFViTMAEForPreTraining
     - call
+
+</tf>
+</frameworkcontent>

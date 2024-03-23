@@ -21,8 +21,22 @@ import re
 
 import numpy
 
-from .utils import ExplicitEnum, expand_dims, is_numpy_array, is_torch_tensor, logging, reshape, squeeze, tensor_size
+from .utils import (
+    ExplicitEnum,
+    expand_dims,
+    is_numpy_array,
+    is_safetensors_available,
+    is_torch_tensor,
+    logging,
+    reshape,
+    squeeze,
+    tensor_size,
+)
 from .utils import transpose as transpose_func
+
+
+if is_safetensors_available():
+    from safetensors import safe_open
 
 
 logger = logging.get_logger(__name__)
@@ -57,7 +71,7 @@ def convert_tf_weight_name_to_pt_weight_name(
           transposed with regards to each other
     """
     if name_scope is not None:
-        if not tf_name.startswith(name_scope):
+        if not tf_name.startswith(name_scope) and "final_logits_bias" not in tf_name:
             raise ValueError(
                 f"Weight name {tf_name} does not start with name_scope {name_scope}. This is an internal error "
                 "in Transformers, so (unless you were doing something really evil) please open an issue to report it!"
@@ -166,6 +180,9 @@ def load_pytorch_checkpoint_in_tf2_model(
     try:
         import tensorflow as tf  # noqa: F401
         import torch  # noqa: F401
+        from safetensors.torch import load_file as safe_load_file  # noqa: F401
+
+        from .pytorch_utils import is_torch_greater_or_equal_than_1_13  # noqa: F401
     except ImportError:
         logger.error(
             "Loading a PyTorch model in TensorFlow, requires both PyTorch and TensorFlow to be installed. Please see "
@@ -182,7 +199,13 @@ def load_pytorch_checkpoint_in_tf2_model(
     for path in pytorch_checkpoint_path:
         pt_path = os.path.abspath(path)
         logger.info(f"Loading PyTorch weights from {pt_path}")
-        pt_state_dict.update(torch.load(pt_path, map_location="cpu"))
+        if pt_path.endswith(".safetensors"):
+            state_dict = safe_load_file(pt_path)
+        else:
+            weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+            state_dict = torch.load(pt_path, map_location="cpu", **weights_only_kwarg)
+
+        pt_state_dict.update(state_dict)
 
     logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters")
 
@@ -226,7 +249,10 @@ def load_pytorch_weights_in_tf2_model(
         )
         raise
 
-    pt_state_dict = {k: v.numpy() for k, v in pt_state_dict.items()}
+    # Numpy doesn't understand bfloat16, so upcast to a dtype that doesn't lose precision
+    pt_state_dict = {
+        k: v.numpy() if v.dtype != torch.bfloat16 else v.float().numpy() for k, v in pt_state_dict.items()
+    }
     return load_pytorch_state_dict_in_tf2_model(
         tf_model,
         pt_state_dict,
@@ -238,6 +264,47 @@ def load_pytorch_weights_in_tf2_model(
     )
 
 
+def _log_key_warnings(missing_keys, unexpected_keys, mismatched_keys, class_name):
+    if len(unexpected_keys) > 0:
+        logger.warning(
+            "Some weights of the PyTorch model were not used when initializing the TF 2.0 model"
+            f" {class_name}: {unexpected_keys}\n- This IS expected if you are initializing"
+            f" {class_name} from a PyTorch model trained on another task or with another architecture"
+            " (e.g. initializing a TFBertForSequenceClassification model from a BertForPreTraining model).\n- This IS"
+            f" NOT expected if you are initializing {class_name} from a PyTorch model that you expect"
+            " to be exactly identical (e.g. initializing a TFBertForSequenceClassification model from a"
+            " BertForSequenceClassification model)."
+        )
+    else:
+        logger.warning(f"All PyTorch model weights were used when initializing {class_name}.\n")
+    if len(missing_keys) > 0:
+        logger.warning(
+            f"Some weights or buffers of the TF 2.0 model {class_name} were not initialized from the"
+            f" PyTorch model and are newly initialized: {missing_keys}\nYou should probably TRAIN this model on a"
+            " down-stream task to be able to use it for predictions and inference."
+        )
+    else:
+        logger.warning(
+            f"All the weights of {class_name} were initialized from the PyTorch model.\n"
+            "If your task is similar to the task the model of the checkpoint was trained on, "
+            f"you can already use {class_name} for predictions without further training."
+        )
+
+    if len(mismatched_keys) > 0:
+        mismatched_warning = "\n".join(
+            [
+                f"- {key}: found shape {shape1} in the checkpoint and {shape2} in the model instantiated"
+                for key, shape1, shape2 in mismatched_keys
+            ]
+        )
+        logger.warning(
+            f"Some weights of {class_name} were not initialized from the model checkpoint"
+            f" are newly initialized because the shapes did not"
+            f" match:\n{mismatched_warning}\nYou should probably TRAIN this model on a down-stream task to be able"
+            " to use it for predictions and inference."
+        )
+
+
 def load_pytorch_state_dict_in_tf2_model(
     tf_model,
     pt_state_dict,
@@ -247,11 +314,11 @@ def load_pytorch_state_dict_in_tf2_model(
     _prefix=None,
     tf_to_pt_weight_rename=None,
     ignore_mismatched_sizes=False,
+    skip_logger_warnings=False,
 ):
     """Load a pytorch state_dict in a TF 2.0 model. pt_state_dict can be either an actual dict or a lazy-loading
     safetensors archive created with the safe_open() function."""
     import tensorflow as tf
-    from keras import backend as K
 
     if tf_inputs is None:
         tf_inputs = tf_model.dummy_inputs
@@ -312,7 +379,14 @@ def load_pytorch_state_dict_in_tf2_model(
             name_scope=_prefix,
         )
         if tf_to_pt_weight_rename is not None:
-            name = tf_to_pt_weight_rename(name)
+            aliases = tf_to_pt_weight_rename(name)  # Is a tuple to account for possible name aliasing
+            for alias in aliases:  # The aliases are in priority order, take the first one that matches
+                if alias in tf_keys_to_pt_keys:
+                    name = alias
+                    break
+            else:
+                # If none of the aliases match, just use the first one (it'll be reported as missing)
+                name = aliases[0]
 
         # Find associated numpy array in pytorch model state dict
         if name not in tf_keys_to_pt_keys:
@@ -344,7 +418,7 @@ def load_pytorch_state_dict_in_tf2_model(
 
         tf_loaded_numel += tensor_size(array)
 
-        K.set_value(symbolic_weight, array)
+        symbolic_weight.assign(tf.cast(array, symbolic_weight.dtype))
         del array  # Immediately free memory to keep peak usage as low as possible
         all_pytorch_weights.discard(name)
 
@@ -358,45 +432,53 @@ def load_pytorch_state_dict_in_tf2_model(
     if tf_model._keys_to_ignore_on_load_unexpected is not None:
         for pat in tf_model._keys_to_ignore_on_load_unexpected:
             unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
+    if not skip_logger_warnings:
+        _log_key_warnings(missing_keys, unexpected_keys, mismatched_keys, class_name=tf_model.__class__.__name__)
 
-    if len(unexpected_keys) > 0:
-        logger.warning(
-            "Some weights of the PyTorch model were not used when initializing the TF 2.0 model"
-            f" {tf_model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are initializing"
-            f" {tf_model.__class__.__name__} from a PyTorch model trained on another task or with another architecture"
-            " (e.g. initializing a TFBertForSequenceClassification model from a BertForPreTraining model).\n- This IS"
-            f" NOT expected if you are initializing {tf_model.__class__.__name__} from a PyTorch model that you expect"
-            " to be exactly identical (e.g. initializing a TFBertForSequenceClassification model from a"
-            " BertForSequenceClassification model)."
-        )
-    else:
-        logger.warning(f"All PyTorch model weights were used when initializing {tf_model.__class__.__name__}.\n")
-    if len(missing_keys) > 0:
-        logger.warning(
-            f"Some weights or buffers of the TF 2.0 model {tf_model.__class__.__name__} were not initialized from the"
-            f" PyTorch model and are newly initialized: {missing_keys}\nYou should probably TRAIN this model on a"
-            " down-stream task to be able to use it for predictions and inference."
-        )
-    else:
-        logger.warning(
-            f"All the weights of {tf_model.__class__.__name__} were initialized from the PyTorch model.\n"
-            "If your task is similar to the task the model of the checkpoint was trained on, "
-            f"you can already use {tf_model.__class__.__name__} for predictions without further training."
-        )
+    if output_loading_info:
+        loading_info = {
+            "missing_keys": missing_keys,
+            "unexpected_keys": unexpected_keys,
+            "mismatched_keys": mismatched_keys,
+        }
+        return tf_model, loading_info
 
-    if len(mismatched_keys) > 0:
-        mismatched_warning = "\n".join(
-            [
-                f"- {key}: found shape {shape1} in the checkpoint and {shape2} in the model instantiated"
-                for key, shape1, shape2 in mismatched_keys
-            ]
-        )
-        logger.warning(
-            f"Some weights of {tf_model.__class__.__name__} were not initialized from the model checkpoint"
-            f" are newly initialized because the shapes did not"
-            f" match:\n{mismatched_warning}\nYou should probably TRAIN this model on a down-stream task to be able"
-            " to use it for predictions and inference."
-        )
+    return tf_model
+
+
+def load_sharded_pytorch_safetensors_in_tf2_model(
+    tf_model,
+    safetensors_shards,
+    tf_inputs=None,
+    allow_missing_keys=False,
+    output_loading_info=False,
+    _prefix=None,
+    tf_to_pt_weight_rename=None,
+    ignore_mismatched_sizes=False,
+):
+    all_loading_infos = []
+    for shard in safetensors_shards:
+        with safe_open(shard, framework="tf") as safetensors_archive:
+            tf_model, loading_info = load_pytorch_state_dict_in_tf2_model(
+                tf_model,
+                safetensors_archive,
+                tf_inputs=tf_inputs,
+                allow_missing_keys=allow_missing_keys,
+                output_loading_info=True,
+                _prefix=_prefix,
+                tf_to_pt_weight_rename=tf_to_pt_weight_rename,
+                ignore_mismatched_sizes=ignore_mismatched_sizes,
+                skip_logger_warnings=True,  # We will emit merged warnings at the end
+            )
+        all_loading_infos.append(loading_info)
+    # Now we just need to merge the loading info
+    # Keys are missing only if they're missing in *every* shard
+    missing_keys = sorted(set.intersection(*[set(info["missing_keys"]) for info in all_loading_infos]))
+    # Keys are unexpected/mismatched if they're unexpected/mismatched in *any* shard
+    unexpected_keys = sum([info["unexpected_keys"] for info in all_loading_infos], [])
+    mismatched_keys = sum([info["mismatched_keys"] for info in all_loading_infos], [])
+
+    _log_key_warnings(missing_keys, unexpected_keys, mismatched_keys, class_name=tf_model.__class__.__name__)
 
     if output_loading_info:
         loading_info = {

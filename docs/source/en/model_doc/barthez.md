@@ -38,8 +38,14 @@ provides a significant boost over vanilla BARThez, and is on par with or outperf
 
 This model was contributed by [moussakam](https://huggingface.co/moussakam). The Authors' code can be found [here](https://github.com/moussaKam/BARThez).
 
+<Tip> 
 
-### Examples
+BARThez implementation is the same as BART, except for tokenization. Refer to [BART documentation](bart) for information on 
+configuration classes and their parameters. BARThez-specific tokenizers are documented below.  
+
+</Tip>
+
+## Resources
 
 - BARThez can be fine-tuned on sequence-to-sequence tasks in a similar way as BART, check:
   [examples/pytorch/summarization/](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization/README.md).

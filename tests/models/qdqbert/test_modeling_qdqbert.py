@@ -563,7 +563,7 @@ class QDQBertModelIntegrationTest(unittest.TestCase):
         quant_nn.QuantLinear.set_default_quant_desc_input(input_desc)
         quant_nn.QuantLinear.set_default_quant_desc_weight(weight_desc)
 
-        model = QDQBertModel.from_pretrained("bert-base-uncased")
+        model = QDQBertModel.from_pretrained("google-bert/bert-base-uncased")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         output = model(input_ids, attention_mask=attention_mask)[0]

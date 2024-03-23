@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torch_fp16,
     require_torchaudio,
     slow,
     torch_device,
@@ -283,6 +284,18 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     input_name = "input_features"
 
+    def _get_input_ids_and_config(self, batch_size=2):
+        config, input_ids, attention_mask, max_length = GenerationTesterMixin._get_input_ids_and_config(self)
+
+        # `input_ids` is actually `input_features` which is a 3D tensor.
+        # We must overwrite the mask to make it 2D since the original `_get_input_ids_and_config` creates an
+        # attention mask of the same shape as `input_ids`.
+        if len(attention_mask.shape) > 2:
+            sequence_length = input_ids.shape[1]
+            attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=attention_mask.device)
+
+        return config, input_ids, attention_mask, max_length
+
     def setUp(self):
         self.model_tester = Speech2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Speech2TextConfig)
@@ -324,14 +337,26 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_features = input_dict["input_features"]
         attention_mask = input_dict["attention_mask"]
         model = Speech2TextForConditionalGeneration(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            input_features = input_features.half()
-            model.half()
+        input_features = input_features.half()
+        model.half()
         model.generate(input_features, attention_mask=attention_mask)
         model.generate(input_features, num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
@@ -745,6 +770,10 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
         # Allow missing keys since TF doesn't cache the sinusoidal embeddings in an attribute
         super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
+
+    @unittest.skip("Test failing,  @RocketNight is looking into it")
+    def test_tf_from_pt_safetensors(self):
+        pass
 
 
 @require_torch

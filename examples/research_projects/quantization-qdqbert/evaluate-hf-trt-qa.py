@@ -272,10 +272,10 @@ if args.dataset_name is not None:
 else:
     raise ValueError("Evaluation requires a dataset name")
 # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-# https://huggingface.co/docs/datasets/loading_datasets.html.
+# https://huggingface.co/docs/datasets/loading_datasets.
 
 # Preprocessing the datasets.
-# Preprocessing is slighlty different for training and evaluation.
+# Preprocessing is slightly different for training and evaluation.
 
 column_names = raw_datasets["validation"].column_names
 

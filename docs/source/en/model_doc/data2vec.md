@@ -35,19 +35,18 @@ the entire input. Experiments on the major benchmarks of speech recognition, ima
 natural language understanding demonstrate a new state of the art or competitive performance to predominant approaches.
 Models and code are available at www.github.com/pytorch/fairseq/tree/master/examples/data2vec.*
 
-Tips:
-
-- Data2VecAudio, Data2VecText, and Data2VecVision have all been trained using the same self-supervised learning method.
-- For Data2VecAudio, preprocessing is identical to [`Wav2Vec2Model`], including feature extraction
-- For Data2VecText, preprocessing is identical to [`RobertaModel`], including tokenization.
-- For Data2VecVision, preprocessing is identical to [`BeitModel`], including feature extraction.
-
 This model was contributed by [edugp](https://huggingface.co/edugp) and [patrickvonplaten](https://huggingface.co/patrickvonplaten).
 [sayakpaul](https://github.com/sayakpaul) and [Rocketknight1](https://github.com/Rocketknight1) contributed Data2Vec for vision in TensorFlow.
 
 The original code (for NLP and Speech) can be found [here](https://github.com/pytorch/fairseq/tree/main/examples/data2vec).
 The original code for vision can be found [here](https://github.com/facebookresearch/data2vec_vision/tree/main/beit).
 
+## Usage tips
+
+- Data2VecAudio, Data2VecText, and Data2VecVision have all been trained using the same self-supervised learning method.
+- For Data2VecAudio, preprocessing is identical to [`Wav2Vec2Model`], including feature extraction
+- For Data2VecText, preprocessing is identical to [`RobertaModel`], including tokenization.
+- For Data2VecVision, preprocessing is identical to [`BeitModel`], including feature extraction.
 
 ## Resources
 
@@ -88,6 +87,8 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] Data2VecVisionConfig
 
+<frameworkcontent>
+<pt>
 
 ## Data2VecAudioModel
 
@@ -164,6 +165,9 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] Data2VecVisionForSemanticSegmentation
     - forward
 
+</pt>
+<tf>
+
 ## TFData2VecVisionModel
 
 [[autodoc]] TFData2VecVisionModel
@@ -178,3 +182,6 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] TFData2VecVisionForSemanticSegmentation
     - call
+
+</tf>
+</frameworkcontent>

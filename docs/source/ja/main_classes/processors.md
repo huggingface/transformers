@@ -86,7 +86,7 @@ QQP、QNLI、RTE、WNLI。
 
 テストセットにはゴールドラベルが付いているため、評価はテストセットで行われますのでご了承ください。
 
-これらのプロセッサを使用する例は、[run_xnli.py](https://github.com/huggingface/transformers/tree/main/examples/legacy/text-classification/run_xnli.py) スクリプトに示されています。
+これらのプロセッサを使用する例は、[run_xnli.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification/run_xnli.py) スクリプトに示されています。
 
 ## SQuAD
 

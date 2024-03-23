@@ -192,6 +192,7 @@ class WavLMConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "wavlm"
 
     def __init__(

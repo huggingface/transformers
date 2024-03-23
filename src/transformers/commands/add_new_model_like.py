@@ -1674,7 +1674,7 @@ def get_user_input():
         "What will be the name of the config class for this model? ", default_value=f"{model_camel_cased}Config"
     )
     checkpoint = get_user_field(
-        "Please give a checkpoint identifier (on the model Hub) for this new model (e.g. facebook/roberta-base): "
+        "Please give a checkpoint identifier (on the model Hub) for this new model (e.g. facebook/FacebookAI/roberta-base): "
     )
 
     old_processing_classes = [

@@ -40,12 +40,12 @@ from ...modeling_tf_utils import (
     TFModelInputType,
     TFPreTrainedModel,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
 from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
-    ContextManagers,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -59,32 +59,33 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "T5Config"
 
 TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "t5-small",
-    "t5-base",
-    "t5-large",
-    "t5-3b",
-    "t5-11b",
+    "google-t5/t5-small",
+    "google-t5/t5-base",
+    "google-t5/t5-large",
+    "google-t5/t5-3b",
+    "google-t5/t5-11b",
     # See all T5 models at https://huggingface.co/models?filter=t5
 ]
 
 ####################################################
 # TF 2.0 Models are constructed using Keras imperative API by sub-classing
-# - tf.keras.layers.Layer for the layers and
-# - TFPreTrainedModel for the models (it-self a sub-class of tf.keras.Model)
+# - keras.layers.Layer for the layers and
+# - TFPreTrainedModel for the models (it-self a sub-class of keras.Model)
 ####################################################
 
 
-class TFT5LayerNorm(tf.keras.layers.Layer):
-    def __init__(self, epsilon=1e-6, **kwargs):
+class TFT5LayerNorm(keras.layers.Layer):
+    def __init__(self, hidden_size, epsilon=1e-6, **kwargs):
         """
         Construct a layernorm module in the T5 style No bias and no subtraction of mean.
         """
         super().__init__(**kwargs)
         self.variance_epsilon = epsilon
+        self.hidden_size = hidden_size
 
     def build(self, input_shape):
         """Build shared word embedding layer"""
-        self.weight = self.add_weight("weight", shape=(input_shape[-1],), initializer="ones")
+        self.weight = self.add_weight("weight", shape=(self.hidden_size,), initializer="ones")
         super().build(input_shape)
 
     def call(self, hidden_states):
@@ -93,23 +94,24 @@ class TFT5LayerNorm(tf.keras.layers.Layer):
         return self.weight * hidden_states
 
 
-class TFT5DenseActDense(tf.keras.layers.Layer):
+class TFT5DenseActDense(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        wi_initializer = tf.keras.initializers.RandomNormal(
+        wi_initializer = keras.initializers.RandomNormal(
             mean=0, stddev=config.initializer_factor * (config.d_model**-0.5)
         )
-        wo_initializer = tf.keras.initializers.RandomNormal(
+        wo_initializer = keras.initializers.RandomNormal(
             mean=0, stddev=config.initializer_factor * (config.d_ff**-0.5)
         )
-        self.wi = tf.keras.layers.Dense(
+        self.wi = keras.layers.Dense(
             config.d_ff, use_bias=False, name="wi", kernel_initializer=wi_initializer
         )  # Update init weights as in flax
-        self.wo = tf.keras.layers.Dense(
+        self.wo = keras.layers.Dense(
             config.d_model, use_bias=False, name="wo", kernel_initializer=wo_initializer
         )  # Update init weights as in flax
-        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+        self.dropout = keras.layers.Dropout(config.dropout_rate)
         self.act = get_tf_activation(config.dense_act_fn)
+        self.config = config
 
     def call(self, hidden_states, training=False):
         hidden_states = self.wi(hidden_states)
@@ -118,27 +120,39 @@ class TFT5DenseActDense(tf.keras.layers.Layer):
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "wi", None) is not None:
+            with tf.name_scope(self.wi.name):
+                self.wi.build([None, None, self.config.d_model])
+        if getattr(self, "wo", None) is not None:
+            with tf.name_scope(self.wo.name):
+                self.wo.build([None, None, self.config.d_ff])
 
-class TFT5DenseGatedActDense(tf.keras.layers.Layer):
+
+class TFT5DenseGatedActDense(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        wi_initializer = tf.keras.initializers.RandomNormal(
+        wi_initializer = keras.initializers.RandomNormal(
             mean=0, stddev=config.initializer_factor * (config.d_model**-0.5)
         )
-        wo_initializer = tf.keras.initializers.RandomNormal(
+        wo_initializer = keras.initializers.RandomNormal(
             mean=0, stddev=config.initializer_factor * (config.d_ff**-0.5)
         )
-        self.wi_0 = tf.keras.layers.Dense(
+        self.wi_0 = keras.layers.Dense(
             config.d_ff, use_bias=False, name="wi_0", kernel_initializer=wi_initializer
         )  # Update init weights as in flax
-        self.wi_1 = tf.keras.layers.Dense(
+        self.wi_1 = keras.layers.Dense(
             config.d_ff, use_bias=False, name="wi_1", kernel_initializer=wi_initializer
         )  # Update init weights as in flax
-        self.wo = tf.keras.layers.Dense(
+        self.wo = keras.layers.Dense(
             config.d_model, use_bias=False, name="wo", kernel_initializer=wo_initializer
         )  # Update init weights as in flax
-        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+        self.dropout = keras.layers.Dropout(config.dropout_rate)
         self.act = get_tf_activation(config.dense_act_fn)
+        self.config = config
 
     def call(self, hidden_states, training=False):
         hidden_gelu = self.act(self.wi_0(hidden_states))
@@ -148,8 +162,22 @@ class TFT5DenseGatedActDense(tf.keras.layers.Layer):
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "wi_0", None) is not None:
+            with tf.name_scope(self.wi_0.name):
+                self.wi_0.build([None, None, self.config.d_model])
+        if getattr(self, "wi_1", None) is not None:
+            with tf.name_scope(self.wi_1.name):
+                self.wi_1.build([None, None, self.config.d_model])
+        if getattr(self, "wo", None) is not None:
+            with tf.name_scope(self.wo.name):
+                self.wo.build([None, None, self.config.d_ff])
 
-class TFT5LayerFF(tf.keras.layers.Layer):
+
+class TFT5LayerFF(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         if config.is_gated_act:
@@ -157,8 +185,8 @@ class TFT5LayerFF(tf.keras.layers.Layer):
         else:
             self.DenseReluDense = TFT5DenseActDense(config, name="DenseReluDense")
 
-        self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
-        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+        self.layer_norm = TFT5LayerNorm(config.d_model, epsilon=config.layer_norm_epsilon, name="layer_norm")
+        self.dropout = keras.layers.Dropout(config.dropout_rate)
 
     def call(self, hidden_states, training=False):
         normed_hidden_states = self.layer_norm(hidden_states)
@@ -166,8 +194,19 @@ class TFT5LayerFF(tf.keras.layers.Layer):
         hidden_states = hidden_states + self.dropout(dense_output, training=training)
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build(None)
+        if getattr(self, "DenseReluDense", None) is not None:
+            with tf.name_scope(self.DenseReluDense.name):
+                self.DenseReluDense.build(None)
 
-class TFT5Attention(tf.keras.layers.Layer):
+
+class TFT5Attention(keras.layers.Layer):
     NEW_ID = itertools.count()
 
     def __init__(self, config, has_relative_attention_bias=False, **kwargs):
@@ -186,39 +225,42 @@ class TFT5Attention(tf.keras.layers.Layer):
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
-        q_initializer = tf.keras.initializers.RandomNormal(
+        q_initializer = keras.initializers.RandomNormal(
             mean=0, stddev=config.initializer_factor * ((self.inner_dim * self.key_value_proj_dim) ** -0.5)
         )
-        k_initializer = tf.keras.initializers.RandomNormal(
+        k_initializer = keras.initializers.RandomNormal(
             mean=0, stddev=config.initializer_factor * (self.inner_dim**-0.5)
         )
-        v_initializer = tf.keras.initializers.RandomNormal(
+        v_initializer = keras.initializers.RandomNormal(
             mean=0, stddev=config.initializer_factor * (self.inner_dim**-0.5)
         )
-        o_initializer = tf.keras.initializers.RandomNormal(
+        o_initializer = keras.initializers.RandomNormal(
             mean=0, stddev=config.initializer_factor * (self.inner_dim**-0.5)
         )
-        self.relative_attention_bias_initializer = tf.keras.initializers.RandomNormal(
+        self.relative_attention_bias_initializer = keras.initializers.RandomNormal(
             mean=0, stddev=config.initializer_factor * (self.inner_dim**-0.5)
         )
 
-        self.q = tf.keras.layers.Dense(
+        self.q = keras.layers.Dense(
             self.inner_dim, use_bias=False, name="q", kernel_initializer=q_initializer
         )  # Update init weights as in flax
-        self.k = tf.keras.layers.Dense(
+        self.k = keras.layers.Dense(
             self.inner_dim, use_bias=False, name="k", kernel_initializer=k_initializer
         )  # Update init weights as in flax
-        self.v = tf.keras.layers.Dense(
+        self.v = keras.layers.Dense(
             self.inner_dim, use_bias=False, name="v", kernel_initializer=v_initializer
         )  # Update init weights as in flax
-        self.o = tf.keras.layers.Dense(
+        self.o = keras.layers.Dense(
             self.d_model, use_bias=False, name="o", kernel_initializer=o_initializer
         )  # Update init weights as in flax
-        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+        self.dropout = keras.layers.Dropout(config.dropout_rate)
 
         self.pruned_heads = set()
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
         if self.has_relative_attention_bias:
             with tf.name_scope("relative_attention_bias"):
                 self.relative_attention_bias = self.add_weight(
@@ -226,8 +268,18 @@ class TFT5Attention(tf.keras.layers.Layer):
                     shape=[self.relative_attention_num_buckets, self.n_heads],
                     initializer=self.relative_attention_bias_initializer,  # Add initializer
                 )
-
-        return super().build(input_shape)
+        if getattr(self, "q", None) is not None:
+            with tf.name_scope(self.q.name):
+                self.q.build([None, None, self.d_model])
+        if getattr(self, "k", None) is not None:
+            with tf.name_scope(self.k.name):
+                self.k.build([None, None, self.d_model])
+        if getattr(self, "v", None) is not None:
+            with tf.name_scope(self.v.name):
+                self.v.build([None, None, self.d_model])
+        if getattr(self, "o", None) is not None:
+            with tf.name_scope(self.o.name):
+                self.o.build([None, None, self.inner_dim])
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -431,7 +483,7 @@ class TFT5Attention(tf.keras.layers.Layer):
         return outputs
 
 
-class TFT5LayerSelfAttention(tf.keras.layers.Layer):
+class TFT5LayerSelfAttention(keras.layers.Layer):
     def __init__(self, config, has_relative_attention_bias=False, **kwargs):
         super().__init__(**kwargs)
         self.SelfAttention = TFT5Attention(
@@ -439,8 +491,8 @@ class TFT5LayerSelfAttention(tf.keras.layers.Layer):
             has_relative_attention_bias=has_relative_attention_bias,
             name="SelfAttention",
         )
-        self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
-        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+        self.layer_norm = TFT5LayerNorm(config.d_model, epsilon=config.layer_norm_epsilon, name="layer_norm")
+        self.dropout = keras.layers.Dropout(config.dropout_rate)
 
     def call(
         self,
@@ -468,8 +520,19 @@ class TFT5LayerSelfAttention(tf.keras.layers.Layer):
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "SelfAttention", None) is not None:
+            with tf.name_scope(self.SelfAttention.name):
+                self.SelfAttention.build(None)
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build(None)
 
-class TFT5LayerCrossAttention(tf.keras.layers.Layer):
+
+class TFT5LayerCrossAttention(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.EncDecAttention = TFT5Attention(
@@ -477,8 +540,8 @@ class TFT5LayerCrossAttention(tf.keras.layers.Layer):
             has_relative_attention_bias=False,
             name="EncDecAttention",
         )
-        self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
-        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+        self.layer_norm = TFT5LayerNorm(config.d_model, epsilon=config.layer_norm_epsilon, name="layer_norm")
+        self.dropout = keras.layers.Dropout(config.dropout_rate)
 
     def call(
         self,
@@ -510,8 +573,19 @@ class TFT5LayerCrossAttention(tf.keras.layers.Layer):
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "EncDecAttention", None) is not None:
+            with tf.name_scope(self.EncDecAttention.name):
+                self.EncDecAttention.build(None)
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build(None)
 
-class TFT5Block(tf.keras.layers.Layer):
+
+class TFT5Block(keras.layers.Layer):
     def __init__(self, config, has_relative_attention_bias=False, **kwargs):
         super().__init__(**kwargs)
         self.is_decoder = config.is_decoder
@@ -613,13 +687,22 @@ class TFT5Block(tf.keras.layers.Layer):
         outputs = outputs + (present_key_value_state,) + attention_outputs
         return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        for layer_module in self.layer:
+            if hasattr(layer_module, "name"):
+                with tf.name_scope(layer_module.name):
+                    layer_module.build(None)
+
 
 ####################################################
 # The full model without a specific pretrained or finetuning head is
-# provided as a tf.keras.layers.Layer usually called "TFT5MainLayer"
+# provided as a keras.layers.Layer usually called "TFT5MainLayer"
 ####################################################
 @keras_serializable
-class TFT5MainLayer(tf.keras.layers.Layer):
+class TFT5MainLayer(keras.layers.Layer):
     config_class = T5Config
 
     def __init__(self, config, embed_tokens=None, **kwargs):
@@ -640,8 +723,10 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             TFT5Block(config, has_relative_attention_bias=bool(i == 0), name=f"block_._{i}")
             for i in range(config.num_layers)
         ]
-        self.final_layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="final_layer_norm")
-        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+        self.final_layer_norm = TFT5LayerNorm(
+            config.d_model, epsilon=config.layer_norm_epsilon, name="final_layer_norm"
+        )
+        self.dropout = keras.layers.Dropout(config.dropout_rate)
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
@@ -679,16 +764,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         if inputs_embeds is None:
             assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
-            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
-            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
-            # is used with a name ending in `/`, that name replaces the current name scope.
-            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
-            context = []
-            if hasattr(self.embed_tokens, "load_weight_prefix"):
-                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
-            with ContextManagers(context):
-                check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
-                inputs_embeds = self.embed_tokens(input_ids)
+            check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
+            inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape
 
@@ -846,9 +923,21 @@ class TFT5MainLayer(tf.keras.layers.Layer):
                 attentions=all_attentions,
             )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "final_layer_norm", None) is not None:
+            with tf.name_scope(self.final_layer_norm.name):
+                self.final_layer_norm.build(None)
+        if getattr(self, "block", None) is not None:
+            for layer in self.block:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 ####################################################
-# TFT5PreTrainedModel is a sub-class of tf.keras.Model
+# TFT5PreTrainedModel is a sub-class of keras.Model
 # which take care of loading and saving pretrained weights
 # and various common utilities.
 # Here you just need to specify a few (self-explanatory)
@@ -918,7 +1007,7 @@ T5_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -1094,10 +1183,10 @@ class TFT5Model(TFT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.shared = tf.keras.layers.Embedding(
+        self.shared = keras.layers.Embedding(
             input_dim=config.vocab_size,
             output_dim=config.d_model,
-            embeddings_initializer=tf.keras.initializers.TruncatedNormal(self.config.initializer_factor),
+            embeddings_initializer=keras.initializers.TruncatedNormal(self.config.initializer_factor),
             name="shared",
         )
         # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
@@ -1147,8 +1236,8 @@ class TFT5Model(TFT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, TFT5Model
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
-        >>> model = TFT5Model.from_pretrained("t5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
+        >>> model = TFT5Model.from_pretrained("google-t5/t5-small")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="tf"
@@ -1221,13 +1310,29 @@ class TFT5Model(TFT5PreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        # The shared/tied weights expect to be in the model base namespace
+        # Adding "/" to the end (not the start!) of a tf.name_scope puts it in the root namespace rather than
+        # the current one.
+        with tf.name_scope(self.shared.load_weight_prefix + "/" + self.shared.name + "/"):
+            self.shared.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "decoder", None) is not None:
+            with tf.name_scope(self.decoder.name):
+                self.decoder.build(None)
+
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top.""", T5_START_DOCSTRING)
 class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.model_dim = config.d_model
-        self.shared = tf.keras.layers.Embedding(
+        self.shared = keras.layers.Embedding(
             config.vocab_size,
             config.d_model,
             name="shared",
@@ -1246,10 +1351,11 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         self.decoder = TFT5MainLayer(decoder_config, self.shared, name="decoder")
 
         if not config.tie_word_embeddings:
-            lm_head_initializer = tf.keras.initializers.RandomNormal(mean=0, stddev=config.initializer_factor)
-            self.lm_head = tf.keras.layers.Dense(
+            lm_head_initializer = keras.initializers.RandomNormal(mean=0, stddev=config.initializer_factor)
+            self.lm_head = keras.layers.Dense(
                 config.vocab_size, use_bias=False, name="lm_head", kernel_initializer=lm_head_initializer
             )  # Update init weights as in flax
+        self.config = config
 
     def get_output_embeddings(self):
         if self.config.tie_word_embeddings:
@@ -1263,8 +1369,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         if self.config.tie_word_embeddings:
             self.set_input_embeddings(value)
         else:
-            lm_head_initializer = tf.keras.initializers.RandomNormal(mean=0, stddev=self.config.initializer_factor)
-            self.lm_head = tf.keras.layers.Dense(
+            lm_head_initializer = keras.initializers.RandomNormal(mean=0, stddev=self.config.initializer_factor)
+            self.lm_head = keras.layers.Dense(
                 shape_list(value)[0], use_bias=False, name="lm_head", kernel_initializer=lm_head_initializer
             )  # Update init weights as in flax
             # in a dense layer the kernel has a shape (last_dim, units), for us (dim, num_tokens)
@@ -1312,8 +1418,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         ```python
         >>> from transformers import AutoTokenizer, TFT5ForConditionalGeneration
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
-        >>> model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
+        >>> model = TFT5ForConditionalGeneration.from_pretrained("google-t5/t5-small")
 
         >>> # training
         >>> inputs = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="tf").input_ids
@@ -1471,6 +1577,25 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
     def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
         return self._shift_right(labels)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        # The shared/tied weights expect to be in the model base namespace
+        # Adding "/" to the end (not the start!) of a tf.name_scope puts it in the root namespace rather than
+        # the current one.
+        with tf.name_scope(self.shared.load_weight_prefix + "/" + self.shared.name + "/"):
+            self.shared.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "decoder", None) is not None:
+            with tf.name_scope(self.decoder.name):
+                self.decoder.build(None)
+        if getattr(self, "lm_head", None) is not None:
+            with tf.name_scope(self.lm_head.name):
+                self.lm_head.build([None, None, self.config.d_model])
+
 
 @add_start_docstrings(
     "The bare T5 Model transformer outputting encoder's raw hidden-stateswithout any specific head on top.",
@@ -1479,7 +1604,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 class TFT5EncoderModel(TFT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.shared = tf.keras.layers.Embedding(
+        self.shared = keras.layers.Embedding(
             config.vocab_size,
             config.d_model,
             name="shared",
@@ -1517,8 +1642,8 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, TFT5EncoderModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
-        >>> model = TFT5EncoderModel.from_pretrained("t5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
+        >>> model = TFT5EncoderModel.from_pretrained("google-t5/t5-small")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="tf"
@@ -1549,3 +1674,16 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        # The shared/tied weights expect to be in the model base namespace
+        # Adding "/" to the end (not the start!) of a tf.name_scope puts it in the root namespace rather than
+        # the current one.
+        with tf.name_scope(self.shared.load_weight_prefix + "/" + self.shared.name + "/"):
+            self.shared.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)

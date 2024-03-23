@@ -24,7 +24,6 @@ Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minder
 Uszkoreit, Neil Houlsby. It's the first paper that successfully trains a Transformer encoder on ImageNet, attaining
 very good results compared to familiar convolutional architectures.
 
-
 The abstract from the paper is the following:
 
 *While the Transformer architecture has become the de-facto standard for natural language processing tasks, its
@@ -35,30 +34,6 @@ sequences of image patches can perform very well on image classification tasks. 
 data and transferred to multiple mid-sized or small image recognition benchmarks (ImageNet, CIFAR-100, VTAB, etc.),
 Vision Transformer (ViT) attains excellent results compared to state-of-the-art convolutional networks while requiring
 substantially fewer computational resources to train.*
-
-Tips:
-
-- Demo notebooks regarding inference as well as fine-tuning ViT on custom data can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer).
-- To feed images to the Transformer encoder, each image is split into a sequence of fixed-size non-overlapping patches,
-  which are then linearly embedded. A [CLS] token is added to serve as representation of an entire image, which can be
-  used for classification. The authors also add absolute position embeddings, and feed the resulting sequence of
-  vectors to a standard Transformer encoder.
-- As the Vision Transformer expects each image to be of the same size (resolution), one can use
-  [`ViTImageProcessor`] to resize (or rescale) and normalize images for the model.
-- Both the patch resolution and image resolution used during pre-training or fine-tuning are reflected in the name of
-  each checkpoint. For example, `google/vit-base-patch16-224` refers to a base-sized architecture with patch
-  resolution of 16x16 and fine-tuning resolution of 224x224. All checkpoints can be found on the [hub](https://huggingface.co/models?search=vit).
-- The available checkpoints are either (1) pre-trained on [ImageNet-21k](http://www.image-net.org/) (a collection of
-  14 million images and 21k classes) only, or (2) also fine-tuned on [ImageNet](http://www.image-net.org/challenges/LSVRC/2012/) (also referred to as ILSVRC 2012, a collection of 1.3 million
-  images and 1,000 classes).
-- The Vision Transformer was pre-trained using a resolution of 224x224. During fine-tuning, it is often beneficial to
-  use a higher resolution than pre-training [(Touvron et al., 2019)](https://arxiv.org/abs/1906.06423), [(Kolesnikov
-  et al., 2020)](https://arxiv.org/abs/1912.11370). In order to fine-tune at higher resolution, the authors perform
-  2D interpolation of the pre-trained position embeddings, according to their location in the original image.
-- The best results are obtained with supervised pre-training, which is not the case in NLP. The authors also performed
-  an experiment with a self-supervised pre-training objective, namely masked patched prediction (inspired by masked
-  language modeling). With this approach, the smaller ViT-B/16 model achieves 79.9% accuracy on ImageNet, a significant
-  improvement of 2% to training from scratch, but still 4% behind supervised pre-training.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vit_architecture.jpg"
 alt="drawing" width="600"/>
@@ -87,28 +62,35 @@ Following the original Vision Transformer, some follow-up works have been made:
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code (written in JAX) can be
 found [here](https://github.com/google-research/vision_transformer).
 
-Note that we converted the weights from Ross Wightman's [timm library](https://github.com/rwightman/pytorch-image-models), who already converted the weights from JAX to PyTorch. Credits
-go to him!
+Note that we converted the weights from Ross Wightman's [timm library](https://github.com/rwightman/pytorch-image-models), 
+who already converted the weights from JAX to PyTorch. Credits go to him!
+
+## Usage tips
+
+- To feed images to the Transformer encoder, each image is split into a sequence of fixed-size non-overlapping patches,
+  which are then linearly embedded. A [CLS] token is added to serve as representation of an entire image, which can be
+  used for classification. The authors also add absolute position embeddings, and feed the resulting sequence of
+  vectors to a standard Transformer encoder.
+- As the Vision Transformer expects each image to be of the same size (resolution), one can use
+  [`ViTImageProcessor`] to resize (or rescale) and normalize images for the model.
+- Both the patch resolution and image resolution used during pre-training or fine-tuning are reflected in the name of
+  each checkpoint. For example, `google/vit-base-patch16-224` refers to a base-sized architecture with patch
+  resolution of 16x16 and fine-tuning resolution of 224x224. All checkpoints can be found on the [hub](https://huggingface.co/models?search=vit).
+- The available checkpoints are either (1) pre-trained on [ImageNet-21k](http://www.image-net.org/) (a collection of
+  14 million images and 21k classes) only, or (2) also fine-tuned on [ImageNet](http://www.image-net.org/challenges/LSVRC/2012/) (also referred to as ILSVRC 2012, a collection of 1.3 million
+  images and 1,000 classes).
+- The Vision Transformer was pre-trained using a resolution of 224x224. During fine-tuning, it is often beneficial to
+  use a higher resolution than pre-training [(Touvron et al., 2019)](https://arxiv.org/abs/1906.06423), [(Kolesnikov
+  et al., 2020)](https://arxiv.org/abs/1912.11370). In order to fine-tune at higher resolution, the authors perform
+  2D interpolation of the pre-trained position embeddings, according to their location in the original image.
+- The best results are obtained with supervised pre-training, which is not the case in NLP. The authors also performed
+  an experiment with a self-supervised pre-training objective, namely masked patched prediction (inspired by masked
+  language modeling). With this approach, the smaller ViT-B/16 model achieves 79.9% accuracy on ImageNet, a significant
+  improvement of 2% to training from scratch, but still 4% behind supervised pre-training.
 
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ViT.
-
-<PipelineTag pipeline="image-classification"/>
-
-- [`ViTForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-- A blog on fine-tuning [`ViTForImageClassification`] on a custom dataset can be found [here](https://huggingface.co/blog/fine-tune-vit).
-- More demo notebooks to fine-tune [`ViTForImageClassification`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer).
-- [Image classification task guide](../tasks/image_classification)
-
-Besides that:
-
-- [`ViTForMaskedImageModeling`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
-
-## Resources
-
+Demo notebooks regarding inference as well as fine-tuning ViT on custom data can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer).
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ViT. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 `ViTForImageClassification` is supported by:
@@ -134,7 +116,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - A blog post on [Deploying Hugging Face ViT on Vertex AI](https://huggingface.co/blog/deploy-vertex-ai)
 - A blog post on [Deploying Hugging Face ViT on Kubernetes with TF Serving](https://huggingface.co/blog/deploy-tfserving-kubernetes)
 
-
 ## ViTConfig
 
 [[autodoc]] ViTConfig
@@ -144,11 +125,13 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] ViTFeatureExtractor
     - __call__
 
-
 ## ViTImageProcessor
 
 [[autodoc]] ViTImageProcessor
     - preprocess
+
+<frameworkcontent>
+<pt>
 
 ## ViTModel
 
@@ -165,6 +148,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] ViTForImageClassification
     - forward
 
+</pt>
+<tf>
+
 ## TFViTModel
 
 [[autodoc]] TFViTModel
@@ -175,6 +161,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] TFViTForImageClassification
     - call
 
+</tf>
+<jax>
+
 ## FlaxVitModel
 
 [[autodoc]] FlaxViTModel
@@ -184,3 +173,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] FlaxViTForImageClassification
     - __call__
+
+</jax>
+</frameworkcontent>

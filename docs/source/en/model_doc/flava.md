@@ -33,9 +33,7 @@ at once -- a true vision and language foundation model should be good at vision 
 cross- and multi-modal vision and language tasks. We introduce FLAVA as such a model and demonstrate
 impressive performance on a wide range of 35 tasks spanning these target modalities.*
 
-
 This model was contributed by [aps](https://huggingface.co/aps). The original code can be found [here](https://github.com/facebookresearch/multimodal/tree/main/examples/flava).
-
 
 ## FlavaConfig
 

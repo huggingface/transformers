@@ -46,7 +46,7 @@ document-level pretraining. It achieves new state-of-the-art results in several 
 understanding (from 70.72 to 79.27), receipt understanding (from 94.02 to 95.24) and document image classification
 (from 93.07 to 94.42).*
 
-Tips:
+## Usage tips
 
 - In addition to *input_ids*, [`~transformers.LayoutLMModel.forward`] also expects the input `bbox`, which are
   the bounding boxes (i.e. 2D-positions) of the input tokens. These can be obtained using an external OCR engine such
@@ -123,6 +123,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] LayoutLMTokenizerFast
 
+<frameworkcontent>
+<pt>
+
 ## LayoutLMModel
 
 [[autodoc]] LayoutLMModel
@@ -143,6 +146,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] LayoutLMForQuestionAnswering
 
+</pt>
+<tf>
+
 ## TFLayoutLMModel
 
 [[autodoc]] TFLayoutLMModel
@@ -162,3 +168,8 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## TFLayoutLMForQuestionAnswering
 
 [[autodoc]] TFLayoutLMForQuestionAnswering
+
+</tf>
+</frameworkcontent>
+
+

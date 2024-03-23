@@ -98,6 +98,7 @@ class ProphetNetConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
     """
+
     model_type = "prophetnet"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {

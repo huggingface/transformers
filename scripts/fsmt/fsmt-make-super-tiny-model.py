@@ -24,18 +24,19 @@
 #
 # It will be used then as "stas/tiny-wmt19-en-ru"
 
-from pathlib import Path
 import json
 import tempfile
+from pathlib import Path
 
-from transformers import FSMTTokenizer, FSMTConfig, FSMTForConditionalGeneration
+from transformers import FSMTConfig, FSMTForConditionalGeneration, FSMTTokenizer
 from transformers.models.fsmt.tokenization_fsmt import VOCAB_FILES_NAMES
+
 
 mname_tiny = "tiny-wmt19-en-ru"
 
 # Build
 
-# borrowed from a test 
+# borrowed from a test
 vocab = [ "l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "w</w>", "r</w>", "t</w>", "lo", "low", "er</w>", "low</w>", "lowest</w>", "newer</w>", "wider</w>", "<unk>", ]
 vocab_tokens = dict(zip(vocab, range(len(vocab))))
 merges = ["l o 123", "lo w 1456", "e r</w> 1789", ""]
@@ -57,7 +58,7 @@ with tempfile.TemporaryDirectory() as tmpdirname:
         tgt_vocab_file=tgt_vocab_file,
         merges_file=merges_file,
     )
-    
+
 config = FSMTConfig(
     langs=['ru', 'en'],
     src_vocab_size=1000, tgt_vocab_size=1000,

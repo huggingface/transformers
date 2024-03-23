@@ -377,6 +377,8 @@ class TFEncoderDecoderMixin:
             enc_dec_model.config.eos_token_id = None
         if hasattr(enc_dec_model.config, "decoder") and hasattr(enc_dec_model.config.decoder, "eos_token_id"):
             enc_dec_model.config.decoder.eos_token_id = None
+        if hasattr(enc_dec_model.generation_config, "eos_token_id"):
+            enc_dec_model.generation_config.eos_token_id = None
 
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(
@@ -474,7 +476,7 @@ class TFEncoderDecoderMixin:
     def prepare_pt_inputs_from_tf_inputs(self, tf_inputs_dict):
         pt_inputs_dict = {}
         for name, key in tf_inputs_dict.items():
-            if type(key) == bool:
+            if isinstance(key, bool):
                 pt_inputs_dict[name] = key
             elif name == "input_values":
                 pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
@@ -509,7 +511,7 @@ class TFEncoderDecoderMixin:
         tf_outputs = tf_model(tf_inputs_dict)
 
         # tf models returned loss is usually a tensor rather than a scalar.
-        # (see `hf_compute_loss`: it uses `tf.keras.losses.Reduction.NONE`)
+        # (see `hf_compute_loss`: it uses `keras.losses.Reduction.NONE`)
         # Change it here to a scalar to match PyTorch models' loss
         tf_loss = getattr(tf_outputs, "loss", None)
         if tf_loss is not None:
@@ -525,7 +527,7 @@ class TFEncoderDecoderMixin:
         # PT -> TF
         with tempfile.TemporaryDirectory() as tmpdirname:
             pt_model.save_pretrained(tmpdirname)
-            tf_model = TFEncoderDecoderModel.from_pretrained(tmpdirname, from_pt=True)
+            tf_model = TFEncoderDecoderModel.from_pretrained(tmpdirname)
 
         self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
 
@@ -542,7 +544,7 @@ class TFEncoderDecoderMixin:
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             pt_model.save_pretrained(tmpdirname)
-            tf_model = TFEncoderDecoderModel.from_pretrained(tmpdirname, from_pt=True)
+            tf_model = TFEncoderDecoderModel.from_pretrained(tmpdirname)
 
         self.check_pt_tf_equivalence(tf_model, pt_model, tf_inputs_dict)
 
@@ -560,7 +562,8 @@ class TFEncoderDecoderMixin:
         tf_model(**tf_inputs_dict)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            tf_model.save_pretrained(tmpdirname)
+            # TODO Matt: PT doesn't support loading TF safetensors - remove the arg and from_tf=True when it does
+            tf_model.save_pretrained(tmpdirname, safe_serialization=False)
             pt_model = EncoderDecoderModel.from_pretrained(tmpdirname, from_tf=True)
 
         self.check_pt_tf_equivalence(tf_model, pt_model, tf_inputs_dict)
@@ -763,7 +766,7 @@ class TFBertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
     def test_bert2bert_summarization(self):
         from transformers import EncoderDecoderModel
 
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
         """Not working, because pt checkpoint has `encoder.encoder.layer...` while tf model has `encoder.bert.encoder.layer...`.
         (For Bert decoder, there is no issue, because `BertModel` is wrapped into `decoder` as `bert`)
@@ -863,8 +866,8 @@ class TFGPT2EncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
     def test_bert2gpt2_summarization(self):
         from transformers import EncoderDecoderModel
 
-        tokenizer_in = AutoTokenizer.from_pretrained("bert-base-cased")
-        tokenizer_out = AutoTokenizer.from_pretrained("gpt2")
+        tokenizer_in = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
+        tokenizer_out = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
         """Not working, because pt checkpoint has `encoder.encoder.layer...` while tf model has `encoder.bert.encoder.layer...`.
         (For GPT2 decoder, there is no issue)
@@ -1015,10 +1018,12 @@ class TFRembertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase)
 @require_tf
 class TFEncoderDecoderModelTest(unittest.TestCase):
     def get_from_encoderdecoder_pretrained_model(self):
-        return TFEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "bert-base-cased")
+        return TFEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "google-bert/bert-base-cased", "google-bert/bert-base-cased"
+        )
 
     def get_decoder_config(self):
-        config = AutoConfig.from_pretrained("bert-base-cased")
+        config = AutoConfig.from_pretrained("google-bert/bert-base-cased")
         config.is_decoder = True
         config.add_cross_attention = True
         return config
@@ -1027,9 +1032,9 @@ class TFEncoderDecoderModelTest(unittest.TestCase):
         return TFEncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
 
     def get_encoder_decoder_models(self):
-        encoder_model = TFBertModel.from_pretrained("bert-base-cased", name="encoder")
+        encoder_model = TFBertModel.from_pretrained("google-bert/bert-base-cased", name="encoder")
         decoder_model = TFBertLMHeadModel.from_pretrained(
-            "bert-base-cased", config=self.get_decoder_config(), name="decoder"
+            "google-bert/bert-base-cased", config=self.get_decoder_config(), name="decoder"
         )
         return {"encoder": encoder_model, "decoder": decoder_model}
 
@@ -1054,8 +1059,10 @@ class TFEncoderDecoderModelTest(unittest.TestCase):
 @require_tf
 class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
     def get_encoder_decoder_config(self):
-        encoder_config = AutoConfig.from_pretrained("bert-base-uncased")
-        decoder_config = AutoConfig.from_pretrained("bert-base-uncased", is_decoder=True, add_cross_attention=True)
+        encoder_config = AutoConfig.from_pretrained("google-bert/bert-base-uncased")
+        decoder_config = AutoConfig.from_pretrained(
+            "google-bert/bert-base-uncased", is_decoder=True, add_cross_attention=True
+        )
         return EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
 
     def get_encoder_decoder_config_small(self):
@@ -1070,9 +1077,9 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 
         # create two random BERT models for bert2bert & initialize weights (+cross_attention weights)
         encoder = TFBertModel(config.encoder)
-        encoder.build()
+        encoder.build_in_name_scope()
         decoder = TFBertLMHeadModel(config.decoder)
-        decoder.build()
+        decoder.build_in_name_scope()
 
         encoder_decoder_orig = TFEncoderDecoderModel(encoder=encoder, decoder=decoder)
 
@@ -1129,9 +1136,7 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dirname_1, tempfile.TemporaryDirectory() as tmp_dirname_2:
             encoder_decoder_pt.encoder.save_pretrained(tmp_dirname_1)
             encoder_decoder_pt.decoder.save_pretrained(tmp_dirname_2)
-            encoder_decoder_tf = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
-                tmp_dirname_1, tmp_dirname_2, encoder_from_pt=True, decoder_from_pt=True
-            )
+            encoder_decoder_tf = TFEncoderDecoderModel.from_encoder_decoder_pretrained(tmp_dirname_1, tmp_dirname_2)
 
         logits_tf = encoder_decoder_tf(input_ids=input_ids, decoder_input_ids=decoder_input_ids).logits
 
@@ -1150,7 +1155,7 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 
         # TensorFlow => PyTorch
         with tempfile.TemporaryDirectory() as tmp_dirname:
-            encoder_decoder_tf.save_pretrained(tmp_dirname)
+            encoder_decoder_tf.save_pretrained(tmp_dirname, safe_serialization=False)
             encoder_decoder_pt = EncoderDecoderModel.from_pretrained(tmp_dirname, from_tf=True)
 
         max_diff = np.max(np.abs(logits_pt.detach().cpu().numpy() - logits_tf.numpy()))
@@ -1161,8 +1166,8 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         load_weight_prefix = TFEncoderDecoderModel.load_weight_prefix
 
         config = self.get_encoder_decoder_config()
-        encoder_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-        decoder_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        encoder_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+        decoder_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
         input_ids = encoder_tokenizer("who sings does he love me with reba", return_tensors="tf").input_ids
         decoder_input_ids = decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
@@ -1174,10 +1179,10 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
             # So we create pretrained models (without `load_weight_prefix`), save them, and later,
             # we load them using `from_pretrained`.
             # (we don't need to do this for encoder, but let's make the code more similar between encoder/decoder)
-            encoder = TFAutoModel.from_pretrained("bert-base-uncased", name="encoder")
+            encoder = TFAutoModel.from_pretrained("google-bert/bert-base-uncased", name="encoder")
             # It's necessary to specify `add_cross_attention=True` here.
             decoder = TFAutoModelForCausalLM.from_pretrained(
-                "bert-base-uncased", is_decoder=True, add_cross_attention=True, name="decoder"
+                "google-bert/bert-base-uncased", is_decoder=True, add_cross_attention=True, name="decoder"
             )
             pretrained_encoder_dir = os.path.join(tmp_dirname, "pretrained_encoder")
             pretrained_decoder_dir = os.path.join(tmp_dirname, "pretrained_decoder")

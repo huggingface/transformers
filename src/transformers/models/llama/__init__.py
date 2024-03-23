@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_flax_available,
     is_sentencepiece_available,
     is_tokenizers_available,
     is_torch_available,
@@ -53,7 +54,16 @@ else:
         "LlamaModel",
         "LlamaPreTrainedModel",
         "LlamaForSequenceClassification",
+        "LlamaForQuestionAnswering",
     ]
+
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_flax_llama"] = ["FlaxLlamaForCausalLM", "FlaxLlamaModel", "FlaxLlamaPreTrainedModel"]
 
 
 if TYPE_CHECKING:
@@ -81,7 +91,21 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
+        from .modeling_llama import (
+            LlamaForCausalLM,
+            LlamaForQuestionAnswering,
+            LlamaForSequenceClassification,
+            LlamaModel,
+            LlamaPreTrainedModel,
+        )
+
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_flax_llama import FlaxLlamaForCausalLM, FlaxLlamaModel, FlaxLlamaPreTrainedModel
 
 
 else:

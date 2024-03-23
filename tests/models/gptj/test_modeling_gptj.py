@@ -17,8 +17,18 @@
 import datetime
 import unittest
 
-from transformers import GPTJConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, tooslow, torch_device
+import pytest
+
+from transformers import BitsAndBytesConfig, GPTJConfig, is_torch_available
+from transformers.testing_utils import (
+    require_bitsandbytes,
+    require_flash_attn,
+    require_torch,
+    require_torch_gpu,
+    slow,
+    tooslow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -518,6 +528,44 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             model = GPTJModel.from_pretrained(model_name, revision="float16", torch_dtype=torch.float16)
             self.assertIsNotNone(model)
 
+    @require_flash_attn
+    @require_torch_gpu
+    @require_bitsandbytes
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_generate_padding_right(self):
+        """
+        Overwritting the common test as the test is flaky on tiny models
+        """
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6b")
+
+        texts = ["hi", "Hello this is a very long sentence"]
+        expected_outputs = [
+            "hi<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>Q: I have a question about the new version of the game. I have a question about the",
+            "Hello this is a very long sentence.\n\nA:\n\nI think the best way to understand this is to think of it",
+        ]
+
+        tokenizer.padding_side = "right"
+        tokenizer.pad_token = tokenizer.eos_token
+
+        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(0)
+
+        quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+
+        model = GPTJForCausalLM.from_pretrained(
+            "EleutherAI/gpt-j-6b",
+            device_map={"": 0},
+            attn_implementation="flash_attention_2",
+            revision="float16",
+            torch_dtype=torch.float16,
+            quantization_config=quantization_config,
+        )
+
+        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_fa_2 = tokenizer.batch_decode(output_fa_2)
+
+        self.assertListEqual(expected_outputs, output_fa_2)
+
 
 @require_torch
 class GPTJModelLanguageGenerationTest(unittest.TestCase):
@@ -534,10 +582,8 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
                 model.gradient_checkpointing_disable()
             model.to(torch_device)
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
-            # fmt: off
             # The dog is a man's best friend. It is a loyal companion, and it is a friend
-            expected_output_ids = [464, 3290, 318, 257, 582, 338, 1266, 1545, 13, 632, 318, 257, 9112, 15185, 11, 290, 340, 318, 257, 1545]
-            # fmt: on
+            expected_output_ids = [464, 3290, 318, 257, 582, 338, 1266, 1545, 13, 632, 318, 257, 9112, 15185, 11, 290, 340, 318, 257, 1545]  # fmt: skip
             output_ids = model.generate(input_ids, do_sample=False)
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
@@ -562,7 +608,8 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
-        if torch_device == "cuda":
+        if torch_device != "cpu":
+            # currently this expect value is only for `cuda`
             EXPECTED_OUTPUT_STR = (
                 "Today is a nice day and I've already been enjoying it. I walked to work with my wife"
             )

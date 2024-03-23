@@ -169,6 +169,7 @@ class SEWDConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "sew-d"
 
     def __init__(

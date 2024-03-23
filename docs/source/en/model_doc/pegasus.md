@@ -25,9 +25,6 @@ rendered properly in your Markdown viewer.
 </a>
 </div>
 
-**DISCLAIMER:** If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=sshleifer&labels=&template=bug-report.md&title)
-and assign @patrickvonplaten.
-
 
 ## Overview
 
@@ -42,12 +39,16 @@ According to the abstract,
 
 This model was contributed by [sshleifer](https://huggingface.co/sshleifer). The Authors' code can be found [here](https://github.com/google-research/pegasus).
 
-Tips:
+## Usage tips
 
 - Sequence-to-sequence model with the same encoder-decoder model architecture as BART. Pegasus is pre-trained jointly on two self-supervised objective functions: Masked Language Modeling (MLM) and a novel summarization specific pretraining objective, called Gap Sentence Generation (GSG).
 
   * MLM: encoder input tokens are randomly replaced by a mask tokens and have to be predicted by the encoder (like in BERT)
   * GSG: whole encoder input sentences are replaced by a second mask token and fed to the decoder, but which has a causal mask to hide the future words like a regular auto-regressive transformer decoder.
+
+- FP16 is not supported (help/ideas on this appreciated!).
+- The adafactor optimizer is recommended for pegasus fine-tuning.
+
 
 ## Checkpoints
 
@@ -60,20 +61,11 @@ All the [checkpoints](https://huggingface.co/models?search=pegasus) are fine-tun
 - Full replication results and correctly pre-processed data can be found in this [Issue](https://github.com/huggingface/transformers/issues/6844#issue-689259666).
 - [Distilled checkpoints](https://huggingface.co/models?search=distill-pegasus) are described in this [paper](https://arxiv.org/abs/2010.13002).
 
-### Examples
-
-- [Script](https://github.com/huggingface/transformers/tree/main/examples/research_projects/seq2seq-distillation/finetune_pegasus_xsum.sh) to fine-tune pegasus
-  on the XSUM dataset. Data download instructions at [examples/pytorch/summarization/](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization/README.md).
-- FP16 is not supported (help/ideas on this appreciated!).
-- The adafactor optimizer is recommended for pegasus fine-tuning.
-
-
 ## Implementation Notes
 
 - All models are transformer encoder-decoders with 16 layers in each component.
 - The implementation is completely inherited from [`BartForConditionalGeneration`]
 - Some key configuration differences:
-
   - static, sinusoidal position embeddings
   - the model starts generating with pad_token_id (which has 0 token_embedding) as the prefix.
   - more beams are used (`num_beams=8`)
@@ -81,7 +73,6 @@ All the [checkpoints](https://huggingface.co/models?search=pegasus) are fine-tun
   input size), `max_length` (the maximum number of tokens to generate) and `length_penalty`.
 - The code to convert checkpoints trained in the author's [repo](https://github.com/google-research/pegasus) can be
   found in `convert_pegasus_tf_to_pytorch.py`.
-
 
 ## Usage Example
 
@@ -106,8 +97,10 @@ All the [checkpoints](https://huggingface.co/models?search=pegasus) are fine-tun
 ... )
 ```
 
-## Documentation resources
+## Resources
 
+- [Script](https://github.com/huggingface/transformers/tree/main/examples/research_projects/seq2seq-distillation/finetune_pegasus_xsum.sh) to fine-tune pegasus
+  on the XSUM dataset. Data download instructions at [examples/pytorch/summarization/](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization/README.md).
 - [Causal language modeling task guide](../tasks/language_modeling)
 - [Translation task guide](../tasks/translation)
 - [Summarization task guide](../tasks/summarization)
@@ -126,6 +119,9 @@ warning: `add_tokens` does not work at the moment.
 
 [[autodoc]] PegasusTokenizerFast
 
+<frameworkcontent>
+<pt>
+
 ## PegasusModel
 
 [[autodoc]] PegasusModel
@@ -141,6 +137,9 @@ warning: `add_tokens` does not work at the moment.
 [[autodoc]] PegasusForCausalLM
     - forward
 
+</pt>
+<tf>
+
 ## TFPegasusModel
 
 [[autodoc]] TFPegasusModel
@@ -150,6 +149,9 @@ warning: `add_tokens` does not work at the moment.
 
 [[autodoc]] TFPegasusForConditionalGeneration
     - call
+
+</tf>
+<jax>
 
 ## FlaxPegasusModel
 
@@ -164,3 +166,6 @@ warning: `add_tokens` does not work at the moment.
     - __call__
     - encode
     - decode
+
+</jax>
+</frameworkcontent>

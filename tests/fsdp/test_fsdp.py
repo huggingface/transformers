@@ -15,6 +15,7 @@
 import itertools
 import os
 import unittest
+from copy import deepcopy
 from functools import partial
 
 from parameterized import parameterized
@@ -24,29 +25,31 @@ from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
+    backend_device_count,
     execute_subprocess_async,
-    get_gpu_count,
     mockenv_context,
     require_accelerate,
     require_fsdp,
-    require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_accelerator,
+    require_torch_multi_accelerator,
     slow,
+    torch_device,
 )
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import FSDPOption, set_seed
-from transformers.utils import is_accelerate_available, is_torch_bf16_gpu_available
+from transformers.utils import is_accelerate_available, is_torch_bf16_available_on_device
 
 
 if is_torch_available():
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_1
+    from transformers.trainer import FSDP_MODEL_NAME
 else:
     is_torch_greater_or_equal_than_2_1 = False
 
 # default torch.distributed port
 DEFAULT_MASTER_PORT = "10999"
 dtypes = ["fp16"]
-if is_torch_bf16_gpu_available():
+if is_torch_bf16_available_on_device(torch_device):
     dtypes += ["bf16"]
 sharding_strategies = ["full_shard", "shard_grad_op"]
 state_dict_types = ["FULL_STATE_DICT", "SHARDED_STATE_DICT"]
@@ -100,7 +103,7 @@ def get_launcher(distributed=False, use_accelerate=False):
     # - it won't be able to handle that
     # 2. for now testing with just 2 gpus max (since some quality tests may give different
     # results with mode gpus because we use very little data)
-    num_gpus = min(2, get_gpu_count()) if distributed else 1
+    num_gpus = min(2, backend_device_count(torch_device)) if distributed else 1
     master_port = get_master_port(real_launcher=True)
     if use_accelerate:
         return f"""accelerate launch
@@ -121,7 +124,7 @@ def _parameterized_custom_name_func(func, param_num, param):
 
 
 @require_accelerate
-@require_torch_gpu
+@require_torch_accelerator
 @require_fsdp_version
 class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     def setUp(self):
@@ -170,7 +173,45 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
 
     @parameterized.expand(params, name_func=_parameterized_custom_name_func)
-    @require_torch_multi_gpu
+    def test_fsdp_config_transformers_auto_wrap(self, sharding_strategy, dtype):
+        output_dir = self.get_auto_remove_tmp_dir()
+        fsdp_config = deepcopy(self.fsdp_config)
+        del fsdp_config["min_num_params"]
+        fsdp_config["transformer_layer_cls_to_wrap"] = "BertLayer"
+        kwargs = {
+            "output_dir": output_dir,
+            "train_len": 128,
+            "save_steps": 5,
+            "learning_rate": 0.1,
+            "fsdp": f"{sharding_strategy} offload auto_wrap",
+            "fsdp_config": fsdp_config,
+        }
+        kwargs[dtype] = True
+        prefix = "FSDP_"
+        with mockenv_context(**self.dist_env_1_gpu):
+            trainer = get_regression_trainer(**kwargs)
+            self.assertEqual(trainer.args.fsdp[0], sharding_strategy)
+            self.assertEqual(trainer.args.fsdp[1], FSDPOption.OFFLOAD)
+            self.assertEqual(trainer.args.fsdp[2], FSDPOption.AUTO_WRAP)
+            fsdp_sharding_strategy = (
+                str(FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1)
+                if is_accelerate_available("0.26.0")
+                else sharding_strategy.upper()
+            )
+            self.assertEqual(os.environ[f"{prefix}SHARDING_STRATEGY"], fsdp_sharding_strategy)
+            self.assertEqual(os.environ[f"{prefix}OFFLOAD_PARAMS"], "true")
+            self.assertEqual(os.environ[f"{prefix}AUTO_WRAP_POLICY"], "TRANSFORMER_BASED_WRAP")
+            self.assertEqual(
+                os.environ[f"{prefix}TRANSFORMER_CLS_TO_WRAP"], ",".join(fsdp_config["transformer_layer_cls_to_wrap"])
+            )
+            self.assertEqual(os.environ[f"{prefix}BACKWARD_PREFETCH"], fsdp_config["backward_prefetch"].upper())
+            self.assertEqual(os.environ[f"{prefix}FORWARD_PREFETCH"], fsdp_config["forward_prefetch"])
+            self.assertEqual(os.environ[f"{prefix}USE_ORIG_PARAMS"], fsdp_config["use_orig_params"])
+            self.assertEqual(os.environ[f"{prefix}SYNC_MODULE_STATES"], fsdp_config["sync_module_states"])
+            self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
+
+    @parameterized.expand(params, name_func=_parameterized_custom_name_func)
+    @require_torch_multi_accelerator
     @slow
     def test_basic_run(self, sharding_strategy, dtype):
         launcher = get_launcher(distributed=True, use_accelerate=False)
@@ -182,7 +223,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         execute_subprocess_async(cmd, env=self.get_env())
 
     @parameterized.expand(dtypes)
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     @slow
     @unittest.skipIf(not is_torch_greater_or_equal_than_2_1, reason="This test on pytorch 2.0 takes 4 hours.")
     def test_basic_run_with_cpu_offload(self, dtype):
@@ -195,7 +236,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         execute_subprocess_async(cmd, env=self.get_env())
 
     @parameterized.expand(state_dict_types, name_func=_parameterized_custom_name_func)
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     @slow
     def test_training_and_can_resume_normally(self, state_dict_type):
         output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
@@ -210,6 +251,19 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         # resume from ckpt
         checkpoint = os.path.join(output_dir, "checkpoint-115")
         resume_args = args + f"--resume_from_checkpoint {checkpoint}".split()
+
+        is_fsdp_ckpt = os.path.isdir(checkpoint) and (
+            # this checks the FSDP state dict when `SHARDED_STATE_DICT` is used
+            any(
+                FSDP_MODEL_NAME in folder_name
+                for folder_name in os.listdir(checkpoint)
+                if os.path.isdir(os.path.join(checkpoint, folder_name))
+            )
+            # this checks the FSDP state dict when `FULL_STATE_DICT` is used
+            or os.path.isfile(os.path.join(checkpoint, f"{FSDP_MODEL_NAME}.bin"))
+        )
+        self.assertTrue(is_fsdp_ckpt)
+
         logs_resume = self.run_cmd_and_get_logs(
             use_accelerate, sharding_strategy, launcher, script, resume_args, output_dir
         )
@@ -241,7 +295,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     def get_base_args(self, output_dir, num_epochs, logging_steps):
         return f"""
-            --model_name_or_path bert-base-cased
+            --model_name_or_path google-bert/bert-base-cased
             --task_name mrpc
             --output_dir {output_dir}
             --overwrite_output_dir

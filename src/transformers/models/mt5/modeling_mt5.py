@@ -32,6 +32,7 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
     Seq2SeqQuestionAnsweringModelOutput,
     Seq2SeqSequenceClassifierOutput,
+    TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
@@ -53,6 +54,19 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MT5Config"
 _CHECKPOINT_FOR_DOC = "mt5-small"
 
+
+####################################################
+# This dict contains ids and associated url
+# for the pretrained weights provided with the models
+####################################################
+MT5_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "google/mt5-small",
+    "google/mt5-base",
+    "google/mt5-large",
+    "google/mt5-xl",
+    "google/mt5-xxl",
+    # See all mT5 models at https://huggingface.co/models?filter=mt5
+]
 
 PARALLELIZE_DOCSTRING = r"""
     This is an experimental feature and is a subject to change at a moment's notice.
@@ -804,6 +818,10 @@ class MT5PreTrainedModel(PreTrainedModel):
             if hasattr(module, "qa_outputs"):
                 module.qa_outputs.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
                 module.qa_outputs.bias.data.zero_()
+        elif isinstance(module, MT5ForTokenClassification):
+            if hasattr(module, "classifier"):
+                module.classifier.weight.data.normal_(mean=0.0, std=factor * 1.0)
+                module.classifier.bias.data.zero_()
         elif isinstance(module, MT5ClassificationHead):
             module.dense.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.dense, "bias") and module.dense.bias is not None:
@@ -997,17 +1015,12 @@ class MT5Stack(MT5PreTrainedModel):
             if not self.is_decoder:
                 raise ValueError(f"`use_cache` can only be set to `True` if {self} is used as a decoder")
 
-        if attention_mask is None:
-            attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
-        if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
-            encoder_seq_length = encoder_hidden_states.shape[1]
-            encoder_attention_mask = torch.ones(
-                batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
-            )
-
         # initialize past_key_values with `None` if past does not exist
         if past_key_values is None:
             past_key_values = [None] * len(self.block)
+
+        if attention_mask is None:
+            attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -1019,7 +1032,9 @@ class MT5Stack(MT5PreTrainedModel):
             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=inputs_embeds.device)
+                encoder_attention_mask = torch.ones(
+                    encoder_hidden_shape, device=inputs_embeds.device, dtype=torch.long
+                )
             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
@@ -1334,9 +1349,9 @@ class MT5Model(MT5PreTrainedModel):
     >>> outputs = model(input_ids=inputs["input_ids"], decoder_input_ids=labels["input_ids"])
     >>> hidden_states = outputs.last_hidden_state
     ```"""
+
     model_type = "mt5"
     config_class = MT5Config
-    _keys_to_ignore_on_load_missing = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1455,8 +1470,8 @@ class MT5Model(MT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MT5Model
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("mt5-small")
-        >>> model = MT5Model.from_pretrained("mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-mt5/mt5-small")
+        >>> model = MT5Model.from_pretrained("google-mt5/mt5-small")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
@@ -1691,8 +1706,8 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MT5ForConditionalGeneration
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("mt5-small")
-        >>> model = MT5ForConditionalGeneration.from_pretrained("mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-mt5/mt5-small")
+        >>> model = MT5ForConditionalGeneration.from_pretrained("google-mt5/mt5-small")
 
         >>> # training
         >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
@@ -2002,8 +2017,8 @@ class MT5EncoderModel(MT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MT5EncoderModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("mt5-small")
-        >>> model = MT5EncoderModel.from_pretrained("mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-mt5/mt5-small")
+        >>> model = MT5EncoderModel.from_pretrained("google-mt5/mt5-small")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1
@@ -2157,6 +2172,80 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    MT5 Encoder Model with a token classification head on top (a linear layer on top of the hidden-states output)
+    e.g. for Named-Entity-Recognition (NER) tasks.
+    """,
+    MT5_START_DOCSTRING,
+)
+class MT5ForTokenClassification(MT5PreTrainedModel):
+    _tied_weights_keys = ["transformer.encoder.embed_tokens.weight"]
+
+    # Copied from transformers.models.t5.modeling_t5.T5ForTokenClassification.__init__ with T5->MT5
+    def __init__(self, config: MT5Config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.transformer = MT5EncoderModel(config)
+        self.dropout = nn.Dropout(config.classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(MT5_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    # Copied from transformers.models.t5.modeling_t5.T5ForTokenClassification.forward with T5->MT5
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+        Returns:
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.transformer(
+            input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]
+        hidden_states = self.dropout(hidden_states)
+        logits = self.classifier(hidden_states)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits, outputs[2:-1])
+            return ((loss,) + output) if loss is not None else output
+
+        return TokenClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

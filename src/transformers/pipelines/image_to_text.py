@@ -1,3 +1,18 @@
+# coding=utf-8
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from typing import List, Union
 
 from ..utils import (
@@ -8,7 +23,7 @@ from ..utils import (
     logging,
     requires_backends,
 )
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 if is_vision_available():
@@ -27,7 +42,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True, has_image_processor=True))
 class ImageToTextPipeline(Pipeline):
     """
     Image To Text pipeline using a `AutoModelForVision2Seq`. This pipeline predicts a caption for a given image.
@@ -59,7 +74,7 @@ class ImageToTextPipeline(Pipeline):
         )
 
     def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, prompt=None, timeout=None):
-        forward_kwargs = {}
+        forward_params = {}
         preprocess_params = {}
 
         if prompt is not None:
@@ -67,18 +82,17 @@ class ImageToTextPipeline(Pipeline):
         if timeout is not None:
             preprocess_params["timeout"] = timeout
 
-        if generate_kwargs is not None:
-            forward_kwargs["generate_kwargs"] = generate_kwargs
         if max_new_tokens is not None:
-            if "generate_kwargs" not in forward_kwargs:
-                forward_kwargs["generate_kwargs"] = {}
-            if "max_new_tokens" in forward_kwargs["generate_kwargs"]:
+            forward_params["max_new_tokens"] = max_new_tokens
+        if generate_kwargs is not None:
+            if max_new_tokens is not None and "max_new_tokens" in generate_kwargs:
                 raise ValueError(
-                    "'max_new_tokens' is defined twice, once in 'generate_kwargs' and once as a direct parameter,"
-                    " please use only one"
+                    "`max_new_tokens` is defined both as an argument and inside `generate_kwargs` argument, please use"
+                    " only 1 version"
                 )
-            forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
-        return preprocess_params, forward_kwargs, {}
+            forward_params.update(generate_kwargs)
+
+        return preprocess_params, forward_params, {}
 
     def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
         """
@@ -149,7 +163,7 @@ class ImageToTextPipeline(Pipeline):
 
         return model_inputs
 
-    def _forward(self, model_inputs, generate_kwargs=None):
+    def _forward(self, model_inputs, **generate_kwargs):
         # Git model sets `model_inputs["input_ids"] = None` in `preprocess` (when `prompt=None`). In batch model, the
         # pipeline will group them into a list of `None`, which fail `_forward`. Avoid this by checking it first.
         if (
@@ -159,8 +173,6 @@ class ImageToTextPipeline(Pipeline):
         ):
             model_inputs["input_ids"] = None
 
-        if generate_kwargs is None:
-            generate_kwargs = {}
         # FIXME: We need to pop here due to a difference in how `generation.py` and `generation.tf_utils.py`
         #  parse inputs. In the Tensorflow version, `generate` raises an error if we don't use `input_ids` whereas
         #  the PyTorch version matches it with `self.model.main_input_name` or `self.model.encoder.main_input_name`

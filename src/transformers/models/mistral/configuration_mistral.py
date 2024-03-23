@@ -82,7 +82,8 @@ class MistralConfig(PretrainedConfig):
             The base period of the RoPE embeddings.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention window size. If not specified, will default to `4096`.
-
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
 
     ```python
     >>> from transformers import MistralModel, MistralConfig
@@ -119,6 +120,7 @@ class MistralConfig(PretrainedConfig):
         tie_word_embeddings=False,
         rope_theta=10000.0,
         sliding_window=4096,
+        attention_dropout=0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -139,6 +141,7 @@ class MistralConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
+        self.attention_dropout = attention_dropout
 
         super().__init__(
             pad_token_id=pad_token_id,

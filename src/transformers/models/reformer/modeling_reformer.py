@@ -2139,7 +2139,7 @@ class ReformerModel(ReformerPreTrainedModel):
         padded_seq_length=None,
         device=None,
     ):
-        logger.info(
+        logger.warning_once(
             f"Input ids are automatically padded from {input_shape[-1]} to {input_shape[-1] + padding_length} to be a "
             f"multiple of `config.chunk_length`: {padded_seq_length}"
         )

@@ -100,6 +100,7 @@ class TrajectoryTransformerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "trajectory_transformer"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {

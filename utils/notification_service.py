@@ -24,7 +24,7 @@ import time
 from typing import Dict, List, Optional, Union
 
 import requests
-from get_ci_error_statistics import get_job_links
+from get_ci_error_statistics import get_jobs
 from get_previous_daily_ci import get_last_daily_ci_reports
 from slack_sdk import WebClient
 
@@ -100,7 +100,13 @@ def dicts_to_sum(objects: Union[Dict[str, Dict], List[dict]]):
 
 class Message:
     def __init__(
-        self, title: str, ci_title: str, model_results: Dict, additional_results: Dict, selected_warnings: List = None
+        self,
+        title: str,
+        ci_title: str,
+        model_results: Dict,
+        additional_results: Dict,
+        selected_warnings: List = None,
+        prev_ci_artifacts=None,
     ):
         self.title = title
         self.ci_title = ci_title
@@ -119,10 +125,17 @@ class Message:
         # Failures and success of the additional tests
         self.n_additional_success = sum(r["success"] for r in additional_results.values())
 
-        all_additional_failures = dicts_to_sum([r["failed"] for r in additional_results.values()])
-        self.n_additional_single_gpu_failures = all_additional_failures["single"]
-        self.n_additional_multi_gpu_failures = all_additional_failures["multi"]
-        self.n_additional_unknown_gpu_failures = all_additional_failures["unclassified"]
+        if len(additional_results) > 0:
+            # `dicts_to_sum` uses `dicts_to_sum` which requires a non empty dictionary. Let's just add an empty entry.
+            all_additional_failures = dicts_to_sum([r["failed"] for r in additional_results.values()])
+            self.n_additional_single_gpu_failures = all_additional_failures["single"]
+            self.n_additional_multi_gpu_failures = all_additional_failures["multi"]
+            self.n_additional_unknown_gpu_failures = all_additional_failures["unclassified"]
+        else:
+            self.n_additional_single_gpu_failures = 0
+            self.n_additional_multi_gpu_failures = 0
+            self.n_additional_unknown_gpu_failures = 0
+
         self.n_additional_failures = (
             self.n_additional_single_gpu_failures
             + self.n_additional_multi_gpu_failures
@@ -142,6 +155,8 @@ class Message:
         if selected_warnings is None:
             selected_warnings = []
         self.selected_warnings = selected_warnings
+
+        self.prev_ci_artifacts = prev_ci_artifacts
 
     @property
     def time(self) -> str:
@@ -391,8 +406,6 @@ class Message:
 
         # Save the complete (i.e. no truncation) failure tables (of the current workflow run)
         # (to be uploaded as artifacts)
-        if not os.path.isdir(os.path.join(os.getcwd(), "test_failure_tables")):
-            os.makedirs(os.path.join(os.getcwd(), "test_failure_tables"))
 
         model_failures_report = prepare_reports(
             title="These following model modules had failures",
@@ -400,7 +413,7 @@ class Message:
             reports=sorted_model_reports,
             to_truncate=False,
         )
-        file_path = os.path.join(os.getcwd(), "test_failure_tables/model_failures_report.txt")
+        file_path = os.path.join(os.getcwd(), "prev_ci_results/model_failures_report.txt")
         with open(file_path, "w", encoding="UTF-8") as fp:
             fp.write(model_failures_report)
 
@@ -410,27 +423,18 @@ class Message:
             reports=sorted_module_reports,
             to_truncate=False,
         )
-        file_path = os.path.join(os.getcwd(), "test_failure_tables/module_failures_report.txt")
+        file_path = os.path.join(os.getcwd(), "prev_ci_results/module_failures_report.txt")
         with open(file_path, "w", encoding="UTF-8") as fp:
             fp.write(module_failures_report)
 
-        target_workflow = "huggingface/transformers/.github/workflows/self-scheduled.yml@refs/heads/main"
-        if os.environ.get("CI_WORKFLOW_REF") == target_workflow:
-            # Get the last previously completed CI's failure tables
-            artifact_names = ["test_failure_tables"]
-            output_dir = os.path.join(os.getcwd(), "previous_reports")
-            os.makedirs(output_dir, exist_ok=True)
-            prev_tables = get_last_daily_ci_reports(
-                artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
-            )
-
-            # if the last run produces artifact named `test_failure_tables`
+        if self.prev_ci_artifacts is not None:
+            # if the last run produces artifact named `prev_ci_results`
             if (
-                "test_failure_tables" in prev_tables
-                and "model_failures_report.txt" in prev_tables["test_failure_tables"]
+                "prev_ci_results" in self.prev_ci_artifacts
+                and "model_failures_report.txt" in self.prev_ci_artifacts["prev_ci_results"]
             ):
                 # Compute the difference of the previous/current (model failure) table
-                prev_model_failures = prev_tables["test_failure_tables"]["model_failures_report.txt"]
+                prev_model_failures = self.prev_ci_artifacts["prev_ci_results"]["model_failures_report.txt"]
                 entries_changed = self.compute_diff_for_failure_reports(model_failures_report, prev_model_failures)
                 if len(entries_changed) > 0:
                     # Save the complete difference
@@ -440,7 +444,7 @@ class Message:
                         reports=entries_changed,
                         to_truncate=False,
                     )
-                    file_path = os.path.join(os.getcwd(), "test_failure_tables/changed_model_failures_report.txt")
+                    file_path = os.path.join(os.getcwd(), "prev_ci_results/changed_model_failures_report.txt")
                     with open(file_path, "w", encoding="UTF-8") as fp:
                         fp.write(diff_report)
 
@@ -505,6 +509,10 @@ class Message:
 
         if len(self.selected_warnings) > 0:
             blocks.append(self.warnings)
+
+        new_failure_blocks = self.get_new_model_failure_blocks(with_header=False)
+        if len(new_failure_blocks) > 0:
+            blocks.extend(new_failure_blocks)
 
         return json.dumps(blocks)
 
@@ -625,6 +633,67 @@ class Message:
             {"type": "section", "text": {"type": "mrkdwn", "text": failure_text}},
         ]
 
+    def get_new_model_failure_blocks(self, with_header=True):
+        if self.prev_ci_artifacts is None:
+            return {}
+
+        sorted_dict = sorted(self.model_results.items(), key=lambda t: t[0])
+
+        prev_model_results = {}
+        if (
+            "prev_ci_results" in self.prev_ci_artifacts
+            and "model_results.json" in self.prev_ci_artifacts["prev_ci_results"]
+        ):
+            prev_model_results = json.loads(self.prev_ci_artifacts["prev_ci_results"]["model_results.json"])
+
+        all_failure_lines = {}
+        for job, job_result in sorted_dict:
+            if len(job_result["failures"]):
+                devices = sorted(job_result["failures"].keys(), reverse=True)
+                for device in devices:
+                    failures = job_result["failures"][device]
+                    prev_error_lines = {}
+                    if job in prev_model_results and device in prev_model_results[job]["failures"]:
+                        prev_error_lines = {error["line"] for error in prev_model_results[job]["failures"][device]}
+
+                    url = None
+                    if job_result["job_link"] is not None and job_result["job_link"][device] is not None:
+                        url = job_result["job_link"][device]
+
+                    for idx, error in enumerate(failures):
+                        if error["line"] in prev_error_lines:
+                            continue
+
+                        new_text = f'{error["line"]}\n\n'
+
+                        if new_text not in all_failure_lines:
+                            all_failure_lines[new_text] = []
+
+                        all_failure_lines[new_text].append(f"<{url}|{device}>" if url is not None else device)
+
+        MAX_ERROR_TEXT = 3000 - len("[Truncated]") - len("```New model failures```\n\n")
+        failure_text = ""
+        for line, devices in all_failure_lines.items():
+            new_text = failure_text + f"{'|'.join(devices)} gpu\n{line}"
+            if len(new_text) > MAX_ERROR_TEXT:
+                # `failure_text` here has length <= 3000
+                failure_text = failure_text + "[Truncated]"
+                break
+            # `failure_text` here has length <= MAX_ERROR_TEXT
+            failure_text = new_text
+
+        blocks = []
+        if failure_text:
+            if with_header:
+                blocks.append(
+                    {"type": "header", "text": {"type": "plain_text", "text": "New model failures", "emoji": True}}
+                )
+            else:
+                failure_text = f"*New model failures*\n\n{failure_text}"
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": failure_text}})
+
+        return blocks
+
     def post_reply(self):
         if self.thread_ts is None:
             raise ValueError("Can only post reply if a post has been made.")
@@ -673,6 +742,20 @@ class Message:
                     )
 
                     time.sleep(1)
+
+        blocks = self.get_new_model_failure_blocks()
+        if blocks:
+            print("Sending the following reply")
+            print(json.dumps({"blocks": blocks}))
+
+            client.chat_postMessage(
+                channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
+                text="Results for new failures",
+                blocks=blocks,
+                thread_ts=self.thread_ts["ts"],
+            )
+
+            time.sleep(1)
 
 
 def retrieve_artifact(artifact_path: str, gpu: Optional[str]):
@@ -769,12 +852,15 @@ def prepare_reports(title, header, reports, to_truncate=True):
 
 
 if __name__ == "__main__":
-    runner_status = os.environ.get("RUNNER_STATUS")
-    runner_env_status = os.environ.get("RUNNER_ENV_STATUS")
+    # runner_status = os.environ.get("RUNNER_STATUS")
+    # runner_env_status = os.environ.get("RUNNER_ENV_STATUS")
     setup_status = os.environ.get("SETUP_STATUS")
 
-    runner_not_available = True if runner_status is not None and runner_status != "success" else False
-    runner_failed = True if runner_env_status is not None and runner_env_status != "success" else False
+    # runner_not_available = True if runner_status is not None and runner_status != "success" else False
+    # runner_failed = True if runner_env_status is not None and runner_env_status != "success" else False
+    # Let's keep the lines regardig runners' status (we might be able to use them again in the future)
+    runner_not_available = False
+    runner_failed = False
     setup_failed = True if setup_status is not None and setup_status != "success" else False
 
     org = "huggingface"
@@ -845,16 +931,26 @@ if __name__ == "__main__":
 
     arguments = sys.argv[1:][0]
     try:
-        models = ast.literal_eval(arguments)
+        folder_slices = ast.literal_eval(arguments)
         # Need to change from elements like `models/bert` to `models_bert` (the ones used as artifact names).
-        models = [x.replace("models/", "models_") for x in models]
+        models = [x.replace("models/", "models_") for folders in folder_slices for x in folders]
     except SyntaxError:
         Message.error_out(title, ci_title)
         raise ValueError("Errored out.")
 
-    github_actions_job_links = get_job_links(
+    github_actions_jobs = get_jobs(
         workflow_run_id=os.environ["GITHUB_RUN_ID"], token=os.environ["ACCESS_REPO_INFO_TOKEN"]
     )
+    github_actions_job_links = {job["name"]: job["html_url"] for job in github_actions_jobs}
+
+    artifact_name_to_job_map = {}
+    for job in github_actions_jobs:
+        for step in job["steps"]:
+            if step["name"].startswith("Test suite reports artifacts: "):
+                artifact_name = step["name"][len("Test suite reports artifacts: ") :]
+                artifact_name_to_job_map[artifact_name] = job
+                break
+
     available_artifacts = retrieve_available_artifacts()
 
     modeling_categories = [
@@ -888,29 +984,13 @@ if __name__ == "__main__":
 
     unclassified_model_failures = []
 
-    # This prefix is used to get job links below. For past CI, we use `workflow_call`, which changes the job names from
-    # `Model tests (...)` to `PyTorch 1.5 / Model tests (...)` for example.
-    job_name_prefix = ""
-    if ci_event.startswith("Past CI - "):
-        framework, version = ci_event.replace("Past CI - ", "").split("-")
-        framework = "PyTorch" if framework == "pytorch" else "TensorFlow"
-        job_name_prefix = f"{framework} {version}"
-    elif ci_event.startswith("Nightly CI"):
-        job_name_prefix = "Nightly CI"
-    elif ci_event.startswith("Push CI (AMD) - "):
-        flavor = ci_event.replace("Push CI (AMD) - ", "")
-        job_name_prefix = f"AMD {flavor}"
-
     for model in model_results.keys():
         for artifact_path in available_artifacts[f"run_all_tests_gpu_{model}_test_reports"].paths:
             artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             if "stats" in artifact:
                 # Link to the GitHub Action job
-                # The job names use `matrix.folder` which contain things like `models/bert` instead of `models_bert`
-                job_name = f"Model tests ({model.replace('models_', 'models/')}, {artifact_path['gpu']}-gpu)"
-                if job_name_prefix:
-                    job_name = f"{job_name_prefix} / {job_name}"
-                model_results[model]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(job_name)
+                job = artifact_name_to_job_map[artifact_path["path"]]
+                model_results[model]["job_link"][artifact_path["gpu"]] = job["html_url"]
                 failed, success, time_spent = handle_test_results(artifact["stats"])
                 model_results[model]["success"] += success
                 model_results[model]["time_spent"] += time_spent[1:-1] + ", "
@@ -963,12 +1043,18 @@ if __name__ == "__main__":
         "PyTorch pipelines": "run_tests_torch_pipeline_gpu",
         "TensorFlow pipelines": "run_tests_tf_pipeline_gpu",
         "Torch CUDA extension tests": "run_tests_torch_cuda_extensions_gpu_test_reports",
+        "Quantization tests": "run_tests_quantization_torch_gpu",
     }
 
-    if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI") or ci_event.startswith("Push CI (AMD)"):
+    if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
         del additional_files["Examples directory"]
         del additional_files["PyTorch pipelines"]
         del additional_files["TensorFlow pipelines"]
+    elif ci_event.startswith("Scheduled CI (AMD)"):
+        del additional_files["TensorFlow pipelines"]
+        del additional_files["Torch CUDA extension tests"]
+    elif ci_event.startswith("Push CI (AMD)"):
+        additional_files = {}
 
     additional_results = {
         key: {
@@ -990,12 +1076,8 @@ if __name__ == "__main__":
 
         for artifact_path in available_artifacts[additional_files[key]].paths:
             # Link to the GitHub Action job
-            job_name = key
-            if artifact_path["gpu"] is not None:
-                job_name = f"{key} ({artifact_path['gpu']}-gpu)"
-            if job_name_prefix:
-                job_name = f"{job_name_prefix} / {job_name}"
-            additional_results[key]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(job_name)
+            job = artifact_name_to_job_map[artifact_path["path"]]
+            additional_results[key]["job_link"][artifact_path["gpu"]] = job["html_url"]
 
             artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             stacktraces = handle_stacktraces(artifact["failures_line"])
@@ -1027,7 +1109,31 @@ if __name__ == "__main__":
         with open(os.path.join(directory, "selected_warnings.json")) as fp:
             selected_warnings = json.load(fp)
 
-    message = Message(title, ci_title, model_results, additional_results, selected_warnings=selected_warnings)
+    if not os.path.isdir(os.path.join(os.getcwd(), "prev_ci_results")):
+        os.makedirs(os.path.join(os.getcwd(), "prev_ci_results"))
+
+    with open("prev_ci_results/model_results.json", "w", encoding="UTF-8") as fp:
+        json.dump(model_results, fp, indent=4, ensure_ascii=False)
+
+    prev_ci_artifacts = None
+    target_workflow = "huggingface/transformers/.github/workflows/self-scheduled.yml@refs/heads/main"
+    if os.environ.get("CI_WORKFLOW_REF") == target_workflow:
+        # Get the last previously completed CI's failure tables
+        artifact_names = ["prev_ci_results"]
+        output_dir = os.path.join(os.getcwd(), "previous_reports")
+        os.makedirs(output_dir, exist_ok=True)
+        prev_ci_artifacts = get_last_daily_ci_reports(
+            artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+        )
+
+    message = Message(
+        title,
+        ci_title,
+        model_results,
+        additional_results,
+        selected_warnings=selected_warnings,
+        prev_ci_artifacts=prev_ci_artifacts,
+    )
 
     # send report only if there is any failure (for push CI)
     if message.n_failures or (ci_event != "push" and not ci_event.startswith("Push CI (AMD)")):

@@ -90,6 +90,7 @@ class OpenLlamaConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "open-llama"
 
     def __init__(

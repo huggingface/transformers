@@ -41,6 +41,7 @@ from ...modeling_tf_utils import (
     TFSequenceSummary,
     TFTokenClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -68,7 +69,7 @@ TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 # Copied from transformers.models.albert.modeling_tf_albert.TFAlbertEmbeddings with Albert->ConvBert
-class TFConvBertEmbeddings(tf.keras.layers.Layer):
+class TFConvBertEmbeddings(keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config: ConvBertConfig, **kwargs):
@@ -78,10 +79,10 @@ class TFConvBertEmbeddings(tf.keras.layers.Layer):
         self.embedding_size = config.embedding_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
@@ -103,7 +104,12 @@ class TFConvBertEmbeddings(tf.keras.layers.Layer):
                 initializer=get_initializer(self.initializer_range),
             )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.embedding_size])
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings.call
     def call(
@@ -147,7 +153,7 @@ class TFConvBertEmbeddings(tf.keras.layers.Layer):
         return final_embeddings
 
 
-class TFConvBertSelfAttention(tf.keras.layers.Layer):
+class TFConvBertSelfAttention(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -173,17 +179,17 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
 
         self.attention_head_size = config.hidden_size // config.num_attention_heads
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.query = tf.keras.layers.Dense(
+        self.query = keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = tf.keras.layers.Dense(
+        self.key = keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
-        self.value = tf.keras.layers.Dense(
+        self.value = keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
 
-        self.key_conv_attn_layer = tf.keras.layers.SeparableConv1D(
+        self.key_conv_attn_layer = keras.layers.SeparableConv1D(
             self.all_head_size,
             self.conv_kernel_size,
             padding="same",
@@ -193,21 +199,22 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
             name="key_conv_attn_layer",
         )
 
-        self.conv_kernel_layer = tf.keras.layers.Dense(
+        self.conv_kernel_layer = keras.layers.Dense(
             self.num_attention_heads * self.conv_kernel_size,
             activation=None,
             name="conv_kernel_layer",
             kernel_initializer=get_initializer(config.initializer_range),
         )
 
-        self.conv_out_layer = tf.keras.layers.Dense(
+        self.conv_out_layer = keras.layers.Dense(
             self.all_head_size,
             activation=None,
             name="conv_out_layer",
             kernel_initializer=get_initializer(config.initializer_range),
         )
 
-        self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.dropout = keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.config = config
 
     def transpose_for_scores(self, x, batch_size):
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
@@ -297,16 +304,40 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "query", None) is not None:
+            with tf.name_scope(self.query.name):
+                self.query.build([None, None, self.config.hidden_size])
+        if getattr(self, "key", None) is not None:
+            with tf.name_scope(self.key.name):
+                self.key.build([None, None, self.config.hidden_size])
+        if getattr(self, "value", None) is not None:
+            with tf.name_scope(self.value.name):
+                self.value.build([None, None, self.config.hidden_size])
+        if getattr(self, "key_conv_attn_layer", None) is not None:
+            with tf.name_scope(self.key_conv_attn_layer.name):
+                self.key_conv_attn_layer.build([None, None, self.config.hidden_size])
+        if getattr(self, "conv_kernel_layer", None) is not None:
+            with tf.name_scope(self.conv_kernel_layer.name):
+                self.conv_kernel_layer.build([None, None, self.all_head_size])
+        if getattr(self, "conv_out_layer", None) is not None:
+            with tf.name_scope(self.conv_out_layer.name):
+                self.conv_out_layer.build([None, None, self.config.hidden_size])
 
-class TFConvBertSelfOutput(tf.keras.layers.Layer):
+
+class TFConvBertSelfOutput(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states, input_tensor, training=False):
         hidden_states = self.dense(hidden_states)
@@ -315,8 +346,19 @@ class TFConvBertSelfOutput(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
-class TFConvBertAttention(tf.keras.layers.Layer):
+
+class TFConvBertAttention(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -335,8 +377,19 @@ class TFConvBertAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attention", None) is not None:
+            with tf.name_scope(self.self_attention.name):
+                self.self_attention.build(None)
+        if getattr(self, "dense_output", None) is not None:
+            with tf.name_scope(self.dense_output.name):
+                self.dense_output.build(None)
 
-class GroupedLinearLayer(tf.keras.layers.Layer):
+
+class GroupedLinearLayer(keras.layers.Layer):
     def __init__(self, input_size, output_size, num_groups, kernel_initializer, **kwargs):
         super().__init__(**kwargs)
         self.input_size = input_size
@@ -369,11 +422,11 @@ class GroupedLinearLayer(tf.keras.layers.Layer):
         return x
 
 
-class TFConvBertIntermediate(tf.keras.layers.Layer):
+class TFConvBertIntermediate(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         if config.num_groups == 1:
-            self.dense = tf.keras.layers.Dense(
+            self.dense = keras.layers.Dense(
                 config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
             )
         else:
@@ -389,6 +442,7 @@ class TFConvBertIntermediate(tf.keras.layers.Layer):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
+        self.config = config
 
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -396,13 +450,21 @@ class TFConvBertIntermediate(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
 
-class TFConvBertOutput(tf.keras.layers.Layer):
+
+class TFConvBertOutput(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
         if config.num_groups == 1:
-            self.dense = tf.keras.layers.Dense(
+            self.dense = keras.layers.Dense(
                 config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
             )
         else:
@@ -413,8 +475,9 @@ class TFConvBertOutput(tf.keras.layers.Layer):
                 kernel_initializer=get_initializer(config.initializer_range),
                 name="dense",
             )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states, input_tensor, training=False):
         hidden_states = self.dense(hidden_states)
@@ -423,8 +486,19 @@ class TFConvBertOutput(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.intermediate_size])
 
-class TFConvBertLayer(tf.keras.layers.Layer):
+
+class TFConvBertLayer(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -443,8 +517,22 @@ class TFConvBertLayer(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "intermediate", None) is not None:
+            with tf.name_scope(self.intermediate.name):
+                self.intermediate.build(None)
+        if getattr(self, "bert_output", None) is not None:
+            with tf.name_scope(self.bert_output.name):
+                self.bert_output.build(None)
 
-class TFConvBertEncoder(tf.keras.layers.Layer):
+
+class TFConvBertEncoder(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -486,12 +574,21 @@ class TFConvBertEncoder(tf.keras.layers.Layer):
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layer", None) is not None:
+            for layer in self.layer:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
-class TFConvBertPredictionHeadTransform(tf.keras.layers.Layer):
+
+class TFConvBertPredictionHeadTransform(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.embedding_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
@@ -500,7 +597,8 @@ class TFConvBertPredictionHeadTransform(tf.keras.layers.Layer):
         else:
             self.transform_act_fn = config.hidden_act
 
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.config = config
 
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -509,9 +607,20 @@ class TFConvBertPredictionHeadTransform(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
+
 
 @keras_serializable
-class TFConvBertMainLayer(tf.keras.layers.Layer):
+class TFConvBertMainLayer(keras.layers.Layer):
     config_class = ConvBertConfig
 
     def __init__(self, config, **kwargs):
@@ -520,7 +629,7 @@ class TFConvBertMainLayer(tf.keras.layers.Layer):
         self.embeddings = TFConvBertEmbeddings(config, name="embeddings")
 
         if config.embedding_size != config.hidden_size:
-            self.embeddings_project = tf.keras.layers.Dense(config.hidden_size, name="embeddings_project")
+            self.embeddings_project = keras.layers.Dense(config.hidden_size, name="embeddings_project")
 
         self.encoder = TFConvBertEncoder(config, name="encoder")
         self.config = config
@@ -616,6 +725,20 @@ class TFConvBertMainLayer(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "embeddings_project", None) is not None:
+            with tf.name_scope(self.embeddings_project.name):
+                self.embeddings_project.build([None, None, self.config.embedding_size])
+
 
 class TFConvBertPreTrainedModel(TFPreTrainedModel):
     """
@@ -633,7 +756,7 @@ CONVBERT_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -770,8 +893,16 @@ class TFConvBertModel(TFConvBertPreTrainedModel):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "convbert", None) is not None:
+            with tf.name_scope(self.convbert.name):
+                self.convbert.build(None)
 
-class TFConvBertMaskedLMHead(tf.keras.layers.Layer):
+
+class TFConvBertMaskedLMHead(keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
 
@@ -808,12 +939,13 @@ class TFConvBertMaskedLMHead(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFConvBertGeneratorPredictions(tf.keras.layers.Layer):
+class TFConvBertGeneratorPredictions(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dense = tf.keras.layers.Dense(config.embedding_size, name="dense")
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dense = keras.layers.Dense(config.embedding_size, name="dense")
+        self.config = config
 
     def call(self, generator_hidden_states, training=False):
         hidden_states = self.dense(generator_hidden_states)
@@ -821,6 +953,17 @@ class TFConvBertGeneratorPredictions(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(hidden_states)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.embedding_size])
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings("""ConvBERT Model with a `language modeling` head on top.""", CONVBERT_START_DOCSTRING)
@@ -901,21 +1044,35 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
             attentions=generator_hidden_states.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "convbert", None) is not None:
+            with tf.name_scope(self.convbert.name):
+                self.convbert.build(None)
+        if getattr(self, "generator_predictions", None) is not None:
+            with tf.name_scope(self.generator_predictions.name):
+                self.generator_predictions.build(None)
+        if getattr(self, "generator_lm_head", None) is not None:
+            with tf.name_scope(self.generator_lm_head.name):
+                self.generator_lm_head.build(None)
 
-class TFConvBertClassificationHead(tf.keras.layers.Layer):
+
+class TFConvBertClassificationHead(keras.layers.Layer):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
-        self.dropout = tf.keras.layers.Dropout(classifier_dropout)
-        self.out_proj = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(classifier_dropout)
+        self.out_proj = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
         )
 
@@ -930,6 +1087,17 @@ class TFConvBertClassificationHead(tf.keras.layers.Layer):
         x = self.out_proj(x)
 
         return x
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -999,6 +1167,17 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
             attentions=outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "convbert", None) is not None:
+            with tf.name_scope(self.convbert.name):
+                self.convbert.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build(None)
+
 
 @add_start_docstrings(
     """
@@ -1015,9 +1194,10 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
         self.sequence_summary = TFSequenceSummary(
             config, initializer_range=config.initializer_range, name="sequence_summary"
         )
-        self.classifier = tf.keras.layers.Dense(
+        self.classifier = keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(
@@ -1092,6 +1272,20 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
             attentions=outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "convbert", None) is not None:
+            with tf.name_scope(self.convbert.name):
+                self.convbert.build(None)
+        if getattr(self, "sequence_summary", None) is not None:
+            with tf.name_scope(self.sequence_summary.name):
+                self.sequence_summary.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
+
 
 @add_start_docstrings(
     """
@@ -1109,10 +1303,11 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
-        self.dropout = tf.keras.layers.Dropout(classifier_dropout)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(classifier_dropout)
+        self.classifier = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1167,6 +1362,17 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
             attentions=outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "convbert", None) is not None:
+            with tf.name_scope(self.convbert.name):
+                self.convbert.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
+
 
 @add_start_docstrings(
     """
@@ -1181,9 +1387,10 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
 
         self.num_labels = config.num_labels
         self.convbert = TFConvBertMainLayer(config, name="convbert")
-        self.qa_outputs = tf.keras.layers.Dense(
+        self.qa_outputs = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1252,3 +1459,14 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "convbert", None) is not None:
+            with tf.name_scope(self.convbert.name):
+                self.convbert.build(None)
+        if getattr(self, "qa_outputs", None) is not None:
+            with tf.name_scope(self.qa_outputs.name):
+                self.qa_outputs.build([None, None, self.config.hidden_size])

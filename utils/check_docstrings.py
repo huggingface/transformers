@@ -79,8 +79,6 @@ OBJECTS_TO_IGNORE = [
     "AlbertTokenizerFast",
     "AlignTextModel",
     "AlignVisionConfig",
-    "AltCLIPTextConfig",
-    "AltCLIPVisionConfig",
     "AudioClassificationPipeline",
     "AutoformerConfig",
     "AutomaticSpeechRecognitionPipeline",
@@ -168,8 +166,6 @@ OBJECTS_TO_IGNORE = [
     "ElectraTokenizerFast",
     "EncoderDecoderModel",
     "EncoderRepetitionPenaltyLogitsProcessor",
-    "ErnieConfig",
-    "ErnieMConfig",
     "ErnieMModel",
     "ErnieModel",
     "ErnieMTokenizer",
@@ -235,12 +231,18 @@ OBJECTS_TO_IGNORE = [
     "FlaxGPTJModel",
     "FlaxGPTNeoForCausalLM",
     "FlaxGPTNeoModel",
+    "FlaxLlamaForCausalLM",
+    "FlaxLlamaModel",
+    "FlaxGemmaForCausalLM",
+    "FlaxGemmaModel",
     "FlaxMBartForConditionalGeneration",
     "FlaxMBartForQuestionAnswering",
     "FlaxMBartForSequenceClassification",
     "FlaxMBartModel",
     "FlaxMarianMTModel",
     "FlaxMarianModel",
+    "FlaxMistralForCausalLM",
+    "FlaxMistralModel",
     "FlaxOPTForCausalLM",
     "FlaxPegasusForConditionalGeneration",
     "FlaxPegasusModel",
@@ -324,6 +326,7 @@ OBJECTS_TO_IGNORE = [
     "IdeficsConfig",
     "IdeficsProcessor",
     "ImageClassificationPipeline",
+    "ImageFeatureExtractionPipeline",
     "ImageGPTConfig",
     "ImageSegmentationPipeline",
     "ImageToImagePipeline",
@@ -392,6 +395,7 @@ OBJECTS_TO_IGNORE = [
     "MraConfig",
     "MusicgenDecoderConfig",
     "MusicgenForConditionalGeneration",
+    "MusicgenMelodyForConditionalGeneration",
     "MvpConfig",
     "MvpTokenizerFast",
     "MT5Tokenizer",
@@ -465,6 +469,7 @@ OBJECTS_TO_IGNORE = [
     "SamConfig",
     "SamPromptEncoderConfig",
     "SeamlessM4TConfig",  # use of unconventional markdown
+    "SeamlessM4Tv2Config",  # use of unconventional markdown
     "Seq2SeqTrainingArguments",
     "SpecialTokensMixin",
     "Speech2Text2Config",
@@ -535,6 +540,8 @@ OBJECTS_TO_IGNORE = [
     "TFConvBertModel",
     "TFConvNextForImageClassification",
     "TFConvNextModel",
+    "TFConvNextV2Model",  # Parsing issue. Equivalent to PT ConvNextV2Model, see PR #25558
+    "TFConvNextV2ForImageClassification",
     "TFCvtForImageClassification",
     "TFCvtModel",
     "TFDPRReader",
@@ -653,6 +660,8 @@ OBJECTS_TO_IGNORE = [
     "TFRagModel",
     "TFRagSequenceForGeneration",
     "TFRagTokenForGeneration",
+    "TFRegNetForImageClassification",
+    "TFRegNetModel",
     "TFRemBertForCausalLM",
     "TFRemBertForMaskedLM",
     "TFRemBertForMultipleChoice",
@@ -738,7 +747,6 @@ OBJECTS_TO_IGNORE = [
     "TrainerState",
     "TrainingArguments",
     "TrajectoryTransformerConfig",
-    "TransfoXLConfig",
     "TranslationPipeline",
     "TvltImageProcessor",
     "UMT5Config",
@@ -760,6 +768,7 @@ OBJECTS_TO_IGNORE = [
     "VitMatteForImageMatting",
     "VitsTokenizer",
     "VivitModel",
+    "Wav2Vec2BertForCTC",
     "Wav2Vec2CTCTokenizer",
     "Wav2Vec2Config",
     "Wav2Vec2ConformerConfig",
@@ -933,6 +942,10 @@ def replace_default_in_arg_description(description: str, default: Any) -> str:
                 except Exception:
                     # Otherwise there is a math operator so we add a code block.
                     str_default = f"`{current_default}`"
+            elif isinstance(default, enum.Enum) and default.name == current_default.split(".")[-1]:
+                # When the default is an Enum (this is often the case for PIL.Image.Resampling), and the docstring
+                # matches the enum name, keep the existing docstring rather than clobbering it with the enum value.
+                str_default = f"`{current_default}`"
 
         if str_default is None:
             str_default = stringify_default(default)
@@ -1210,7 +1223,10 @@ def check_docstrings(overwrite: bool = False):
         error_message += "\n" + "\n".join([f"- {name}" for name in hard_failures])
     if len(failures) > 0:
         error_message += (
-            "The following objects docstrings do not match their signature. Run `make fix-copies` to fix this."
+            "The following objects docstrings do not match their signature. Run `make fix-copies` to fix this. "
+            "In some cases, this error may be raised incorrectly by the docstring checker. If you think this is the "
+            "case, you can manually check the docstrings and then add the object name to `OBJECTS_TO_IGNORE` in "
+            "`utils/check_docstrings.py`."
         )
         error_message += "\n" + "\n".join([f"- {name}" for name in failures])
     if len(to_clean) > 0:

@@ -97,6 +97,7 @@ class Swin2SRConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "swin2sr"
 
     attribute_map = {

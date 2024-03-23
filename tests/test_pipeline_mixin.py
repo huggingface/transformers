@@ -39,6 +39,7 @@ from .pipelines.test_pipelines_document_question_answering import DocumentQuesti
 from .pipelines.test_pipelines_feature_extraction import FeatureExtractionPipelineTests
 from .pipelines.test_pipelines_fill_mask import FillMaskPipelineTests
 from .pipelines.test_pipelines_image_classification import ImageClassificationPipelineTests
+from .pipelines.test_pipelines_image_feature_extraction import ImageFeatureExtractionPipelineTests
 from .pipelines.test_pipelines_image_segmentation import ImageSegmentationPipelineTests
 from .pipelines.test_pipelines_image_to_image import ImageToImagePipelineTests
 from .pipelines.test_pipelines_image_to_text import ImageToTextPipelineTests
@@ -70,6 +71,7 @@ pipeline_test_mapping = {
     "feature-extraction": {"test": FeatureExtractionPipelineTests},
     "fill-mask": {"test": FillMaskPipelineTests},
     "image-classification": {"test": ImageClassificationPipelineTests},
+    "image-feature-extraction": {"test": ImageFeatureExtractionPipelineTests},
     "image-segmentation": {"test": ImageSegmentationPipelineTests},
     "image-to-image": {"test": ImageToImagePipelineTests},
     "image-to-text": {"test": ImageToTextPipelineTests},
@@ -313,7 +315,7 @@ class PipelineTesterMixin:
 
             out = []
             if task == "conversational":
-                for item in pipeline(data(10), batch_size=4, max_new_tokens=20):
+                for item in pipeline(data(10), batch_size=4, max_new_tokens=5):
                     out.append(item)
             else:
                 for item in pipeline(data(10), batch_size=4):
@@ -373,6 +375,13 @@ class PipelineTesterMixin:
     @require_vision
     def test_pipeline_image_to_text(self):
         self.run_task_tests(task="image-to-text")
+
+    @is_pipeline_test
+    @require_timm
+    @require_vision
+    @require_torch
+    def test_pipeline_image_feature_extraction(self):
+        self.run_task_tests(task="image-feature-extraction")
 
     @unittest.skip(reason="`run_pipeline_test` is currently not implemented.")
     @is_pipeline_test

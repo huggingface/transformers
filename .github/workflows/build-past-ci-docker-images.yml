@@ -15,8 +15,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["1.13", "1.12", "1.11", "1.10"]
-    runs-on: ubuntu-latest
+        version: ["1.13", "1.12", "1.11"]
+    runs-on: ubuntu-22.04
     steps:
       -
         name: Set up Docker Buildx
@@ -60,7 +60,7 @@ jobs:
       fail-fast: false
       matrix:
         version: ["2.11", "2.10", "2.9", "2.8", "2.7", "2.6", "2.5"]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       -
         name: Set up Docker Buildx

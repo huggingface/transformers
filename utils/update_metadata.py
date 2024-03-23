@@ -62,6 +62,7 @@ _re_pt_models = re.compile(r"(.*)(?:Model|Encoder|Decoder|ForConditionalGenerati
 PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("pretraining", "MODEL_FOR_PRETRAINING_MAPPING_NAMES", "AutoModelForPreTraining"),
     ("feature-extraction", "MODEL_MAPPING_NAMES", "AutoModel"),
+    ("image-feature-extraction", "MODEL_FOR_IMAGE_MAPPING_NAMES", "AutoModel"),
     ("audio-classification", "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES", "AutoModelForAudioClassification"),
     ("text-generation", "MODEL_FOR_CAUSAL_LM_MAPPING_NAMES", "AutoModelForCausalLM"),
     ("automatic-speech-recognition", "MODEL_FOR_CTC_MAPPING_NAMES", "AutoModelForCTC"),
@@ -197,9 +198,9 @@ def get_frameworks_table() -> pd.DataFrame:
             processors[t] = "AutoProcessor"
         elif t in transformers_module.models.auto.tokenization_auto.TOKENIZER_MAPPING_NAMES:
             processors[t] = "AutoTokenizer"
-        elif t in transformers_module.models.auto.feature_extraction_auto.FEATURE_EXTRACTOR_MAPPING_NAMES:
-            processors[t] = "AutoFeatureExtractor"
         elif t in transformers_module.models.auto.image_processing_auto.IMAGE_PROCESSOR_MAPPING_NAMES:
+            processors[t] = "AutoImageProcessor"
+        elif t in transformers_module.models.auto.feature_extraction_auto.FEATURE_EXTRACTOR_MAPPING_NAMES:
             processors[t] = "AutoFeatureExtractor"
         else:
             # Default to AutoTokenizer if a model has nothing, for backward compatibility.

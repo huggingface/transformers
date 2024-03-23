@@ -192,6 +192,7 @@ class InstructBlipQFormerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "instructblip_qformer"
 
     def __init__(

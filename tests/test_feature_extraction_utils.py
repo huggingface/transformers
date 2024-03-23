@@ -52,12 +52,6 @@ class FeatureExtractorUtilTester(unittest.TestCase):
             # This check we did call the fake head request
             mock_head.assert_called()
 
-    def test_legacy_load_from_url(self):
-        # This test is for deprecated behavior and can be removed in v5
-        _ = Wav2Vec2FeatureExtractor.from_pretrained(
-            "https://huggingface.co/hf-internal-testing/tiny-random-wav2vec2/resolve/main/preprocessor_config.json"
-        )
-
 
 @is_staging_test
 class FeatureExtractorPushToHubTester(unittest.TestCase):
@@ -85,7 +79,7 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
 
     def test_push_to_hub(self):
         feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
-        feature_extractor.push_to_hub("test-feature-extractor", use_auth_token=self._token)
+        feature_extractor.push_to_hub("test-feature-extractor", token=self._token)
 
         new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(f"{USER}/test-feature-extractor")
         for k, v in feature_extractor.__dict__.items():
@@ -97,7 +91,7 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
             feature_extractor.save_pretrained(
-                tmp_dir, repo_id="test-feature-extractor", push_to_hub=True, use_auth_token=self._token
+                tmp_dir, repo_id="test-feature-extractor", push_to_hub=True, token=self._token
             )
 
         new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(f"{USER}/test-feature-extractor")
@@ -106,7 +100,7 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
 
     def test_push_to_hub_in_organization(self):
         feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
-        feature_extractor.push_to_hub("valid_org/test-feature-extractor", use_auth_token=self._token)
+        feature_extractor.push_to_hub("valid_org/test-feature-extractor", token=self._token)
 
         new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("valid_org/test-feature-extractor")
         for k, v in feature_extractor.__dict__.items():
@@ -118,7 +112,7 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
             feature_extractor.save_pretrained(
-                tmp_dir, repo_id="valid_org/test-feature-extractor-org", push_to_hub=True, use_auth_token=self._token
+                tmp_dir, repo_id="valid_org/test-feature-extractor-org", push_to_hub=True, token=self._token
             )
 
         new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("valid_org/test-feature-extractor-org")
@@ -129,7 +123,7 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
         CustomFeatureExtractor.register_for_auto_class()
         feature_extractor = CustomFeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
 
-        feature_extractor.push_to_hub("test-dynamic-feature-extractor", use_auth_token=self._token)
+        feature_extractor.push_to_hub("test-dynamic-feature-extractor", token=self._token)
 
         # This has added the proper auto_map field to the config
         self.assertDictEqual(

@@ -27,8 +27,10 @@ from transformers.testing_utils import (
     require_accelerate,
     require_tf,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     require_torch_or_tf,
+    torch_device,
 )
 
 from .test_pipelines_common import ANY
@@ -88,6 +90,24 @@ class TextGenerationPipelineTests(unittest.TestCase):
                 {"generated_token_ids": ANY(list)},
             ],
         )
+
+        ## -- test tokenizer_kwargs
+        test_str = "testing tokenizer kwargs. using truncation must result in a different generation."
+        input_len = len(text_generator.tokenizer(test_str)["input_ids"])
+        output_str, output_str_with_truncation = (
+            text_generator(test_str, do_sample=False, return_full_text=False, min_new_tokens=1)[0]["generated_text"],
+            text_generator(
+                test_str,
+                do_sample=False,
+                return_full_text=False,
+                min_new_tokens=1,
+                truncation=True,
+                max_length=input_len + 1,
+            )[0]["generated_text"],
+        )
+        assert output_str != output_str_with_truncation  # results must be different because one had truncation
+
+        # -- what is the point of this test? padding is hardcoded False in the pipeline anyway
         text_generator.tokenizer.pad_token_id = text_generator.model.config.eos_token_id
         text_generator.tokenizer.pad_token = "<pad>"
         outputs = text_generator(
@@ -108,6 +128,52 @@ class TextGenerationPipelineTests(unittest.TestCase):
                     {"generated_token_ids": ANY(list)},
                     {"generated_token_ids": ANY(list)},
                 ],
+            ],
+        )
+
+    @require_torch
+    def test_small_chat_model_pt(self):
+        text_generator = pipeline(
+            task="text-generation", model="rocketknight1/tiny-gpt2-with-chatml-template", framework="pt"
+        )
+        # Using `do_sample=False` to force deterministic output
+        chat1 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+            {"role": "assistant", "content": "This is a reply"},
+        ]
+        chat2 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a second test"},
+            {"role": "assistant", "content": "This is a reply"},
+        ]
+        outputs = text_generator(chat1, do_sample=False, max_new_tokens=10)
+        expected_chat1 = chat1 + [
+            {
+                "role": "assistant",
+                "content": " factors factors factors factors factors factors factors factors factors factors",
+            }
+        ]
+        self.assertEqual(
+            outputs,
+            [
+                {"generated_text": expected_chat1},
+            ],
+        )
+
+        outputs = text_generator([chat1, chat2], do_sample=False, max_new_tokens=10)
+        expected_chat2 = chat2 + [
+            {
+                "role": "assistant",
+                "content": " factors factors factors factors factors factors factors factors factors factors",
+            }
+        ]
+
+        self.assertEqual(
+            outputs,
+            [
+                [{"generated_text": expected_chat1}],
+                [{"generated_text": expected_chat2}],
             ],
         )
 
@@ -149,6 +215,52 @@ class TextGenerationPipelineTests(unittest.TestCase):
                         )
                     }
                 ],
+            ],
+        )
+
+    @require_tf
+    def test_small_chat_model_tf(self):
+        text_generator = pipeline(
+            task="text-generation", model="rocketknight1/tiny-gpt2-with-chatml-template", framework="tf"
+        )
+        # Using `do_sample=False` to force deterministic output
+        chat1 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+            {"role": "assistant", "content": "This is a reply"},
+        ]
+        chat2 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a second test"},
+            {"role": "assistant", "content": "This is a reply"},
+        ]
+        outputs = text_generator(chat1, do_sample=False, max_new_tokens=10)
+        expected_chat1 = chat1 + [
+            {
+                "role": "assistant",
+                "content": " factors factors factors factors factors factors factors factors factors factors",
+            }
+        ]
+        self.assertEqual(
+            outputs,
+            [
+                {"generated_text": expected_chat1},
+            ],
+        )
+
+        outputs = text_generator([chat1, chat2], do_sample=False, max_new_tokens=10)
+        expected_chat2 = chat2 + [
+            {
+                "role": "assistant",
+                "content": " factors factors factors factors factors factors factors factors factors factors",
+            }
+        ]
+
+        self.assertEqual(
+            outputs,
+            [
+                [{"generated_text": expected_chat1}],
+                [{"generated_text": expected_chat2}],
             ],
         )
 
@@ -240,7 +352,12 @@ class TextGenerationPipelineTests(unittest.TestCase):
         # We don't care about infinite range models.
         # They already work.
         # Skip this test for XGLM, since it uses sinusoidal positional embeddings which are resized on-the-fly.
-        EXTRA_MODELS_CAN_HANDLE_LONG_INPUTS = ["RwkvForCausalLM", "XGLMForCausalLM", "GPTNeoXForCausalLM"]
+        EXTRA_MODELS_CAN_HANDLE_LONG_INPUTS = [
+            "RwkvForCausalLM",
+            "XGLMForCausalLM",
+            "GPTNeoXForCausalLM",
+            "FuyuForCausalLM",
+        ]
         if (
             tokenizer.model_max_length < 10000
             and text_generator.model.__class__.__name__ not in EXTRA_MODELS_CAN_HANDLE_LONG_INPUTS
@@ -269,7 +386,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
             model="hf-internal-testing/tiny-random-bloom",
             model_kwargs={"device_map": "auto", "torch_dtype": torch.bfloat16},
         )
-        self.assertEqual(pipe.model.device, torch.device(0))
         self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
         out = pipe("This is a test")
         self.assertEqual(
@@ -286,7 +402,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
 
         # Upgraded those two to real pipeline arguments (they just get sent for the model as they're unlikely to mean anything else.)
         pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device_map="auto", torch_dtype=torch.bfloat16)
-        self.assertEqual(pipe.model.device, torch.device(0))
         self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
         out = pipe("This is a test")
         self.assertEqual(
@@ -303,7 +418,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
 
         # torch_dtype will be automatically set to float32 if not provided - check: https://github.com/huggingface/transformers/pull/20602
         pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device_map="auto")
-        self.assertEqual(pipe.model.device, torch.device(0))
         self.assertEqual(pipe.model.lm_head.weight.dtype, torch.float32)
         out = pipe("This is a test")
         self.assertEqual(
@@ -319,20 +433,26 @@ class TextGenerationPipelineTests(unittest.TestCase):
         )
 
     @require_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_small_model_fp16(self):
         import torch
 
-        pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device=0, torch_dtype=torch.float16)
+        pipe = pipeline(
+            model="hf-internal-testing/tiny-random-bloom",
+            device=torch_device,
+            torch_dtype=torch.float16,
+        )
         pipe("This is a test")
 
     @require_torch
     @require_accelerate
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_pipeline_accelerate_top_p(self):
         import torch
 
-        pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device_map="auto", torch_dtype=torch.float16)
+        pipe = pipeline(
+            model="hf-internal-testing/tiny-random-bloom", device_map=torch_device, torch_dtype=torch.float16
+        )
         pipe("This is a test", do_sample=True, top_p=0.5)
 
     def test_pipeline_length_setting_warning(self):

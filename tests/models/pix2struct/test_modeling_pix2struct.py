@@ -49,9 +49,6 @@ if is_torch_available():
         Pix2StructVisionModel,
     )
     from transformers.models.pix2struct.modeling_pix2struct import PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_11
-else:
-    is_torch_greater_or_equal_than_1_11 = False
 
 
 if is_vision_available():
@@ -199,6 +196,18 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
     def test_retain_grad_hidden_states_attentions(self):
         pass
@@ -336,6 +345,18 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     @unittest.skip(reason="Pix2Struct does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -365,6 +386,7 @@ class Pix2StructModelTester:
         self.parent = parent
         self.text_model_tester = Pix2StructTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Pix2StructVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -722,10 +744,6 @@ def prepare_img():
     return im
 
 
-@unittest.skipIf(
-    not is_torch_greater_or_equal_than_1_11,
-    reason="`Pix2StructImageProcessor` requires `torch>=1.11.0`.",
-)
 @require_vision
 @require_torch
 @slow

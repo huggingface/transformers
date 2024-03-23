@@ -85,14 +85,14 @@ GPU memory occupied: 1343 MB.
 
 ## 모델 로드 [[load-model]]
 
-우선, `bert-large-uncased` 모델을 로드합니다. 모델의 가중치를 직접 GPU에 로드해서 가중치만이 얼마나 많은 공간을 차지하는지 확인할 수 있습니다.
+우선, `google-bert/bert-large-uncased` 모델을 로드합니다. 모델의 가중치를 직접 GPU에 로드해서 가중치만이 얼마나 많은 공간을 차지하는지 확인할 수 있습니다.
 
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
 
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-large-uncased").to("cuda")
+>>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-large-uncased").to("cuda")
 >>> print_gpu_utilization()
 GPU memory occupied: 2631 MB.
 ```

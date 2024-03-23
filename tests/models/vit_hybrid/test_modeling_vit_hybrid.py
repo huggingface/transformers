@@ -15,11 +15,10 @@
 """ Testing suite for the PyTorch ViT Hybrid model. """
 
 
-import inspect
 import unittest
 
 from transformers import ViTHybridConfig
-from transformers.testing_utils import require_accelerate, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import is_flaky, require_accelerate, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -123,6 +122,7 @@ class ViTHybridModelTester:
             initializer_range=self.initializer_range,
             backbone_featmap_shape=self.backbone_featmap_shape,
             backbone_config=backbone_config,
+            backbone=None,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -156,7 +156,7 @@ class ViTHybridModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     all_model_classes = (ViTHybridModel, ViTHybridForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": ViTHybridModel, "image-classification": ViTHybridForImageClassification}
+        {"image-feature-extraction": ViTHybridModel, "image-classification": ViTHybridForImageClassification}
         if is_torch_available()
         else {}
     )
@@ -184,18 +184,6 @@ class ViTHybridModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -232,6 +220,10 @@ class ViTHybridModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         for model_name in VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ViTHybridModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @is_flaky(description="is_flaky https://github.com/huggingface/transformers/issues/29516")
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
 
 
 # We will verify our results on an image of cute cats

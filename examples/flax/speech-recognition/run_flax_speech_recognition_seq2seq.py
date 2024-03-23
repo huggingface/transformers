@@ -39,7 +39,7 @@ from flax import jax_utils, traverse_util
 from flax.jax_utils import pad_shard_unpad, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
-from huggingface_hub import Repository, create_repo
+from huggingface_hub import HfApi
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -60,9 +60,9 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risk.
-check_min_version("4.35.0.dev0")
+check_min_version("4.40.0.dev0")
 
-require_version("datasets>=2.14.0", "To fix: pip install -r examples/flax/speech-recogintion/requirements.txt")
+require_version("datasets>=2.14.0", "To fix: pip install -r examples/flax/speech-recognition/requirements.txt")
 
 logger = logging.getLogger(__name__)
 
@@ -427,8 +427,9 @@ def main():
             )
         else:
             repo_name = training_args.hub_model_id
-        create_repo(repo_name, exist_ok=True, token=training_args.hub_token)
-        repo = Repository(training_args.output_dir, clone_from=repo_name, token=training_args.hub_token)
+        # Create repo and retrieve repo_id
+        api = HfApi()
+        repo_id = api.create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
 
     # 3. Load dataset
     raw_datasets = DatasetDict()
@@ -439,6 +440,7 @@ def main():
             data_args.dataset_config_name,
             split=data_args.train_split_name,
             cache_dir=data_args.dataset_cache_dir,
+            num_proc=data_args.preprocessing_num_workers,
             token=True if model_args.use_auth_token else None,
         )
 
@@ -448,6 +450,7 @@ def main():
             data_args.dataset_config_name,
             split=data_args.eval_split_name,
             cache_dir=data_args.dataset_cache_dir,
+            num_proc=data_args.preprocessing_num_workers,
             token=True if model_args.use_auth_token else None,
         )
 
@@ -551,7 +554,7 @@ def main():
         prepare_dataset,
         remove_columns=next(iter(raw_datasets.values())).column_names,
         num_proc=num_workers,
-        desc="preprocess train dataset",
+        desc="preprocess train and eval dataset",
     )
 
     # filter training data with inputs longer than max_input_length
@@ -575,7 +578,7 @@ def main():
         return
 
     # 8. Load Metric
-    metric = evaluate.load("wer")
+    metric = evaluate.load("wer", cache_dir=model_args.cache_dir)
 
     def compute_metrics(preds, labels):
         # replace padded labels by the padding token
@@ -638,7 +641,7 @@ def main():
 
     # Create learning rate schedule
     linear_decay_lr_schedule_fn = create_learning_rate_fn(
-        len(vectorized_datasets["train"]),
+        total_train_steps,
         training_args.warmup_steps,
         training_args.learning_rate,
     )
@@ -850,7 +853,13 @@ def main():
             model.save_pretrained(training_args.output_dir, params=params)
             tokenizer.save_pretrained(training_args.output_dir)
             if training_args.push_to_hub:
-                repo.push_to_hub(commit_message=f"Saving weights and logs of epoch {epoch}", blocking=False)
+                api.upload_folder(
+                    commit_message=f"Saving weights and logs of epoch {epoch}",
+                    folder_path=training_args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=training_args.hub_token,
+                )
 
 
 if __name__ == "__main__":

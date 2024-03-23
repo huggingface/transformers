@@ -41,13 +41,6 @@ to any binary segmentation task where a text or image query
 can be formulated. Finally, we find our system to adapt well
 to generalized queries involving affordances or properties*
 
-Tips:
-
-- [`CLIPSegForImageSegmentation`] adds a decoder on top of [`CLIPSegModel`]. The latter is identical to [`CLIPModel`].
-- [`CLIPSegForImageSegmentation`] can generate image segmentations based on arbitrary prompts at test time. A prompt can be either a text
-(provided to the model as `input_ids`) or an image (provided to the model as `conditional_pixel_values`). One can also provide custom
-conditional embeddings (provided to the model as `conditional_embeddings`).
-
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/clipseg_architecture.png"
 alt="drawing" width="600"/> 
 
@@ -55,6 +48,13 @@ alt="drawing" width="600"/>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/timojl/clipseg).
+
+## Usage tips
+
+- [`CLIPSegForImageSegmentation`] adds a decoder on top of [`CLIPSegModel`]. The latter is identical to [`CLIPModel`].
+- [`CLIPSegForImageSegmentation`] can generate image segmentations based on arbitrary prompts at test time. A prompt can be either a text
+(provided to the model as `input_ids`) or an image (provided to the model as `conditional_pixel_values`). One can also provide custom
+conditional embeddings (provided to the model as `conditional_embeddings`).
 
 ## Resources
 

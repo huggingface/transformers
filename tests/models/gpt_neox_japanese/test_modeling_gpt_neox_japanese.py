@@ -238,7 +238,7 @@ class GPTNeoXModelJapaneseTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     def test_generation(self):
         model_id = "abeja/gpt-neox-japanese-2.7b"
 
-        prompts = ["データサイエンティストとは、", "100年後に必要とされる会社は、", "フルリモートの環境で働くために必要なことは、", "国境の長いトンネルを抜けると", "美味しい日本食といえば、"]
+        prompts = ["データサイエンティストとは、", "100年後に必要とされる会社は、", "フルリモートの環境で働くために必要なことは、", "国境の長いトンネルを抜けると", "美味しい日本食といえば、"]  # fmt: skip
 
         EXPECTED_OUTPUTS = [
             "データサイエンティストとは、データを分析し、ビジネスに役立つ知見を導き出す専門家のことです。",

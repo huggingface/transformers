@@ -26,4 +26,3 @@ La documentación ha sido trasladada a [hf.co/docs/sagemaker](https://huggingfac
 
 - [Entrenar modelos de Hugging Face en Amazon SageMaker con SageMaker Python SDK](https://huggingface.co/docs/sagemaker/train)
 - [Desplegar modelos de Hugging Face en Amazon SageMaker con SageMaker Python SDK](https://huggingface.co/docs/sagemaker/inference)
-- [Preguntas Frecuentes](https://huggingface.co/docs/sagemaker/faq)

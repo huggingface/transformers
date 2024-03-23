@@ -59,6 +59,11 @@ class TrainerState:
             Run an evaluation every X steps.
         save_steps (`int`, *optional*, defaults to 500):
             Save checkpoint every X updates steps.
+        train_batch_size (`int`, *optional*):
+            The batch size for the training dataloader. Only needed when
+            `auto_find_batch_size` has been used.
+        num_input_tokens_seen (`int`, *optional*, defaults to 0):
+            The number of tokens seen during training (number of input tokens, not the number of prediction tokens).
         total_flos (`float`, *optional*, defaults to 0):
             The total number of floating operations done by the model since the beginning of training (stored as floats
             to avoid overflow).
@@ -86,7 +91,9 @@ class TrainerState:
     logging_steps: int = 500
     eval_steps: int = 500
     save_steps: int = 500
+    train_batch_size: int = None
     num_train_epochs: int = 0
+    num_input_tokens_seen: int = 0
     total_flos: float = 0
     log_history: List[Dict[str, float]] = None
     best_metric: Optional[float] = None
@@ -204,7 +211,7 @@ class TrainerCallback:
 
     The argument `args`, `state` and `control` are positionals for all events, all the others are grouped in `kwargs`.
     You can unpack the ones you need in the signature of the event using them. As an example, see the code of the
-    simple [`~transformer.PrinterCallback`].
+    simple [`~transformers.PrinterCallback`].
 
     Example:
 
@@ -482,17 +489,17 @@ class ProgressCallback(TrainerCallback):
         self.prediction_bar = None
 
     def on_train_begin(self, args, state, control, **kwargs):
-        if state.is_local_process_zero:
+        if state.is_world_process_zero:
             self.training_bar = tqdm(total=state.max_steps, dynamic_ncols=True)
         self.current_step = 0
 
     def on_step_end(self, args, state, control, **kwargs):
-        if state.is_local_process_zero:
+        if state.is_world_process_zero:
             self.training_bar.update(state.global_step - self.current_step)
             self.current_step = state.global_step
 
     def on_prediction_step(self, args, state, control, eval_dataloader=None, **kwargs):
-        if state.is_local_process_zero and has_length(eval_dataloader):
+        if state.is_world_process_zero and has_length(eval_dataloader):
             if self.prediction_bar is None:
                 self.prediction_bar = tqdm(
                     total=len(eval_dataloader), leave=self.training_bar is None, dynamic_ncols=True
@@ -500,24 +507,24 @@ class ProgressCallback(TrainerCallback):
             self.prediction_bar.update(1)
 
     def on_evaluate(self, args, state, control, **kwargs):
-        if state.is_local_process_zero:
+        if state.is_world_process_zero:
             if self.prediction_bar is not None:
                 self.prediction_bar.close()
             self.prediction_bar = None
 
     def on_predict(self, args, state, control, **kwargs):
-        if state.is_local_process_zero:
+        if state.is_world_process_zero:
             if self.prediction_bar is not None:
                 self.prediction_bar.close()
             self.prediction_bar = None
 
     def on_log(self, args, state, control, logs=None, **kwargs):
-        if state.is_local_process_zero and self.training_bar is not None:
+        if state.is_world_process_zero and self.training_bar is not None:
             _ = logs.pop("total_flos", None)
             self.training_bar.write(str(logs))
 
     def on_train_end(self, args, state, control, **kwargs):
-        if state.is_local_process_zero:
+        if state.is_world_process_zero:
             self.training_bar.close()
             self.training_bar = None
 

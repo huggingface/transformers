@@ -201,3 +201,27 @@ class BackboneTesterMixin:
             if self.has_attentions:
                 outputs = backbone(**inputs_dict, output_attentions=True)
                 self.assertIsNotNone(outputs.attentions)
+
+    def test_backbone_stage_selection(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        batch_size = inputs_dict["pixel_values"].shape[0]
+
+        for backbone_class in self.all_model_classes:
+            config.out_indices = [-2, -1]
+            backbone = backbone_class(config)
+            backbone.to(torch_device)
+            backbone.eval()
+
+            outputs = backbone(**inputs_dict)
+
+            # Test number of feature maps returned
+            self.assertIsInstance(outputs.feature_maps, tuple)
+            self.assertTrue(len(outputs.feature_maps) == 2)
+
+            # Order of channels returned is same as order of channels iterating over stage names
+            channels_from_stage_names = [
+                backbone.out_feature_channels[name] for name in backbone.stage_names if name in backbone.out_features
+            ]
+            self.assertEqual(backbone.channels, channels_from_stage_names)
+            for feature_map, n_channels in zip(outputs.feature_maps, backbone.channels):
+                self.assertTrue(feature_map.shape[:2], (batch_size, n_channels))

@@ -54,7 +54,7 @@ When you load a model explicitly, you can inspect the generation configuration t
 ```python
 >>> from transformers import AutoModelForCausalLM
 
->>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+>>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
 >>> model.generation_config
 GenerationConfig {
     "bos_token_id": 50256,
@@ -82,7 +82,7 @@ Even if the default decoding strategy mostly works for your task, you can still 
 commonly adjusted parameters include:
 
 - `max_new_tokens`: the maximum number of tokens to generate. In other words, the size of the output sequence, not
-including the tokens in the prompt. As an alternative to using the output's length as a stopping criteria, you can choose 
+including the tokens in the prompt. As an alternative to using the output's length as a stopping criteria, you can choose
 to stop generation whenever the full generation exceeds some amount of time. To learn more, check [`StoppingCriteria`].
 - `num_beams`: by specifying a number of beams higher than 1, you are effectively switching from greedy search to
 beam search. This strategy evaluates several hypotheses at each time step and eventually chooses the hypothesis that
@@ -121,8 +121,8 @@ one for summarization with beam search). You must have the right Hub permissions
 ```python
 >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, GenerationConfig
 
->>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
->>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
+>>> model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
 
 >>> translation_generation_config = GenerationConfig(
 ...     num_beams=4,
@@ -162,8 +162,8 @@ your screen, one word at a time:
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer
 
->>> tok = AutoTokenizer.from_pretrained("gpt2")
->>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+>>> tok = AutoTokenizer.from_pretrained("openai-community/gpt2")
+>>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
 >>> inputs = tok(["An increasing sequence: one,"], return_tensors="pt")
 >>> streamer = TextStreamer(tok)
 
@@ -187,7 +187,7 @@ Here, we'll show some of the parameters that control the decoding strategies and
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
 >>> prompt = "I look forward to"
->>> checkpoint = "distilgpt2"
+>>> checkpoint = "distilbert/distilgpt2"
 
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -208,7 +208,7 @@ The two main parameters that enable and control the behavior of contrastive sear
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
->>> checkpoint = "gpt2-large"
+>>> checkpoint = "openai-community/gpt2-large"
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
 
@@ -235,7 +235,7 @@ To enable multinomial sampling set `do_sample=True` and `num_beams=1`.
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 >>> set_seed(0)  # For reproducibility
 
->>> checkpoint = "gpt2-large"
+>>> checkpoint = "openai-community/gpt2-large"
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
 
@@ -260,7 +260,7 @@ To enable this decoding strategy, specify the `num_beams` (aka number of hypothe
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
 >>> prompt = "It is astonishing how one can"
->>> checkpoint = "gpt2-medium"
+>>> checkpoint = "openai-community/gpt2-medium"
 
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -283,7 +283,7 @@ the `num_beams` greater than 1, and set `do_sample=True` to use this decoding st
 >>> set_seed(0)  # For reproducibility
 
 >>> prompt = "translate English to German: The house is wonderful."
->>> checkpoint = "t5-small"
+>>> checkpoint = "google-t5/t5-small"
 
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -339,13 +339,16 @@ This guide illustrates the main parameters that enable various decoding strategi
 [`generate`] method, which gives you even further control over the [`generate`] method's behavior.
 For the complete list of the available parameters, refer to the [API documentation](./main_classes/text_generation.md).
 
-### Assisted Decoding
+### Speculative Decoding
 
-Assisted decoding is a modification of the decoding strategies above that uses an assistant model with the same
-tokenizer (ideally a much smaller model) to greedily generate a few candidate tokens. The main model then validates
-the candidate tokens in a single forward pass, which speeds up the decoding process. Currently, only greedy search
-and sampling are supported with assisted decoding, and doesn't support batched inputs. To learn more about assisted
-decoding, check [this blog post](https://huggingface.co/blog/assisted-generation).
+Speculative decoding (also known as assisted decoding) is a modification of the decoding strategies above, that uses an
+assistant model (ideally a much smaller one) with the same tokenizer, to generate a few candidate tokens. The main
+model then validates the candidate tokens in a single forward pass, which speeds up the decoding process. If
+`do_sample=True`, then the token validation with resampling introduced in the
+[speculative decoding paper](https://arxiv.org/pdf/2211.17192.pdf) is used.
+
+Currently, only greedy search and sampling are supported with assisted decoding, and assisted decoding doesn't support batched inputs.
+To learn more about assisted decoding, check [this blog post](https://huggingface.co/blog/assisted-generation).
 
 To enable assisted decoding, set the `assistant_model` argument with a model.
 
@@ -366,8 +369,8 @@ To enable assisted decoding, set the `assistant_model` argument with a model.
 ['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
 ```
 
-When using assisted decoding with sampling methods, you can use the `temperature` argument to control the randomness
-just like in multinomial sampling. However, in assisted decoding, reducing the temperature will help improving latency.
+When using assisted decoding with sampling methods, you can use the `temperature` argument to control the randomness,
+just like in multinomial sampling. However, in assisted decoding, reducing the temperature may help improve the latency.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
@@ -386,3 +389,6 @@ just like in multinomial sampling. However, in assisted decoding, reducing the t
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['Alice and Bob are going to the same party. It is a small party, in a small']
 ```
+
+Alternativelly, you can also set the `prompt_lookup_num_tokens` to trigger n-gram based assisted decoding, as opposed
+to model based assisted decoding. You can read more about it [here](https://twitter.com/joao_gante/status/1747322413006643259).

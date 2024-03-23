@@ -40,7 +40,11 @@ achieve SOTA results on the WikiText103 (10.8 compared to SOTA perplexity of 15.
 accuracy of 63.2%) datasets. Our BERT model achieves SOTA results on the RACE dataset (90.9% compared to SOTA accuracy
 of 89.4%).*
 
-Tips:
+This model was contributed by [jdemouth](https://huggingface.co/jdemouth). The original code can be found [here](https://github.com/NVIDIA/Megatron-LM). 
+That repository contains a multi-GPU and multi-node implementation of the Megatron Language models. In particular, 
+it contains a hybrid model parallel approach using "tensor parallel" and "pipeline parallel" techniques.
+
+## Usage tips
 
 We have provided pretrained [BERT-345M](https://ngc.nvidia.com/catalog/models/nvidia:megatron_bert_345m) checkpoints
 for use to evaluate or finetuning downstream tasks.
@@ -78,11 +82,7 @@ python3 $PATH_TO_TRANSFORMERS/models/megatron_bert/convert_megatron_bert_checkpo
 python3 $PATH_TO_TRANSFORMERS/models/megatron_bert/convert_megatron_bert_checkpoint.py megatron_bert_345m_v0_1_cased.zip
 ```
 
-This model was contributed by [jdemouth](https://huggingface.co/jdemouth). The original code can be found [here](https://github.com/NVIDIA/Megatron-LM). That repository contains a multi-GPU and multi-node implementation of the
-Megatron Language models. In particular, it contains a hybrid model parallel approach using "tensor parallel" and
-"pipeline parallel" techniques.
-
-## Documentation resources
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
