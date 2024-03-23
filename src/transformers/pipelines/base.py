@@ -1019,8 +1019,6 @@ class Pipeline(_ScikitCompat):
         elif isinstance(inputs, tuple):
             return tuple([self._ensure_tensor_on_device(item, device) for item in inputs])
         elif isinstance(inputs, torch.Tensor):
-            if device == torch.device("cpu") and inputs.dtype in {torch.float16, torch.bfloat16}:
-                inputs = inputs.float()
             return inputs.to(device)
         else:
             return inputs
@@ -1164,7 +1162,7 @@ class Pipeline(_ScikitCompat):
 
         self.call_count += 1
         if self.call_count > 10 and self.framework == "pt" and self.device.type == "cuda":
-            warnings.warn(
+            logger.warning_once(
                 "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please use a"
                 " dataset",
                 UserWarning,

@@ -51,6 +51,7 @@ from transformers.testing_utils import (
     get_tests_dir,
     is_pt_tf_cross_test,
     require_jinja,
+    require_read_token,
     require_tf,
     require_tokenizers,
     require_torch,
@@ -200,13 +201,19 @@ class TokenizerTesterMixin:
     def setUp(self) -> None:
         # Tokenizer.filter makes it possible to filter which Tokenizer to case based on all the
         # information available in Tokenizer (name, rust class, python class, vocab key name)
+        self.from_pretrained_id = (
+            [self.from_pretrained_id] if isinstance(self.from_pretrained_id, str) else self.from_pretrained_id
+        )
+
+        self.tokenizers_list = []
         if self.test_rust_tokenizer:
             self.tokenizers_list = [
                 (
                     self.rust_tokenizer_class,
-                    self.from_pretrained_id,
+                    pretrained_id,
                     self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {},
                 )
+                for pretrained_id in self.from_pretrained_id
             ]
         else:
             self.tokenizers_list = []
@@ -1097,26 +1104,73 @@ class TokenizerTesterMixin:
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 output = tokenizer.apply_chat_template(
-                    dummy_conversation, chat_template=dummy_template, tokenize=False
+                    dummy_conversation, chat_template=dummy_template, tokenize=False, return_dict=False
                 )
                 self.assertEqual(output, expected_output)  # Test we can pass chat_template arg
+
                 # Check that no error raised when tokenize=True
-                tokenizer.apply_chat_template(dummy_conversation, chat_template=dummy_template, tokenize=True)
+                output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=dummy_template, tokenize=True, return_dict=False
+                )
+                dict_output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=dummy_template, tokenize=True, return_dict=True
+                )
+                self.assertEqual(dict_output["input_ids"], output)  # Test return_dict behaviour matches
 
                 tokenizer.chat_template = dummy_template
                 self.assertEqual(tokenizer.chat_template, dummy_template)  # Test property setter
-                output = tokenizer.apply_chat_template(dummy_conversation, tokenize=False)
+                output = tokenizer.apply_chat_template(dummy_conversation, tokenize=False, return_dict=False)
                 self.assertEqual(output, expected_output)  # Test chat_template attribute is used if no arg is passed
-                tokenizer.apply_chat_template(dummy_conversation, tokenize=True)  # Check that no error raised
+                # Check that no error raised
+                tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
 
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
                     tokenizer.save_pretrained(tmp_dir_name)
                     tokenizer = tokenizer.from_pretrained(tmp_dir_name)
 
                 self.assertEqual(tokenizer.chat_template, dummy_template)  # Test template has persisted
-                output = tokenizer.apply_chat_template(dummy_conversation, tokenize=False)
+                output = tokenizer.apply_chat_template(dummy_conversation, tokenize=False, return_dict=False)
                 self.assertEqual(output, expected_output)  # Test output is the same after reloading
-                tokenizer.apply_chat_template(dummy_conversation, tokenize=True)  # Check that no error raised
+                # Check that no error raised
+                tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
+
+    @require_jinja
+    def test_chat_template_batched(self):
+        dummy_template = "{% for message in messages %}{{message['role'] + message['content']}}{% endfor %}"
+        dummy_conversations = [
+            [
+                {"role": "system", "content": "system message"},
+                {"role": "user", "content": "user message"},
+                {"role": "assistant", "content": "assistant message"},
+            ],
+            [
+                {"role": "system", "content": "system message 2"},
+                {"role": "user", "content": "user message 2"},
+                {"role": "assistant", "content": "assistant message 2"},
+            ],
+        ]
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                output = tokenizer.apply_chat_template(
+                    dummy_conversations, chat_template=dummy_template, tokenize=False
+                )
+                self.assertEqual(
+                    output,
+                    [
+                        "systemsystem messageuseruser messageassistantassistant message",
+                        "systemsystem message 2useruser message 2assistantassistant message 2",
+                    ],
+                )
+                one_element_output = tokenizer.apply_chat_template(
+                    dummy_conversations[:1], chat_template=dummy_template, tokenize=False
+                )
+                self.assertEqual(
+                    one_element_output, ["systemsystem messageuseruser messageassistantassistant message"]
+                )  # Assert that list structure is retained even with one element
+                tokenizer.apply_chat_template(
+                    dummy_conversations, chat_template=dummy_template, tokenize=True
+                )  # Check that no error raised
 
     @require_jinja
     def test_chat_template_dict(self):
@@ -1543,6 +1597,56 @@ class TokenizerTesterMixin:
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
                     self.assertEqual(overflowing_tokens, seq1_tokens[-(2 + stride) :])
+
+    @slow
+    @require_read_token
+    def test_encode_decode_fast_slow_all_tokens(self):
+        if self.rust_tokenizer_class is not None:
+            pretrained_name = self.from_pretrained_id
+
+            slow_tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, legacy=False)
+            with self.subTest(f"{pretrained_name}"):
+                rust_tokenizer = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, from_slow=True, legacy=False
+                )
+                input_full_vocab_ids = list(
+                    range(len(slow_tokenizer))
+                )  # TODO let's maybe shuffle this! And run it 4 times. This way we cover more cmbinations
+                input_full_vocab_string = rust_tokenizer.convert_tokens_to_string(
+                    rust_tokenizer.convert_ids_to_tokens(input_full_vocab_ids)
+                )
+                print(f"Length of the input string that is tested: {len(input_full_vocab_string)}")
+
+                for chunk in range(0, len(input_full_vocab_string) - 1024, 1024):
+                    string_to_check = input_full_vocab_string[chunk : chunk + 1024]
+                    with self.subTest(f"{(chunk/len(input_full_vocab_string))*100}%"):
+                        slow_encode = slow_tokenizer.encode(string_to_check)
+                        fast_encode = rust_tokenizer.encode(string_to_check)
+                        self.assertEquals(
+                            slow_encode,
+                            fast_encode,
+                            "Hint: the following tokenization diff were obtained for slow vs fast:\n "
+                            f"elements in slow: {set(slow_tokenizer.tokenize(string_to_check))-set(rust_tokenizer.tokenize(string_to_check))} \nvs\n "
+                            f"elements in fast: {set(rust_tokenizer.tokenize(string_to_check))-set(slow_tokenizer.tokenize(string_to_check))} \n"
+                            f"string used     : {string_to_check}",
+                        )
+                print(f"Length of the input ids that is tested: {len(input_full_vocab_ids)}")
+                for chunk in range(0, len(input_full_vocab_ids) - 100, 100):
+                    ids_to_decode = input_full_vocab_ids[chunk : chunk + 100]
+                    with self.subTest(f"{(chunk/len(input_full_vocab_string))*100}%"):
+                        self.assertEquals(
+                            slow_tokenizer.decode(
+                                ids_to_decode,
+                                space_between_special_tokens=False,
+                                clean_up_tokenization_spaces=False,
+                            ),
+                            rust_tokenizer.decode(
+                                ids_to_decode,
+                                space_between_special_tokens=False,
+                                clean_up_tokenization_spaces=False,
+                            ),
+                            f"Hint here are the tokens being decoded.: {slow_tokenizer.convert_ids_to_tokens(ids_to_decode)}",
+                        )
 
     # def test_encode_input_type(self):
     #     tokenizers = self.get_tokenizers(do_lower_case=False)
