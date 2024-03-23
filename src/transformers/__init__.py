@@ -314,6 +314,7 @@ _import_structure = {
         "CpmAntConfig",
         "CpmAntTokenizer",
     ],
+    "models.crystalcoder": ["CRYSTALCODER_PRETRAINED_CONFIG_ARCHIVE_MAP", "CrystalCoderConfig"],
     "models.ctrl": [
         "CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CTRLConfig",
@@ -1191,6 +1192,7 @@ else:
     _import_structure["models.cohere"].append("CohereTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.cpm"].append("CpmTokenizerFast")
+    _import_structure["models.crystalcoder"].append("CrystalCoderTokenizerFast")
     _import_structure["models.deberta"].append("DebertaTokenizerFast")
     _import_structure["models.deberta_v2"].append("DebertaV2TokenizerFast")
     _import_structure["models.deprecated.retribert"].append("RetriBertTokenizerFast")
@@ -1286,6 +1288,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_keras_nlp_objects) if not name.startswith("_")
     ]
 else:
+    _import_structure["models.crystalcoder"].append("TFCrystalCoderTokenizer")
     _import_structure["models.gpt2"].append("TFGPT2Tokenizer")
 
 # Vision-specific objects
@@ -1883,6 +1886,14 @@ else:
             "CpmAntForCausalLM",
             "CpmAntModel",
             "CpmAntPreTrainedModel",
+        ]
+    )
+    _import_structure["models.crystalcoder"].extend(
+        [
+            "CRYSTALCODER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CrystalCoderLMHeadModel",
+            "CrystalCoderModel",
+            "CrystalCoderPreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -5193,6 +5204,11 @@ if TYPE_CHECKING:
         CpmAntConfig,
         CpmAntTokenizer,
     )
+    from .models.crystalcoder import (
+        CRYSTALCODER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CrystalCoderConfig,
+        CrystalCoderTokenizer,
+    )
     from .models.ctrl import (
         CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CTRLConfig,
@@ -6050,6 +6066,7 @@ if TYPE_CHECKING:
         from .models.cohere import CohereTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.cpm import CpmTokenizerFast
+        from .models.crystalcoder import CrystalCoderTokenizerFast
         from .models.deberta import DebertaTokenizerFast
         from .models.deberta_v2 import DebertaV2TokenizerFast
         from .models.deprecated.retribert import RetriBertTokenizerFast
@@ -6128,6 +6145,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_keras_nlp_objects import *
     else:
+        from .models.crystalcoder import TFCrystalCoderTokenizer
         from .models.gpt2 import TFGPT2Tokenizer
 
     try:
@@ -6672,6 +6690,12 @@ if TYPE_CHECKING:
             CpmAntForCausalLM,
             CpmAntModel,
             CpmAntPreTrainedModel,
+        )
+        from .models.crystalcoder import (
+            CRYSTALCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CrystalCoderLMHeadModel,
+            CrystalCoderModel,
+            CrystalCoderPreTrainedModel,
         )
         from .models.ctrl import (
             CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,

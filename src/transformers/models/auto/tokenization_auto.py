@@ -147,6 +147,7 @@ else:
                 ),
             ),
             ("cpmant", ("CpmAntTokenizer", None)),
+            ("crystalcoder", (None, "CrystalCoderTokenizerFast" if is_tokenizers_available() else None)),
             ("ctrl", ("CTRLTokenizer", None)),
             ("data2vec-audio", ("Wav2Vec2CTCTokenizer", None)),
             ("data2vec-text", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
