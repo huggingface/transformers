@@ -1198,9 +1198,15 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
             # TODO: use `next_tokens` directly instead.
             model_inputs = {"input_ids": input_ids.contiguous()}
 
-        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
+        if position_ids is not None:
+            input_length = position_ids.shape[-1]
+        elif input_ids is not None:
+            input_length = input_ids.shape[-1]
+        else:
+            input_length = inputs_embeds.shape[-2]
         if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
+            input_tensor = inputs_embeds if input_ids is None else input_ids
+            cache_position = torch.arange(past_length, past_length + input_length, device=input_tensor.device)
         else:
             cache_position = cache_position[-input_length:]
 
