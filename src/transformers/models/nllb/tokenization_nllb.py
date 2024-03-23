@@ -233,32 +233,32 @@ class NllbTokenizer(PreTrainedTokenizer):
     @property
     def lang_code_to_id(self):
         logger.warning_once(
-            "the `lang_code_to_id` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
-            " this attribute will be removed in `transformers` v4.38"
+            "The `lang_code_to_id` attribute is deprecated and will be removed in `transformers` v4.38. "
+            "You can use `tokenizer.added_tokens_decoder` instead, which natively handles this logic."
         )
         return self._lang_code_to_id
 
     @property
     def fairseq_tokens_to_ids(self):
         logger.warning_once(
-            "the `fairseq_tokens_to_ids` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
-            " this attribute will be removed in `transformers` v4.38"
+            "The `lang_code_to_id` attribute is deprecated and will be removed in `transformers` v4.38. "
+            "You can use `tokenizer.added_tokens_decoder` instead, which natively handles this logic."
         )
         return self._fairseq_tokens_to_ids
 
     @property
     def id_to_lang_code(self):
         logger.warning_once(
-            "the `id_to_lang_code` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
-            " this attribute will be removed in `transformers` v4.38"
+            "The `lang_code_to_id` attribute is deprecated and will be removed in `transformers` v4.38. "
+            "You can use `tokenizer.added_tokens_decoder` instead, which natively handles this logic."
         )
         return self._id_to_lang_code
 
     @property
     def fairseq_ids_to_tokens(self):
         logger.warning_once(
-            "the `_fairseq_ids_to_tokens` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
-            " this attribute will be removed in `transformers` v4.38"
+            "The `lang_code_to_id` attribute is deprecated and will be removed in `transformers` v4.38. "
+            "You can use `tokenizer.added_tokens_decoder` instead, which natively handles this logic."
         )
         return self._fairseq_ids_to_tokens
 
