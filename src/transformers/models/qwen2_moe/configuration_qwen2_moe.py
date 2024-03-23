@@ -20,10 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Qwen/Qwen1.5-MoE-A2.7B": "https://huggingface.co/Qwen/Qwen1.5-MoE-A2.7B/resolve/main/config.json",
-}
-
 
 class Qwen2MoeConfig(PretrainedConfig):
     r"""
@@ -150,10 +146,6 @@ class Qwen2MoeConfig(PretrainedConfig):
         self.use_sliding_window = use_sliding_window
         self.sliding_window = sliding_window
         self.max_window_layers = max_window_layers
-
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
 
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
