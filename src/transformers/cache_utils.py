@@ -4,6 +4,10 @@ from typing import Any, Dict, List, Optional, Tuple
 import torch
 
 from .configuration_utils import PretrainedConfig
+from .utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -57,6 +61,17 @@ class Cache:
             return max_length - new_seq_length
         return previous_seq_length
 
+    @property
+    def seen_tokens(self):
+        logger.warning_once(
+            "The `seen_tokens` attribute is deprecated and will be removed in v4.41. Use the `cache_position` "
+            "model input instead."
+        )
+        if hasattr(self, "_seen_tokens"):
+            return self._seen_tokens
+        else:
+            return None
+
 
 class DynamicCache(Cache):
     """
@@ -69,7 +84,7 @@ class DynamicCache(Cache):
     def __init__(self) -> None:
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
-        self.seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
+        self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
         """
@@ -121,7 +136,7 @@ class DynamicCache(Cache):
         """
         # Update the number of seen tokens
         if layer_idx == 0:
-            self.seen_tokens += key_states.shape[-2]
+            self._seen_tokens += key_states.shape[-2]
 
         # Update the cache
         if len(self.key_cache) <= layer_idx:
@@ -191,7 +206,7 @@ class SinkCache(Cache):
         self.window_length = window_length
         self.num_sink_tokens = num_sink_tokens
         self.cos_sin_cache = {}
-        self.seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
+        self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
 
     @staticmethod
     def _rotate_half(x):
@@ -272,7 +287,7 @@ class SinkCache(Cache):
 
         # Update the number of seen tokens
         if layer_idx == 0:
-            self.seen_tokens += key_states.shape[-2]
+            self._seen_tokens += key_states.shape[-2]
 
         # [bsz, num_heads, seq_len, head_dim]
         if len(self.key_cache) <= layer_idx:
@@ -398,16 +413,11 @@ class StaticCache(Cache):
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model. `layer_idx` kept for BC"""
-        # TODO: Fix once the stateful `int` bug in PyTorch is fixed.
-        raise ValueError(
-            "get_seq_length is not implemented for StaticCache. Please refer to https://github.com/huggingface/transformers/pull/29114."
-        )
-
-    def get_usable_length(self, new_sequence_length=None, layer_idx: Optional[int] = 0) -> int:
-        # TODO: Fix once the stateful `int` bug in PyTorch is fixed.
-        raise ValueError(
-            "get_seq_length is not implemented for StaticCache. Please refer to https://github.com/huggingface/transformers/pull/29114."
-        )
+        # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
+        # limit the check to the first batch member and head dimension.
+        # TODO: This is error prone, a filled cache may be `0.0`. Let's use a stateless integer instead, after
+        # https://github.com/pytorch/pytorch/issues/120248 is fixed
+        return (self.key_cache[0, 0].any(dim=-1)).sum()
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""

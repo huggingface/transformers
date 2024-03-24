@@ -49,6 +49,7 @@ if is_torch_available():
 @require_sentencepiece
 @require_tokenizers
 class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google/gemma-7b"
     tokenizer_class = GemmaTokenizer
     rust_tokenizer_class = GemmaTokenizerFast
 
