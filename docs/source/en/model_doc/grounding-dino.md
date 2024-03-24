@@ -45,7 +45,7 @@ import requests
 
 import torch
 from PIL import Image
-from transformers import AutoProcessor, AutoModelForObjectDetection, 
+from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection, 
 
 model_id = "IDEA-Research/grounding-dino-tiny"
 
