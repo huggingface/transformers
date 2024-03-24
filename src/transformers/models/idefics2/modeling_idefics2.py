@@ -138,6 +138,16 @@ class Idefics2CausalLMOutputWithPast(ModelOutput):
 
 
 class Idefics2VisionEmbeddings(nn.Module):
+    """
+    This is a modified version of `siglip.modelign_siglip.SiglipVisionEmbeddings` to enable images of variable
+    resolution.
+
+    The modifications are adapted from [Patch n' Pack: NaViT, a Vision Transformer for any Aspect Ratio and Resolution](https://arxiv.org/abs/2307.06304)
+    which allows treating images in their native aspect ratio and without the need to resize them to the same
+    fixed size. In particular, we start from the original pre-trained SigLIP model
+    (which uses images of fixed-size square images) and adapt it by training on images of variable resolutions.
+    """
+
     def __init__(self, config: Idefics2VisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
