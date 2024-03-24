@@ -24,7 +24,11 @@ import torch.utils.checkpoint
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
+from ...modeling_attn_mask_utils import (
+    _create_4d_causal_attention_mask,
+    _prepare_4d_attention_mask,
+    _prepare_4d_causal_attention_mask_for_sdpa,
+)
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -350,6 +354,7 @@ class OwlViTAttention(nn.Module):
             )
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
+        self.is_causal = True
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
@@ -441,6 +446,65 @@ class OwlViTAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
+class OwlViTSdpaAttention(OwlViTAttention):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        causal_attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+
+        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        # get query projection
+        query_states = self.q_proj(hidden_states) * self.scale
+        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+
+        proj_shape = (bsz, self.num_heads, -1, self.head_dim)
+        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
+        key_states = key_states.view(*proj_shape)
+        value_states = value_states.view(*proj_shape)
+
+        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+        # Reference: https://github.com/pytorch/pytorch/issues/112577.
+        if query_states.device.type == "cuda" and attention_mask is not None:
+            query_states = query_states.contiguous()
+            key_states = key_states.contiguous()
+            value_states = value_states.contiguous()
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=self.is_causal and causal_attention_mask is None,
+        )
+
+        if attn_output.size() != (bsz  ,  self.num_heads, tgt_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
+
+        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, None
+
+
+OWLVIT_ATTENTION_CLASSES = {
+    "eager": OwlViTAttention,
+    "sdpa": OwlViTSdpaAttention,
+}
+
+
 # Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->OwlViT
 class OwlViTMLP(nn.Module):
     def __init__(self, config):
@@ -462,7 +526,7 @@ class OwlViTEncoderLayer(nn.Module):
     def __init__(self, config: OwlViTConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = OwlViTAttention(config)
+        self.self_attn = OWLVIT_ATTENTION_CLASSES[config._attn_implementation](config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = OwlViTMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -517,6 +581,7 @@ class OwlViTPreTrainedModel(PreTrainedModel):
     config_class = OwlViTConfig
     base_model_prefix = "owlvit"
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
     _no_split_modules = ["OwlViTEncoderLayer"]
 
     def _init_weights(self, module):
@@ -770,6 +835,7 @@ class OwlViTTextTransformer(nn.Module):
         self.embeddings = OwlViTTextEmbeddings(config)
         self.encoder = OwlViTEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self._use_sdpa = config._attn_implementation == "sdpa"
 
     @add_start_docstrings_to_model_forward(OWLVIT_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTTextConfig)
@@ -801,10 +867,16 @@ class OwlViTTextTransformer(nn.Module):
         causal_attention_mask = _create_4d_causal_attention_mask(
             input_shape, hidden_states.dtype, device=hidden_states.device
         )
+
         # expand attention_mask
         if attention_mask is not None:
             # [num_samples, seq_len] -> [num_samples, 1, tgt_seq_len, src_seq_len]
             attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+
+        if self._use_sdpa and not output_attentions:
+            # output_attentions=True can not be supported when using SDPA, and we fall back on
+            # the manual implementation that requires a 4D causal mask in all cases.
+            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(attention_mask, input_shape, hidden_states, 0)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
