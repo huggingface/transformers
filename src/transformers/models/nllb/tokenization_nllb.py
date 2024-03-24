@@ -218,7 +218,6 @@ class NllbTokenizer(PreTrainedTokenizer):
     def src_lang(self) -> str:
         return self._src_lang
 
-
     @src_lang.setter
     def src_lang(self, new_src_lang: str) -> None:
         self._src_lang = new_src_lang
