@@ -66,7 +66,7 @@ with torch.no_grad():
 results = processor.post_process_grounded_object_detection(
     outputs,
     inputs.input_ids,
-    bbox_threshold=0.4
+    bbox_threshold=0.4,
     text_threshold=0.3,
     target_sizes=[image.size[::-1]]
 )
