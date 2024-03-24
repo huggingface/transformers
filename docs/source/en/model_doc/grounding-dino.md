@@ -50,7 +50,7 @@ from transformers import AutoProcessor, AutoModelForObjectDetection,
 model_id = "IDEA-Research/grounding-dino-tiny"
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForObjectDetection.from_pretrained(model_id).to(device)
+model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
 
 def load_image(url):
     return Image.open(requests.get(url, stream=True).raw)
