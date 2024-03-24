@@ -154,6 +154,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                   [GPTBigCode](model_doc/gpt_bigcode)                    |       ✅        |         ❌         |      ❌      |
 |               [GPTSAN-japanese](model_doc/gptsan-japanese)               |       ✅        |         ❌         |      ❌      |
 |                    [Graphormer](model_doc/graphormer)                    |       ✅        |         ❌         |      ❌      |
+|                [Grounding DINO](model_doc/grounding-dino)                |       ✅        |         ❌         |      ❌      |
 |                      [GroupViT](model_doc/groupvit)                      |       ✅        |         ✅         |      ❌      |
 |                       [HerBERT](model_doc/herbert)                       |       ✅        |         ✅         |      ✅      |
 |                        [Hubert](model_doc/hubert)                        |       ✅        |         ✅         |      ❌      |

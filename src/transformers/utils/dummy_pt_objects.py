@@ -4236,6 +4236,30 @@ class GraphormerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class GroundingDinoForObjectDetection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GroundingDinoModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GroundingDinoPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
