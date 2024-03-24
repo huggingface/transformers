@@ -19,9 +19,11 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
+    Idefics2Config,
     Idefics2ForConditionalGeneration,
     Idefics2ImageProcessor,
     Idefics2Processor,
+    MistralConfig,
 )
 
 
@@ -32,6 +34,8 @@ EPILOG_TXT = """Example:
 
 KEYS_TO_MODIFY_MAPPING = {
     "lm_head.weight": "lm_head.linear.weight",
+    "model.layers": "model.text_model.layers",
+    "model.norm": "model.text_model.norm",
 }
 
 
@@ -39,7 +43,7 @@ WEIGHTS_TO_MERGE_MAPPING = (
     # (weights to merge), (new weight name)
     (
         ("model.embed_tokens.weight", "model.embed_tokens.additional_embedding.weight"),
-        "model.embed_tokens.weight",
+        "model.text_model.embed_tokens.weight",
     ),
     (("lm_head.linear.weight", "lm_head.additional_fc.weight"), "lm_head.weight"),
 )
@@ -79,7 +83,45 @@ def merge_weights(state_dict):
     return new_state_dict
 
 
+def get_config(checkpoint):
+    if checkpoint == "HuggingFaceM4/idefics2":
+        # We load the config then recreate to use the text_config
+        config = AutoConfig.from_pretrained(checkpoint)
+        text_config = MistralConfig(
+            vocab_size=config.vocab_size + config.additional_vocab_size,
+            hidden_size=config.hidden_size,
+            intermediate_size=config.intermediate_size,
+            num_hidden_layers=config.num_hidden_layers,
+            num_attention_heads=config.num_attention_heads,
+            num_key_value_heads=config.num_key_value_heads,
+            hidden_act=config.hidden_act,
+            max_position_embeddings=config.max_position_embeddings,
+            initializer_range=config.initializer_range,
+            rms_norm_eps=config.rms_norm_eps,
+            tie_word_embeddings=config.tie_word_embeddings,
+            rope_theta=config.rope_theta,
+            sliding_window=config.sliding_window,
+            attention_dropout=config.attention_dropout,
+            pad_token_id=config.pad_token_id,
+            bos_token_id=config.bos_token_id,
+            eos_token_id=config.eos_token_id,
+        )
+        config = Idefics2Config(
+            text_config=text_config.to_dict(),
+            vision_config=config.vision_config,
+            perceiver_config=config.perceiver_config,
+            vocab_size=config.vocab_size,  # FIXME - how should this be stored given the vocab size in the text_config is overwritten
+            additional_vocab_size=config.additional_vocab_size,
+            use_cache=config.use_cache,
+            image_token_id=config.image_token_id,
+        )
+        return config
+
+    return AutoConfig.from_pretrained(checkpoint)
+
+
 def convert_idefics2_hub_to_hf(original_model_id, output_hub_path, push_to_hub):
+    # The original model maps to AutoModelForCausalLM, converted we map to Idefics2ForConditionalGeneration
     original_model = AutoModelForCausalLM.from_pretrained(original_model_id, trust_remote_code=True)
     # The original model doesn't use the idefics2 processing objects
     image_seq_len = original_model.config.perceiver_config.resampler_n_latents
@@ -96,15 +138,7 @@ def convert_idefics2_hub_to_hf(original_model_id, output_hub_path, push_to_hub):
     # Merge weights
     state_dict = merge_weights(state_dict)
 
-    # Pad embeddings to multiple of 64 for performance reasons
-    for weight in ["model.embed_tokens.weight", "lm_head.weight"]:
-        w = state_dict[weight]
-        in_dim, out_dim = w.shape
-        pad_size = 64 - in_dim % 64
-        w = torch.cat((w, torch.zeros(pad_size, out_dim)), dim=0)
-        state_dict[weight] = w
-
-    config = AutoConfig.from_pretrained(original_model_id)
+    config = get_config(original_model_id)
 
     model = Idefics2ForConditionalGeneration(config)
     model.load_state_dict(state_dict, strict=True, assign=True)

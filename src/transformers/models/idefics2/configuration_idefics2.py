@@ -18,6 +18,7 @@ from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -189,58 +190,18 @@ class Idefics2Config(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        additional_vocab_size (`int`, *optional*, defaults to 2):
-            Additional vocabulary size of the model, typically for the special "<img>" token.
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the Idefics2 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Idefics2Model`]
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 14336):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 8):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf).
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
-            The maximum sequence length that this model might ever be used with. Mistral's sliding window attention
-            allows sequence of up to 4096*32 tokens.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            The id of the padding token.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            The id of the "beginning-of-sequence" token.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            The id of the "end-of-sequence" token.
+            Whether or not the model should cache the key/value pairs of the attention mechanism.
         image_token_id (`int`, *optional*, defaults to 32001):
             The id of the "image" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention window size. If not specified, will default to `4096`.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
+            Whether or not to tie the word embeddings with the token embeddings.
         vision_config (`IdeficsVisionConfig` or `dict`, *optional*):
             Custom vision config or dict
         perceiver_config (`IdeficsPerceiverConfig` or `dict`, *optional*):
             Custom perceiver config or dict
+        text_config (`MistralConfig` or `dict`, *optional*):
+            Custom text config or dict for the text model
 
     Example:
     ```python
@@ -258,51 +219,17 @@ class Idefics2Config(PretrainedConfig):
 
     def __init__(
         self,
-        additional_vocab_size=2,
-        vocab_size=32000,
-        hidden_size=4096,
-        intermediate_size=14336,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=8,
-        hidden_act="silu",
-        max_position_embeddings=4096 * 8,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
         use_cache=True,
-        pad_token_id=0,  # None in the original configuration_mistral, we set it to the unk_token_id
-        bos_token_id=1,
-        eos_token_id=2,
         image_token_id=32_001,
         tie_word_embeddings=False,
-        rope_theta=10000.0,
-        sliding_window=4096,
-        attention_dropout=0.0,
         vision_config=None,
         perceiver_config=None,
+        text_config=None,
         **kwargs,
     ):
-        self.vocab_size = vocab_size
-        self.additional_vocab_size = additional_vocab_size
         self.image_token_id = image_token_id
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.sliding_window = sliding_window
-
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.attention_dropout = attention_dropout
+        self.tie_word_embeddings = tie_word_embeddings
 
         if perceiver_config is None:
             self.perceiver_config = Idefics2PerceiverConfig()
@@ -320,10 +247,18 @@ class Idefics2Config(PretrainedConfig):
         elif isinstance(vision_config, Idefics2VisionConfig):
             self.vision_config = vision_config
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        if isinstance(text_config, dict):
+            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "mistral"
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        elif text_config is None:
+            logger.info("text_config is None, using default text config")
+            text_config = CONFIG_MAPPING["mistral"](
+                max_position_embeddings=4096 * 8,
+                rms_norm_eps=1e-5,
+                # None in the original configuration_mistral, we set it to the unk_token_id
+                pad_token_id=0,
+            )
+
+        self.text_config = text_config
+
+        super().__init__(**kwargs)
