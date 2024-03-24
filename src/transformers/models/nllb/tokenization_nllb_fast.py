@@ -186,7 +186,6 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
 
-
     @property
     def can_save_slow_tokenizer(self) -> bool:
         return os.path.isfile(self.vocab_file) if self.vocab_file else False
