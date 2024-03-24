@@ -16,13 +16,12 @@
 import unittest
 
 from transformers import BigBirdTokenizer, BigBirdTokenizerFast
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, require_torch, slow
 from transformers.utils import cached_property
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
-
-SPIECE_UNDERLINE = "▁"
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
@@ -87,7 +86,16 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = BigBirdTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE + "This",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "a",
+                SPIECE_UNDERLINE + "t",
+                "est",
+            ],
+        )
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens),

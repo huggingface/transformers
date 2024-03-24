@@ -17,13 +17,13 @@ import tempfile
 import unittest
 
 from transformers import (
-    SPIECE_UNDERLINE,
     AddedToken,
     BatchEncoding,
     NllbTokenizer,
     NllbTokenizerFast,
     is_torch_available,
 )
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.models.nllb.tokenization_nllb import FAIRSEQ_LANGUAGE_CODES
 from transformers.testing_utils import (
     get_tests_dir,
@@ -67,7 +67,16 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = NllbTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE + "This",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "a",
+                SPIECE_UNDERLINE + "t",
+                "est",
+            ],
+        )
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens),

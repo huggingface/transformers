@@ -21,13 +21,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
+from ...constants.token_constants import SPIECE_UNDERLINE
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "sentencepiece_model_ckpt": "sentencepiece.bpe.model"}
 
@@ -161,7 +160,7 @@ class ErnieMTokenizer(PreTrainedTokenizer):
             text = text.lower()
 
         for token in split_tokens:
-            if token[:1] == "▁":
+            if token[:1] == SPIECE_UNDERLINE:
                 token = token[1:]
             start = text[offset:].index(token) + offset
             end = start + len(token)

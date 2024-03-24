@@ -26,6 +26,7 @@ from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...constants.token_constants import SPIECE_UNDERLINE
 from ...deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
@@ -1500,7 +1501,7 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
         merge_space_with_prev_subword=False,
         pad_token_id=0,
         unk_token_id=1,
-        space="▁",
+        space=SPIECE_UNDERLINE,
     ):
         """
         Counts the number of characters per text string associated with the input token id.
@@ -1518,7 +1519,7 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
                 sample, the lengths of subsequent subwords will be set to 0.
             unk_token_id (`int`, *optional*, defaults to 1):
                 The id of the _unknown_ text token. Associated to a subword of length 1.
-            space (`str`, *optional*, defaults to `"▁"`):
+            space (`str`, *optional*, defaults to `SPIECE_UNDERLINE`):
                 The space character.
         """
         batch_size, _ = input_ids.shape

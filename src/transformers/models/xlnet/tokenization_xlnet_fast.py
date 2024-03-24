@@ -19,6 +19,7 @@ import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
+from ...constants.token_constants import SPIECE_UNDERLINE  # noqa: F401
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
@@ -49,8 +50,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "xlnet/xlnet-base-cased": None,
     "xlnet/xlnet-large-cased": None,
 }
-
-SPIECE_UNDERLINE = "▁"
 
 # Segments (not really needed)
 SEG_ID_A = 0

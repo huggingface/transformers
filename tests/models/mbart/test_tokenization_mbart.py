@@ -16,7 +16,8 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import SPIECE_UNDERLINE, BatchEncoding, MBartTokenizer, MBartTokenizerFast, is_torch_available
+from transformers import BatchEncoding, MBartTokenizer, MBartTokenizerFast, is_torch_available
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
@@ -58,7 +59,16 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = MBartTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE + "This",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "a",
+                SPIECE_UNDERLINE + "t",
+                "est",
+            ],
+        )
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens),

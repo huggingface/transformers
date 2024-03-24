@@ -40,7 +40,7 @@ from transformers import (
     T5Config,
     set_seed,
 )
-from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
+from transformers.constants.utils_constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 
 def load_demo_image():

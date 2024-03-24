@@ -15,7 +15,8 @@
 import tempfile
 import unittest
 
-from transformers import SPIECE_UNDERLINE, BatchEncoding, PLBartTokenizer, is_torch_available
+from transformers import BatchEncoding, PLBartTokenizer, is_torch_available
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
@@ -56,7 +57,16 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = PLBartTokenizer(SAMPLE_VOCAB, language_codes="base", keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE + "This",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "a",
+                SPIECE_UNDERLINE + "t",
+                "est",
+            ],
+        )
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens),
@@ -143,7 +153,16 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = PLBartTokenizer(SAMPLE_VOCAB, language_codes="multi", keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE + "This",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "a",
+                SPIECE_UNDERLINE + "t",
+                "est",
+            ],
+        )
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens),

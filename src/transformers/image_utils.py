@@ -22,6 +22,14 @@ import numpy as np
 import requests
 from packaging import version
 
+from .constants.utils_constants import (  # noqa: F401
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
+)
 from .utils import (
     ExplicitEnum,
     is_jax_tensor,
@@ -32,14 +40,6 @@ from .utils import (
     logging,
     requires_backends,
     to_numpy,
-)
-from .utils.constants import (  # noqa: F401
-    IMAGENET_DEFAULT_MEAN,
-    IMAGENET_DEFAULT_STD,
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
 )
 
 

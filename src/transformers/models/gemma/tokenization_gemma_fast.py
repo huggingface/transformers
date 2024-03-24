@@ -18,6 +18,7 @@ from typing import Optional, Tuple
 
 from tokenizers import processors
 
+from ...constants.token_constants import SPIECE_UNDERLINE  # noqa: F401
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
 from ...utils.versions import require_version
@@ -38,7 +39,7 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a Gemma tokenizer fast. Based on byte-level Byte-Pair-Encoding.
 
-    This uses notably ByteFallback and no prefix space. Normalization is applied to replace  `" "` with `"▁"`
+    This uses notably ByteFallback and no prefix space. Normalization is applied to replace  `" "` with `SPIECE_UNDERLINE`
 
     ```python
     >>> from transformers import GemmaTokenizerFast

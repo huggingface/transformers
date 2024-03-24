@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import sentencepiece as spm
 
+from ...constants.token_constants import SPIECE_UNDERLINE
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
@@ -47,8 +48,6 @@ EntitySpan = Tuple[int, int]
 EntitySpanInput = List[EntitySpan]
 Entity = str
 EntityInput = List[Entity]
-
-SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "entity_vocab_file": "entity_vocab.json"}
 

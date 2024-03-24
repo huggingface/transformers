@@ -62,7 +62,16 @@ class XLMProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = XLMProphetNetTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE + "This",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "a",
+                SPIECE_UNDERLINE + "t",
+                "est",
+            ],
+        )
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens),

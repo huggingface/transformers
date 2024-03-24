@@ -7,6 +7,8 @@ from tokenizers.implementations.base_tokenizer import BaseTokenizer
 from tokenizers.models import Unigram
 from tokenizers.processors import TemplateProcessing
 
+from transformers.constants.token_constants import SPIECE_UNDERLINE
+
 
 class SentencePieceUnigramTokenizer(BaseTokenizer):
     """
@@ -18,7 +20,7 @@ class SentencePieceUnigramTokenizer(BaseTokenizer):
 
     def __init__(
         self,
-        replacement: str = "▁",
+        replacement: str = SPIECE_UNDERLINE,
         add_prefix_space: bool = True,
         unk_token: Union[str, AddedToken] = "<unk>",
         eos_token: Union[str, AddedToken] = "</s>",

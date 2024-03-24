@@ -15,7 +15,8 @@
 
 import unittest
 
-from transformers import SPIECE_UNDERLINE, XLNetTokenizer, XLNetTokenizerFast
+from transformers import XLNetTokenizer, XLNetTokenizerFast
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -63,7 +64,16 @@ class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = XLNetTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE + "This",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "a",
+                SPIECE_UNDERLINE + "t",
+                "est",
+            ],
+        )
 
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [285, 46, 10, 170, 382])
 
@@ -154,7 +164,7 @@ class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ".",
             ],
         )
-        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["▁he", "ll", "o"])
+        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), [SPIECE_UNDERLINE + "he", "ll", "o"])
 
     def test_tokenizer_no_lower(self):
         tokenizer = XLNetTokenizer(SAMPLE_VOCAB, do_lower_case=False)

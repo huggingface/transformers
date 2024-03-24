@@ -21,6 +21,7 @@ import os
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
+from ...constants.token_constants import SPIECE_UNDERLINE
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import is_sentencepiece_available, is_sudachi_projection_available, logging
 
@@ -33,8 +34,6 @@ else:
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "spm_file": "spiece.model"}
-
-SPIECE_UNDERLINE = "▁"
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {

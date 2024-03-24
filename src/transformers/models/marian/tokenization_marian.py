@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import sentencepiece
 
+from ...constants.token_constants import SPIECE_UNDERLINE
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
@@ -54,8 +55,6 @@ PRETRAINED_VOCAB_FILES_MAP = {
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"Helsinki-NLP/opus-mt-en-de": 512}
 PRETRAINED_INIT_CONFIGURATION = {}
-
-SPIECE_UNDERLINE = "▁"
 
 # Example URL https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/vocab.json
 

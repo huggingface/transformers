@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
+from ...constants.token_constants import SPIECE_UNDERLINE  # noqa: F401
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
@@ -38,8 +39,6 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "almanach/camembert-base": 512,
 }
-
-SPIECE_UNDERLINE = "▁"
 
 
 class CamembertTokenizer(PreTrainedTokenizer):

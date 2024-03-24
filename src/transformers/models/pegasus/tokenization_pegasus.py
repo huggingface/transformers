@@ -18,11 +18,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
+from ...constants.token_constants import SPIECE_UNDERLINE  # noqa: F401
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
-
-SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 

@@ -22,12 +22,12 @@ import unittest
 from datasets import load_dataset
 
 from transformers import (
-    SPIECE_UNDERLINE,
     AddedToken,
     CodeLlamaTokenizer,
     CodeLlamaTokenizerFast,
     is_torch_available,
 )
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.convert_slow_tokenizer import convert_slow_tokenizer
 from transformers.testing_utils import (
     get_tests_dir,
@@ -79,7 +79,16 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = CodeLlamaTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE + "This",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "a",
+                SPIECE_UNDERLINE + "t",
+                "est",
+            ],
+        )
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens),
@@ -534,7 +543,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         # the added prefix token should not be decoded
         self.assertEqual(out2, "<REPR_END> inform")
         input_ids = tokenizer.encode("<REPR_END>inform", add_special_tokens=False)
-        self.assertEqual(input_ids, [29871, 32016, 262, 689])  # 29871 is the spiece underline, '▁'
+        self.assertEqual(input_ids, [29871, 32016, 262, 689])  # 29871 is the `SPIECE_UNDERLINE'
 
         out2 = tokenizer.decode(
             tokenizer.encode(" <REPR_END> inform", add_special_tokens=False), spaces_between_special_tokens=False
@@ -548,7 +557,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         input_ids = tokenizer.encode("<s> Hello<s>how", add_special_tokens=False)
         self.assertEqual(input_ids, [1, 15043, 1, 3525])
         tokens = tokenizer.tokenize("<s> Hello<s>how", add_special_tokens=False)
-        self.assertEqual(tokens, ["<s>", "▁Hello", "<s>", "how"])
+        self.assertEqual(tokens, ["<s>", SPIECE_UNDERLINE + "Hello", "<s>", "how"])
         decoded_tokens = tokenizer.decode(input_ids)
         self.assertEqual(decoded_tokens, "<s> Hello<s>how")
 
@@ -556,7 +565,10 @@ class LlamaIntegrationTest(unittest.TestCase):
         input_ids = tokenizer.encode(" <s> Hello<s> how", add_special_tokens=False)
         self.assertEqual(input_ids, [259, 1, 15043, 1, 920])
         tokens = tokenizer.tokenize(" <s> Hello<s> how", add_special_tokens=False)
-        self.assertEqual(tokens, ["▁▁", "<s>", "▁Hello", "<s>", "▁how"])
+        self.assertEqual(
+            tokens,
+            [SPIECE_UNDERLINE * 2, "<s>", SPIECE_UNDERLINE + "Hello", "<s>", SPIECE_UNDERLINE + "how"],
+        )
         decoded_tokens = tokenizer.decode(input_ids)
         self.assertEqual(decoded_tokens, " <s> Hello<s> how")
 
@@ -583,7 +595,22 @@ class LlamaIntegrationTest(unittest.TestCase):
         tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf", legacy=False)
         tokens = tokenizer.tokenize("[INST] How are you doing?<s>[/INST]")
         self.assertEqual(
-            tokens, ["▁[", "INST", "]", "▁How", "▁are", "▁you", "▁doing", "?", "<s>", "[", "/", "INST", "]"]
+            tokens,
+            [
+                SPIECE_UNDERLINE + "[",
+                "INST",
+                "]",
+                SPIECE_UNDERLINE + "How",
+                SPIECE_UNDERLINE + "are",
+                SPIECE_UNDERLINE + "you",
+                SPIECE_UNDERLINE + "doing",
+                "?",
+                "<s>",
+                "[",
+                "/",
+                "INST",
+                "]",
+            ],
         )
         inputs_ids = tokenizer.encode("[INST] How are you doing?<s>[/INST]")
         self.assertEqual(

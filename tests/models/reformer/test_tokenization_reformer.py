@@ -14,7 +14,8 @@
 
 import unittest
 
-from transformers import SPIECE_UNDERLINE, ReformerTokenizer, ReformerTokenizerFast
+from transformers import ReformerTokenizer, ReformerTokenizerFast
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, require_torch, slow
 from transformers.utils import cached_property
 
@@ -133,7 +134,16 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = ReformerTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE + "This",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "a",
+                SPIECE_UNDERLINE + "t",
+                "est",
+            ],
+        )
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens),

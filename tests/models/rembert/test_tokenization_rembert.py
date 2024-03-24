@@ -20,11 +20,13 @@ import unittest
 
 from tests.test_tokenization_common import AddedToken, TokenizerTesterMixin
 from transformers import RemBertTokenizer, RemBertTokenizerFast
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers
+from transformers.constants.token_constants import SPIECE_UNDERLINE
+from transformers.testing_utils import (
+    get_tests_dir,
+    require_sentencepiece,
+    require_tokenizers,
+)
 
-
-SENTENCEPIECE_UNDERLINE = "▁"
-SPIECE_UNDERLINE = SENTENCEPIECE_UNDERLINE  # Kept for backward compatibility
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
@@ -57,7 +59,7 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(vocab_keys[0], "<unk>")
         self.assertEqual(vocab_keys[1], "<s>")
 
-        self.assertEqual(vocab_keys[5], "▁the")
+        self.assertEqual(vocab_keys[5], SPIECE_UNDERLINE + "the")
         self.assertEqual(vocab_keys[2], "</s>")
 
     def test_vocab_size(self):
@@ -67,7 +69,16 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = RemBertTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE + "This",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "a",
+                SPIECE_UNDERLINE + "t",
+                "est",
+            ],
+        )
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens),
@@ -75,7 +86,10 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
-        self.assertListEqual( tokens,  [SPIECE_UNDERLINE + "I",SPIECE_UNDERLINE + "was",SPIECE_UNDERLINE + "b","or","n",SPIECE_UNDERLINE + "in",SPIECE_UNDERLINE + "","9","2","0","0","0",",",SPIECE_UNDERLINE + "and",SPIECE_UNDERLINE + "this",SPIECE_UNDERLINE + "is",SPIECE_UNDERLINE + "f","al","s","é",".",],)  # fmt: skip
+        self.assertListEqual(tokens, [SPIECE_UNDERLINE+"I", SPIECE_UNDERLINE+"was", SPIECE_UNDERLINE+"b",
+                                       "or", "n", SPIECE_UNDERLINE+"in", SPIECE_UNDERLINE+"", "9", "2", "0", "0", "0", ",",
+                                       SPIECE_UNDERLINE+"and", SPIECE_UNDERLINE+"this", SPIECE_UNDERLINE+"is",
+                                       SPIECE_UNDERLINE+"f", "al", "s", "é", ".",])  # fmt: skip
         ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(ids, [8, 21, 84, 55, 24, 19, 7, 0, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 0, 4])
 
@@ -84,7 +98,7 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         text = "清水寺は京都にある。"
         tokens = tokenizer.tokenize(text)
-        self.assertListEqual(tokens, ["▁", "清水寺は京都にある。"])
+        self.assertListEqual(tokens, [SPIECE_UNDERLINE, "清水寺は京都にある。"])
         encoded_string = tokenizer.encode(text)
         self.assertListEqual(encoded_string, [1000, 7, 0, 1001])
         decode_text = tokenizer.convert_tokens_to_string(tokens)
@@ -92,13 +106,13 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         text = "That's awesome! 🤩 #HuggingFace,  🌟 Have a great day! 🌈"
         tokens = tokenizer.tokenize(text)
-        self.assertListEqual( tokens, ['▁That', "'", 's', '▁a', 'w', 'es', 'ome', '!', '▁', '🤩', '▁', '#', 'H', 'u', 'g', 'g', 'ing', 'F', 'a', 'ce', ',', '▁', '🌟', '▁H', 'a', 've', '▁a', '▁great', '▁day', '!', '▁', '🌈'])  # fmt: skip
+        self.assertListEqual( tokens, [SPIECE_UNDERLINE+'That', "'", 's', SPIECE_UNDERLINE+'a', 'w', 'es', 'ome', '!', SPIECE_UNDERLINE, '🤩', SPIECE_UNDERLINE, '#', 'H', 'u', 'g', 'g', 'ing', 'F', 'a', 'ce', ',', SPIECE_UNDERLINE, '🌟', SPIECE_UNDERLINE+'H', 'a', 've', SPIECE_UNDERLINE+'a', SPIECE_UNDERLINE+'great', SPIECE_UNDERLINE+'day', '!', SPIECE_UNDERLINE, '🌈'])  # fmt: skip
         decode_text = tokenizer.convert_tokens_to_string(tokens)
         self.assertEquals(decode_text, "That's awesome! 🤩 #HuggingFace, 🌟 Have a great day! 🌈")
 
         text = "In the sky up above"
         tokens = tokenizer._tokenize(text)
-        self.assertListEqual(tokens, ["▁In", "▁the", "▁s", "k", "y", "▁up", "▁a", "b", "o", "ve"])  # fmt: skip
+        self.assertListEqual(tokens, [SPIECE_UNDERLINE+"In", SPIECE_UNDERLINE+"the", SPIECE_UNDERLINE+"s", "k", "y", SPIECE_UNDERLINE+"up", SPIECE_UNDERLINE+"a", "b", "o", "ve"])  # fmt: skip
         encoded_string = tokenizer.encode(text)
         self.assertListEqual(encoded_string, [1000, 388, 5, 47, 45, 30, 118, 10, 65, 20, 123, 1001])
         decode_text = tokenizer.convert_tokens_to_string(tokens)
@@ -107,7 +121,26 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         text = "The cat. . Sat <s>.In a room"
         tokens = tokenizer.tokenize(text)
         self.assertListEqual(
-            tokens, ["▁The", "▁c", "at", ".", "▁", ".", "▁S", "at", "▁", "<", "s", ">", ".", "I", "n", "▁a", "▁room"]
+            tokens,
+            [
+                SPIECE_UNDERLINE + "The",
+                SPIECE_UNDERLINE + "c",
+                "at",
+                ".",
+                SPIECE_UNDERLINE,
+                ".",
+                SPIECE_UNDERLINE + "S",
+                "at",
+                SPIECE_UNDERLINE,
+                "<",
+                "s",
+                ">",
+                ".",
+                "I",
+                "n",
+                SPIECE_UNDERLINE + "a",
+                SPIECE_UNDERLINE + "room",
+            ],
         )
         encoded_string = tokenizer.encode(text)
         self.assertListEqual(
@@ -118,7 +151,7 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         text = "Invoice #12345, dated 2023-12-01, is due on 2024-01-15."
         tokens = tokenizer.tokenize(text)
-        self.assertListEqual(tokens, ['▁In', 'v', 'o', 'ic', 'e', '▁', '#', '1', '2', '34', '5', ',', '▁da', 'ted', '▁', '2', '0', '2', '3', '-', '1', '2', '-', '0', '1', ',', '▁is', '▁d', 'u', 'e', '▁on', '▁', '2', '0', '2', '4', '-', '0', '1', '-', '1', '5', '.'])  # fmt: skip
+        self.assertListEqual(tokens, [SPIECE_UNDERLINE+'In', 'v', 'o', 'ic', 'e', SPIECE_UNDERLINE, '#', '1', '2', '34', '5', ',', SPIECE_UNDERLINE+'da', 'ted', SPIECE_UNDERLINE, '2', '0', '2', '3', '-', '1', '2', '-', '0', '1', ',', SPIECE_UNDERLINE+'is', SPIECE_UNDERLINE+'d', 'u', 'e', SPIECE_UNDERLINE+'on', SPIECE_UNDERLINE, '2', '0', '2', '4', '-', '0', '1', '-', '1', '5', '.'])  # fmt: skip
         encoded_string = tokenizer.encode(text)
         self.assertListEqual(encoded_string, [1000, 388, 83, 20, 113, 15, 7, 0, 356, 602, 0, 555, 3, 417, 273, 7, 602, 347, 602, 0, 33, 356, 602, 33, 347, 356, 3, 46, 229, 51, 15, 59, 7, 602, 347, 602, 0, 33, 347, 356, 33, 356, 555, 4, 1001])  # fmt: skip
         decode_text = tokenizer.convert_tokens_to_string(tokens)
@@ -126,7 +159,7 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit..."
         tokens = tokenizer.tokenize(text)
-        self.assertListEqual(tokens,  ['▁', 'L', 'or', 'em', '▁', 'i', 'p', 's', 'um', '▁do', 'l', 'or', '▁sit', '▁am', 'e', 't', ',', '▁con', 'se', 'c', 'te', 't', 'ur', '▁a', 'd', 'i', 'p', 'is', 'c', 'ing', '▁', 'el', 'it', '.', '.', '.'])  # fmt: skip
+        self.assertListEqual(tokens,  [SPIECE_UNDERLINE, 'L', 'or', 'em', SPIECE_UNDERLINE, 'i', 'p', 's', 'um', SPIECE_UNDERLINE+'do', 'l', 'or', SPIECE_UNDERLINE+'sit', SPIECE_UNDERLINE+'am', 'e', 't', ',', SPIECE_UNDERLINE+'con', 'se', 'c', 'te', 't', 'ur', SPIECE_UNDERLINE+'a', 'd', 'i', 'p', 'is', 'c', 'ing', SPIECE_UNDERLINE, 'el', 'it', '.', '.', '.'])  # fmt: skip
         encoded_string = tokenizer.encode(text)
         self.assertListEqual( encoded_string,  [1000, 7, 279, 55, 300, 7, 23, 29, 6, 155, 92, 27, 55, 615, 219, 15, 14, 3, 247, 114, 28, 181, 14, 108, 10, 16, 23, 29, 125, 28, 17, 7, 168, 137, 4, 4, 4, 1001] )  # fmt: skip
         decode_text = tokenizer.convert_tokens_to_string(tokens)
@@ -135,7 +168,24 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # for multiple language in one sentence
         text = "Bonjour! Hello! こんにちは!"
         tokens = tokenizer.tokenize(text)
-        self.assertListEqual(tokens, ["▁B", "on", "j", "o", "ur", "!", "▁He", "ll", "o", "!", "▁", "こんにちは", "!"])
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE + "B",
+                "on",
+                "j",
+                "o",
+                "ur",
+                "!",
+                SPIECE_UNDERLINE + "He",
+                "ll",
+                "o",
+                "!",
+                SPIECE_UNDERLINE,
+                "こんにちは",
+                "!",
+            ],
+        )
         encoded_string = tokenizer.encode(text)
         self.assertListEqual(encoded_string, [1000, 295, 109, 999, 20, 108, 146, 156, 86, 20, 146, 7, 0, 146, 1001])
         decode_text = tokenizer.convert_tokens_to_string(tokens)
@@ -143,7 +193,7 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         text = "Extra spaces\tand\nline breaks\r\nshould be handled."
         tokens = tokenizer.tokenize(text)
-        self.assertListEqual(tokens, ['▁E', 'x', 't', 'r', 'a', '▁sp', 'a', 'ce', 's', '▁and', '▁line', '▁b', 're', 'a', 'k', 's', '▁should', '▁be', '▁hand', 'led', '.'])  # fmt: skip
+        self.assertListEqual(tokens, [SPIECE_UNDERLINE+'E', 'x', 't', 'r', 'a', SPIECE_UNDERLINE+'sp', 'a', 'ce', 's', SPIECE_UNDERLINE+'and', SPIECE_UNDERLINE+'line', SPIECE_UNDERLINE+'b', 're', 'a', 'k', 's', SPIECE_UNDERLINE+'should', SPIECE_UNDERLINE+'be', SPIECE_UNDERLINE+'hand', 'led', '.'])  # fmt: skip
         encoded_string = tokenizer.encode(text)
         self.assertListEqual(
             encoded_string,
