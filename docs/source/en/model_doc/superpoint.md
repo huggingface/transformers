@@ -1,7 +1,7 @@
 <!--Copyright 2024 The HuggingFace Team. All rights reserved.
 
 Licensed under the MIT License; you may not use this file except in compliance with
-the License. 
+the License.
 
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
@@ -113,10 +113,8 @@ The original code can be found [here](https://github.com/magicleap/SuperPointPre
 
 - preprocess
 
-## SuperPointModel
+## SuperPointForKeypointDetection
 
-[[autodoc]] SuperPointModel
+[[autodoc]] SuperPointForKeypointDetection
 
 - forward
-
-

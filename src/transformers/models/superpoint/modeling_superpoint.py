@@ -390,7 +390,7 @@ Args:
     "SuperPoint model outputting keypoints and descriptors.",
     SUPERPOINT_START_DOCSTRING,
 )
-class SuperPointModel(SuperPointPreTrainedModel):
+class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
     """
     SuperPoint model. It consists of a SuperPointEncoder, a SuperPointInterestPointDecoder and a
     SuperPointDescriptorDecoder. SuperPoint was proposed in `SuperPoint: Self-Supervised Interest Point Detection and
@@ -423,7 +423,7 @@ class SuperPointModel(SuperPointPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, AutoModel
+        >>> from transformers import AutoImageProcessor, SuperPointForKeypointDetection
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -432,7 +432,7 @@ class SuperPointModel(SuperPointPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> processor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
-        >>> model = AutoModel.from_pretrained("magic-leap-community/superpoint")
+        >>> model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
 
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
