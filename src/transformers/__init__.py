@@ -2691,6 +2691,7 @@ else:
     _import_structure["models.mistral"].extend(
         [
             "MistralForCausalLM",
+            "MistralForQuestionAnswering",
             "MistralForSequenceClassification",
             "MistralModel",
             "MistralPreTrainedModel",
@@ -7331,6 +7332,7 @@ if TYPE_CHECKING:
         )
         from .models.mistral import (
             MistralForCausalLM,
+            MistralForQuestionAnswering,
             MistralForSequenceClassification,
             MistralModel,
             MistralPreTrainedModel,

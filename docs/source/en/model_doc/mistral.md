@@ -203,6 +203,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] MistralForSequenceClassification
     - forward
 
+## MistralForQuestionAnswering
+
+[[autodoc]] MistralForQuestionAnswering
+    - forward
+
 ## FlaxMistralModel
 
 [[autodoc]] FlaxMistralModel
