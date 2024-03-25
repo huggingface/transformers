@@ -1254,6 +1254,12 @@ class GenerationMixin:
                 "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
             )
 
+        # Update generation config with the updated special tokens
+        generation_config.bos_token_id = bos_token_id
+        generation_config.eos_token_id = eos_token_id
+        generation_config.pad_token_id = pad_token_id
+        generation_config.decoder_start_token_id = decoder_start_token_id
+
         return generation_config
 
     @torch.no_grad()
