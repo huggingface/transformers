@@ -1504,7 +1504,7 @@ class Trainer:
         self.save_model(output_dir, _internal_call=True)
         if self.args.should_save:
             # Update the `TrainerControl` state to where we are currently
-            self.state.stateful_callbacks["TrainerControl"] = self.control.save_state()
+            self.state.stateful_callbacks["TrainerControl"] = self.control.state()
             self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
             torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
@@ -2798,7 +2798,7 @@ class Trainer:
         # Save the Trainer state
         if self.args.should_save:
             # Update the `TrainerControl` state to where we are currently
-            self.state.stateful_callbacks["TrainerControl"] = self.control.save_state()
+            self.state.stateful_callbacks["TrainerControl"] = self.control.state()
             self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
 
         if self.args.push_to_hub:
@@ -2984,7 +2984,9 @@ class Trainer:
                 reissue_pt_warnings(caught_warnings)
 
     def _load_callback_state(self):
-        """If callback states exist and were passed in, restore their states"""
+        """If callback states exist and were passed in, restore their states if enabled"""
+        if not self.args.restore_callback_states_from_checkpoint:
+            return
         # Callback states are stored in stateful_callbacks
         not_found = []
         for stored_callback, data in self.state.stateful_callbacks.items():

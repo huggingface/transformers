@@ -86,7 +86,7 @@ class TrainerState:
             impact the way data will be logged in TensorBoard.
         stateful_callbacks (`List[StatefulTrainerCallback]`, *optional*):
             Callbacks attached to the `Trainer` that should have their states be saved or restored.
-            Relevent callbacks should implement a `save_state` and `from_state` function.
+            Relevent callbacks should implement a `state` and `from_state` function.
     """
 
     epoch: Optional[float] = None
@@ -125,7 +125,7 @@ class TrainerState:
                     raise TypeError(
                         f"All callbacks passed to be saved must inherit `ExportableState`, but received {type(callback)}"
                     )
-                stateful_callbacks[callback.__class__.__name__] = callback.save_state()
+                stateful_callbacks[callback.__class__.__name__] = callback.state()
             self.stateful_callbacks = stateful_callbacks
 
     def save_to_json(self, json_path: str):
@@ -148,7 +148,7 @@ class ExportableState:
     be saved during `Trainer._save_checkpoint` and loaded back in during
     `Trainer._load_from_checkpoint`.
 
-    These must implement a `save_state` function that gets called during the respective
+    These must implement a `state` function that gets called during the respective
     Trainer function call. It should only include parameters and attributes needed to
     recreate the state at a particular time, to avoid utilizing pickle/maintain standard
     file IO writing.
@@ -163,7 +163,7 @@ class ExportableState:
             # early_stopping_patience_counter denotes the number of times validation metrics failed to improve.
             self.early_stopping_patience_counter = 0
 
-        def save_state(self) -> dict:
+        def state(self) -> dict:
             return {
                 "args": {
                     "early_stopping_patience": self.early_stopping_patience,
@@ -175,8 +175,8 @@ class ExportableState:
             }
     ```"""
 
-    def save_state(self) -> dict:
-        raise NotImplementedError("You must implement a `save_state` function to utilize this class.")
+    def state(self) -> dict:
+        raise NotImplementedError("You must implement a `state` function to utilize this class.")
 
     @classmethod
     def from_state(cls, state):
@@ -235,7 +235,7 @@ class TrainerControl(ExportableState):
         self.should_evaluate = False
         self.should_log = False
 
-    def save_state(self) -> dict:
+    def state(self) -> dict:
         return {
             "args": {
                 "should_training_stop": self.should_training_stop,
@@ -681,7 +681,7 @@ class EarlyStoppingCallback(TrainerCallback, ExportableState):
         if self.early_stopping_patience_counter >= self.early_stopping_patience:
             control.should_training_stop = True
 
-    def save_state(self) -> dict:
+    def state(self) -> dict:
         return {
             "args": {
                 "early_stopping_patience": self.early_stopping_patience,

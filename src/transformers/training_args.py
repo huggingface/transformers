@@ -951,6 +951,12 @@ class TrainingArguments:
             )
         },
     )
+    restore_callback_states_from_checkpoint: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to restore the callback states from the checkpoint. If `True`, will override Callbacks passed to the `Trainer` if they exist in the checkpoint."
+        },
+    )
     no_cuda: bool = field(
         default=False,
         metadata={"help": "This argument is deprecated. It will be removed in version 5.0 of 🤗 Transformers."},

@@ -43,8 +43,9 @@ if is_torch_available():
 class MyTestTrainerCallback(TrainerCallback):
     "A callback that registers the events that goes through."
 
-    def __init__(self):
+    def __init__(self, my_test_state="test"):
         self.events = []
+        self.my_test_state = my_test_state
 
     def on_init_end(self, args, state, control, **kwargs):
         self.events.append("on_init_end")
@@ -271,6 +272,7 @@ class TrainerCallbackTest(unittest.TestCase):
             save_steps=2,
             eval_steps=2,
             max_steps=2,
+            restore_callback_states_from_checkpoint=True,
         )
         # Load it back in and verify values
         checkpoint = os.path.join(self.output_dir, "checkpoint-2")
@@ -280,6 +282,49 @@ class TrainerCallbackTest(unittest.TestCase):
         ][0]
         assert cb.early_stopping_patience == 5
         assert cb.early_stopping_threshold == 0.2
+
+    def test_stateful_mixed_callbacks(self):
+        # Use two callbacks, one stateful one not
+        # Use something with non-defaults
+        cbs = [
+            MyTestTrainerCallback(my_test_state="another value"),
+            EarlyStoppingCallback(early_stopping_patience=5, early_stopping_threshold=0.2),
+        ]
+        trainer = self.get_trainer(
+            callbacks=cbs,
+            load_best_model_at_end=True,
+            save_strategy="steps",
+            evaluation_strategy="steps",
+            save_steps=2,
+            eval_steps=2,
+            max_steps=2,
+        )
+        trainer.train()
+
+        # Create a new trainer with defaults
+        trainer = self.get_trainer(
+            callbacks=[EarlyStoppingCallback(), MyTestTrainerCallback()],
+            load_best_model_at_end=True,
+            save_strategy="steps",
+            evaluation_strategy="steps",
+            save_steps=2,
+            eval_steps=2,
+            max_steps=2,
+            restore_callback_states_from_checkpoint=True,
+        )
+        # Load it back in and verify values
+        checkpoint = os.path.join(self.output_dir, "checkpoint-2")
+        trainer.train(resume_from_checkpoint=checkpoint)
+        cbs = [
+            callback
+            for callback in trainer.callback_handler.callbacks
+            if isinstance(callback, (EarlyStoppingCallback, MyTestTrainerCallback))
+        ]
+        assert len(cbs) == 2
+        my_test, early_stopping = cbs
+        assert early_stopping.early_stopping_patience == 5
+        assert early_stopping.early_stopping_threshold == 0.2
+        assert my_test.my_test_state == "test"
 
     def test_missing_stateful_callback(self):
         cb = EarlyStoppingCallback()
@@ -295,7 +340,10 @@ class TrainerCallbackTest(unittest.TestCase):
         trainer.train()
 
         # Create a new trainer with defaults
-        trainer = self.get_trainer(max_steps=2)
+        trainer = self.get_trainer(
+            max_steps=2,
+            restore_callback_states_from_checkpoint=True,
+        )
         # Load it back in and verify values
         checkpoint = os.path.join(self.output_dir, "checkpoint-2")
         # warning should be emitted for not-present callbacks
