@@ -1269,38 +1269,20 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
                 self.skipTest("Skip Reformer as the lm_head input size is 2 * hidden size, adopted from Rev Nets.")
+                
             if any(
                 model_name in model_class.__name__.lower()
-                for model_name in [
-                    "wav2vec",
-                    "clvp",
-                    "bark",
-                ]
+                for model_name in ["marian", "mbart", "pegasus"]
             ):
-                self.skipTest("Skip speech models")
-            if any(
-                model_name in model_class.__name__.lower()
-                for model_name in [
-                    "marian",
-                    "mbart",
-                    "pegasus",
-                ]
-            ):
-                self.skipTest("DoLa is not supported for the models without returning layerwise hidden states")
+                self.skipTest("DoLa is not supported for models that don't return layerwise hidden states")
 
             # enable cache if the model is not openai-gpt, xlnet, cpm, or xlm
             config, input_ids, attention_mask, _ = self._get_input_ids_and_config(batch_size=1)
-            config.use_cache = True
-            if any(
-                model_name in model_class.__name__.lower()
-                for model_name in [
-                    "openaigpt",
-                    "xlnet",
-                    "cpm",
-                    "xlm",
-                ]
-            ):
+            
+            if not hasattr(config, "use_cache"):
                 config.use_cache = False
+            else:
+                config.use_cache = True
 
             # Encoder-decoder models are not supported
             if config.is_encoder_decoder:
@@ -1308,6 +1290,8 @@ class GenerationTesterMixin:
             config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
 
+            if model.get_output_embeddings() is None:
+                self.skipTest("DoLa is not supported for models that don't have output embeddings")
             # Sets dola generation arguments such that:
             # a) no EOS is generated, to ensure generation doesn't break early
             # b) there are at least two forward passes in the main model, to ensure the input preparation of

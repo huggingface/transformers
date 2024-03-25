@@ -310,7 +310,7 @@ class GenerationConfig(PushToHubMixin):
 
         dola_layers (`str` or `List[int]`, *optional*):
             The layers to use for DoLa decoding. If `None`, DoLa decoding is not used. If a string, it must
-            be one of "low" or "high", which means using the lower part or higher part of the model layers, respectively,
+            be one of "low" or "high", which means using the lower part or higher part of the model layers, respectively.
             If a list of integers, it must contain the indices of the layers to use for candidate premature layers in DoLa.
             The 0-th layer is the word embedding layer of the model. Set to `'low'` to improve long-answer reasoning tasks,
             `'high'` to improve short-answer tasks. Check the [documentation](https://github.com/huggingface/transformers/blob/main/docs/source/en/generation_strategies.md)
@@ -728,7 +728,7 @@ class GenerationConfig(PushToHubMixin):
         if self.dola_layers is not None and (self.repetition_penalty is None or self.repetition_penalty < 1.2):
             dola_decoding_wrong_parameter_msg = (
                 "`dola_layers` is set to trigger DoLa decoding, but `repetition_penalty` is set to a value of {repetition_penalty}, "
-                "which could induce unwanted repetition. The recommended value for DoLa decoding is `repetition_penalty=1.2` to prevent repetition."
+                "which could induce unwanted repetition. The recommended value for DoLa decoding is `repetition_penalty>=1.2`."
             )
             warnings.warn(
                 dola_decoding_wrong_parameter_msg.format(repetition_penalty=self.repetition_penalty),

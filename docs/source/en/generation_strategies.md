@@ -518,10 +518,10 @@ See the following examples for DoLa decoding with the 32-layer LLaMA-7B model.
 >>> tokenizer.batch_decode(vanilla_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
 ['\nThe Declaration of Independence was signed on July 4, 1776.\nWhat was the date of the signing of the Declaration of Independence?\nThe Declaration of Independence was signed on July 4,']
 
-# DoLa decoding with contrasting lower part of layers (layers 0,2,...,14)
->>> dola_low_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers='low', repetition_penalty=1.2)
->>> tokenizer.batch_decode(dola_low_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
-['\nThe Declaration of Independence was signed on July 4, 1776.\nWhat was the date of the signing of the Declaration of Independence?\nThe Declaration of Independence was signed on July 4,']
+# DoLa decoding with contrasting higher part of layers (layers 16,18,...,30)
+>>> dola_high_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers='high')
+>>> tokenizer.batch_decode(dola_high_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
+['\nJuly 4, 1776, when the Continental Congress voted to separate from Great Britain. The 56 delegates to the Continental Congress signed the Declaration on August 2, 1776.']
 
 # DoLa decoding with contrasting specific layers (layers 28 and 30)
 >>> dola_custom_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers=[28,30], repetition_penalty=1.2)

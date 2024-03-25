@@ -2418,6 +2418,9 @@ class GenerationMixin:
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ['Today is a beautiful day, and you should celebrate it!"\n\nShe smiled as she hugged me']
         ```"""
+
+        if self.config.is_encoder_decoder:
+            raise ValueError("DoLa decoding is only available for decoder-only models.")
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
@@ -2502,6 +2505,8 @@ class GenerationMixin:
             raise ValueError("dola_layers must be either 'low', 'high' or a list of integers.")
 
         lm_head = self.get_output_embeddings()
+        if lm_head is None:
+            raise ValueError("DoLa is not supported for models that don't have output embeddings.")
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
@@ -2525,51 +2530,8 @@ class GenerationMixin:
 
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
-            if len(candidate_premature_layers) == 1:
-                base_logits = candidate_premature_logits[candidate_premature_layers[0]]
-                final_logits, base_logits = _relative_top_filter(final_logits, base_logits)
-                logits = final_logits - base_logits
-                next_token_logits = logits
-            else:
-                # 1. Stacking all premature_layers into a new dimension
-                stacked_premature_layers = torch.stack(
-                    [candidate_premature_logits[i] for i in candidate_premature_layers], dim=0
-                )
 
-                # 2. Calculate the softmax values for mature_layer and all premature_layers
-                softmax_mature_layer = F.softmax(final_logits, dim=-1)  # shape: (batch_size, vocab_size)
-                softmax_premature_layers = F.softmax(
-                    stacked_premature_layers, dim=-1
-                )  # shape: (num_premature_layers, batch_size, vocab_size)
-
-                # 3. Calculate M, the average distribution
-                M = 0.5 * (
-                    softmax_mature_layer[None, :, :] + softmax_premature_layers
-                )  # shape: (num_premature_layers, batch_size, vocab_size)
-
-                # 4. Calculate log-softmax for the KL divergence
-                log_softmax_mature_layer = F.log_softmax(final_logits, dim=-1)  # shape: (batch_size, vocab_size)
-                log_softmax_premature_layers = F.log_softmax(
-                    stacked_premature_layers, dim=-1
-                )  # shape: (num_premature_layers, batch_size, vocab_size)
-
-                # 5. Calculate the KL divergences and then the JS divergences
-                kl1 = F.kl_div(log_softmax_mature_layer[None, :, :], M, reduction="none").mean(
-                    -1
-                )  # shape: (num_premature_layers, batch_size)
-                kl2 = F.kl_div(log_softmax_premature_layers, M, reduction="none").mean(
-                    -1
-                )  # shape: (num_premature_layers, batch_size)
-                js_divs = 0.5 * (kl1 + kl2)  # shape: (num_premature_layers, batch_size)
-
-                # 6. Reduce the batchmean
-                js_divs = js_divs.mean(-1)  # shape: (num_premature_layers,)
-                premature_layer = candidate_premature_layers[int(js_divs.argmax().cpu().item())]
-
-                base_logits = candidate_premature_logits[premature_layer]
-                final_logits, base_logits = _relative_top_filter(final_logits, base_logits)
-                logits = final_logits - base_logits
-                next_token_logits = logits
+            next_token_logits = _dola_select_contrast(candidate_premature_layers, candidate_premature_logits, final_logits)
             # pre-process distribution
             next_token_scores = logits_processor(input_ids, next_token_logits)
             if do_sample:  # sample
@@ -2629,27 +2591,14 @@ class GenerationMixin:
             streamer.end()
 
         if return_dict_in_generate:
-            if self.config.is_encoder_decoder:
-                return GenerateEncoderDecoderOutput(
-                    sequences=input_ids,
-                    scores=scores,
-                    logits=raw_logits,
-                    encoder_attentions=encoder_attentions,
-                    encoder_hidden_states=encoder_hidden_states,
-                    decoder_attentions=decoder_attentions,
-                    cross_attentions=cross_attentions,
-                    decoder_hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-            else:
-                return GenerateDecoderOnlyOutput(
-                    sequences=input_ids,
-                    scores=scores,
-                    logits=raw_logits,
-                    attentions=decoder_attentions,
-                    hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
+            return GenerateDecoderOnlyOutput(
+                sequences=input_ids,
+                scores=scores,
+                logits=raw_logits,
+                attentions=decoder_attentions,
+                hidden_states=decoder_hidden_states,
+                past_key_values=model_kwargs.get("past_key_values"),
+            )
         else:
             return input_ids
 
@@ -4662,6 +4611,51 @@ def stack_model_outputs(model_outputs: List[ModelOutput]) -> ModelOutput:
     # Return a new object of the inferred class with the concatenated attributes
     return model_output_cls(**concatenated_data)
 
+def _dola_select_contrast(
+    candidate_premature_layers: List[int],
+    candidate_premature_logits: Dict[int, torch.FloatTensor],
+    final_logits: torch.FloatTensor,
+) -> torch.FloatTensor:
+    if len(candidate_premature_layers) == 1:
+        base_logits = candidate_premature_logits[candidate_premature_layers[0]]
+        final_logits, base_logits = _relative_top_filter(final_logits, base_logits)
+        logits = final_logits - base_logits
+    else:
+        # 1. Stacking all premature_layers into a new dimension
+        stacked_premature_layers = torch.stack(
+            [candidate_premature_logits[i] for i in candidate_premature_layers], dim=0
+        )
+
+        # 2. Calculate the softmax values for mature_layer and all premature_layers
+        softmax_mature_layer = F.softmax(final_logits, dim=-1)  # shape: (batch_size, vocab_size)
+        softmax_premature_layers = F.softmax(
+            stacked_premature_layers, dim=-1
+        )  # shape: (num_premature_layers, batch_size, vocab_size)
+
+        # 3. Calculate M, the average distribution
+        M = 0.5 * (
+            softmax_mature_layer[None, :, :] + softmax_premature_layers
+        )  # shape: (num_premature_layers, batch_size, vocab_size)
+
+        # 4. Calculate log-softmax for the KL divergence
+        log_softmax_mature_layer = F.log_softmax(final_logits, dim=-1)  # shape: (batch_size, vocab_size)
+        log_softmax_premature_layers = F.log_softmax(
+            stacked_premature_layers, dim=-1
+        )  # shape: (num_premature_layers, batch_size, vocab_size)
+
+        # 5. Calculate the KL divergences and then the JS divergences
+        kl1 = F.kl_div(log_softmax_mature_layer[None, :, :], M, reduction="none").mean(-1)  # shape: (num_premature_layers, batch_size)
+        kl2 = F.kl_div(log_softmax_premature_layers, M, reduction="none").mean(-1)  # shape: (num_premature_layers, batch_size)
+        js_divs = 0.5 * (kl1 + kl2)  # shape: (num_premature_layers, batch_size)
+
+        # 6. Reduce the batchmean
+        js_divs = js_divs.mean(-1)  # shape: (num_premature_layers,)
+        premature_layer = candidate_premature_layers[int(js_divs.argmax().cpu().item())]
+
+        base_logits = candidate_premature_logits[premature_layer]
+        final_logits, base_logits = _relative_top_filter(final_logits, base_logits)
+        logits = final_logits - base_logits
+    return logits
 
 def _relative_top_filter(
     scores: torch.FloatTensor,

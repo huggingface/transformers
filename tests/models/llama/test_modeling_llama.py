@@ -723,7 +723,6 @@ class LlamaIntegrationTest(unittest.TestCase):
             input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False, dola_layers="low"
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        print("Answer here: ", text)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
