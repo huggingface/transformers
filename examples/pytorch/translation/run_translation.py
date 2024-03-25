@@ -53,7 +53,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.39.0.dev0")
+check_min_version("4.40.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/translation/requirements.txt")
 
@@ -468,6 +468,19 @@ def main():
     # Get the language codes for input/target.
     source_lang = data_args.source_lang.split("_")[0]
     target_lang = data_args.target_lang.split("_")[0]
+
+    # Check the whether the source target length fits in the model, if it has absolute positional embeddings
+    if (
+        hasattr(model.config, "max_position_embeddings")
+        and not hasattr(model.config, "relative_attention_max_distance")
+        and model.config.max_position_embeddings < data_args.max_source_length
+    ):
+        raise ValueError(
+            f"`--max_source_length` is set to {data_args.max_source_length}, but the model only has"
+            f" {model.config.max_position_embeddings} position encodings. Consider either reducing"
+            f" `--max_source_length` to {model.config.max_position_embeddings} or using a model with larger position "
+            "embeddings"
+        )
 
     # Temporarily set max_target_length for training.
     max_target_length = data_args.max_target_length

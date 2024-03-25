@@ -28,6 +28,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_phonemizer
 class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/wav2vec2-lv-60-espeak-cv-ft"
     tokenizer_class = Wav2Vec2PhonemeCTCTokenizer
     test_rust_tokenizer = False
 

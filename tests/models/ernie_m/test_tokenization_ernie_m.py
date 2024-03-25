@@ -28,6 +28,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/spiece.model")
 @require_sentencepiece
 @require_tokenizers
 class ErnieMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "susnato/ernie-m-base_pytorch"
     tokenizer_class = ErnieMTokenizer
     test_seq2seq = False
     test_sentencepiece = True

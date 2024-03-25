@@ -131,11 +131,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
         if assistant_model.config.is_encoder_decoder:
             # both are encoder-decoder
             self.input_ids_key = "decoder_input_ids"
-            self.attention_key = "decoder_attention_mask"
         elif "encoder_outputs" in assistant_kwargs:
             # special case for encoder-decoder with decoder-only assistant (like DistilWhisper)
             self.input_ids_key = "input_ids"
-            self.attention_key = "attention_mask"
             self.assistant_kwargs["attention_mask"] = self.assistant_kwargs.get(
                 "decoder_attention_mask",
                 torch.ones((input_ids.shape[0], 1), device=input_ids.device, dtype=torch.long),
@@ -143,15 +141,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
         else:
             # both are decoder-only
             self.input_ids_key = "input_ids"
-            self.attention_key = "attention_mask"
 
         # Prepare generation-related options.
-        eos_token_id = generation_config.eos_token_id
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
-        self.eos_token_id_tensor = (
-            torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
-        )
         self.logits_processor = logits_processor
         self.generation_config = copy.deepcopy(generation_config)
         self.generation_config.return_dict_in_generate = True
