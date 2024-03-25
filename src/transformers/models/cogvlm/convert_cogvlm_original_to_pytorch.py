@@ -147,6 +147,9 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
 
     inputs = processor(images=image, text=prompt, return_tensors="pt").to(hf_device, torch.bfloat16)
 
+    for k, v in inputs.items():
+        print(k, v.shape)
+
     # verify generation
     # with torch.no_grad():
     #     outputs = model.generate(**inputs, **gen_kwargs)
