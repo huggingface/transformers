@@ -22,7 +22,7 @@ from transformers import (
     Seq2SeqTrainingArguments,
     T5Tokenizer,
 )
-from transformers.testing_utils import TestCasePlus, require_torch, slow
+from transformers.testing_utils import TestCasePlus, require_sentencepiece, require_torch, slow
 from transformers.utils import is_datasets_available
 
 
@@ -30,6 +30,7 @@ if is_datasets_available():
     import datasets
 
 
+@require_sentencepiece
 class Seq2seqTrainerTester(TestCasePlus):
     @slow
     @require_torch

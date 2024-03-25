@@ -239,7 +239,9 @@ class RTDetrConfig(PretrainedConfig):
         **kwargs,
     ):
         backbone_kwargs = (
-            {"features_only": True, "out_indices": [2, 3, 4]} if backbone_kwargs is None and backbone_config is None else backbone_kwargs
+            {"features_only": True, "out_indices": [2, 3, 4]}
+            if backbone_kwargs is None and backbone_config is None
+            else backbone_kwargs
         )
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps

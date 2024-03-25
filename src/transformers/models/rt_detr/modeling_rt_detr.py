@@ -1157,15 +1157,6 @@ class RTDetrPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         if hasattr(module, "weight_embedding") and self.config.learnt_init_query:
             nn.init.normal_(module)
-        # if hasattr(module, "class_embed"):
-        #     prior_prob = 0.01
-        #     bias_value = -math.log((1 - prior_prob) / prior_prob)
-        #     if module.class_embed is not None:
-        #         module.class_embed.bias.data = torch.ones(self.config.num_labels) * bias_value
-        # if hasattr(module, "bbox_embed"):
-        #     if module.bbox_embed is not None:
-        #         nn.init.constant_(module.bbox_embed.layers[-1].weight.data, 0)
-        #         nn.init.constant_(module.bbox_embed.layers[-1].bias.data, 0)
 
 
 RTDETR_START_DOCSTRING = r"""
