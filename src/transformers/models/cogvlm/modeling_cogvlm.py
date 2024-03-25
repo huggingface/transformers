@@ -398,38 +398,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-def attention_fn(
-    # all of shape (batch_size, num_heads, seq_length, head_dim)
-    query_layer,
-    key_layer,
-    value_layer,
-    attention_mask,
-    *,
-    scaling_attention_score: bool = True,
-    attention_dropout: nn.Module = None,
-):
-    attention_mask_bool = attention_mask == 0
-    is_low_triangle = (attention_mask_bool == torch.ones_like(attention_mask_bool, dtype=torch.float).tril()).all()
-    is_full = (attention_mask_bool > 0).all()
-    if not (int(torch.__version__.split(".")[0]) >= 2):
-        warnings.warn("It's recommended to use torch2.0 or higher.")
-    if int(torch.__version__.split(".")[0]) >= 2 and scaling_attention_score and (is_full or is_low_triangle):
-        dropout_p = 0.0 if attention_dropout is None or not attention_dropout.training else attention_dropout.p
-        return torch.nn.functional.scaled_dot_product_attention(
-            query_layer, key_layer, value_layer, attn_mask=None, dropout_p=dropout_p, is_causal=not is_full
-        )
-    else:
-        if scaling_attention_score:
-            query_layer = query_layer / math.sqrt(query_layer.shape[-1])
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        attention_scores = attention_scores + attention_mask
-        attention_scores = nn.functional.softmax(attention_scores, dim=-1, dtype=torch.float32).to(query_layer.dtype)
-        if attention_dropout is not None:
-            attention_scores = attention_dropout(attention_scores)
-        context_layer = torch.matmul(attention_scores, value_layer)
-        return context_layer
-
-
 class CogvlmVisionExpertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -492,32 +460,88 @@ class CogvlmVisionExpertAttention(nn.Module):
 
         past_key_value = (key_states, value_states) if use_cache else None
 
-        # query_states = query_states / math.sqrt(query_states.shape[-1])
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
-        # attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
+        if attention_mask is not None:  # no matter the length, we just slice it
+            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            attn_weights = attn_weights + causal_mask
 
-        # # Apply attention mask
-        # attention_scores = attention_scores + attention_mask
-        # # Normalize the attention scores to probabilities
-        # attention_scores = nn.functional.softmax(attention_scores, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        # upcast attention to fp32
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = nn.functional.dropout(attn_weights, p=0., training=self.training)
+        context_layer = torch.matmul(attn_weights, value_states)
 
-        # context_layer = torch.matmul(attention_scores, value_states)
+        if context_layer.size() != (batch_size, self.num_heads, q_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(batch_size, self.num_heads, q_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
 
-        # if context_layer.size() != (batch_size, self.num_heads, q_len, self.head_dim):
-        #     raise ValueError(
-        #         f"`attn_output` should be of size {(batch_size, self.num_heads, q_len, self.head_dim)}, but is"
-        #         f" {context_layer.size()}"
-        #     )
-        # context_layer = context_layer.transpose(1, 2).contiguous().reshape(batch_size, q_len, self.hidden_size)
+        context_layer = context_layer.transpose(1, 2).contiguous()
 
-        context_layer = attention_fn(
-            query_layer=query_states,
-            key_layer=key_states,
-            value_layer=value_states,
-            attention_mask=attention_mask,
-            scaling_attention_score=True,
-            attention_dropout=None,
+        context_layer = context_layer.reshape(batch_size, q_len, self.hidden_size)
+
+        attn_output = torch.empty(context_layer.shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        attn_output[vision_token_mask] = self.vision_expert_dense(context_layer[vision_token_mask])
+        attn_output[language_token_mask] = self.language_expert_dense(context_layer[language_token_mask])
+
+        return (
+            (attn_output, attn_weights, past_key_value) if output_attentions else (attn_output, None, past_key_value)
         )
+    
+
+class CogvlmVisionExpertSdpaAttention(CogvlmVisionExpertAttention):
+    """
+    CogVLM attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `CogvlmVisionExpertAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    SDPA API.
+    """
+
+    # Adapted from CogvlmVisionExpertAttention.forward
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        token_type_ids: torch.LongTensor,
+        position_ids: torch.LongTensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        batch_size, q_len, hidden_size = hidden_states.size()
+        vision_token_mask, language_token_mask = get_expert_mask(token_type_ids)
+
+        mixed_raw_layer = torch.empty(
+            (batch_size, q_len, hidden_size * 3), dtype=hidden_states.dtype, device=hidden_states.device
+        )
+        mixed_raw_layer[vision_token_mask] = self.vision_expert_query_key_value(hidden_states[vision_token_mask])
+        mixed_raw_layer[language_token_mask] = self.language_expert_query_key_value(hidden_states[language_token_mask])
+
+        query_states, key_states, value_states = torch.split(mixed_raw_layer, self.hidden_size, dim=-1)
+        query_states = self._transpose_for_scores(query_states)
+        key_states = self._transpose_for_scores(key_states)
+        value_states = self._transpose_for_scores(value_states)
+
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += past_key_value[0].shape[-2]
+
+        cos, sin = self.rotary_emb(value_states, seq_len=position_ids.max() + 1)
+        cos, sin = F.embedding(position_ids, cos.squeeze(1)), F.embedding(position_ids, sin.squeeze(1))
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin, position_ids, unsqueeze_dim=1
+        )
+
+        if past_key_value is not None:
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+
+        past_key_value = (key_states, value_states) if use_cache else None
+
+        context_layer = torch.nn.functional.scaled_dot_product_attention(
+            query_states, key_states, value_states, attn_mask=None, dropout_p=0., is_causal=True,
+        )
+
         if context_layer.size() != (batch_size, self.num_heads, q_len, self.head_dim):
             raise ValueError(
                 f"`attn_output` should be of size {(batch_size, self.num_heads, q_len, self.head_dim)}, but is"
@@ -529,17 +553,22 @@ class CogvlmVisionExpertAttention(nn.Module):
         attn_output[vision_token_mask] = self.vision_expert_dense(context_layer[vision_token_mask])
         attn_output[language_token_mask] = self.language_expert_dense(context_layer[language_token_mask])
 
-        return (
-            # TODO add attention_scores here
-            (attn_output, None, past_key_value) if output_attentions else (attn_output, None, past_key_value)
-        )
+        return (attn_output, None, past_key_value)
+
+
+COGVLM_ATTENTION_CLASSES = {
+    "eager": CogvlmVisionExpertAttention,
+    "sdpa": CogvlmVisionExpertSdpaAttention,
+}
 
 
 class CogvlmDecoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = CogvlmVisionExpertAttention(config=config)
+        # TODO eager isn't giving logits with same tolerance
+        config._attn_implementation = "sdpa"
+        self.self_attn = COGVLM_ATTENTION_CLASSES[config._attn_implementation](config=config)
         self.mlp = CogvlmVisionExpertMLP(config)
         self.input_layernorm = CogvlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = CogvlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
