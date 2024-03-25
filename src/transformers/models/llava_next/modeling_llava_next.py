@@ -20,6 +20,7 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
+import numpy as np
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
