@@ -2524,7 +2524,9 @@ class GenerationMixin:
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
 
-            next_token_logits = _dola_select_contrast(candidate_premature_layers, candidate_premature_logits, final_logits)
+            next_token_logits = _dola_select_contrast(
+                candidate_premature_layers, candidate_premature_logits, final_logits
+            )
             # pre-process distribution
             next_token_scores = logits_processor(input_ids, next_token_logits)
             if do_sample:  # sample
@@ -4604,6 +4606,7 @@ def stack_model_outputs(model_outputs: List[ModelOutput]) -> ModelOutput:
     # Return a new object of the inferred class with the concatenated attributes
     return model_output_cls(**concatenated_data)
 
+
 def _dola_select_contrast(
     candidate_premature_layers: List[int],
     candidate_premature_logits: Dict[int, torch.FloatTensor],
@@ -4637,8 +4640,12 @@ def _dola_select_contrast(
         )  # shape: (num_premature_layers, batch_size, vocab_size)
 
         # 5. Calculate the KL divergences and then the JS divergences
-        kl1 = F.kl_div(log_softmax_mature_layer[None, :, :], M, reduction="none").mean(-1)  # shape: (num_premature_layers, batch_size)
-        kl2 = F.kl_div(log_softmax_premature_layers, M, reduction="none").mean(-1)  # shape: (num_premature_layers, batch_size)
+        kl1 = F.kl_div(log_softmax_mature_layer[None, :, :], M, reduction="none").mean(
+            -1
+        )  # shape: (num_premature_layers, batch_size)
+        kl2 = F.kl_div(log_softmax_premature_layers, M, reduction="none").mean(
+            -1
+        )  # shape: (num_premature_layers, batch_size)
         js_divs = 0.5 * (kl1 + kl2)  # shape: (num_premature_layers, batch_size)
 
         # 6. Reduce the batchmean
@@ -4649,6 +4656,7 @@ def _dola_select_contrast(
         final_logits, base_logits = _relative_top_filter(final_logits, base_logits)
         logits = final_logits - base_logits
     return logits
+
 
 def _relative_top_filter(
     scores: torch.FloatTensor,

@@ -1270,10 +1270,7 @@ class GenerationTesterMixin:
             if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
                 self.skipTest("Skip Reformer as the lm_head input size is 2 * hidden size, adopted from Rev Nets.")
 
-            if any(
-                model_name in model_class.__name__.lower()
-                for model_name in ["marian", "mbart", "pegasus"]
-            ):
+            if any(model_name in model_class.__name__.lower() for model_name in ["marian", "mbart", "pegasus"]):
                 self.skipTest("DoLa is not supported for models that don't return layerwise hidden states")
 
             # enable cache if the model is not openai-gpt, xlnet, cpm, or xlm
