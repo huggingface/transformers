@@ -600,9 +600,7 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
     # so we need to apply the function recursively.
     def load(module: nn.Module, state_dict, prefix=""):
         local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-        unexpected_keys = []
-        missing_keys = []
-        args = (state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
+        args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
         # Parameters of module and children will start with prefix. We can exit early if there are none in this
         # state_dict
         if len([key for key in state_dict if key.startswith(prefix)]) > 0:
