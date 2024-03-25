@@ -495,7 +495,8 @@ class Idefics2MultiheadAttentionPoolingHead(nn.Module):
         self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = Idefics2MLP(config)
+        # Ignore copy
+        self.mlp = Idefics2MLP(hidden_size=config.hidden_size, intermediate_size=config.intermediate_size, hidden_act=config.hidden_act)
 
     def forward(self, hidden_state):
         batch_size = hidden_state.shape[0]
@@ -681,12 +682,15 @@ class Idefics2VisionTransformer(nn.Module):
 
         batch_size = pixel_values.size(0)
         if patch_attention_mask is None:
+            patch_size = self.config.patch_size
             patch_attention_mask = torch.ones(
-                size=(
+                (
                     batch_size,
-                    pixel_values.size(2) // self.config.patch_size,
-                    pixel_values.size(3) // self.config.patch_size,
-                ),
+                    pixel_values.size(2) // patch_size,
+                    pixel_values.size(3) // patch_size,
+                )
+            )
+            patch_attention_mask = patch_attention_mask.to(
                 dtype=torch.bool,
                 device=pixel_values.device,
             )
@@ -722,17 +726,18 @@ class Idefics2VisionTransformer(nn.Module):
             attentions=encoder_outputs.attentions,
         )
 
-
-class Idefics2MLP(nn.Module):
-    def __init__(self, config, input_size=None, output_size=None, intermediate_size=None, hidden_act=None):
+# Copied from transformers.models.idefics.modeling_idefics.IdeficsMLP
+class IdeficsMLP(nn.Module):
+    def __init__(
+        self,
+        hidden_size: int,
+        intermediate_size: int,
+        hidden_act: str,
+    ):
         super().__init__()
-        self.input_size = config.hidden_size if input_size is None else input_size
-        self.output_size = config.hidden_size if output_size is None else output_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.gate_proj = nn.Linear(self.input_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.input_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.output_size, bias=False)
-        hidden_act = config.hidden_act if hidden_act is None else hidden_act
+        self.gate_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
+        self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=False)
+        self.up_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
         self.act_fn = ACT2FN[hidden_act]
 
     def forward(self, x):
@@ -766,10 +771,11 @@ def _get_unpad_data(attention_mask):
 
 
 class Idefics2PerceiverAttention(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config, layer_idx: Optional[int] = None) -> None:
         """Perceiver Cross-Attention Module --> let long-form inputs be `context`, resampled embeddings be `latents`"""
         super().__init__()
 
+        self.layer_idx = None
         self.hidden_size = config.text_config.hidden_size
         self.num_heads = config.perceiver_config.resampler_n_heads
         self.head_dim = config.perceiver_config.resampler_head_dim
@@ -812,28 +818,20 @@ class Idefics2PerceiverAttention(nn.Module):
         bsz, q_len, _ = latents.size()
         kv_seq_len = q_len + context.size()[1]
 
-        query_states = self.q_proj(latents).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = (
-            self.k_proj(torch.cat([context, latents], dim=-2))
-            .view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim)
-            .transpose(1, 2)
-        )
-        value_states = (
-            self.v_proj(torch.cat([context, latents], dim=-2))
-            .view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim)
-            .transpose(1, 2)
-        )
+        hidden_states = torch.concat([context, latents], dim=-2)
 
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += past_key_value[0].shape[-2]
+        query_states = self.q_proj(latents)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim)
+
+        past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
-
-        past_key_value = (key_states, value_states) if use_cache else None
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx)
 
         query_states = self.q_layer_norm(query_states)
         key_states = self.k_layer_norm(key_states)
@@ -952,6 +950,9 @@ class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
         past_key_value = (key_states, value_states) if use_cache else None
+
+        query_states = self.q_layer_norm(query_states)
+        key_states = self.k_layer_norm(key_states)
 
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -1153,21 +1154,6 @@ IDEFICS2_PERCEIVER_ATTENTION_CLASSES = {
 }
 
 
-class Idefics2PerceiverMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.input_size = config.text_config.hidden_size
-        self.output_size = config.text_config.hidden_size
-        self.intermediate_size = config.text_config.hidden_size * 4
-        self.gate_proj = nn.Linear(self.input_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.input_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.output_size, bias=False)
-        self.act_fn = ACT2FN[config.perceiver_config.hidden_act]
-
-    def forward(self, x):
-        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-
-
 class Idefics2PerceiverLayer(nn.Module):
     def __init__(self, config, layer_idx: int):
         super().__init__()
@@ -1178,10 +1164,12 @@ class Idefics2PerceiverLayer(nn.Module):
 
         self.input_latents_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.input_context_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
-        self.self_attn = IDEFICS2_PERCEIVER_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.self_attn = IDEFICS2_PERCEIVER_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.post_attention_layernorm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
-        self.mlp = Idefics2PerceiverMLP(config)
+        self.mlp = Idefics2MLP(
+            config.text_config, intermediate_size=config.text_config * 4, hidden_act=config.perceiver_config.hidden_act
+        )
 
     def forward(
         self,
@@ -1213,31 +1201,10 @@ class Idefics2PerceiverLayer(nn.Module):
         latents = self.input_latents_norm(latents)
         context = self.input_context_norm(context)
 
-        if attention_mask is None:
-            attention_mask = torch.ones(
-                size=(context.size(0), context.size(1)),
-                dtype=torch.bool,
-                device=context.device,
-            )
-        attention_mask = torch.cat(
-            [
-                attention_mask,
-                torch.ones(
-                    size=(attention_mask.size(0), latents.size(1)),
-                    dtype=attention_mask.dtype,
-                    device=attention_mask.device,
-                ),
-            ],
-            dim=-1,
-        )
         latents, self_attn_weights, present_key_value = self.self_attn(
             latents=latents,
             context=context,
-            attention_mask=(
-                _prepare_4d_attention_mask(attention_mask, latents.dtype, tgt_len=self.n_latents)
-                if not self._use_flash_attention_2
-                else attention_mask
-            ),
+            attention_mask=attention_mask,
         )
         latents = residual + latents
         residual = latents
@@ -1281,10 +1248,19 @@ class Idefics2PerceiverResampler(nn.Module):
     def forward(
         self,
         context: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask,
     ) -> torch.Tensor:
         latents = einops.repeat(self.latents, "seq embed -> bsz seq embed", bsz=context.shape[0])
 
+        latent_attention_mask = torch.ones(
+            (attention_mask.size(0), latents.size(1)), dtype=attention_mask.dtype, device=attention_mask.device
+        )
+        attention_mask = torch.cat([attention_mask, latent_attention_mask], dim=-1)
+        attention_mask = (
+            _prepare_4d_attention_mask(attention_mask, latents.dtype, tgt_len=self.n_latents)
+            if not self._use_flash_attention_2
+            else attention_mask
+        )
         for perceiver_layer in self.layers:
             layer_outputs = perceiver_layer(
                 latents,
@@ -1471,17 +1447,11 @@ IDEFICS2_INPUTS_DOCSTRING = r"""
 class Idefics2Model(Idefics2PreTrainedModel):
     def __init__(self, config: Idefics2Config):
         super().__init__(config)
-        self.padding_idx = self.config.pad_token_id
-        self.vocab_size = self.config.vocab_size
+        self.padding_idx = self.config.text_config.pad_token_id
+        self.vocab_size = self.config.text_config.vocab_size
 
         self.vision_model = Idefics2VisionTransformer(config.vision_config)
-        self.modality_projection = Idefics2MLP(
-            config,
-            input_size=config.vision_config.hidden_size,
-            output_size=config.text_config.hidden_size,
-            hidden_act=config.text_config.hidden_act,
-            intermediate_size=config.text_config.intermediate_size,
-        )
+        self.modality_projection = Idefics2MLP(config.text_config, hidden_size=config.vision_config.hidden_size)
 
         self.perceiver_resampler = Idefics2PerceiverResampler(config)
 
@@ -1601,28 +1571,30 @@ class Idefics2Model(Idefics2PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-        elif input_ids is not None:
+        # retrieve input_ids and inputs_embeds
+        if input_ids is not None:
             batch_size, seq_length = input_ids.shape
         elif inputs_embeds is not None:
             batch_size, seq_length, _ = inputs_embeds.shape
         else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        past_key_values_length = 0
+        past_seen_tokens = 0
         if use_cache:
-            use_legacy_cache = not isinstance(past_key_values, Cache)
-            if use_legacy_cache:
+            if not isinstance(past_key_values, Cache):
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_key_values_length = past_key_values.get_usable_length(seq_length)
+            past_seen_tokens = past_key_values.get_usable_length(seq_length)
 
-        if inputs_embeds is not None and input_ids is None and past_key_values_length == 0:
+        if inputs_embeds is not None and input_ids is None and past_seen_tokens == 0:
             raise ValueError("When first calling the model, if input_embeds are passed, input_ids should not be None.")
+
+        if self.gradient_checkpointing and self.training and use_cache:
+            logger.warning_once(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+            )
+            use_cache = False
 
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids)
@@ -1632,7 +1604,6 @@ class Idefics2Model(Idefics2PreTrainedModel):
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
         elif pixel_values is not None:
             batch_size, num_images, num_channels, height, width = pixel_values.shape
-            # pixel_values = pixel_values.to(dtype=self.dtype, device=input_ids.device)  # fp16 compatibility
             pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
             pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
 
@@ -1675,7 +1646,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         elif image_hidden_states is not None:
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=input_ids.device)
 
-        if past_key_values_length == 0:
+        if past_seen_tokens == 0:
             # When we generate, we don't want to replace the potential image_token_id that we generated by images
             # that simply don't exist
             new_inp = self.inputs_merger(
@@ -1749,12 +1720,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
 
     def tie_weights(self):
         """
