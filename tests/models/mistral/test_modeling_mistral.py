@@ -571,7 +571,6 @@ class MistralIntegrationTest(unittest.TestCase):
             input_ids, max_new_tokens=20, temperature=0, dola_layers="low", repetition_penalty=1.2
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        print("Answer here: ", text)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
         del model

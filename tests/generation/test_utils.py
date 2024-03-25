@@ -1269,7 +1269,7 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
                 self.skipTest("Skip Reformer as the lm_head input size is 2 * hidden size, adopted from Rev Nets.")
-                
+
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in ["marian", "mbart", "pegasus"]
@@ -1278,7 +1278,7 @@ class GenerationTesterMixin:
 
             # enable cache if the model is not openai-gpt, xlnet, cpm, or xlm
             config, input_ids, attention_mask, _ = self._get_input_ids_and_config(batch_size=1)
-            
+
             if not hasattr(config, "use_cache"):
                 config.use_cache = False
             else:
