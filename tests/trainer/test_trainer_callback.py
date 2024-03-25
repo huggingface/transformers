@@ -359,7 +359,7 @@ class TrainerCallbackTest(unittest.TestCase):
         )
         trainer.train()
         # Load it back in and verify values
-        trainer = self.get_trainer(max_steps=2)
+        trainer = self.get_trainer(max_steps=2, restore_callback_states_from_checkpoint=True)
         checkpoint = os.path.join(self.output_dir, "checkpoint-2")
         trainer.state = TrainerState.load_from_json(os.path.join(checkpoint, TRAINER_STATE_NAME))
         trainer._load_callback_state()
