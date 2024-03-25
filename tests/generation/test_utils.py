@@ -1660,6 +1660,12 @@ class GenerationTesterMixin:
                         mode="constant",
                         value=1,
                     )
+            # IDEFICS special attn treatment
+            if "image_attention_mask" in inputs:
+                image_attention_mask = inputs["image_attention_mask"]
+                last_mask = image_attention_mask[:, -1, :].unsqueeze(1)
+                inputs["image_attention_mask"] = last_mask
+
             outputs_cached = model.generate(**inputs, do_sample=False, max_new_tokens=1, return_dict_in_generate=True)
 
             # The two sets of generated text and past kv should be equal to each other

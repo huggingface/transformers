@@ -662,23 +662,19 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
     def test_left_padding_compatibility(self):
         pass
 
-    @unittest.skip("IDEFICS kv cache not implemented for gated cross attn layers")
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip("IDEFICS lv cache not implemented for gated cross attn layers")
+    @unittest.skip("IDEFICS need special treatment for image attn after pre-fill")
     def test_contrastive_generate(self):
         pass
 
-    @unittest.skip("IDEFICS kv cache not implemented for gated cross attn layers")
+    @unittest.skip("IDEFICS need special treatment for image attn after pre-fill")
     def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
 
-    @unittest.skip("IDEFICS kv cache not implemented for gated cross attn layers")
+    @unittest.skip("IDEFICS need special treatment for image attn after pre-fill")
     def test_contrastive_generate_low_memory(self):
         pass
 
-    @unittest.skip("IDEFICS cannot generate with no input")
+    @unittest.skip("IDEFICS need special treatment for image attn after pre-fill")
     def test_generate_without_input_ids(self):
         pass
 
