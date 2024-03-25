@@ -8,8 +8,8 @@ from .base import Pipeline, build_pipeline_init_args
 
 
 if is_av_available():
-    import numpy as np
     import av
+    import numpy as np
 
 
 if is_torch_available():
