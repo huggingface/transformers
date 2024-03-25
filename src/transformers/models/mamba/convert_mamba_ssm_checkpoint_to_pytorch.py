@@ -63,10 +63,8 @@ def convert_mamba_ssm_checkpoint_to_huggingface_model(
     # Convert mamba_ssm config to huggingface MambaConfig
     hf_config = convert_ssm_config_to_hf_config(original_ssm_config)
 
-    # Rename weights
-    converted_state_dict = original_state_dict.copy()
-    converted_state_dict["backbone.embeddings.weight"] = converted_state_dict["backbone.embedding.weight"]
-    converted_state_dict.pop("backbone.embedding.weight")
+    # No weights need to be renamed between the two models.
+    converted_state_dict = original_state_dict
 
     # Load reshaped state dict into a huggingface model.
     hf_model = MambaForCausalLM(hf_config)
