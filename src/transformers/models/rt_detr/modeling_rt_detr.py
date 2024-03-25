@@ -1155,6 +1155,8 @@ class RTDetrPreTrainedModel(PreTrainedModel):
             if hasattr(module, "bias"):
                 module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        if hasattr(module, "weight_embedding") and self.config.learnt_init_query:
+            nn.init.normal_(module)
         # if hasattr(module, "class_embed"):
         #     prior_prob = 0.01
         #     bias_value = -math.log((1 - prior_prob) / prior_prob)
@@ -1601,7 +1603,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
         # decoder embedding
         if config.learnt_init_query:
             weight_embedding = torch.empty(1, config.num_queries, config.d_model)
-            nn.init.normal_(weight_embedding)
             self.weight_embedding = nn.Parameter(weight_embedding, requires_grad=True)
 
         # encoder head
