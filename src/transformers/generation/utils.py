@@ -706,6 +706,8 @@ class GenerationMixin:
         if generation_config.num_beams > 1:
             if isinstance(generation_config.eos_token_id, list):
                 min_tokens_to_keep = len(generation_config.eos_token_id) + 1
+            elif isinstance(generation_config.eos_token_id, torch.Tensor):
+                min_tokens_to_keep = generation_config.eos_token_id.shape[0] + 1
             else:
                 min_tokens_to_keep = 2
         else:
@@ -746,7 +748,6 @@ class GenerationMixin:
         model_kwargs: Optional[Dict[str, Any]] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
-        eos_token_id: Optional[torch.Tensor] = None,
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsProcessor`]
@@ -797,20 +798,24 @@ class GenerationMixin:
                 EncoderNoRepeatNGramLogitsProcessor(generation_config.encoder_no_repeat_ngram_size, encoder_input_ids)
             )
         if generation_config.bad_words_ids is not None:
-            processors.append(NoBadWordsLogitsProcessor(generation_config.bad_words_ids, eos_token_id))
+            processors.append(
+                NoBadWordsLogitsProcessor(generation_config.bad_words_ids, generation_config.eos_token_id)
+            )
         if (
             generation_config.min_length is not None
             and generation_config.eos_token_id is not None
             and generation_config.min_length > 0
         ):
-            processors.append(MinLengthLogitsProcessor(generation_config.min_length, eos_token_id))
+            processors.append(MinLengthLogitsProcessor(generation_config.min_length, generation_config.eos_token_id))
         if (
             generation_config.min_new_tokens is not None
             and generation_config.eos_token_id is not None
             and generation_config.min_new_tokens > 0
         ):
             processors.append(
-                MinNewTokensLengthLogitsProcessor(input_ids_seq_length, generation_config.min_new_tokens, eos_token_id)
+                MinNewTokensLengthLogitsProcessor(
+                    input_ids_seq_length, generation_config.min_new_tokens, generation_config.eos_token_id
+                )
             )
         if prefix_allowed_tokens_fn is not None:
             processors.append(
@@ -1211,7 +1216,13 @@ class GenerationMixin:
     def _prepare_special_tokens(
         self, generation_config: GenerationConfig, kwargs_has_attention_mask: Optional[bool] = None
     ) -> Tuple[Optional[torch.Tensor]]:
-        """Prepares the special tokens for generation."""
+        """
+        Prepares the special tokens for generation, overwriting the generation config with their processed versions
+        converted to tensor.
+
+        Note that `generation_config` is changed in place and stops being serializable after this method is called.
+        If called outside `generate`, consider creating a copy of `generation_config` first.
+        """
 
         # Convert special tokens to tensors (if they exist)
         def _tensor_or_none(token):
@@ -1243,7 +1254,7 @@ class GenerationMixin:
                 "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
             )
 
-        return bos_token_id, eos_token_id, pad_token_id, decoder_start_token_id
+        return generation_config
 
     @torch.no_grad()
     def generate(
@@ -1360,12 +1371,12 @@ class GenerationMixin:
         accepts_attention_mask = "attention_mask" in set(inspect.signature(self.forward).parameters.keys())
         requires_attention_mask = "encoder_outputs" not in model_kwargs
         kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
-        bos_token_id, eos_token_id, pad_token_id, decoder_start_token_id = self._prepare_special_tokens(
-            generation_config, kwargs_has_attention_mask
-        )
+        generation_config = self._prepare_special_tokens(generation_config, kwargs_has_attention_mask)
 
         # 3. Define model inputs
-        inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(inputs, bos_token_id, model_kwargs)
+        inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(
+            inputs, generation_config.bos_token_id, model_kwargs
+        )
         batch_size = inputs_tensor.shape[0]
 
         # decoder-only models must use left-padding for generation.
@@ -1373,9 +1384,9 @@ class GenerationMixin:
             # If `input_ids` was given, check if the last id in any sequence is `pad_token_id`
             # Note: If using, `inputs_embeds` this check does not work, because we want to be more hands-off.
             if (
-                pad_token_id is not None
+                generation_config.pad_token_id is not None
                 and len(inputs_tensor.shape) == 2
-                and torch.sum(inputs_tensor[:, -1] == pad_token_id) > 0
+                and torch.sum(inputs_tensor[:, -1] == generation_config.pad_token_id) > 0
             ):
                 logger.warning(
                     "A decoder-only architecture is being used, but right-padding was detected! For correct "
@@ -1394,7 +1405,7 @@ class GenerationMixin:
 
         if not kwargs_has_attention_mask and requires_attention_mask and accepts_attention_mask:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
-                inputs_tensor, pad_token_id, eos_token_id
+                inputs_tensor, generation_config.pad_token_id, generation_config.eos_token_id
             )
 
         if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
@@ -1409,7 +1420,7 @@ class GenerationMixin:
                 batch_size=batch_size,
                 model_input_name=model_input_name,
                 model_kwargs=model_kwargs,
-                decoder_start_token_id=decoder_start_token_id,
+                decoder_start_token_id=generation_config.decoder_start_token_id,
                 device=inputs_tensor.device,
             )
         else:
@@ -1485,7 +1496,6 @@ class GenerationMixin:
             model_kwargs=model_kwargs,
             negative_prompt_ids=negative_prompt_ids,
             negative_prompt_attention_mask=negative_prompt_attention_mask,
-            eos_token_id=eos_token_id,
         )
 
         # 9. prepare stopping criteria
