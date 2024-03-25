@@ -98,11 +98,11 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
 
     print("Original input_ids:", tokenizer.decode(original_inputs["input_ids"][0]))
 
-    # gen_kwargs = {"max_length": 2048, "do_sample": False}
-    # with torch.no_grad():
-    #     outputs = original_model.generate(**original_inputs, **gen_kwargs)
-    #     outputs = outputs[:, original_inputs["input_ids"].shape[1] :]
-    #     original_generated_text = tokenizer.decode(outputs[0])
+    gen_kwargs = {"max_new_tokens": 10, "do_sample": False}
+    with torch.no_grad():
+        outputs = original_model.generate(**original_inputs, **gen_kwargs)
+        outputs = outputs[:, original_inputs["input_ids"].shape[1] :]
+        original_generated_text = tokenizer.decode(outputs[0])
 
     # load HF model
     # rename in_channels to num_channels for sake of consistency
@@ -151,14 +151,14 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         print(k, v.shape)
 
     # verify generation
-    # with torch.no_grad():
-    #     outputs = model.generate(**inputs, **gen_kwargs)
-    #     outputs = outputs[:, inputs["input_ids"].shape[1] :]
-    #     generated_text = tokenizer.decode(outputs[0])
+    with torch.no_grad():
+        outputs = model.generate(**inputs, **gen_kwargs, use_cache=False)
+        outputs = outputs[:, inputs["input_ids"].shape[1] :]
+        generated_text = tokenizer.decode(outputs[0])
 
-    # print("Original text:", original_generated_text)
-    # print("HF text:", generated_text)
-    # assert original_generated_text == generated_text
+    print("Original text:", original_generated_text)
+    print("HF text:", generated_text)
+    assert original_generated_text == generated_text
 
     print("Original input_ids:", original_inputs["input_ids"])
     print("HF input_ids:", inputs["input_ids"])
@@ -178,7 +178,7 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     print("Last values of HF logits:", logits[0, -3:, -3:])
 
     # assert values
-    assert torch.allclose(original_logits.to(logits.device), logits, atol=1e-1)
+    assert torch.allclose(original_logits.to(logits.device), logits, atol=1e-4)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:

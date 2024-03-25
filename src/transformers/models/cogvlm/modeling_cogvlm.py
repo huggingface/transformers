@@ -797,7 +797,7 @@ class CogvlmModel(CogvlmPreTrainedModel):
 
                 input_ids = torch.cat([vision_input_ids, input_ids[:, 1:]], dim=1)
                 token_type_ids = torch.cat([vision_token_type_ids, token_type_ids[:, 1:]], dim=1)
-                attention_mask = torch.tensor([1] * input_ids.shape[1]).repeat(batch_size, 1).to(input_ids.device)
+                attention_mask = torch.ones_like(input_ids)
 
                 inputs_embeds = self.embed_tokens(input_ids)
 
