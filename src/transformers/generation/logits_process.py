@@ -1120,7 +1120,7 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
     Args:
         bad_words_ids (`List[List[int]]`):
             List of list of token ids that are not allowed to be generated.
-        eos_token_id (`Union[int, List[int], torch.Tensor]`):
+        eos_token_id (`Union[int, List[int], torch.Tensor]`, *optional*):
             The id(s) of the *end-of-sequence* token.
 
     Examples:
@@ -1158,19 +1158,22 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
     ```
     """
 
-    def __init__(self, bad_words_ids: List[List[int]], eos_token_id: Union[int, List[int], torch.Tensor]):
+    def __init__(
+        self, bad_words_ids: List[List[int]], eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None
+    ):
+        # Filter EOS token from bad_words_ids
+        if eos_token_id is not None:
+            if not isinstance(eos_token_id, torch.Tensor):
+                if isinstance(eos_token_id, int):
+                    eos_token_id = [eos_token_id]
+                eos_token_id = torch.tensor(eos_token_id)
+
+            bad_words_ids = list(
+                filter(lambda bad_token_seq: all(bad_token_seq != [i] for i in eos_token_id), bad_words_ids)
+            )
+
         self.bad_word_ids = bad_words_ids
         self._validate_arguments()
-
-        # Filter EOS token from bad_words_ids
-        if not isinstance(eos_token_id, torch.Tensor):
-            if isinstance(eos_token_id, int):
-                eos_token_id = [eos_token_id]
-            eos_token_id = torch.tensor(eos_token_id)
-
-        bad_words_ids = list(
-            filter(lambda bad_token_seq: all(bad_token_seq != [i] for i in eos_token_id), bad_words_ids)
-        )
 
         # Forbidding a sequence is equivalent to setting its bias to -inf
         sequence_bias = {tuple(sequence): float("-inf") for sequence in bad_words_ids}
