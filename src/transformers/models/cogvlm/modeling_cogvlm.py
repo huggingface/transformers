@@ -234,22 +234,22 @@ class CogvlmVisionTransformer(nn.Module):
 
     def forward(self, hidden_states):
 
-        filepath = hf_hub_download(
-            repo_id="nielsr/test-cogvlm", filename="hidden_states_before_clip.pt", repo_type="dataset"
-        )
-        original_hidden_states = torch.load(filepath)
+        # filepath = hf_hub_download(
+        #     repo_id="nielsr/test-cogvlm", filename="hidden_states_before_clip.pt", repo_type="dataset"
+        # )
+        # original_hidden_states = torch.load(filepath)
 
-        assert torch.allclose(hidden_states, original_hidden_states.to(hidden_states.device))
+        # assert torch.allclose(hidden_states, original_hidden_states.to(hidden_states.device))
 
         for idx, layer_module in enumerate(self.layers):
             hidden_states = layer_module(hidden_states, print_values=idx==0)
 
-        filepath = hf_hub_download(
-            repo_id="nielsr/test-cogvlm", filename="hidden_states_after_clip.pt", repo_type="dataset"
-        )
-        original_hidden_states = torch.load(filepath)
+        # filepath = hf_hub_download(
+        #     repo_id="nielsr/test-cogvlm", filename="hidden_states_after_clip.pt", repo_type="dataset"
+        # )
+        # original_hidden_states = torch.load(filepath)
 
-        assert torch.allclose(hidden_states, original_hidden_states.to(hidden_states.device)), "Hidden states not the same after CLIP"
+        # assert torch.allclose(hidden_states, original_hidden_states.to(hidden_states.device)), "Hidden states not the same after CLIP"
 
         return hidden_states
 
@@ -825,37 +825,37 @@ class CogvlmModel(CogvlmPreTrainedModel):
                 images_features = images_features.reshape(-1, images_features.shape[-1])
                 images_features = images_features.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
 
-                print("First values of text embeddings:", inputs_embeds[0, :3, :3])
-                print("First values of images_features:", images_features[0, :3])
+                # print("First values of text embeddings:", inputs_embeds[0, :3, :3])
+                # print("First values of images_features:", images_features[0, :3])
 
-                from huggingface_hub import hf_hub_download
+                # from huggingface_hub import hf_hub_download
 
-                filepath = hf_hub_download(
-                    repo_id="nielsr/test-cogvlm", filename="images_features.pt", repo_type="dataset"
-                )
-                original_images_features = torch.load(filepath)
-                filepath = hf_hub_download(
-                    repo_id="nielsr/test-cogvlm", filename="inputs_embeds.pt", repo_type="dataset"
-                )
-                original_inputs_embeds = torch.load(filepath)
-                filepath = hf_hub_download(
-                    repo_id="nielsr/test-cogvlm", filename="token_type_ids.pt", repo_type="dataset"
-                )
-                original_token_type_ids = torch.load(filepath)
+                # filepath = hf_hub_download(
+                #     repo_id="nielsr/test-cogvlm", filename="images_features.pt", repo_type="dataset"
+                # )
+                # original_images_features = torch.load(filepath)
+                # filepath = hf_hub_download(
+                #     repo_id="nielsr/test-cogvlm", filename="inputs_embeds.pt", repo_type="dataset"
+                # )
+                # original_inputs_embeds = torch.load(filepath)
+                # filepath = hf_hub_download(
+                #     repo_id="nielsr/test-cogvlm", filename="token_type_ids.pt", repo_type="dataset"
+                # )
+                # original_token_type_ids = torch.load(filepath)
 
-                print("Mean of original image features:", original_images_features.mean())
-                print("Mean of HF image features:", images_features.mean())
+                # print("Mean of original image features:", original_images_features.mean())
+                # print("Mean of HF image features:", images_features.mean())
 
                 # verify
-                assert torch.allclose(images_features, original_images_features.to(images_features.device), atol=1e-3)
-                assert torch.allclose(inputs_embeds, original_inputs_embeds.to(inputs_embeds.device))
-                assert token_type_ids[0].tolist() == original_token_type_ids[0].tolist()
+                # assert torch.allclose(images_features, original_images_features.to(images_features.device), atol=1e-3)
+                # assert torch.allclose(inputs_embeds, original_inputs_embeds.to(inputs_embeds.device))
+                # assert token_type_ids[0].tolist() == original_token_type_ids[0].tolist()
 
-                print("Token type ids:", token_type_ids)
+                # print("Token type ids:", token_type_ids)
 
                 inputs_embeds = inputs_embeds.index_put([token_type_ids == VISION_TOKEN_TYPE], images_features)
 
-                print("First values of inputs_embeds after index_put:", inputs_embeds[0, :3, :3])
+                # print("First values of inputs_embeds after index_put:", inputs_embeds[0, :3, :3])
 
             else:
                 # TODO verify single-modality
@@ -914,21 +914,21 @@ class CogvlmModel(CogvlmPreTrainedModel):
         hidden_states = inputs_embeds
 
         # verify initial hidden states
-        filepath = hf_hub_download(repo_id="nielsr/test-cogvlm", filename="initial_hidden_states.pt", repo_type="dataset")
-        original_hidden_states = torch.load(filepath).to(hidden_states.device)
-        assert torch.allclose(hidden_states, original_hidden_states)
-        # verify attention mask
-        filepath = hf_hub_download(repo_id="nielsr/test-cogvlm", filename="initial_attention_mask.pt", repo_type="dataset")
-        original_attention_mask = torch.load(filepath).to(attention_mask.device)
-        assert torch.allclose(attention_mask.float(), original_attention_mask.float())
-        # verify token type ids
-        filepath = hf_hub_download(repo_id="nielsr/test-cogvlm", filename="initial_token_type_ids.pt", repo_type="dataset")
-        original_token_type_ids = torch.load(filepath).to(token_type_ids.device)
-        assert torch.allclose(token_type_ids.float(), original_token_type_ids.float())
-        # verify position ids
-        filepath = hf_hub_download(repo_id="nielsr/test-cogvlm", filename="initial_position_ids.pt", repo_type="dataset")
-        original_position_ids = torch.load(filepath).to(position_ids.device)
-        assert torch.allclose(position_ids.float(), original_position_ids.float())
+        # filepath = hf_hub_download(repo_id="nielsr/test-cogvlm", filename="initial_hidden_states.pt", repo_type="dataset")
+        # original_hidden_states = torch.load(filepath).to(hidden_states.device)
+        # assert torch.allclose(hidden_states, original_hidden_states)
+        # # verify attention mask
+        # filepath = hf_hub_download(repo_id="nielsr/test-cogvlm", filename="initial_attention_mask.pt", repo_type="dataset")
+        # original_attention_mask = torch.load(filepath).to(attention_mask.device)
+        # assert torch.allclose(attention_mask.float(), original_attention_mask.float())
+        # # verify token type ids
+        # filepath = hf_hub_download(repo_id="nielsr/test-cogvlm", filename="initial_token_type_ids.pt", repo_type="dataset")
+        # original_token_type_ids = torch.load(filepath).to(token_type_ids.device)
+        # assert torch.allclose(token_type_ids.float(), original_token_type_ids.float())
+        # # verify position ids
+        # filepath = hf_hub_download(repo_id="nielsr/test-cogvlm", filename="initial_position_ids.pt", repo_type="dataset")
+        # original_position_ids = torch.load(filepath).to(position_ids.device)
+        # assert torch.allclose(position_ids.float(), original_position_ids.float())
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -948,16 +948,16 @@ class CogvlmModel(CogvlmPreTrainedModel):
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
-                print_values=idx==0,
+                print_values=False,
             )
             hidden_states = layer_outputs[0]
 
-            if idx == 0:
-                filepath = hf_hub_download(
-                    repo_id="nielsr/test-cogvlm", filename="hidden_states_after_layer_0.pt", repo_type="dataset"
-                )
-                original_hidden_states = torch.load(filepath)
-                assert torch.allclose(hidden_states, original_hidden_states.to(hidden_states.device))
+            # if idx == 0:
+            #     filepath = hf_hub_download(
+            #         repo_id="nielsr/test-cogvlm", filename="hidden_states_after_layer_0.pt", repo_type="dataset"
+            #     )
+            #     original_hidden_states = torch.load(filepath)
+            #     assert torch.allclose(hidden_states, original_hidden_states.to(hidden_states.device))
 
             if use_cache:
                 next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
