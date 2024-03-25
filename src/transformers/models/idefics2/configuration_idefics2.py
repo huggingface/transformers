@@ -257,8 +257,9 @@ class Idefics2Config(PretrainedConfig):
                 rms_norm_eps=1e-5,
                 # None in the original configuration_mistral, we set it to the unk_token_id
                 pad_token_id=0,
+                tie_word_embeddings=False,
             )
 
         self.text_config = text_config
 
-        super().__init__(**kwargs)
+        super().__init__(**kwargs, tie_word_embeddings=tie_word_embeddings)

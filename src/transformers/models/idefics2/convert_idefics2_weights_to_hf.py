@@ -14,6 +14,7 @@
 import argparse
 
 import torch
+from accelerate import init_empty_weights
 
 from transformers import (
     AutoConfig,
@@ -110,10 +111,9 @@ def get_config(checkpoint):
             text_config=text_config.to_dict(),
             vision_config=config.vision_config,
             perceiver_config=config.perceiver_config,
-            vocab_size=config.vocab_size,  # FIXME - how should this be stored given the vocab size in the text_config is overwritten
-            additional_vocab_size=config.additional_vocab_size,
             use_cache=config.use_cache,
             image_token_id=config.image_token_id,
+            tie_word_embeddings=config.tie_word_embeddings,
         )
         return config
 
@@ -140,7 +140,9 @@ def convert_idefics2_hub_to_hf(original_model_id, output_hub_path, push_to_hub):
 
     config = get_config(original_model_id)
 
-    model = Idefics2ForConditionalGeneration(config)
+    with init_empty_weights():
+        model = Idefics2ForConditionalGeneration(config)
+
     model.load_state_dict(state_dict, strict=True, assign=True)
 
     model.save_pretrained(output_hub_path)
