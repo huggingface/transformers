@@ -114,10 +114,6 @@ class Embeddings(nn.Module):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.dim, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.dim)
-        if config.sinusoidal_pos_embds:
-            create_sinusoidal_embeddings(
-                n_pos=config.max_position_embeddings, dim=config.dim, out=self.position_embeddings.weight
-            )
 
         self.LayerNorm = nn.LayerNorm(config.dim, eps=1e-12)
         self.dropout = nn.Dropout(config.dropout)
@@ -635,7 +631,7 @@ class DistilBertPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding) and module.weight.requires_grad:
+        elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
@@ -711,6 +707,11 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+        if config.sinusoidal_pos_embds:
+            create_sinusoidal_embeddings(
+                n_pos=config.max_position_embeddings, dim=config.dim, out=self.embeddings.position_embeddings.weight
+            )
 
     def get_position_embeddings(self) -> nn.Embedding:
         """
