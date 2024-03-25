@@ -171,6 +171,9 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     print("First values of HF logits:", logits[0, :3, :3])
     print("Mean of HF logits:", logits.mean())
 
+    print("Last values of original logits:", original_logits[0, -3:, -3:])
+    print("Last values of HF logits:", logits[0, -3:, -3:])
+
     # assert values
     assert torch.allclose(original_logits.to(logits.device), logits, atol=1e-1)
     print("Looks ok!")

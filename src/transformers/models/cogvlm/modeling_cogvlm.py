@@ -15,11 +15,9 @@
 """ PyTorch CogVLM model."""
 
 import math
-import warnings
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -141,7 +139,7 @@ class CogvlmVisionAttention(nn.Module):
         super().__init__()
         self.num_heads = config.num_attention_heads
         head_dim = config.hidden_size // config.num_attention_heads
-        self.scale = head_dim**-0.5
+        self.scale = 1.0 / head_dim**0.5
         self.query_key_value = nn.Linear(config.hidden_size, config.hidden_size * 3)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.output_dropout = torch.nn.Dropout(config.dropout_prob)
@@ -150,7 +148,8 @@ class CogvlmVisionAttention(nn.Module):
         batch_size, sequence_length, _ = hidden_state.shape
         qkv = self.query_key_value(hidden_state)
 
-        qkv = qkv.reshape(batch_size, sequence_length, 3, self.num_heads, -1).permute(2, 0, 1, 3, 4)  # 3, B, L, H, D
+        # reshape to (3, batch_size, sequence_length, num_heads, head_dim)
+        qkv = qkv.reshape(batch_size, sequence_length, 3, self.num_heads, -1).permute(2, 0, 1, 3, 4)
         queries, keys, values = qkv[0], qkv[1], qkv[2]
 
         import xformers.ops as xops
@@ -166,11 +165,7 @@ class CogvlmVisionAttention(nn.Module):
         output = self.output_dropout(output)
         return output
 
-        # reshape to (3, batch_size, sequence_length, num_heads, head_dim)
-        # qkv = qkv.reshape(batch_size, sequence_length, 3, self.num_heads, -1).permute(2, 0, 1, 3, 4)
-        # queries, keys, values = qkv[0], qkv[1], qkv[2]
-
-        # # thanks to https://github.com/facebookresearch/xformers/issues/922#issuecomment-1808329588
+        # thanks to https://github.com/facebookresearch/xformers/issues/922#issuecomment-1808329588
         # queries = queries * self.scale
         # queries = queries.transpose(1, 2)
         # keys = keys.transpose(1, 2)
@@ -449,7 +444,10 @@ class CogvlmVisionExpertAttention(nn.Module):
             kv_seq_len += past_key_value[0].shape[-2]
 
         cos, sin = self.rotary_emb(value_states, seq_len=position_ids.max() + 1)
-        cos, sin = F.embedding(position_ids, cos.squeeze(1)), F.embedding(position_ids, sin.squeeze(1))
+        cos, sin = (
+            nn.functional.embedding(position_ids, cos.squeeze(1)),
+            nn.functional.embedding(position_ids, sin.squeeze(1)),
+        )
         query_states, key_states = apply_rotary_pos_emb(
             query_states, key_states, cos, sin, position_ids, unsqueeze_dim=1
         )
@@ -468,13 +466,13 @@ class CogvlmVisionExpertAttention(nn.Module):
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=0., training=self.training)
+        attn_weights = nn.functional.dropout(attn_weights, p=0.0, training=self.training)
         context_layer = torch.matmul(attn_weights, value_states)
 
         if context_layer.size() != (batch_size, self.num_heads, q_len, self.head_dim):
             raise ValueError(
                 f"`attn_output` should be of size {(batch_size, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
+                f" {context_layer.size()}"
             )
 
         context_layer = context_layer.transpose(1, 2).contiguous()
@@ -488,7 +486,7 @@ class CogvlmVisionExpertAttention(nn.Module):
         return (
             (attn_output, attn_weights, past_key_value) if output_attentions else (attn_output, None, past_key_value)
         )
-    
+
 
 class CogvlmVisionExpertSdpaAttention(CogvlmVisionExpertAttention):
     """
@@ -527,7 +525,10 @@ class CogvlmVisionExpertSdpaAttention(CogvlmVisionExpertAttention):
             kv_seq_len += past_key_value[0].shape[-2]
 
         cos, sin = self.rotary_emb(value_states, seq_len=position_ids.max() + 1)
-        cos, sin = F.embedding(position_ids, cos.squeeze(1)), F.embedding(position_ids, sin.squeeze(1))
+        cos, sin = (
+            nn.functional.embedding(position_ids, cos.squeeze(1)),
+            nn.functional.embedding(position_ids, sin.squeeze(1)),
+        )
         query_states, key_states = apply_rotary_pos_emb(
             query_states, key_states, cos, sin, position_ids, unsqueeze_dim=1
         )
@@ -539,7 +540,12 @@ class CogvlmVisionExpertSdpaAttention(CogvlmVisionExpertAttention):
         past_key_value = (key_states, value_states) if use_cache else None
 
         context_layer = torch.nn.functional.scaled_dot_product_attention(
-            query_states, key_states, value_states, attn_mask=None, dropout_p=0., is_causal=True,
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=None,
+            dropout_p=0.0,
+            is_causal=True,
         )
 
         if context_layer.size() != (batch_size, self.num_heads, q_len, self.head_dim):
@@ -621,6 +627,7 @@ class CogvlmPreTrainedModel(PreTrainedModel):
     config_class = CogvlmConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = False
+    _supports_sdpa = True
     _no_split_modules = ["CogvlmDecoderLayer", "CogvlmVisionTransformerLayer"]
     _skip_keys_device_placement = "past_key_values"
 
