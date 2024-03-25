@@ -158,6 +158,10 @@ class LlavaNextVisionText2TextModelTester:
         }
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_generation(self, inputs_dict):
+        inputs_dict["input_name"] = "input_ids"
+        return inputs_dict
+
 
 @require_torch
 class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -166,6 +170,7 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     """
 
     all_model_classes = (LlavaNextForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (LlavaNextForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
 
@@ -213,6 +218,14 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
 
     @unittest.skip(reason="CPU offload is not yet supported")
     def test_cpu_offload(self):
+        pass
+
+    @unittest.skip("no need to check if the LM backbone is passing already")
+    def test_generate_from_inputs_embeds_decoder_only(self):
+        pass
+
+    @unittest.skip("also assume that it works if the LM backbone is working")
+    def test_left_padding_compatibility(self):
         pass
 
     # Copied from tests.test_modeling_common.ModelTesterMixin.test_resize_tokens_embeddings with config.vocab_size->config.text_config.vocab_size

@@ -27,6 +27,7 @@ from transformers import Pix2StructConfig, Pix2StructTextConfig, Pix2StructVisio
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -386,6 +387,7 @@ class Pix2StructModelTester:
         self.parent = parent
         self.text_model_tester = Pix2StructTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Pix2StructVisionModelTester(parent, **vision_kwargs)
+        self.seq_length = self.text_model_tester.seq_length  # needed for generation
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
@@ -415,10 +417,17 @@ class Pix2StructModelTester:
         }
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_generation(self, inputs_dict):
+        inputs_dict["input_name"] = "flattened_patches"
+        inputs_dict.pop("decoder_input_ids")
+        inputs_dict.pop("decoder_attention_mask")
+        return inputs_dict
+
 
 @require_torch
-class Pix2StructModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Pix2StructModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Pix2StructForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (Pix2StructForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-to-text": Pix2StructForConditionalGeneration} if is_torch_available() else {}
     fx_compatible = False
     test_head_masking = False

@@ -151,6 +151,10 @@ class VipLlavaVisionText2TextModelTester:
         }
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_generation(self, inputs_dict):
+        inputs_dict["input_name"] = "input_ids"
+        return inputs_dict
+
 
 @require_torch
 # Copied from transformers.tests.models.llava.test_modeling_llava.LlavaForConditionalGenerationModelTest with Llava->VipLlava
@@ -160,6 +164,7 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
     """
 
     all_model_classes = (VipLlavaForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (VipLlavaForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -351,6 +356,14 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
             model_tied.resize_token_embeddings(config.text_config.vocab_size + 10)
             params_tied_2 = list(model_tied.parameters())
             self.assertEqual(len(params_tied_2), len(params_tied))
+
+    @unittest.skip("no need to check if the LM backbone is passing already")
+    def test_generate_from_inputs_embeds_decoder_only(self):
+        pass
+
+    @unittest.skip("also assume that it works if the LM backbone is working")
+    def test_left_padding_compatibility(self):
+        pass
 
 
 @require_torch

@@ -262,10 +262,15 @@ class FuyuModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_generation(self, inputs_dict):
+        inputs_dict["input_name"] = "pixel_values"
+        return inputs_dict
+
 
 @require_torch
 class FuyuModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (FuyuForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (FuyuForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = {"text-generation": FuyuForCausalLM} if is_torch_available() else {}
 
     test_head_masking = False

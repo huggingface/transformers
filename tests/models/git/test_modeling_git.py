@@ -393,6 +393,11 @@ class GitModelTester:
 
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_generation(self, inputs_dict):
+        inputs_dict["input_name"] = "input_ids"
+        inputs_dict.pop("pixel_values")
+        return inputs_dict
+
 
 @require_torch
 class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):

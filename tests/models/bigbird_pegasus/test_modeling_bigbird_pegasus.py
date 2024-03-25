@@ -293,12 +293,11 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
         input_ids = inputs_dict[self.input_name]
         attention_mask = torch.ones_like(input_ids, dtype=torch.long)
-
-        # cut to half length & take max batch_size 3
-        sequence_length = input_ids.shape[-1] // 2
-        input_ids = input_ids[:batch_size, :sequence_length]
-        attention_mask = attention_mask[:batch_size, :sequence_length]
-        model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
+        model_kwargs = {
+            "input_ids": input_ids[:batch_size],
+            "attention_mask": attention_mask[:batch_size],
+            "input_name": "input_ids",
+        }
 
         # generate max 3 tokens
         max_length = input_ids.shape[-1] + 3

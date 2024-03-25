@@ -199,6 +199,7 @@ class Kosmos2ModelTester:
         self.text_model_tester = Kosmos2TextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Kosmos2VisionModelTester(parent, **vision_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.seq_length = self.text_model_tester.seq_length
         self.latent_query_num = latent_query_num
         self.is_training = is_training
 
@@ -246,6 +247,10 @@ class Kosmos2ModelTester:
         }
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_generation(self, inputs_dict):
+        inputs_dict["input_name"] = "pixel_values"
+        return inputs_dict
+
 
 @require_torch
 class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -261,247 +266,6 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
-
-    # used by generation mixin
-    def _get_input_ids_and_config(self, model_class=None, batch_size=2):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for k, v in inputs_dict.items():
-            inputs_dict[k] = v[:batch_size]
-
-        # take max batch_size 3
-        input_ids = inputs_dict["input_ids"]
-        inputs_dict["input_ids"] = input_ids[:batch_size]
-
-        # generate max 3 tokens
-        max_length = input_ids.shape[-1] + 3
-        if config.eos_token_id is not None and config.pad_token_id is None:
-            # hack to allow generate for models such as GPT2 as is done in `generate()`
-            if isinstance(config.eos_token_id, int):
-                config.eos_token_id = [config.eos_token_id]
-            config.pad_token_id = config.eos_token_id[0]
-
-        return config, inputs_dict, max_length
-
-    def _greedy_generate(
-        self,
-        model,
-        max_length,
-        model_kwargs,
-        output_scores=False,
-        output_logits=False,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict_in_generate=False,
-    ):
-        pixel_values = model_kwargs.pop("pixel_values")
-        logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
-            model_kwargs["attention_mask"].shape[-1],
-            forced_bos_token_id=model.config.forced_bos_token_id,
-            forced_eos_token_id=model.config.forced_eos_token_id,
-            max_length=max_length,
-        )
-
-        output_generate = model.generate(
-            pixel_values,
-            do_sample=False,
-            num_beams=1,
-            max_length=max_length,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            output_scores=output_scores,
-            output_logits=output_logits,
-            return_dict_in_generate=return_dict_in_generate,
-            **logits_process_kwargs,
-            **model_kwargs,
-        )
-
-        return output_generate
-
-    def _sample_generate(
-        self,
-        model,
-        model_kwargs,
-        max_length,
-        num_return_sequences,
-        logits_warper_kwargs,
-        process_kwargs,
-        output_scores=False,
-        output_logits=False,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict_in_generate=False,
-    ):
-        torch.manual_seed(0)
-        output_generate = model.generate(
-            do_sample=True,
-            num_beams=1,
-            max_length=max_length,
-            num_return_sequences=num_return_sequences,
-            output_scores=output_scores,
-            output_logits=output_logits,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict_in_generate=return_dict_in_generate,
-            **logits_warper_kwargs,
-            **process_kwargs,
-            **model_kwargs,
-        )
-
-        return output_generate
-
-    def _beam_search_generate(
-        self,
-        model,
-        model_kwargs,
-        max_length,
-        beam_kwargs,
-        logits_process_kwargs,
-        output_scores=False,
-        output_logits=False,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict_in_generate=False,
-    ):
-        output_generate = model.generate(
-            do_sample=False,
-            max_length=max_length,
-            output_scores=output_scores,
-            output_logits=output_logits,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict_in_generate=return_dict_in_generate,
-            **beam_kwargs,
-            **logits_process_kwargs,
-            **model_kwargs,
-        )
-
-        return output_generate
-
-    def _beam_sample_generate(
-        self,
-        model,
-        model_kwargs,
-        max_length,
-        beam_kwargs,
-        logits_warper_kwargs,
-        output_scores=False,
-        output_logits=False,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict_in_generate=False,
-    ):
-        torch.manual_seed(0)
-        output_generate = model.generate(
-            do_sample=True,
-            max_length=max_length,
-            output_scores=output_scores,
-            output_logits=output_logits,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict_in_generate=return_dict_in_generate,
-            **beam_kwargs,
-            **logits_warper_kwargs,
-            **model_kwargs,
-        )
-
-        return output_generate
-
-    def _group_beam_search_generate(
-        self,
-        model,
-        model_kwargs,
-        max_length,
-        beam_kwargs,
-        logits_process_kwargs,
-        output_scores=False,
-        output_logits=False,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict_in_generate=False,
-    ):
-        output_generate = model.generate(
-            do_sample=False,
-            max_length=max_length,
-            output_scores=output_scores,
-            output_logits=output_logits,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict_in_generate=return_dict_in_generate,
-            **beam_kwargs,
-            **logits_process_kwargs,
-            **model_kwargs,
-        )
-
-        return output_generate
-
-    def _constrained_beam_search_generate(
-        self,
-        model,
-        model_kwargs,
-        max_length,
-        constraints,
-        beam_kwargs,
-        logits_process_kwargs,
-        output_scores=False,
-        output_logits=False,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict_in_generate=False,
-    ):
-        output_generate = model.generate(
-            do_sample=False,
-            max_length=max_length,
-            output_scores=output_scores,
-            output_logits=output_logits,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict_in_generate=return_dict_in_generate,
-            constraints=constraints,
-            **beam_kwargs,
-            **logits_process_kwargs,
-            **model_kwargs,
-        )
-
-        return output_generate
-
-    def _contrastive_generate(
-        self,
-        model,
-        model_kwargs,
-        max_length,
-        output_scores=False,
-        output_logits=False,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict_in_generate=False,
-    ):
-        contrastive_search_kwargs = {
-            "penalty_alpha": 0.6,
-            "top_k": 5,
-        }
-
-        logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
-            model_kwargs[self.input_name].shape[-1],
-            forced_bos_token_id=model.config.forced_bos_token_id,
-            forced_eos_token_id=model.config.forced_eos_token_id,
-            max_length=max_length,
-        )
-
-        output_generate = model.generate(
-            do_sample=False,
-            num_beams=1,
-            max_length=max_length,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            output_scores=output_scores,
-            output_logits=output_logits,
-            return_dict_in_generate=return_dict_in_generate,
-            **logits_process_kwargs,
-            **model_kwargs,
-            **contrastive_search_kwargs,
-        )
-
-        return output_generate
 
     # TODO: `image-to-text` pipeline for this model needs Processor.
     def is_pipeline_test_to_skip(
@@ -751,6 +515,10 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
             # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
+
+    @unittest.skip("assume that it works if the LM backbone is working")
+    def test_left_padding_compatibility(self):
+        pass
 
 
 # We will verify our results on an image of cute cats

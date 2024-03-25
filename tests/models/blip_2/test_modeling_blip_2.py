@@ -619,6 +619,7 @@ class Blip2ModelTester:
         self.qformer_model_tester = Blip2QFormerModelTester(parent, **qformer_kwargs)
         self.text_model_tester = Blip2TextModelTester(parent, **text_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.seq_length = self.text_model_tester.seq_length
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
 
@@ -682,10 +683,16 @@ class Blip2ModelTester:
         }
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_generation(self, inputs_dict):
+        inputs_dict["input_name"] = "pixel_values"
+        inputs_dict.pop("labels")
+        return inputs_dict
+
 
 @require_torch
 class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration, Blip2Model) if is_torch_available() else ()
+    all_generative_model_classes = (Blip2ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Blip2Model,
@@ -735,6 +742,10 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
 
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_cpu_offload(self):
+        pass
+
+    # we cannot check output for blip, it has too many length related hacks until refactoring
+    def _check_outputs(self, output, input_tensor, config, is_vision_model, use_cache=False, num_return_sequences=1):
         pass
 
     def test_forward_signature(self):

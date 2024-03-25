@@ -243,7 +243,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
         # generate max 3 tokens
         max_length = input_ids.shape[-1] + 3
         attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
-        model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
+        model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask, "input_name": "input_ids"}
         return config, model_kwargs, max_length
 
     @staticmethod
@@ -693,78 +693,11 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         sequence_length = input_ids.shape[-1]
         input_ids = input_ids[:batch_size, :]
         attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
-        model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
+        model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask, "input_name": "input_ids"}
 
         # generate max 3 tokens
         max_length = 3
         return config, model_kwargs, max_length
-
-    # override since the `input_ids` cannot be used as the `decoder_input_ids` for musicgen_melody (input / outputs are
-    # different modalities -> different shapes)
-    def _greedy_generate(
-        self,
-        model,
-        model_kwargs,
-        max_length,
-        output_scores=False,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict_in_generate=False,
-    ):
-        logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
-            model_kwargs["attention_mask"].shape[-1],
-            max_length=max_length,
-        )
-
-        output_generate = model.generate(
-            model_kwargs.pop("input_ids"),
-            do_sample=False,
-            num_beams=1,
-            max_length=max_length,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            output_scores=output_scores,
-            return_dict_in_generate=return_dict_in_generate,
-            remove_invalid_values=True,
-            **logits_process_kwargs,
-            **model_kwargs,
-        )
-
-        return output_generate
-
-    # override since the `input_ids` cannot be used as the `decoder_input_ids` for musicgen_melody (input / outputs are
-    # different modalities -> different shapes)
-    def _sample_generate(
-        self,
-        model,
-        model_kwargs,
-        max_length,
-        num_return_sequences,
-        logits_warper_kwargs,
-        process_kwargs,
-        output_scores=False,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict_in_generate=False,
-    ):
-        torch.manual_seed(0)
-        output_generate = model.generate(
-            model_kwargs.pop("input_ids"),
-            do_sample=True,
-            num_beams=1,
-            max_length=max_length,
-            num_return_sequences=num_return_sequences,
-            output_scores=output_scores,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict_in_generate=return_dict_in_generate,
-            remove_invalid_values=True,
-            **logits_warper_kwargs,
-            **process_kwargs,
-            **model_kwargs,
-        )
-
-        return output_generate
 
     @staticmethod
     def _get_logits_processor_and_warper_kwargs(
