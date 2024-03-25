@@ -21,9 +21,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "BAAI/seggpt-vit-large": "https://huggingface.co/BAAI/seggpt-vit-large/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class SegGptConfig(PretrainedConfig):

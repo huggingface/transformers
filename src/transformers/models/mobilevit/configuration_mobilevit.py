@@ -26,21 +26,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "apple/mobilevit-small": "https://huggingface.co/apple/mobilevit-small/resolve/main/config.json",
-    "apple/mobilevit-x-small": "https://huggingface.co/apple/mobilevit-x-small/resolve/main/config.json",
-    "apple/mobilevit-xx-small": "https://huggingface.co/apple/mobilevit-xx-small/resolve/main/config.json",
-    "apple/deeplabv3-mobilevit-small": (
-        "https://huggingface.co/apple/deeplabv3-mobilevit-small/resolve/main/config.json"
-    ),
-    "apple/deeplabv3-mobilevit-x-small": (
-        "https://huggingface.co/apple/deeplabv3-mobilevit-x-small/resolve/main/config.json"
-    ),
-    "apple/deeplabv3-mobilevit-xx-small": (
-        "https://huggingface.co/apple/deeplabv3-mobilevit-xx-small/resolve/main/config.json"
-    ),
-    # See all MobileViT models at https://huggingface.co/models?filter=mobilevit
-}
+
+from ..deprecated._archive_maps import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class MobileViTConfig(PretrainedConfig):
