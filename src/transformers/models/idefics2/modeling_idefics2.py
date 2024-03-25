@@ -496,7 +496,12 @@ class Idefics2MultiheadAttentionPoolingHead(nn.Module):
         self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         # Ignore copy
-        self.mlp = Idefics2MLP(hidden_size=config.hidden_size, intermediate_size=config.intermediate_size, hidden_act=config.hidden_act)
+        self.mlp = Idefics2MLP(
+            hidden_size=config.hidden_size,
+            intermediate_size=config.intermediate_size,
+            hidden_act=config.hidden_act,
+            output_size=config.hidden_size,
+        )
 
     def forward(self, hidden_state):
         batch_size = hidden_state.shape[0]
@@ -726,18 +731,19 @@ class Idefics2VisionTransformer(nn.Module):
             attentions=encoder_outputs.attentions,
         )
 
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsMLP
-class IdeficsMLP(nn.Module):
+
+class Idefics2MLP(nn.Module):
     def __init__(
         self,
         hidden_size: int,
         intermediate_size: int,
+        output_size: int,
         hidden_act: str,
     ):
         super().__init__()
         self.gate_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
-        self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=False)
         self.up_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
+        self.down_proj = nn.Linear(intermediate_size, output_size, bias=False)
         self.act_fn = ACT2FN[hidden_act]
 
     def forward(self, x):
@@ -1165,10 +1171,12 @@ class Idefics2PerceiverLayer(nn.Module):
         self.input_latents_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.input_context_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.self_attn = IDEFICS2_PERCEIVER_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.post_attention_layernorm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.mlp = Idefics2MLP(
-            config.text_config, intermediate_size=config.text_config * 4, hidden_act=config.perceiver_config.hidden_act
+            hidden_size=config.text_config.hidden_size,
+            intermediate_size=config.text_config.hidden_size * 4,
+            output_size=config.text_config.hidden_size,
+            hidden_act=config.perceiver_config.hidden_act,
         )
 
     def forward(
@@ -1244,6 +1252,8 @@ class Idefics2PerceiverResampler(nn.Module):
         # Create Transformer Blocks
         self.layers = nn.ModuleList([Idefics2PerceiverLayer(config, idx) for idx in range(self.depth)])
         self.norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
+
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     def forward(
         self,
@@ -1451,7 +1461,12 @@ class Idefics2Model(Idefics2PreTrainedModel):
         self.vocab_size = self.config.text_config.vocab_size
 
         self.vision_model = Idefics2VisionTransformer(config.vision_config)
-        self.modality_projection = Idefics2MLP(config.text_config, hidden_size=config.vision_config.hidden_size)
+        self.modality_projection = Idefics2MLP(
+            hidden_size=config.vision_config.hidden_size,
+            intermediate_size=config.text_config.intermediate_size,
+            output_size=config.text_config.hidden_size,
+            hidden_act=config.text_config.hidden_act,
+        )
 
         self.perceiver_resampler = Idefics2PerceiverResampler(config)
 
@@ -1589,12 +1604,6 @@ class Idefics2Model(Idefics2PreTrainedModel):
 
         if inputs_embeds is not None and input_ids is None and past_seen_tokens == 0:
             raise ValueError("When first calling the model, if input_embeds are passed, input_ids should not be None.")
-
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
 
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids)
