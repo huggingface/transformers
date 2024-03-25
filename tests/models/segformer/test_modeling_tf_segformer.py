@@ -34,7 +34,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFSegformerForImageClassification, TFSegformerForSemanticSegmentation, TFSegformerModel
-    from transformers.models.segformer.modeling_tf_segformer import TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -438,9 +437,9 @@ class TFSegformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFSegformerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "nvidia/segformer-b0-finetuned-ade-512-512"
+        model = TFSegformerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

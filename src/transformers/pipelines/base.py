@@ -861,7 +861,7 @@ class Pipeline(_ScikitCompat):
                 raise ValueError(f"{device} unrecognized or not available.")
         else:
             self.device = device if device is not None else -1
-        self.torch_dtype = torch_dtype
+
         self.binary_output = binary_output
 
         # We shouldn't call `model.to()` for models loaded with accelerate
@@ -964,6 +964,13 @@ class Pipeline(_ScikitCompat):
         """
         return self(X)
 
+    @property
+    def torch_dtype(self) -> Optional["torch.dtype"]:
+        """
+        Torch dtype of the model (if it's Pytorch model), `None` otherwise.
+        """
+        return getattr(self.model, "dtype", None)
+
     @contextmanager
     def device_placement(self):
         """
@@ -1019,8 +1026,6 @@ class Pipeline(_ScikitCompat):
         elif isinstance(inputs, tuple):
             return tuple([self._ensure_tensor_on_device(item, device) for item in inputs])
         elif isinstance(inputs, torch.Tensor):
-            if device == torch.device("cpu") and inputs.dtype in {torch.float16, torch.bfloat16}:
-                inputs = inputs.float()
             return inputs.to(device)
         else:
             return inputs

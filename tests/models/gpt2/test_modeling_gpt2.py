@@ -32,7 +32,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2DoubleHeadsModel,
         GPT2ForQuestionAnswering,
         GPT2ForSequenceClassification,
@@ -701,9 +700,9 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in GPT2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GPT2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openai-community/gpt2"
+        model = GPT2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

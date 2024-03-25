@@ -40,7 +40,6 @@ if is_torch_available():
 
     from transformers import IdeficsForVisionText2Text, IdeficsModel, IdeficsProcessor
     from transformers.models.idefics.configuration_idefics import IdeficsPerceiverConfig, IdeficsVisionConfig
-    from transformers.models.idefics.modeling_idefics import IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
 else:
     is_torch_greater_or_equal_than_2_0 = False
@@ -562,9 +561,9 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = IdeficsModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "HuggingFaceM4/idefics-9b"
+        model = IdeficsModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @require_torch_sdpa
     @slow

@@ -40,10 +40,8 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LiltConfig"
 
-LILT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "SCUT-DLVCLab/lilt-roberta-en-base",
-    # See all LiLT models at https://huggingface.co/models?filter=lilt
-]
+
+from ..deprecated._archive_maps import LILT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class LiltTextEmbeddings(nn.Module):

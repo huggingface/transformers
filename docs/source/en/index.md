@@ -174,6 +174,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                         [LLaMA](model_doc/llama)                         |       ✅        |         ❌         |      ✅      |
 |                        [Llama2](model_doc/llama2)                        |       ✅        |         ❌         |      ✅      |
 |                         [LLaVa](model_doc/llava)                         |       ✅        |         ❌         |      ❌      |
+|                    [LLaVA-NeXT](model_doc/llava_next)                    |       ✅        |         ❌         |      ❌      |
 |                    [Longformer](model_doc/longformer)                    |       ✅        |         ✅         |      ❌      |
 |                        [LongT5](model_doc/longt5)                        |       ✅        |         ❌         |      ✅      |
 |                          [LUKE](model_doc/luke)                          |       ✅        |         ❌         |      ❌      |
@@ -266,6 +267,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                   [SqueezeBERT](model_doc/squeezebert)                   |       ✅        |         ❌         |      ❌      |
 |                      [StableLm](model_doc/stablelm)                      |       ✅        |         ❌         |      ❌      |
 |                    [Starcoder2](model_doc/starcoder2)                    |       ✅        |         ❌         |      ❌      |
+|                    [SuperPoint](model_doc/superpoint)                    |       ✅        |         ❌         |      ❌      |
 |                   [SwiftFormer](model_doc/swiftformer)                   |       ✅        |         ❌         |      ❌      |
 |                    [Swin Transformer](model_doc/swin)                    |       ✅        |         ✅         |      ❌      |
 |                 [Swin Transformer V2](model_doc/swinv2)                  |       ✅        |         ❌         |      ❌      |

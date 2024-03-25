@@ -32,7 +32,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import ResNetBackbone, ResNetForImageClassification, ResNetModel
-    from transformers.models.resnet.modeling_resnet import RESNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -273,9 +272,9 @@ class ResNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ResNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/resnet-50"
+        model = ResNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -289,15 +288,11 @@ def prepare_img():
 class ResNetModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            AutoImageProcessor.from_pretrained(RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
-            if is_vision_available()
-            else None
-        )
+        return AutoImageProcessor.from_pretrained("microsoft/resnet-50") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ResNetForImageClassification.from_pretrained(RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
+        model = ResNetForImageClassification.from_pretrained("microsoft/resnet-50").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
