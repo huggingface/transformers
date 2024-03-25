@@ -737,7 +737,6 @@ class BatchEncoding(UserDict):
 
             def is_tensor(obj):
                 return isinstance(obj, mx.array)
-
         else:
 
             def as_tensor(value, dtype=None):
