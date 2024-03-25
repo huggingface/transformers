@@ -23,9 +23,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/siglip-base-patch16-224": "https://huggingface.co/google/siglip-base-patch16-224/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class SiglipTextConfig(PretrainedConfig):

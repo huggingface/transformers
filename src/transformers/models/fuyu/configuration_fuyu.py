@@ -21,9 +21,8 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "adept/fuyu-8b": "https://huggingface.co/adept/fuyu-8b/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class FuyuConfig(PretrainedConfig):

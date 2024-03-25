@@ -57,10 +57,7 @@ _IMAGE_CLASS_CHECKPOINT = "google/vit-base-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
-VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/vit-base-patch16-224",
-    # See all ViT models at https://huggingface.co/models?filter=vit
-]
+from ..deprecated._archive_maps import VIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class ViTEmbeddings(nn.Module):

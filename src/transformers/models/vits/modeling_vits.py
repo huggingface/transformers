@@ -42,11 +42,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "VitsConfig"
 
 
-VITS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/mms-tts-eng",
-    # See all VITS models at https://huggingface.co/models?filter=vits
-    # and all MMS models at https://huggingface.co/models?sort=trending&search=facebook%2Fmms-tts
-]
+from ..deprecated._archive_maps import VITS_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
