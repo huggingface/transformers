@@ -866,15 +866,11 @@ class MixtralSparseMoeBlock(nn.Module):
             if top_x.shape[0] == 0:
                 continue
 
-            # in torch it is faster to index using lists than torch tensors
-            top_x_list = top_x.tolist()
-            idx_list = idx.tolist()
-
             # Index the correct hidden states and compute the expert hidden state for
             # the current expert. We need to make sure to multiply the output hidden
             # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
-            current_state = hidden_states[None, top_x_list].reshape(-1, hidden_dim)
-            current_hidden_states = expert_layer(current_state) * routing_weights[top_x_list, idx_list, None]
+            current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
+            current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
 
             # However `index_add_` only support torch tensors for indexing so we'll use
             # the `top_x` tensor here.
