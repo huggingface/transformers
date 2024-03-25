@@ -938,8 +938,10 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
     _re_capture_meta = re.compile(
         r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\* \(from ([^)]*)\)[^\[]*([^\)]*\)).*?by (.*?[A-Za-z\*]{2,}?)\. (.*)$"
     )
-    # This regex is used to synchronize link.
+    # This regex is used to synchronize title link.
     _re_capture_title_link = re.compile(r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\*")
+    # This regex is used to synchronize paper title and link.
+    _re_capture_paper_link = re.compile(r" \[([^\]]*)\]\(([^\)]*)\)")
 
     if len(localized_model_list) == 0:
         localized_model_index = {}
@@ -971,10 +973,22 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
                 readmes_match = False
                 localized_model_index[title] = update
         else:
-            # Synchronize link
-            localized_model_index[title] = _re_capture_title_link.sub(
+            # Synchronize title link
+            converted_model = _re_capture_title_link.sub(
                 f"**[{title}]({model_link})**", localized_model_index[title], count=1
             )
+
+            # Synchronize paper title and its link (if found)
+            paper_title_link = _re_capture_paper_link.search(model)
+            if paper_title_link is not None:
+                paper_title, paper_link = paper_title_link.groups()
+                converted_model = _re_capture_paper_link.sub(
+                    f" [{paper_title}]({paper_link})", converted_model, count=1
+                )
+
+            if converted_model != localized_model_index[title]:
+                readmes_match = False
+                localized_model_index[title] = converted_model
 
     sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
 

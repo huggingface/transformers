@@ -43,10 +43,8 @@ _EXPECTED_OUTPUT_SHAPE = [1, 512, 7, 7]
 _IMAGE_CLASS_CHECKPOINT = "sail/poolformer_s12"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "sail/poolformer_s12",
-    # See all PoolFormer models at https://huggingface.co/models?filter=poolformer
-]
+
+from ..deprecated._archive_maps import POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path

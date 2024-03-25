@@ -32,7 +32,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST, TFRegNetForImageClassification, TFRegNetModel
+    from transformers import TFRegNetForImageClassification, TFRegNetModel
 
 
 if is_vision_available():
@@ -252,9 +252,9 @@ class TFRegNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFRegNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/regnet-y-040"
+        model = TFRegNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -268,15 +268,11 @@ def prepare_img():
 class RegNetModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            AutoImageProcessor.from_pretrained(TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
-            if is_vision_available()
-            else None
-        )
+        return AutoImageProcessor.from_pretrained("facebook/regnet-y-040") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFRegNetForImageClassification.from_pretrained(TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        model = TFRegNetForImageClassification.from_pretrained("facebook/regnet-y-040")
 
         image_processor = self.default_image_processor
         image = prepare_img()

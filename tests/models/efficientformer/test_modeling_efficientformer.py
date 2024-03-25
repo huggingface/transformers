@@ -40,9 +40,6 @@ if is_torch_available():
         MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
         MODEL_MAPPING_NAMES,
     )
-    from transformers.models.efficientformer.modeling_efficientformer import (
-        EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
 
 
 if is_vision_available():
@@ -371,9 +368,9 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = EfficientFormerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "snap-research/efficientformer-l1-300"
+        model = EfficientFormerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

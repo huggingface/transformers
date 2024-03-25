@@ -52,7 +52,7 @@ import torch.distributed as dist
 from huggingface_hub import ModelCard, create_repo, upload_folder
 from packaging import version
 from torch import nn
-from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
+from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
 
 from . import __version__
 from .configuration_utils import PretrainedConfig
@@ -221,6 +221,9 @@ if is_accelerate_available():
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
 
+if is_accelerate_available("0.28.0"):
+    from accelerate.utils import DataLoaderConfiguration
+
 
 def _is_peft_model(model):
     if is_peft_available():
@@ -350,7 +353,7 @@ class Trainer:
         model: Union[PreTrainedModel, nn.Module] = None,
         args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
-        train_dataset: Optional[Dataset] = None,
+        train_dataset: Optional[Union[Dataset, IterableDataset]] = None,
         eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
         model_init: Optional[Callable[[], PreTrainedModel]] = None,
@@ -1303,7 +1306,8 @@ class Trainer:
                         optimizer_dict[param].zero_grad()
 
                 for param in model.parameters():
-                    param.register_post_accumulate_grad_hook(optimizer_hook)
+                    if param.requires_grad:
+                        param.register_post_accumulate_grad_hook(optimizer_hook)
 
                 optimizer_cls = LayerWiseDummyOptimizer
                 optimizer_kwargs.update({"optimizer_dict": optimizer_dict})
@@ -2093,7 +2097,12 @@ class Trainer:
                             "a `main_input_name` attribute to the model class you are using."
                         )
                     else:
-                        self.state.num_input_tokens_seen += self.accelerator.gather(inputs[main_input_name]).numel()
+                        input_device = inputs[main_input_name].device
+                        self.state.num_input_tokens_seen += torch.sum(
+                            self.accelerator.gather(
+                                torch.tensor(inputs[main_input_name].numel(), device=input_device, dtype=torch.int64)
+                            )
+                        ).item()
                 if rng_to_sync:
                     self._load_rng_state(resume_from_checkpoint)
                     rng_to_sync = False
@@ -2124,6 +2133,10 @@ class Trainer:
                     # if loss is nan or inf simply add the average of previous logged losses
                     tr_loss += tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
                 else:
+                    if tr_loss.device != tr_loss_step.device:
+                        raise ValueError(
+                            f"Calculated loss must be on the original device: {tr_loss.device} but device in use is {tr_loss_step.device}"
+                        )
                     tr_loss += tr_loss_step
 
                 self.current_flos += float(self.floating_point_ops(inputs))
@@ -4243,12 +4256,26 @@ class Trainer:
         grad_acc_kwargs["sync_with_dataloader"] = False
         gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
 
+        accelerator_config = self.args.accelerator_config.to_dict()
+
+        if is_accelerate_available("0.28.0"):
+            dataloader_config = DataLoaderConfiguration(
+                split_batches=accelerator_config.pop("split_batches"),
+                dispatch_batches=accelerator_config.pop("dispatch_batches"),
+                even_batches=accelerator_config.pop("even_batches"),
+                use_seedable_sampler=accelerator_config.pop("use_seedable_sampler"),
+            )
+        args = {
+            "deepspeed_plugin": self.args.deepspeed_plugin,
+            "gradient_accumulation_plugin": gradient_accumulation_plugin,
+        }
+        if is_accelerate_available("0.28.0"):
+            args["dataloader_config"] = dataloader_config
+        else:
+            args.update(accelerator_config)
+
         # create accelerator object
-        self.accelerator = Accelerator(
-            deepspeed_plugin=self.args.deepspeed_plugin,
-            gradient_accumulation_plugin=gradient_accumulation_plugin,
-            **self.args.accelerator_config.to_dict(),
-        )
+        self.accelerator = Accelerator(**args)
         # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
         self.gather_function = self.accelerator.gather_for_metrics
 

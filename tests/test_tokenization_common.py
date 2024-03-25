@@ -1023,24 +1023,6 @@ class TokenizerTesterMixin:
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=False)
                 self.assertIn(decoded, ["[ABC][SAMPLE][DEF]", "[ABC][SAMPLE][DEF]".lower()])
 
-    def test_pretrained_model_lists(self):
-        # We should have at least one default checkpoint for each tokenizer
-        # We should specify the max input length as well (used in some part to list the pretrained checkpoints)
-        self.assertGreaterEqual(len(self.tokenizer_class.pretrained_vocab_files_map), 1)
-        self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
-        self.assertEqual(
-            len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]),
-            len(self.tokenizer_class.max_model_input_sizes),
-        )
-
-        weights_list = list(self.tokenizer_class.max_model_input_sizes.keys())
-        weights_lists_2 = []
-        for file_id, map_list in self.tokenizer_class.pretrained_vocab_files_map.items():
-            weights_lists_2.append(list(map_list.keys()))
-
-        for weights_list_2 in weights_lists_2:
-            self.assertListEqual(weights_list, weights_list_2)
-
     def test_mask_output(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
@@ -1104,26 +1086,73 @@ class TokenizerTesterMixin:
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 output = tokenizer.apply_chat_template(
-                    dummy_conversation, chat_template=dummy_template, tokenize=False
+                    dummy_conversation, chat_template=dummy_template, tokenize=False, return_dict=False
                 )
                 self.assertEqual(output, expected_output)  # Test we can pass chat_template arg
+
                 # Check that no error raised when tokenize=True
-                tokenizer.apply_chat_template(dummy_conversation, chat_template=dummy_template, tokenize=True)
+                output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=dummy_template, tokenize=True, return_dict=False
+                )
+                dict_output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=dummy_template, tokenize=True, return_dict=True
+                )
+                self.assertEqual(dict_output["input_ids"], output)  # Test return_dict behaviour matches
 
                 tokenizer.chat_template = dummy_template
                 self.assertEqual(tokenizer.chat_template, dummy_template)  # Test property setter
-                output = tokenizer.apply_chat_template(dummy_conversation, tokenize=False)
+                output = tokenizer.apply_chat_template(dummy_conversation, tokenize=False, return_dict=False)
                 self.assertEqual(output, expected_output)  # Test chat_template attribute is used if no arg is passed
-                tokenizer.apply_chat_template(dummy_conversation, tokenize=True)  # Check that no error raised
+                # Check that no error raised
+                tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
 
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
                     tokenizer.save_pretrained(tmp_dir_name)
                     tokenizer = tokenizer.from_pretrained(tmp_dir_name)
 
                 self.assertEqual(tokenizer.chat_template, dummy_template)  # Test template has persisted
-                output = tokenizer.apply_chat_template(dummy_conversation, tokenize=False)
+                output = tokenizer.apply_chat_template(dummy_conversation, tokenize=False, return_dict=False)
                 self.assertEqual(output, expected_output)  # Test output is the same after reloading
-                tokenizer.apply_chat_template(dummy_conversation, tokenize=True)  # Check that no error raised
+                # Check that no error raised
+                tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
+
+    @require_jinja
+    def test_chat_template_batched(self):
+        dummy_template = "{% for message in messages %}{{message['role'] + message['content']}}{% endfor %}"
+        dummy_conversations = [
+            [
+                {"role": "system", "content": "system message"},
+                {"role": "user", "content": "user message"},
+                {"role": "assistant", "content": "assistant message"},
+            ],
+            [
+                {"role": "system", "content": "system message 2"},
+                {"role": "user", "content": "user message 2"},
+                {"role": "assistant", "content": "assistant message 2"},
+            ],
+        ]
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                output = tokenizer.apply_chat_template(
+                    dummy_conversations, chat_template=dummy_template, tokenize=False
+                )
+                self.assertEqual(
+                    output,
+                    [
+                        "systemsystem messageuseruser messageassistantassistant message",
+                        "systemsystem message 2useruser message 2assistantassistant message 2",
+                    ],
+                )
+                one_element_output = tokenizer.apply_chat_template(
+                    dummy_conversations[:1], chat_template=dummy_template, tokenize=False
+                )
+                self.assertEqual(
+                    one_element_output, ["systemsystem messageuseruser messageassistantassistant message"]
+                )  # Assert that list structure is retained even with one element
+                tokenizer.apply_chat_template(
+                    dummy_conversations, chat_template=dummy_template, tokenize=True
+                )  # Check that no error raised
 
     @require_jinja
     def test_chat_template_dict(self):

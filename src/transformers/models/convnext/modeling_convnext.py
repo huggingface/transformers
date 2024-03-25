@@ -54,10 +54,8 @@ _EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
 _IMAGE_CLASS_CHECKPOINT = "facebook/convnext-tiny-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/convnext-tiny-224",
-    # See all ConvNext models at https://huggingface.co/models?filter=convnext
-]
+
+from ..deprecated._archive_maps import CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
