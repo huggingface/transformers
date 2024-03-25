@@ -79,6 +79,10 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             Determines the default velocity to be used while creating midi Notes.
         num_bars (`int`, *optional*, defaults to 2):
             Determines cutoff_time_idx in for each token.
+        unk_token (`<fill_type>`, *optional*, defaults to `"-1"`): <fill_docstring>
+        eos_token (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        pad_token (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        bos_token (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
     """
 
     model_input_names = ["token_ids", "attention_mask"]

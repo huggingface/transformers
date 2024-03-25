@@ -255,10 +255,10 @@ class Kosmos2Config(PretrainedConfig):
             Dictionary of configuration options used to initialize [`Kosmos2VisionConfig`].
         latent_query_num (`int`, *optional*, defaults to 64):
             The number of latent query tokens that represent the image features used in the text decoder component.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
         vocab_size (`int`, *optional*, defaults to 65037):
             Vocabulary size of the Kosmos2 text model.
+        kwargs (*optional*):
+            Dictionary of keyword arguments.
 
     Example:
 
