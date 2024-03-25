@@ -56,12 +56,18 @@
     title: Compartir modelos personalizados
   - local: run_scripts
     title: Entrenamiento con scripts
+  - local: chat_templating
+    title: Plantillas para Modelos de Chat
+  - local: trainer
+    title: Entrenador
   - local: sagemaker
     title: Ejecutar el entrenamiento en Amazon SageMaker
   - local: converting_tensorflow_models
     title: Convertir checkpoints de TensorFlow
   - local: serialization
     title: Exportar a ONNX
+  - local: torchscript
+    title: Exportar a TorchScript
   - local: community
     title: Los recursos de la comunidad
   title: Guías para desarrolladores
@@ -84,6 +90,10 @@
     title: Glosario
   - local: task_summary
     title: Lo que 🤗 Transformers puede hacer
+  - local: tasks_explained
+    title: Como los 🤗 Transformers resuelven tareas
+  - local: attention
+    title: Mecanismos de atención
   - local: pad_truncation
     title: Relleno y truncamiento
   - local: bertology

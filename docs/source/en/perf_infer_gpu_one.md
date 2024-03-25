@@ -39,14 +39,17 @@ FlashAttention-2 is experimental and may change considerably in future versions.
 FlashAttention-2 is currently supported for the following architectures:
 * [Bark](https://huggingface.co/docs/transformers/model_doc/bark#transformers.BarkModel)
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
+* [Cohere](https://huggingface.co/docs/transformers/model_doc/cohere#transformers.CohereModel)
 * [DistilBert](https://huggingface.co/docs/transformers/model_doc/distilbert#transformers.DistilBertModel)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
 * [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
 * [GPTNeo](https://huggingface.co/docs/transformers/model_doc/gpt_neo#transformers.GPTNeoModel)
 * [GPTNeoX](https://huggingface.co/docs/transformers/model_doc/gpt_neox#transformers.GPTNeoXModel)
+* [GPT-J](https://huggingface.co/docs/transformers/model_doc/gptj#transformers.GPTJModel)
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
 * [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel)
 * [Llava](https://huggingface.co/docs/transformers/model_doc/llava)
+* [Llava-NeXT](https://huggingface.co/docs/transformers/model_doc/llava_next)
 * [VipLlava](https://huggingface.co/docs/transformers/model_doc/vipllava)
 * [MBart](https://huggingface.co/docs/transformers/model_doc/mbart#transformers.MBartModel)
 * [Mistral](https://huggingface.co/docs/transformers/model_doc/mistral#transformers.MistralModel)
@@ -54,6 +57,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [OPT](https://huggingface.co/docs/transformers/model_doc/opt#transformers.OPTModel)
 * [Phi](https://huggingface.co/docs/transformers/model_doc/phi#transformers.PhiModel)
 * [StableLm](https://huggingface.co/docs/transformers/model_doc/stablelm#transformers.StableLmModel)
+* [Starcoder2](https://huggingface.co/docs/transformers/model_doc/starcoder2#transformers.Starcoder2Model)
 * [Qwen2](https://huggingface.co/docs/transformers/model_doc/qwen2#transformers.Qwen2Model)
 * [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper#transformers.WhisperModel)
 
@@ -170,6 +174,7 @@ PyTorch's [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.o
 
 For now, Transformers supports SDPA inference and training for the following architectures:
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
+* [Cohere](https://huggingface.co/docs/transformers/model_doc/cohere#transformers.CohereModel)
 * [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
@@ -180,6 +185,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Mistral](https://huggingface.co/docs/transformers/model_doc/mistral#transformers.MistralModel)
 * [Mixtral](https://huggingface.co/docs/transformers/model_doc/mixtral#transformers.MixtralModel)
 * [StableLm](https://huggingface.co/docs/transformers/model_doc/stablelm#transformers.StableLmModel)
+* [Starcoder2](https://huggingface.co/docs/transformers/model_doc/starcoder2#transformers.Starcoder2Model)
 * [Qwen2](https://huggingface.co/docs/transformers/model_doc/qwen2#transformers.Qwen2Model)
 
 <Tip>

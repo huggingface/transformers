@@ -45,7 +45,6 @@ if is_torch_available():
         SwitchTransformersTop1Router,
     )
     from transformers.models.switch_transformers.modeling_switch_transformers import (
-        SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
         load_balancing_loss_func,
         router_z_loss_func,
     )
@@ -670,9 +669,9 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SwitchTransformersModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/switch-base-8"
+        model = SwitchTransformersModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip("Test has a segmentation fault on torch 1.8.0")
     def test_export_to_onnx(self):

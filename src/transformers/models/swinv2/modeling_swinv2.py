@@ -56,10 +56,7 @@ _IMAGE_CLASS_CHECKPOINT = "microsoft/swinv2-tiny-patch4-window8-256"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
-SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/swinv2-tiny-patch4-window8-256",
-    # See all Swinv2 models at https://huggingface.co/models?filter=swinv2
-]
+from ..deprecated._archive_maps import SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # drop_path, Swinv2PatchEmbeddings, Swinv2PatchMerging and Swinv2DropPath are from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/swin_transformer_v2.py.

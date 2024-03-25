@@ -30,6 +30,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import is_torch_greater_or_equal_than_2_2
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -51,10 +52,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "bigcode/gpt_bigcode-santacoder"
 _CONFIG_FOR_DOC = "GPTBigCodeConfig"
 
-GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "bigcode/gpt_bigcode-santacoder",
-    # See all GPTBigCode models at https://huggingface.co/models?filter=gpt_bigcode
-]
+
+from ..deprecated._archive_maps import GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Fused kernels
@@ -424,7 +423,7 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
             attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
+            dropout (`float`):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
@@ -534,21 +533,16 @@ class GPTBigCodeSdpaAttention(GPTBigCodeAttention):
             key = key.unsqueeze(1)
             value = value.unsqueeze(1)
 
-            # Although these expand are not numerically useful, PyTorch 2.1 can not dispatch to memory-efficient backend
+            # Although these expand are not numerically useful, PyTorch can not dispatch to memory-efficient backend
             # and flash attention backend (No available kernel.  Aborting execution.) from the shapes
             # query = [batch_size, num_heads, query_length, head_dim]
             # key = [batch_size, 1, past_length, head_dim]
             # value = [batch_size, 1, past_length, head_dim]
             #
-            # so we could do:
-            #
-            # key = key.expand(-1, self.num_heads, -1, -1)
-            # value = value.expand(-1, self.num_heads, -1, -1)
-            #
-            # However SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-            # so we always dispatch to the math path: https://github.com/pytorch/pytorch/issues/112577.
-            # Arguably we could still do expand + contiguous when `query.device.type == "cuda"` in order to dispatch on memory-efficient
-            # backend, but it feels very hacky.
+            # torch==2.1.2 is bugged with non-contiguous inputs with custom attn_mask (https://github.com/pytorch/pytorch/issues/112577), hence the check.
+            if is_torch_greater_or_equal_than_2_2:
+                key = key.expand(-1, self.num_heads, -1, -1)
+                value = value.expand(-1, self.num_heads, -1, -1)
         else:
             query_length = query_shape[-1]
 
@@ -1020,6 +1014,15 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             self_attention_mask = self_attention_mask.unsqueeze(2 if self.multi_query else 1)
 
             if self._use_sdpa and head_mask is None and not output_attentions:
+                # SDPA with a custom mask is much faster in fp16/fp32 dtype rather than bool. Cast here to floating point instead of at every layer.
+                dtype = self.wte.weight.dtype
+                min_dtype = torch.finfo(dtype).min
+                self_attention_mask = torch.where(
+                    self_attention_mask,
+                    torch.full([], 0.0, dtype=dtype, device=self_attention_mask.device),
+                    torch.full([], min_dtype, dtype=dtype, device=self_attention_mask.device),
+                )
+
                 # output_attentions=True can not be supported when using SDPA, and we fall back on
                 # the manual implementation that requires a 4D causal mask in all cases.
                 if self.multi_query:
@@ -1027,22 +1030,12 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
                     # [batch_size, target_length, 1, source_length], not compatible with SDPA, hence this transpose.
                     self_attention_mask = self_attention_mask.transpose(1, 2)
 
-                if query_length > 1 and attention_mask is not None:
+                if query_length > 1 and attention_mask is not None and attention_mask.device.type == "cuda":
                     # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
                     # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
                     self_attention_mask = AttentionMaskConverter._unmask_unattended(
-                        self_attention_mask, attention_mask, unmasked_value=True
+                        self_attention_mask, min_dtype=min_dtype
                     )
-
-                # SDPA with a custom mask is much faster in fp16/fp32 dtype rather than bool. Cast here to floating point instead of at every layer.
-                dtype = self.wte.weight.dtype
-                self_attention_mask = torch.where(
-                    self_attention_mask,
-                    torch.full([], 0.0, dtype=dtype, device=self_attention_mask.device),
-                    torch.full(
-                        [], torch.finfo(self.wte.weight.dtype).min, dtype=dtype, device=self_attention_mask.device
-                    ),
-                )
 
             attention_mask = self_attention_mask
 

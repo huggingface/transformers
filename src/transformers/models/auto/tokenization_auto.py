@@ -138,6 +138,7 @@ else:
             ),
             ("codegen", ("CodeGenTokenizer", "CodeGenTokenizerFast" if is_tokenizers_available() else None)),
             ("cogvlm", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+            ("cohere", (None, "CohereTokenizerFast" if is_tokenizers_available() else None)),
             ("convbert", ("ConvBertTokenizer", "ConvBertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "cpm",
@@ -223,6 +224,7 @@ else:
                 ),
             ),
             ("llava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+            ("llava_next", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "longt5",
@@ -234,6 +236,7 @@ else:
             ("luke", ("LukeTokenizer", None)),
             ("lxmert", ("LxmertTokenizer", "LxmertTokenizerFast" if is_tokenizers_available() else None)),
             ("m2m_100", ("M2M100Tokenizer" if is_sentencepiece_available() else None, None)),
+            ("mamba", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("marian", ("MarianTokenizer" if is_sentencepiece_available() else None, None)),
             (
                 "mbart",
@@ -279,6 +282,7 @@ else:
                 ),
             ),
             ("musicgen", ("T5Tokenizer", "T5TokenizerFast" if is_tokenizers_available() else None)),
+            ("musicgen_melody", ("T5Tokenizer", "T5TokenizerFast" if is_tokenizers_available() else None)),
             ("mvp", ("MvpTokenizer", "MvpTokenizerFast" if is_tokenizers_available() else None)),
             ("nezha", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
@@ -400,6 +404,7 @@ else:
                 ("SqueezeBertTokenizer", "SqueezeBertTokenizerFast" if is_tokenizers_available() else None),
             ),
             ("stablelm", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
+            ("starcoder2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             (
                 "switch_transformers",
                 (
@@ -418,6 +423,13 @@ else:
             ("tapex", ("TapexTokenizer", None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
             ("tvp", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "udop",
+                (
+                    "UdopTokenizer" if is_sentencepiece_available() else None,
+                    "UdopTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             (
                 "umt5",
                 (

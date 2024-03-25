@@ -63,11 +63,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "suno/bark-small"
 _CONFIG_FOR_DOC = "BarkConfig"
 
-BARK_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "suno/bark-small",
-    "suno/bark",
-    # See all Bark models at https://huggingface.co/models?filter=bark
-]
+
+from ..deprecated._archive_maps import BARK_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
@@ -306,7 +303,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
             attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
+            dropout (`float`):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
@@ -1881,6 +1878,7 @@ class BarkModel(BarkPreTrainedModel):
         torch_dtype: Optional[torch.dtype] = None,
         device_map: Optional[Union[str, Dict[str, int]]] = None,
         hard_check_only: bool = False,
+        check_device_map: bool = False,
     ):
         """
         `_check_and_enable_flash_attn_2` originally don't expand flash attention enabling to the model
@@ -1901,7 +1899,7 @@ class BarkModel(BarkPreTrainedModel):
         can initialize the correct attention module
         """
         config = super()._check_and_enable_flash_attn_2(
-            config, torch_dtype, device_map, hard_check_only=hard_check_only
+            config, torch_dtype, device_map, hard_check_only=hard_check_only, check_device_map=check_device_map
         )
 
         config.semantic_config._attn_implementation = config._attn_implementation

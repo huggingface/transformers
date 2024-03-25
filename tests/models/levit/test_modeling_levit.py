@@ -21,7 +21,6 @@ from math import ceil, floor
 
 from transformers import LevitConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -33,13 +32,14 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-        MODEL_MAPPING,
         LevitForImageClassification,
         LevitForImageClassificationWithTeacher,
         LevitModel,
     )
-    from transformers.models.levit.modeling_levit import LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.auto.modeling_auto import (
+        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+        MODEL_MAPPING_NAMES,
+    )
 
 
 if is_vision_available():
@@ -297,7 +297,7 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             # LevitForImageClassificationWithTeacher supports inference-only
             if (
-                model_class in get_values(MODEL_MAPPING)
+                model_class.__name__ in MODEL_MAPPING_NAMES.values()
                 or model_class.__name__ == "LevitForImageClassificationWithTeacher"
             ):
                 continue
@@ -317,7 +317,7 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in get_values(MODEL_MAPPING) or not model_class.supports_gradient_checkpointing:
+            if model_class.__name__ in MODEL_MAPPING_NAMES.values() or not model_class.supports_gradient_checkpointing:
                 continue
             # LevitForImageClassificationWithTeacher supports inference-only
             if model_class.__name__ == "LevitForImageClassificationWithTeacher":
@@ -341,9 +341,9 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             if (
-                model_class
+                model_class.__name__
                 not in [
-                    *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+                    *MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES.values(),
                 ]
                 or model_class.__name__ == "LevitForImageClassificationWithTeacher"
             ):
@@ -381,9 +381,9 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = LevitModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/levit-128S"
+        model = LevitModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -397,13 +397,11 @@ def prepare_img():
 class LevitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return LevitImageProcessor.from_pretrained(LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        return LevitImageProcessor.from_pretrained("facebook/levit-128S")
 
     @slow
     def test_inference_image_classification_head(self):
-        model = LevitForImageClassificationWithTeacher.from_pretrained(LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(
-            torch_device
-        )
+        model = LevitForImageClassificationWithTeacher.from_pretrained("facebook/levit-128S").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

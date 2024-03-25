@@ -151,10 +151,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DetaConfig"
 _CHECKPOINT_FOR_DOC = "jozhang97/deta-swin-large-o365"
 
-DETA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "jozhang97/deta-swin-large-o365",
-    # See all DETA models at https://huggingface.co/models?filter=deta
-]
+
+from ..deprecated._archive_maps import DETA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -2345,9 +2343,10 @@ class DetaLoss(nn.Module):
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         # Check that we have initialized the distributed state
         world_size = 1
-        if PartialState._shared_state != {}:
-            num_boxes = reduce(num_boxes)
-            world_size = PartialState().num_processes
+        if is_accelerate_available():
+            if PartialState._shared_state != {}:
+                num_boxes = reduce(num_boxes)
+                world_size = PartialState().num_processes
         num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
 
         # Compute all the requested losses

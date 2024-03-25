@@ -39,6 +39,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -53,7 +54,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import InstructBlipForConditionalGeneration, InstructBlipVisionModel
-    from transformers.models.instructblip.modeling_instructblip import INSTRUCTBLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -221,9 +221,9 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in INSTRUCTBLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = InstructBlipVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/instructblip-flan-t5-xl"
+        model = InstructBlipVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class InstructBlipQFormerModelTester:
@@ -397,6 +397,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
         self.vision_model_tester = InstructBlipVisionModelTester(parent, **vision_kwargs)
         self.qformer_model_tester = InstructBlipQFormerModelTester(parent, **qformer_kwargs)
         self.text_model_tester = InstructBlipTextModelDecoderOnlyTester(parent, **text_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
 
@@ -451,7 +452,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
 
 
 @require_torch
-class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unittest.TestCase):
+class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (InstructBlipForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
@@ -524,9 +525,9 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unit
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in INSTRUCTBLIP_PRETRAINED_MODEL_ARCHIVE_LIST:
-            model = InstructBlipForConditionalGeneration.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/instructblip-flan-t5-xl"
+        model = InstructBlipForConditionalGeneration.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
