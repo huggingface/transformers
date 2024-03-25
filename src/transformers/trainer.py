@@ -73,6 +73,7 @@ from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
     DefaultFlowCallback,
+    ExportableState,
     PrinterCallback,
     ProgressCallback,
     TrainerCallback,
@@ -628,12 +629,15 @@ class Trainer:
         else:
             self.label_smoother = None
 
+        self.control = TrainerControl()
+
         self.state = TrainerState(
             is_local_process_zero=self.is_local_process_zero(),
             is_world_process_zero=self.is_world_process_zero(),
+            stateful_callbacks=[
+                cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)
+            ],
         )
-
-        self.control = TrainerControl()
         # Internal variable to count flos in each process, will be accumulated in `self.state.total_flos` then
         # returned to 0 every time flos need to be logged
         self.current_flos = 0
@@ -1446,6 +1450,8 @@ class Trainer:
         output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
         self.save_model(output_dir, _internal_call=True)
         if self.args.should_save:
+            # Update the `TrainerControl` state to where we are currently
+            self.state.stateful_callbacks["TrainerControl"] = self.control.state()
             self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
             torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
@@ -1883,7 +1889,11 @@ class Trainer:
         if not delay_optimizer_creation:
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
-        self.state = TrainerState()
+        self.state = TrainerState(
+            stateful_callbacks=[
+                cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)
+            ]
+        )
         self.state.is_hyper_param_search = trial is not None
         self.state.train_batch_size = self._train_batch_size
 
@@ -1991,6 +2001,7 @@ class Trainer:
             os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME)
         ):
             self.state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
+            self._load_callback_state()
             epochs_trained = self.state.global_step // num_update_steps_per_epoch
             if not args.ignore_data_skip:
                 steps_trained_in_current_epoch = self.state.global_step % (num_update_steps_per_epoch)
@@ -2687,6 +2698,8 @@ class Trainer:
 
         # Save the Trainer state
         if self.args.should_save:
+            # Update the `TrainerControl` state to where we are currently
+            self.state.stateful_callbacks["TrainerControl"] = self.control.state()
             self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
 
         if self.args.push_to_hub:
@@ -2864,6 +2877,38 @@ class Trainer:
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, SCHEDULER_NAME)))
                 reissue_pt_warnings(caught_warnings)
+
+    def _load_callback_state(self):
+        """If callback states exist and were passed in, restore their states if enabled"""
+        if not self.args.restore_callback_states_from_checkpoint:
+            return
+        # Callback states are stored in stateful_callbacks
+        not_found = []
+        for stored_callback, data in self.state.stateful_callbacks.items():
+            if any(
+                callback.__class__.__name__ == stored_callback
+                for callback in self.callback_handler.callbacks + [self.control]
+            ):
+                for callback in self.callback_handler.callbacks + [self.control]:
+                    if callback.__class__.__name__ == stored_callback:
+                        args, attributes = data.values()
+                        new_callback = type(callback)(**args)
+                        for attribute, value in attributes.items():
+                            setattr(new_callback, attribute, value)
+                        if isinstance(callback, TrainerControl):
+                            # Specifically for restoring the `control` state
+                            self.control = new_callback
+                        else:
+                            # We remove the existing callback and add a new one
+                            self.callback_handler.remove_callback(callback)
+                            self.callback_handler.add_callback(new_callback)
+                logger.info("  Continuing training from checkpoint, restoring any callbacks that were passed in")
+            else:
+                not_found.append(stored_callback)
+        if len(not_found) > 0:
+            logger.warning(
+                f"  Checkpoint included callbacks not included in current configuration. Ignoring. ({', '.join(not_found)})"
+            )
 
     def hyperparameter_search(
         self,
