@@ -295,6 +295,7 @@ _import_structure = {
         "CogvlmProcessor",
         "CogvlmVisionConfig",
     ],
+    "models.cohere": ["COHERE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CohereConfig"],
     "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
@@ -5169,15 +5170,16 @@ if TYPE_CHECKING:
         ClvpProcessor,
         ClvpTokenizer,
     )
+    from .models.codegen import (
+        CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CodeGenConfig,
+        CodeGenTokenizer,
+    )
     from .models.cogvlm import (
         COGVLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CogvlmConfig,
         CogvlmProcessor,
         CogvlmVisionConfig,
-    from .models.codegen import (
-        CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        CodeGenConfig,
-        CodeGenTokenizer,
     )
     from .models.cohere import COHERE_PRETRAINED_CONFIG_ARCHIVE_MAP, CohereConfig
     from .models.conditional_detr import (
@@ -5189,8 +5191,6 @@ if TYPE_CHECKING:
         ConvBertConfig,
         ConvBertTokenizer,
     )
-    from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDetrConfig
-    from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.convnextv2 import (
         CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6642,6 +6642,7 @@ if TYPE_CHECKING:
             CogvlmForCausalLM,
             CogvlmModel,
             CogvlmPreTrainedModel,
+        )
         from .models.cohere import (
             CohereForCausalLM,
             CohereModel,

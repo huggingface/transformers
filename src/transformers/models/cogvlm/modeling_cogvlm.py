@@ -16,10 +16,14 @@
 
 import math
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+import warnings
 
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
+import torch.nn.functional as F
+
+from huggingface_hub import hf_hub_download
 
 from transformers import PreTrainedModel
 from transformers.activations import ACT2FN
@@ -144,27 +148,41 @@ class CogvlmVisionAttention(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.output_dropout = torch.nn.Dropout(config.dropout_prob)
 
-    def forward(self, hidden_state: torch.FloatTensor) -> torch.FloatTensor:
-        batch_size, sequence_length, _ = hidden_state.shape
+    def forward(self, hidden_state: torch.FloatTensor, print_values=False) -> torch.FloatTensor:
+        B, L, _ = hidden_state.shape
         qkv = self.query_key_value(hidden_state)
-        # reshape to (3, batch_size, sequence_length, num_heads, head_dim)
-        qkv = qkv.reshape(batch_size, sequence_length, 3, self.num_heads, -1).permute(2, 0, 1, 3, 4)
-        queries, keys, values = qkv[0], qkv[1], qkv[2]
 
-        # thanks to https://github.com/facebookresearch/xformers/issues/922#issuecomment-1808329588
-        queries = queries * self.scale
-        queries = queries.transpose(1, 2)
-        keys = keys.transpose(1, 2)
-        values = values.transpose(1, 2)
-        attention_scores = queries @ keys.transpose(-2, -1)
+        qkv = qkv.reshape(B, L, 3, self.num_heads, -1).permute(2, 0, 1, 3, 4)  # 3, B, L, H, D
+        q, k, v = qkv[0], qkv[1], qkv[2]
 
-        attention_probs = attention_scores.softmax(-1)
-        attention_output = attention_probs @ values
-        attention_output = attention_output.transpose(1, 2)
+        import xformers.ops as xops
 
-        output = self.dense(attention_output.reshape(batch_size, sequence_length, -1))
+        out = xops.memory_efficient_attention(
+            q, k, v, scale=self.scale,
+        )
+
+        output = self.dense(out.view(B, L, -1))
         output = self.output_dropout(output)
         return output
+
+        # reshape to (3, batch_size, sequence_length, num_heads, head_dim)
+        # qkv = qkv.reshape(batch_size, sequence_length, 3, self.num_heads, -1).permute(2, 0, 1, 3, 4)
+        # queries, keys, values = qkv[0], qkv[1], qkv[2]
+
+        # # thanks to https://github.com/facebookresearch/xformers/issues/922#issuecomment-1808329588
+        # queries = queries * self.scale
+        # queries = queries.transpose(1, 2)
+        # keys = keys.transpose(1, 2)
+        # values = values.transpose(1, 2)
+        # attention_scores = queries @ keys.transpose(-2, -1)
+
+        # attention_probs = attention_scores.softmax(-1)
+        # attention_output = attention_probs @ values
+        # attention_output = attention_output.transpose(1, 2)
+
+        # output = self.dense(attention_output.reshape(batch_size, sequence_length, -1))
+        # output = self.output_dropout(output)
+        # return output
 
 
 class CogvlmVisionMLP(nn.Module):
@@ -190,9 +208,18 @@ class CogvlmVisionTransformerLayer(nn.Module):
         self.mlp = CogvlmVisionMLP(config)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, print_values=False):
         attention_input = hidden_states
-        attention_output = self.input_layernorm(self.attention(attention_input))
+
+        if print_values:
+            print("Hidden states before attention:", attention_input[0, :3, :3])
+
+        attention_output = self.attention(attention_input, print_values=print_values)
+
+        if print_values:
+            print("Hidden states after attention:", attention_output[0, :3, :3])
+        
+        attention_output = self.input_layernorm(attention_output)
         hidden_states = attention_input + attention_output
         mlp_input = hidden_states
         mlp_output = self.post_attention_layernorm(self.mlp(mlp_input))
@@ -206,8 +233,24 @@ class CogvlmVisionTransformer(nn.Module):
         self.layers = nn.ModuleList([CogvlmVisionTransformerLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(self, hidden_states):
-        for layer_module in self.layers:
-            hidden_states = layer_module(hidden_states)
+
+        filepath = hf_hub_download(
+            repo_id="nielsr/test-cogvlm", filename="hidden_states_before_clip.pt", repo_type="dataset"
+        )
+        original_hidden_states = torch.load(filepath)
+
+        assert torch.allclose(hidden_states, original_hidden_states.to(hidden_states.device))
+
+        for idx, layer_module in enumerate(self.layers):
+            hidden_states = layer_module(hidden_states, print_values=idx==0)
+
+        filepath = hf_hub_download(
+            repo_id="nielsr/test-cogvlm", filename="hidden_states_after_clip.pt", repo_type="dataset"
+        )
+        original_hidden_states = torch.load(filepath)
+
+        assert torch.allclose(hidden_states, original_hidden_states.to(hidden_states.device)), "Hidden states not the same after CLIP"
+
         return hidden_states
 
 
@@ -252,12 +295,8 @@ class CogvlmVisionModel(nn.Module):
         return hidden_state
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Cogvlm
 class CogvlmRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
-        """
-        CogvlmRMSNorm is equivalent to T5LayerNorm
-        """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
@@ -267,7 +306,7 @@ class CogvlmRMSNorm(nn.Module):
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+        return (self.weight * hidden_states).to(input_dtype)
 
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Cogvlm
@@ -345,6 +384,91 @@ class CogvlmRotaryEmbedding(nn.Module):
         )
 
 
+class RotaryEmbedding(torch.nn.Module):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+        super().__init__()
+
+        self.dim = dim
+        self.max_position_embeddings = max_position_embeddings
+        self.base = base
+        inv_freq = self._compute_inv_freq(device)
+        self.register_buffer("inv_freq", inv_freq)
+        self.max_seq_len_cached = 0
+
+    def _compute_inv_freq(self, device=None):
+        return 1.0 / (
+                self.base
+                ** (torch.arange(0, self.dim, 2, device=device) / self.dim)
+        )
+
+    def _set_cos_sin_cache(self, seq_len, device, dtype):
+        self.max_seq_len_cached = seq_len
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+
+        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+        emb = torch.cat((freqs, freqs), dim=-1)
+        self.register_buffer("cos_cached", emb.cos()[:, None, :].to(dtype), persistent=False)
+        self.register_buffer("sin_cached", emb.sin()[:, None, :].to(dtype), persistent=False)
+
+    def forward(self, x, seq_len):
+        # x: [bs, num_attention_heads, seq_len, head_size]
+        if seq_len > self.max_seq_len_cached:
+            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
+
+        return (
+            self.cos_cached[:seq_len, ...].to(dtype=x.dtype),
+            self.sin_cached[:seq_len, ...].to(dtype=x.dtype),
+        )
+
+
+def rotate_half(x):
+    x1, x2 = x[..., :x.shape[-1] // 2], x[..., x.shape[-1] // 2:]
+    return torch.cat((-x2, x1), dim=x1.ndim - 1)
+
+
+def apply_rotary_pos_emb_index_bhs(q, k, cos, sin, position_id):
+    # batch_size, num_head, seq_len, hidden_size
+    cos, sin = F.embedding(position_id, cos.squeeze(1)).unsqueeze(1), \
+        F.embedding(position_id, sin.squeeze(1)).unsqueeze(1)
+    q, k = (q * cos) + (rotate_half(q) * sin), (k * cos) + (rotate_half(k) * sin)
+    return q, k
+
+
+def attention_fn(
+        query_layer: "torch.tensor(B, H, L, HD)",
+        key_layer: "torch.tensor(B, H, L, HD)",
+        value_layer: "torch.tensor(B, H, L, HD)",
+        attention_mask: "torch.tensor(B, H, L, HD)",
+        *,
+        scaling_attention_score: bool = True,
+        attention_dropout: nn.Module = None
+):
+    attention_mask_bool = (attention_mask == 0)
+    is_low_triangle = (attention_mask_bool == torch.ones_like(attention_mask_bool, dtype=torch.float).tril()).all()
+    is_full = (attention_mask_bool > 0).all()
+    if not (int(torch.__version__.split('.')[0]) >= 2):
+        warnings.warn("It's recommended to use torch2.0 or higher.")
+    if int(torch.__version__.split('.')[0]) >= 2 and scaling_attention_score and (is_full or is_low_triangle):
+        dropout_p = 0. if attention_dropout is None or not attention_dropout.training else attention_dropout.p
+        return torch.nn.functional.scaled_dot_product_attention(
+            query_layer, key_layer, value_layer,
+            attn_mask=None,
+            dropout_p=dropout_p,
+            is_causal=not is_full
+        )
+    else:
+        if scaling_attention_score:
+            query_layer = query_layer / math.sqrt(query_layer.shape[-1])
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_scores = attention_scores + attention_mask
+        attention_scores = nn.functional.softmax(attention_scores, dim=-1, dtype=torch.float32).to(query_layer.dtype)
+        if attention_dropout is not None:
+            attention_scores = attention_dropout(attention_scores)
+        context_layer = torch.matmul(attention_scores, value_layer)
+        return context_layer
+
+
 class CogvlmVisionExpertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -354,7 +478,7 @@ class CogvlmVisionExpertAttention(nn.Module):
         self.head_dim = self.hidden_size // self.num_heads
         self.max_position_embeddings = config.max_position_embeddings
 
-        self.rotary_emb = CogvlmRotaryEmbedding(dim=self.head_dim)
+        self.rotary_emb = RotaryEmbedding(self.head_dim)
         self.vision_expert_query_key_value = nn.Linear(self.hidden_size, self.hidden_size * 3, bias=False)
         self.vision_expert_dense = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.language_expert_query_key_value = nn.Linear(self.hidden_size, self.hidden_size * 3, bias=False)
@@ -376,6 +500,7 @@ class CogvlmVisionExpertAttention(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        print_values: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         batch_size, q_len, hidden_size = hidden_states.size()
         vision_token_mask, language_token_mask = get_expert_mask(token_type_ids)
@@ -391,16 +516,34 @@ class CogvlmVisionExpertAttention(nn.Module):
         key_states = self._transpose_for_scores(key_states)
         value_states = self._transpose_for_scores(value_states)
 
+        if print_values:
+            # verify the queries, keys and values by loading from HF
+            filepath = hf_hub_download(
+                repo_id="nielsr/test-cogvlm", filename="query_states.pt", repo_type="dataset"
+            )
+            original_queries = torch.load(filepath)
+            print("First values of query_States:", query_states[0, 0, :3, :3])
+            print("First values of original_queries:", original_queries[0, 0, :3, :3])
+            assert torch.allclose(query_states, original_queries.to(query_states.device))
+            
+            filepath = hf_hub_download(
+                repo_id="nielsr/test-cogvlm", filename="key_states.pt", repo_type="dataset"
+            )
+            original_keys = torch.load(filepath)
+            assert torch.allclose(key_states, original_keys.to(key_states.device))
+
+            filepath = hf_hub_download(
+                repo_id="nielsr/test-cogvlm", filename="value_states.pt", repo_type="dataset"
+            )
+            original_values = torch.load(filepath)
+            assert torch.allclose(value_states, original_values.to(value_states.device))
+
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
 
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        cos, sin = (
-            nn.functional.embedding(position_ids, cos.squeeze(1)),
-            nn.functional.embedding(position_ids, sin.squeeze(1)),
-        )
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        cos, sin = self.rotary_emb(value_states, seq_len=position_ids.max() + 1)
+        query_states, key_states = apply_rotary_pos_emb_index_bhs(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
@@ -408,17 +551,27 @@ class CogvlmVisionExpertAttention(nn.Module):
 
         past_key_value = (key_states, value_states) if use_cache else None
 
-        query_states = query_states / math.sqrt(query_states.shape[-1])
+        # query_states = query_states / math.sqrt(query_states.shape[-1])
 
-        attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
+        # attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
 
-        # Apply attention mask
-        attention_scores = attention_scores + attention_mask
-        # Normalize the attention scores to probabilities
-        attention_scores = nn.functional.softmax(attention_scores, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        # # Apply attention mask
+        # attention_scores = attention_scores + attention_mask
+        # # Normalize the attention scores to probabilities
+        # attention_scores = nn.functional.softmax(attention_scores, dim=-1, dtype=torch.float32).to(query_states.dtype)
 
-        context_layer = torch.matmul(attention_scores, value_states)
+        # context_layer = torch.matmul(attention_scores, value_states)
 
+        # if context_layer.size() != (batch_size, self.num_heads, q_len, self.head_dim):
+        #     raise ValueError(
+        #         f"`attn_output` should be of size {(batch_size, self.num_heads, q_len, self.head_dim)}, but is"
+        #         f" {context_layer.size()}"
+        #     )
+        # context_layer = context_layer.transpose(1, 2).contiguous().reshape(batch_size, q_len, self.hidden_size)
+
+        context_layer = attention_fn(
+            query_layer=query_states, key_layer=key_states, value_layer=value_states, attention_mask=attention_mask,
+            scaling_attention_score=True, attention_dropout=None)
         if context_layer.size() != (batch_size, self.num_heads, q_len, self.head_dim):
             raise ValueError(
                 f"`attn_output` should be of size {(batch_size, self.num_heads, q_len, self.head_dim)}, but is"
@@ -431,7 +584,8 @@ class CogvlmVisionExpertAttention(nn.Module):
         attn_output[language_token_mask] = self.language_expert_dense(context_layer[language_token_mask])
 
         return (
-            (attn_output, attention_scores, past_key_value)
+            # TODO add attention_scores here
+            (attn_output, None, past_key_value)
             if output_attentions
             else (attn_output, None, past_key_value)
         )
@@ -495,10 +649,13 @@ class CogvlmDecoderLayer(nn.Module):
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
 
+        if print_values:
+            print("Hidden states before RMS norm:", hidden_states[0, :3, :3])
+
         hidden_states = self.input_layernorm(hidden_states)
 
         if print_values:
-            print("Hidden states before self attention:", hidden_states[0,:3,:3])
+            print("Hidden states after RMS norm, before self attention:", hidden_states[0, :3, :3])
 
         # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
@@ -509,10 +666,11 @@ class CogvlmDecoderLayer(nn.Module):
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
+            print_values=print_values,
         )
 
         if print_values:
-            print("Hidden states after self attention:", hidden_states[0,:3,:3])
+            print("Hidden states after self attention:", hidden_states[0, :3, :3])
 
         hidden_states = residual + hidden_states
 
@@ -721,18 +879,24 @@ class CogvlmModel(CogvlmPreTrainedModel):
 
                 from huggingface_hub import hf_hub_download
 
-                filepath = hf_hub_download(repo_id="nielsr/test-cogvlm", filename="images_features.pt", repo_type="dataset")
+                filepath = hf_hub_download(
+                    repo_id="nielsr/test-cogvlm", filename="images_features.pt", repo_type="dataset"
+                )
                 original_images_features = torch.load(filepath)
-                filepath = hf_hub_download(repo_id="nielsr/test-cogvlm", filename="inputs_embeds.pt", repo_type="dataset")
+                filepath = hf_hub_download(
+                    repo_id="nielsr/test-cogvlm", filename="inputs_embeds.pt", repo_type="dataset"
+                )
                 original_inputs_embeds = torch.load(filepath)
-                filepath = hf_hub_download(repo_id="nielsr/test-cogvlm", filename="token_type_ids.pt", repo_type="dataset")
+                filepath = hf_hub_download(
+                    repo_id="nielsr/test-cogvlm", filename="token_type_ids.pt", repo_type="dataset"
+                )
                 original_token_type_ids = torch.load(filepath)
 
                 print("Mean of original image features:", original_images_features.mean())
                 print("Mean of HF image features:", images_features.mean())
 
                 # verify
-                # assert torch.allclose(images_features, original_images_features.to(images_features.device))
+                assert torch.allclose(images_features, original_images_features.to(images_features.device), atol=1e-3)
                 assert torch.allclose(inputs_embeds, original_inputs_embeds.to(inputs_embeds.device))
                 assert token_type_ids[0].tolist() == original_token_type_ids[0].tolist()
 
@@ -798,6 +962,23 @@ class CogvlmModel(CogvlmPreTrainedModel):
 
         hidden_states = inputs_embeds
 
+        # verify initial hidden states
+        filepath = hf_hub_download(repo_id="nielsr/test-cogvlm", filename="initial_hidden_states.pt", repo_type="dataset")
+        original_hidden_states = torch.load(filepath).to(hidden_states.device)
+        assert torch.allclose(hidden_states, original_hidden_states)
+        # verify attention mask
+        filepath = hf_hub_download(repo_id="nielsr/test-cogvlm", filename="initial_attention_mask.pt", repo_type="dataset")
+        original_attention_mask = torch.load(filepath).to(attention_mask.device)
+        assert torch.allclose(attention_mask.float(), original_attention_mask.float())
+        # verify token type ids
+        filepath = hf_hub_download(repo_id="nielsr/test-cogvlm", filename="initial_token_type_ids.pt", repo_type="dataset")
+        original_token_type_ids = torch.load(filepath).to(token_type_ids.device)
+        assert torch.allclose(token_type_ids.float(), original_token_type_ids.float())
+        # verify position ids
+        filepath = hf_hub_download(repo_id="nielsr/test-cogvlm", filename="initial_position_ids.pt", repo_type="dataset")
+        original_position_ids = torch.load(filepath).to(position_ids.device)
+        assert torch.allclose(position_ids.float(), original_position_ids.float())
+
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -806,10 +987,6 @@ class CogvlmModel(CogvlmPreTrainedModel):
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-
-            if idx in [0, 1, 2]:
-                print(f"Hidden states before layer {idx}", hidden_states[0, :3, :3])
-                print(f"Mean of hidden states before layer {idx}", hidden_states.mean())
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
             layer_outputs = decoder_layer(
@@ -820,9 +997,16 @@ class CogvlmModel(CogvlmPreTrainedModel):
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
-                print_values=idx in [0, 1, 2],
+                print_values=idx==0,
             )
             hidden_states = layer_outputs[0]
+
+            if idx == 0:
+                filepath = hf_hub_download(
+                    repo_id="nielsr/test-cogvlm", filename="hidden_states_after_layer_0.pt", repo_type="dataset"
+                )
+                original_hidden_states = torch.load(filepath)
+                assert torch.allclose(hidden_states, original_hidden_states.to(hidden_states.device))
 
             if use_cache:
                 next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)

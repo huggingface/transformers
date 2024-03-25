@@ -2070,7 +2070,6 @@ COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class CogvlmForCausalLM(metaclass=DummyObject):
-class CohereForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -2078,7 +2077,6 @@ class CohereForCausalLM(metaclass=DummyObject):
 
 
 class CogvlmModel(metaclass=DummyObject):
-class CohereModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -2086,6 +2084,26 @@ class CohereModel(metaclass=DummyObject):
 
 
 class CogvlmPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CohereForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CohereModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class CoherePreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
