@@ -981,6 +981,9 @@ class Pipeline(_ScikitCompat):
             if self.device.type == "cuda":
                 with torch.cuda.device(self.device):
                     yield
+            elif self.device.type == "mlu":
+                with torch.mlu.device(self.device):
+                    yield
             else:
                 yield
 
