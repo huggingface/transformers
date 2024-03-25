@@ -59,6 +59,7 @@ _CONFIG_FOR_DOC = "MambaConfig"
 
 from ..deprecated._archive_maps import MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
+
 class MambaCache:
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         self.seqlen_offset = 0

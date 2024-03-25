@@ -16,7 +16,10 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_llava": ["LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlavaConfig"]}
+_import_structure = {
+    "configuration_llava": ["LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlavaConfig"],
+    "processing_llava": ["LlavaProcessor"],
+}
 
 
 try:
@@ -34,6 +37,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_llava import LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlavaConfig
+    from .processing_llava import LlavaProcessor
 
     try:
         if not is_torch_available():
