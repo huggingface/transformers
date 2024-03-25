@@ -3256,7 +3256,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                 Thread(
                                     target=auto_conversion,
                                     args=(pretrained_model_name_or_path,),
-                                    kwargs=cached_file_kwargs,
+                                    kwargs={"ignore_errors_during_conversion": True, **cached_file_kwargs},
                                     name="Thread-autoconversion",
                                 ).start()
                     else:
