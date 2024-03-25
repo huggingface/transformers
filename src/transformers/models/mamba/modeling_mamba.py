@@ -505,8 +505,8 @@ class MambaModel(MambaPreTrainedModel):
         self.post_init()
 
     def load_hook(self, state_dict, prefix, *args):
-        if "embedding" in state_dict:
-            state_dict["embeddings"] = state_dict.pop("embedding", None)
+        if "backbone.embeddings.weight" in state_dict:
+            state_dict["backbone.embeddings.weight"] = state_dict.pop("backbone.embedding.weight", None)
 
     def get_input_embeddings(self):
         return self.embeddings
