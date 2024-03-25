@@ -1394,12 +1394,12 @@ class LlamaConverter(SpmConverter):
         return None
 
     def pre_tokenizer(self, replacement, add_prefix_space):
+        if not self.original_tokenizer.legacy:
+            return super().pre_tokenizer(replacement, add_prefix_space)
         return None
 
     def post_processor(self):
         # the processor is defined in the LlamaTokenizerFast class.
-        if not self.original_tokenizer.legacy:
-            return super().post_processor()
         return None
 
 
