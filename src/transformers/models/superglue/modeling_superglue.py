@@ -22,6 +22,7 @@ from torch import Tensor, nn
 
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 from transformers import PreTrainedModel
+from ..superpoint.modeling_superpoint import ImagePointDescriptionOutput
 
 from ...utils import (
     ModelOutput,
@@ -29,6 +30,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ..auto import AutoModelForKeypointDetection
 
 logger = logging.get_logger(__name__)
 
@@ -95,6 +97,10 @@ def log_optimal_transport(scores: torch.Tensor, alpha: torch.Tensor, iters: int)
     Z = log_sinkhorn_iterations(couplings, log_mu, log_nu, iters)
     Z = Z - norm  # multiply probabilities by M+N
     return Z
+
+
+def arange_like(x, dim: int):
+    return x.new_ones(x.shape[dim]).cumsum(0) - 1
 
 
 @dataclass
@@ -333,9 +339,6 @@ class SuperGlue(nn.Module):
 
         return matches_0, matches_1, matching_scores_0, matching_scores_1
 
-    @staticmethod
-    def arange_like(x, dim: int):
-        return x.new_ones(x.shape[dim]).cumsum(0) - 1
 
 
 class SuperGluePreTrainedModel(PreTrainedModel):
@@ -384,6 +387,11 @@ class SuperGlueModel(SuperGluePreTrainedModel):
     def __init__(self, config: SuperGlueConfig):
         super().__init__(config)
 
+        if config.keypoint_detector_config.name_or_path != "":
+            self.keypoint_detector = AutoModelForKeypointDetection.from_pretrained(
+                config.keypoint_detector_config.name_or_path)
+        else:
+            self.keypoint_detector = AutoModelForKeypointDetection.from_config(config.keypoint_detector_config)
         self.keypoint_encoder = SuperGlueKeypointEncoder(config)
         self.gnn = SuperGlueAttentionalGNN(config)
 
@@ -395,15 +403,26 @@ class SuperGlueModel(SuperGluePreTrainedModel):
     @add_start_docstrings_to_model_forward(SUPERGLUE_INPUTS_DOCSTRING)
     def forward(
             self,
-            image0_keypoints: Tensor = None,
-            image0_scores: Tensor = None,
-            image0_descriptors: Tensor = None,
-            image1_keypoints: Tensor = None,
-            image1_scores: Tensor = None,
-            image1_descriptors: Tensor = None,
+            pixel_values: torch.FloatTensor = None,
             return_dict: Optional[bool] = None,
     ) -> Union[Tuple, ImageMatchingOutput]:
         # TODO documentation example
+
+        if pixel_values.shape[0] != 2:
+            # TODO Define input strategy : should input contain exactly 2 images or modulo 2 images and treat them as bathes
+            raise ValueError("Input does not contain exactly 2 images")
+
+        _, _, height, width = pixel_values.shape
+        keypoint_detection: ImagePointDescriptionOutput = self.keypoint_detector(pixel_values)
+
+        image0_indices = torch.nonzero(keypoint_detection.mask[0]).squeeze()
+        image0_keypoints = torch.unsqueeze(keypoint_detection.keypoints[0][image0_indices], dim=0)
+        image0_descriptors = torch.unsqueeze(keypoint_detection.descriptors[0][image0_indices], dim=0)
+        image0_scores = torch.unsqueeze(keypoint_detection.scores[0][image0_indices], dim=0)
+        image1_indices = torch.nonzero(keypoint_detection.mask[1]).squeeze()
+        image1_keypoints = torch.unsqueeze(keypoint_detection.keypoints[1][image1_indices], dim=0)
+        image1_descriptors = torch.unsqueeze(keypoint_detection.descriptors[1][image1_indices], dim=0)
+        image1_scores = torch.unsqueeze(keypoint_detection.scores[1][image1_indices], dim=0)
 
         if image0_keypoints.shape[1] == 0 or image1_keypoints.shape[1] == 0:  # no keypoints
             shape0, shape1 = image0_keypoints.shape[:-1], image1_keypoints.shape[:-1]
@@ -414,9 +433,16 @@ class SuperGlueModel(SuperGluePreTrainedModel):
                 image1_keypoints.new_zeros(shape1)
             )
 
-            # Keypoint MLP encoder.
-        descriptors_0 = image0_descriptors + self.keypoint_encoder(image0_keypoints, image0_scores)
-        descriptors_1 = image1_descriptors + self.keypoint_encoder(image1_keypoints, image1_scores)
+        descriptors_0 = torch.transpose(image0_descriptors, -1, -2)
+        descriptors_1 = torch.transpose(image1_descriptors, -1, -2)
+
+        # Keypoint normalization
+        keypoints0 = normalize_keypoints(image0_keypoints, height, width)
+        keypoints1 = normalize_keypoints(image1_keypoints, height, width)
+
+        # Keypoint MLP encoder.
+        descriptors_0 = descriptors_0 + self.keypoint_encoder(keypoints0, image0_scores)
+        descriptors_1 = descriptors_1 + self.keypoint_encoder(keypoints1, image1_scores)
 
         # Multi-layer Transformer network.
         descriptors_0, descriptors_1 = self.gnn(descriptors_0, descriptors_1)
@@ -427,20 +453,20 @@ class SuperGlueModel(SuperGluePreTrainedModel):
 
         # Compute matching descriptor distance.
         scores = torch.einsum('bdn,bdm->bnm', projected_descriptors_0, projected_descriptors_1)
-        scores = scores / self.descriptor_dim ** .5
+        scores = scores / self.config.descriptor_dim ** .5
 
         # Run the optimal transport.
-        scores = self.log_optimal_transport(
+        scores = log_optimal_transport(
             scores,
             self.bin_score,
-            iters=self.sinkhorn_iterations
+            iters=self.config.sinkhorn_iterations
         )
 
         # Get the matches with score above "match_threshold".
         max0, max1 = scores[:, :-1, :-1].max(2), scores[:, :-1, :-1].max(1)
         indices0, indices1 = max0.indices, max1.indices
-        mutual0 = self.arange_like(indices0, 1)[None] == indices1.gather(1, indices0)
-        mutual1 = self.arange_like(indices1, 1)[None] == indices0.gather(1, indices1)
+        mutual0 = arange_like(indices0, 1)[None] == indices1.gather(1, indices0)
+        mutual1 = arange_like(indices1, 1)[None] == indices0.gather(1, indices1)
         zero = scores.new_tensor(0)
         matching_scores_0 = torch.where(mutual0, max0.values.exp(), zero)
         matching_scores_1 = torch.where(mutual1, matching_scores_0.gather(1, indices1), zero)
