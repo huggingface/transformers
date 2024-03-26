@@ -6,6 +6,8 @@ export PYTHONPATH = src
 check_dirs := examples tests src utils
 
 exclude_folders := examples/research_projects
+integration_tests_dir := tests/deepspeed tests/fsdp tests/peft_integration tests/trainer tests/extended tests/sagemaker
+generation_tests_dir := tests/generation
 
 modified_only_fixup:
 	$(eval modified_py_files := $(shell python utils/get_modified_files.py $(check_dirs)))
@@ -94,15 +96,22 @@ test:
 	python -m pytest -n auto --dist=loadfile -s -v ./tests/
 
 # Run tests for examples
-
 test-examples:
-	python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/
+	python3 -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/
 
 # Run tests for SageMaker DLC release
 
 test-sagemaker: # install sagemaker dependencies in advance with pip install .[sagemaker]
 	TEST_SAGEMAKER=True python -m pytest -n auto  -s -v ./tests/sagemaker
 
+run_integration_tests:
+	python3 -m pytest -v --make-reports=${MACHINE_TYPE}_tests_integration $(integration_tests_dir) 
+
+run_flash_attn_tests:
+	python3 -m pytest -v --make-reports=${MACHINE_TYPE}_tests_flash_attention -m "flash_attn_test" tests/models/
+
+run_generation_tests:
+	python3 -m pytest -v --make-reports=${MACHINE_TYPE}_tests_generation $(generation_tests_dir) 
 
 # Release stuff
 

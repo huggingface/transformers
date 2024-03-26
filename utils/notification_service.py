@@ -465,6 +465,9 @@ class Message:
         failures = {k: v["failed"] for k, v in self.additional_results.items()}
         errors = {k: v["error"] for k, v in self.additional_results.items()}
 
+        # Force-skip some tests for inidivdual workflows.
+        skip_errored_out_tests = os.environ.get("CI_SKIP_ERRORED_OUT", False)
+
         individual_reports = []
         for key, value in failures.items():
             device_report = self.get_device_report(value)
@@ -476,7 +479,8 @@ class Message:
                 if device_report:
                     report = f"{device_report}{report}"
 
-                individual_reports.append(report)
+                if (errors[key] and not skip_errored_out_tests) or device_report:
+                    individual_reports.append(report)
 
         header = "Single |  Multi | Category\n"
         failures_report = prepare_reports(
@@ -929,11 +933,18 @@ if __name__ == "__main__":
         Message.error_out(title, ci_title, runner_not_available, runner_failed, setup_failed)
         exit(0)
 
-    arguments = sys.argv[1:][0]
+    arguments = None
+
+    if len(sys.argv) > 1:
+        arguments = sys.argv[1:][0]    
+
     try:
-        folder_slices = ast.literal_eval(arguments)
-        # Need to change from elements like `models/bert` to `models_bert` (the ones used as artifact names).
-        models = [x.replace("models/", "models_") for folders in folder_slices for x in folders]
+        if arguments is not None:
+            folder_slices = ast.literal_eval(arguments)
+            # Need to change from elements like `models/bert` to `models_bert` (the ones used as artifact names).
+            models = [x.replace("models/", "models_") for folders in folder_slices for x in folders]
+        else:
+            models = []
     except SyntaxError:
         Message.error_out(title, ci_title)
         raise ValueError("Errored out.")
@@ -1043,6 +1054,7 @@ if __name__ == "__main__":
         "PyTorch pipelines": "run_tests_torch_pipeline_gpu",
         "TensorFlow pipelines": "run_tests_tf_pipeline_gpu",
         "Torch CUDA extension tests": "run_tests_torch_cuda_extensions_gpu_test_reports",
+        "Integration tests": "run_integration_tests",
         "Quantization tests": "run_tests_quantization_torch_gpu",
     }
 
