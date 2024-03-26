@@ -1154,7 +1154,7 @@ class GenerationTesterMixin:
             )
             self.assertListEqual(low_output.tolist(), high_output.tolist())
 
-    # @is_flaky()  # Read NOTE (1) below. If there are API issues, all attempts will fail.
+    @is_flaky()  # Read NOTE (1) below. If there are API issues, all attempts will fail.
     def test_assisted_decoding_matches_greedy_search(self):
         # This test ensures that the assisted generation does not introduce output changes over greedy search.
         # NOTE (1): The sentence above is true most of the time, there is a tiny difference in the logits due to matmul
