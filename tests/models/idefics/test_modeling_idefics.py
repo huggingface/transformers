@@ -609,6 +609,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
 
         return config, inputs_dict, max_length
 
+    # idefics does not return attn because of sdpa, so override it here
     def _check_outputs(self, output, input_tensor, config, is_vision_model, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_tensor.shape
         num_sequences_in_output = batch_size * num_return_sequences

@@ -250,9 +250,6 @@ class Kosmos2Config(PretrainedConfig):
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`Kosmos2VisionConfig`].
         latent_query_num (`int`, *optional*, defaults to 64):
-            The number of latent query tokens that represent the image features used in the text decoder component.
-        vocab_size (`int`, *optional*, defaults to 65037):
-            Vocabulary size of the Kosmos2 text model.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -279,7 +276,6 @@ class Kosmos2Config(PretrainedConfig):
         text_config=None,
         vision_config=None,
         latent_query_num=64,
-        vocab_size=65037,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -296,4 +292,3 @@ class Kosmos2Config(PretrainedConfig):
         self.vision_config = Kosmos2VisionConfig(**vision_config)
 
         self.latent_query_num = latent_query_num
-        self.vocab_size = vocab_size

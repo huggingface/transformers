@@ -508,12 +508,11 @@ class GenerationTesterMixin:
     def test_sample_generate(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict, max_length = self._get_input_ids_and_config(model_class)
-            seq_length = self.model_tester.seq_length
 
             model = model_class(config).to(torch_device).eval()
 
             process_kwargs, logits_warper_kwargs = self._get_logits_processor_and_warper_kwargs(
-                seq_length,
+                inputs_dict["attention_mask"].shape[-1],
                 forced_bos_token_id=model.config.forced_bos_token_id,
                 forced_eos_token_id=model.config.forced_eos_token_id,
                 max_length=max_length,
@@ -536,10 +535,9 @@ class GenerationTesterMixin:
 
             config.use_cache = False
             model = model_class(config).to(torch_device).eval()
-            seq_length = self.model_tester.seq_length
 
             process_kwargs, logits_warper_kwargs = self._get_logits_processor_and_warper_kwargs(
-                seq_length,
+                inputs_dict["attention_mask"].shape[-1],
                 forced_bos_token_id=model.config.forced_bos_token_id,
                 forced_eos_token_id=model.config.forced_eos_token_id,
                 max_length=max_length,
