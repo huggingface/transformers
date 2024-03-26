@@ -1225,17 +1225,15 @@ class OLMoModel(OLMoPreTrainedModel):
 
         # Validate config.
         if self.config.alibi and self.config.flash_attention:
-            raise OLMoConfigurationError("ALiBi is currently not supported with FlashAttention")
+            raise ValueError("ALiBi is currently not supported with FlashAttention")
 
         if self.config.alibi and self.config.rope:
-            raise OLMoConfigurationError("ALiBi and RoPE are mutually exclusive")
+            raise ValueError("ALiBi and RoPE are mutually exclusive")
 
         if self.config.embedding_size is not None and self.config.embedding_size != self.config.vocab_size:
             if self.config.embedding_size < self.config.vocab_size:
-                raise OLMoConfigurationError("embedding size should be at least as big as vocab size")
+                raise ValueError("embedding size should be at least as big as vocab size")
             elif self.config.embedding_size % 128 != 0:
-                import warnings
-
                 warnings.warn(
                     "Embedding size is not a multiple of 128! This could hurt throughput performance.", UserWarning
                 )
@@ -1247,19 +1245,19 @@ class OLMoModel(OLMoPreTrainedModel):
             0 < self.config.block_group_size <= self.config.n_layers
             and self.config.n_layers % self.config.block_group_size == 0
         ):
-            raise OLMoConfigurationError("n layers must be divisible by block group size")
+            raise ValueError("n layers must be divisible by block group size")
 
         torch.backends.cuda.enable_flash_sdp(self.config.flash_attention)
         torch.backends.cuda.enable_mem_efficient_sdp(False)  # this is super slow so make sure torch won't use it
 
         self.transformer = nn.ModuleDict(
-            dict(
-                wte=nn.Embedding(
+            {
+                "wte": nn.Embedding(
                     config.embedding_size or config.vocab_size, config.d_model, device=config.init_device
                 ),
-                emb_drop=Dropout(config.embedding_dropout),
-                ln_f=LayerNorm.build(config),
-            )
+                "emb_drop": Dropout(config.embedding_dropout),
+                "ln_f": LayerNorm.build(config),
+            }
         )
 
         blocks = [OLMoBlock.build(i, config, self.__cache) for i in range(config.n_layers)]
@@ -1323,7 +1321,7 @@ class OLMoModel(OLMoPreTrainedModel):
             return device
 
     def reset_parameters(self):
-        log.info("Initializing model parameters...")
+        logger.info("Initializing model parameters...")
         # Top-level embeddings / linear layers.
         init_weights(
             self.config,
@@ -1600,9 +1598,7 @@ class OLMoModel(OLMoPreTrainedModel):
             return fsdp_wrap_fn
         elif wrap_strategy == FSDPWrapStrategy.by_block_group:
             if self.config.block_group_size <= 1:
-                raise OLMoConfigurationError(
-                    "'by_block_group' FSDP wrapping strategy requires block group size greater than 1"
-                )
+                raise ValueError("'by_block_group' FSDP wrapping strategy requires block group size greater than 1")
 
             def fsdp_wrap_fn(module, recurse: bool = True, nonwrapped_numel: int = 0):
                 del nonwrapped_numel
@@ -1615,7 +1611,7 @@ class OLMoModel(OLMoPreTrainedModel):
             return fsdp_wrap_fn
         elif wrap_strategy == FSDPWrapStrategy.by_block_group_and_size:
             if self.config.block_group_size <= 1:
-                raise OLMoConfigurationError(
+                raise ValueError(
                     "'by_block_group_and_size' FSDP wrapping strategy requires block group size greater than 1"
                 )
 
