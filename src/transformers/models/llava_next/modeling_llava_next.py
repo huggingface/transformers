@@ -53,7 +53,7 @@ def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
 
     Args:
         image_size (`tuple`):
-            The size of the input image in the format (width, height).
+            The size of the input image in the format (height, width). ?
         grid_pinpoints (`List`):
             A list containing possible resolutions. Each item in the list should be a tuple or list
             of the form `(height, width)`.
@@ -61,7 +61,7 @@ def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
             The size of each image patch.
 
     Returns:
-        tuple: The shape of the image patch grid in the format (width, height).
+        tuple: The shape of the image patch grid in the format (height, width). ?
     """
     if not isinstance(grid_pinpoints, list):
         raise ValueError("grid_pinpoints should be a list of tuples or lists")

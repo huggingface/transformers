@@ -25,45 +25,6 @@ from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava_next import LlavaNextConfig
 
 
-logger = logging.get_logger(__name__)# coding=utf-8
-# Copyright 2024 the HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-""" PyTorch Llava-NeXT model."""
-
-from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
-
-import torch
-import torch.utils.checkpoint
-from torch import nn
-import numpy as np
-
-from ... import PreTrainedModel
-from ...activations import ACT2FN
-from ...cache_utils import Cache
-from ...image_processing_utils import select_best_resolution
-from ...modeling_outputs import ModelOutput
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
-from ..auto import AutoModel, AutoModelForCausalLM
-from .configuration_llava_next import LlavaNextConfig
-
-
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlavaNextConfig"
@@ -103,6 +64,21 @@ def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
 
 
 def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
+    """
+    Calculate the shape of the image patch grid after the preprocessing for images of any resolution.
+
+    Args:
+        image_size (`tuple`):
+            The size of the input image in the format (height, width). ?
+        grid_pinpoints (`List`):
+            A list containing possible resolutions. Each item in the list should be a tuple or list
+            of the form `(height, width)`.
+        patch_size (`int`):
+            The size of each image patch.
+
+    Returns:
+        tuple: The shape of the image patch grid in the format (height, width). ?
+    """
     if not isinstance(grid_pinpoints, list):
         raise ValueError("grid_pinpoints should be a list of tuples or lists")
     
@@ -112,7 +88,7 @@ def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
         image_size = image_size.tolist()
 
     best_resolution = select_best_resolution(image_size, grid_pinpoints)
-    width, height = best_resolution
+    height, width = best_resolution
     num_patches = 0
     for i in range(0, height, patch_size):
         for j in range(0, width, patch_size):
