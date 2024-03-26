@@ -26,12 +26,8 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 logger = logging.get_logger(__name__)
 
-BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/beit-base-patch16-224-pt22k": (
-        "https://huggingface.co/microsoft/beit-base-patch16-224-pt22k/resolve/main/config.json"
-    ),
-    # See all BEiT models at https://huggingface.co/models?filter=beit
-}
+
+from ..deprecated._archive_maps import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class BeitConfig(BackboneConfigMixin, PretrainedConfig):

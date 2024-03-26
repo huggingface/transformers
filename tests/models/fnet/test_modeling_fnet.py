@@ -43,7 +43,6 @@ if is_torch_available():
         FNetTokenizerFast,
     )
     from transformers.models.fnet.modeling_fnet import (
-        FNET_PRETRAINED_MODEL_ARCHIVE_LIST,
         FNetBasicFourierTransform,
         is_scipy_available,
     )
@@ -464,9 +463,9 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/fnet-base"
+        model = FNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

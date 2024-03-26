@@ -55,10 +55,7 @@ _CHECKPOINT_FOR_DOC = "facebook/xglm-564M"
 _CONFIG_FOR_DOC = "XGLMConfig"
 
 
-TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/xglm-564M",
-    # See all XGLM models at https://huggingface.co/models?filter=xglm
-]
+from ..deprecated._archive_maps import TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 LARGE_NEGATIVE = -1e8
