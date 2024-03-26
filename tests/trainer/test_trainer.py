@@ -3793,17 +3793,17 @@ class OptimizerAndModelInspectionTest(unittest.TestCase):
         trainer.create_optimizer()
         self.assertEqual(trainer.get_learning_rates(), [5e-05, 5e-05])
 
-        def test_get_optimizer_group(self):
-            model = nn.Sequential(nn.Linear(128, 64))
-            trainer = Trainer(model=model)
-            # ValueError is raised if optimizer is None
-            with self.assertRaises(ValueError):
-                trainer.get_optimizer_group()
-            trainer.create_optimizer()
-            # Get groups
-            num_groups = len(trainer.get_optimizer_group())
-            self.assertEqual(num_groups, 2)
-            # Get group of parameter
-            param = next(model.parameters())
-            group = trainer.get_optimizer_group(param)
-            self.assertIn(param, group["params"])
+    def test_get_optimizer_group(self):
+        model = nn.Sequential(nn.Linear(128, 64))
+        trainer = Trainer(model=model)
+        # ValueError is raised if optimizer is None
+        with self.assertRaises(ValueError):
+            trainer.get_optimizer_group()
+        trainer.create_optimizer()
+        # Get groups
+        num_groups = len(trainer.get_optimizer_group())
+        self.assertEqual(num_groups, 2)
+        # Get group of parameter
+        param = next(model.parameters())
+        group = trainer.get_optimizer_group(param)
+        self.assertIn(param, group["params"])
