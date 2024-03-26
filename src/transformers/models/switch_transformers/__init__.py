@@ -47,6 +47,7 @@ else:
         "SwitchTransformersPreTrainedModel",
         "SwitchTransformersTop1Router",
         "SwitchTransformersSparseMLP",
+        "SwitchTransformersForSequenceClassification",
     ]
 
 
@@ -67,6 +68,7 @@ if TYPE_CHECKING:
             SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
             SwitchTransformersEncoderModel,
             SwitchTransformersForConditionalGeneration,
+            SwitchTransformersForSequenceClassification,
             SwitchTransformersModel,
             SwitchTransformersPreTrainedModel,
             SwitchTransformersSparseMLP,

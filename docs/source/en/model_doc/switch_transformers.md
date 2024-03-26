@@ -69,3 +69,8 @@ The original code can be found [here](https://github.com/google/flaxformer/tree/
 
 [[autodoc]] SwitchTransformersEncoderModel
     - forward
+
+## SwitchTransformersForSequenceClassification
+
+[[autodoc]] SwitchTransformersForSequenceClassification
+    - forward
