@@ -531,21 +531,48 @@ class OLMoBlock(nn.Module):
         attn_mask: Optional[torch.Tensor] = None,
         dropout_p: float = 0.0,
         is_causal: bool = False,
-    ) -> torch.Tensor:
+        use_pytorch_sdpa: bool = True,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Computes scaled dot product attention on query, key and value tensors, using an optional
         attention mask if passed, and applying dropout if a probability greater than 0.0 is specified.
 
         This method is based on PyTorch's `scaled_dot_product_attention`.
         """
-        return F.scaled_dot_product_attention(
-            q,
-            k,
-            v,
-            attn_mask=attn_mask,
-            dropout_p=dropout_p,
-            is_causal=is_causal,
-        )
+        if use_pytorch_sdpa and output_attentions:
+            logger.warning_once(
+                "OLMoModel is using SDPA, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                "but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `use_pytorch_sdpa=False` in `OLMoConfig`."
+            )
+            use_pytorch_sdpa = False
+
+        if use_pytorch_sdpa:
+            return F.scaled_dot_product_attention(
+                q,
+                k,
+                v,
+                attn_mask=attn_mask,
+                dropout_p=dropout_p,
+                is_causal=is_causal,
+            ), None
+
+        attn_weights = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(q.size(-1))
+
+        if is_causal:
+            assert attn_mask is None
+
+            query_len, key_len = q.shape[-2], k.shape[-2]  # could be different if layer_past not None
+            attn_bias = get_causal_attention_bias(self.__cache, key_len, q.device)[:, :, :query_len, :key_len]
+        elif attn_mask is not None:
+            attn_bias = attn_mask.to(q.dtype)
+        else:
+            attn_bias = torch.zeros_like(attn_weights)
+
+        attn_weights += attn_bias
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1).to(q.dtype)
+        attn_weights = nn.functional.dropout(attn_weights, p=dropout_p)
+        return torch.matmul(attn_weights, v), attn_weights if output_attentions else None
 
     def attention(
         self,
@@ -555,7 +582,9 @@ class OLMoBlock(nn.Module):
         attention_bias: Optional[torch.Tensor] = None,
         layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         use_cache: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
+        use_pytorch_sdpa: bool = True,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]], Optional[torch.Tensor]]:
         B, T, C = q.size()  # batch size, sequence length, d_model
         dtype = k.dtype
 
@@ -600,20 +629,22 @@ class OLMoBlock(nn.Module):
 
         # Get the attention scores.
         # shape: (B, nh, T, hs)
-        att = self._scaled_dot_product_attention(
+        att, attn_weights = self._scaled_dot_product_attention(
             q,
             k,
             v,
             attn_mask=attention_bias,
             dropout_p=0.0 if not self.training else self.config.attention_dropout,
             is_causal=attention_bias is None,
+            use_pytorch_sdpa=use_pytorch_sdpa,
+            output_attentions=output_attentions,
         )
 
         # Re-assemble all head outputs side-by-side.
         att = att.transpose(1, 2).contiguous().view(B, T, C)
 
         # Apply output projection.
-        return self.attn_out(att), present
+        return self.attn_out(att), present, attn_weights
 
     @abstractmethod
     def forward(
@@ -622,7 +653,9 @@ class OLMoBlock(nn.Module):
         attention_bias: Optional[torch.FloatTensor] = None,
         layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         use_cache: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
+        use_pytorch_sdpa: bool = True,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]], Optional[torch.Tensor]]:
         raise NotImplementedError
 
     @classmethod
@@ -677,7 +710,9 @@ class OLMoSequentialBlock(OLMoBlock):
         attention_bias: Optional[torch.Tensor] = None,
         layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         use_cache: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
+        use_pytorch_sdpa: bool = True,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]], Optional[torch.Tensor]]:
         # Get query, key, value projections.
         # shape:
         #  - for regular attn q, k, v: (batch_size, seq_len, d_model)
@@ -695,11 +730,28 @@ class OLMoSequentialBlock(OLMoBlock):
 
         # Get attention scores.
         if self._activation_checkpoint_fn is not None:
-            att, cache = self._activation_checkpoint_fn(  # type: ignore
-                self.attention, q, k, v, attention_bias, layer_past=layer_past, use_cache=use_cache
+            att, cache, attn_weights = self._activation_checkpoint_fn(  # type: ignore
+                self.attention,
+                q,
+                k,
+                v,
+                attention_bias,
+                layer_past=layer_past,
+                use_cache=use_cache,
+                use_pytorch_sdpa=use_pytorch_sdpa,
+                output_attentions=output_attentions,
             )
         else:
-            att, cache = self.attention(q, k, v, attention_bias, layer_past=layer_past, use_cache=use_cache)
+            att, cache, attn_weights = self.attention(
+                q,
+                k,
+                v,
+                attention_bias,
+                layer_past=layer_past,
+                use_cache=use_cache,
+                use_pytorch_sdpa=use_pytorch_sdpa,
+                output_attentions=output_attentions,
+            )
 
         # Add attention scores.
         # shape: (B, T, C)
@@ -721,7 +773,7 @@ class OLMoSequentialBlock(OLMoBlock):
         x = self.dropout(x)
         x = og_x + x
 
-        return x, cache
+        return x, cache, attn_weights
 
 
 class OLMoParallelBlock(OLMoBlock):
@@ -773,7 +825,9 @@ class OLMoParallelBlock(OLMoBlock):
         attention_bias: Optional[torch.Tensor] = None,
         layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         use_cache: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
+        use_pytorch_sdpa: bool = True,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]], Optional[torch.Tensor]]:
         # Get query, key, value, and feed-forward projections.
         # shape of q, k, v:
         #  - for regular attn q, k, v: (batch_size, seq_len, d_model)
@@ -795,11 +849,28 @@ class OLMoParallelBlock(OLMoBlock):
         # Get attention scores.
         # shape: (B, T, C)
         if self._activation_checkpoint_fn is not None:
-            att, cache = self._activation_checkpoint_fn(  # type: ignore
-                self.attention, q, k, v, attention_bias, layer_past=layer_past, use_cache=use_cache
+            att, cache, attn_weights = self._activation_checkpoint_fn(  # type: ignore
+                self.attention,
+                q,
+                k,
+                v,
+                attention_bias,
+                layer_past=layer_past,
+                use_cache=use_cache,
+                use_pytorch_sdpa=use_pytorch_sdpa,
+                output_attentions=output_attentions,
             )
         else:
-            att, cache = self.attention(q, k, v, attention_bias, layer_past=layer_past, use_cache=use_cache)
+            att, cache, attn_weights = self.attention(
+                q,
+                k,
+                v,
+                attention_bias,
+                layer_past=layer_past,
+                use_cache=use_cache,
+                use_pytorch_sdpa=use_pytorch_sdpa,
+                output_attentions=output_attentions,
+            )
 
         # Apply output projections (and activation function) and sum the results.
         # We keep these projections separate because we found that we got better throughput this
@@ -808,11 +879,13 @@ class OLMoParallelBlock(OLMoBlock):
             return (
                 x + self.dropout(self.ff_out(self._activation_checkpoint_fn(self.act, ff))) + self.dropout(att),
                 cache,
+                attn_weights,
             )
         else:
             return (
                 x + self.dropout(self.ff_out(self.act(ff))) + self.dropout(att),
                 cache,
+                attn_weights,
             )
 
 
@@ -893,39 +966,15 @@ class OLMoLlamaBlock(OLMoBlock):
         init_weights(self.config, self.v_proj, d=self.config.d_model, layer_id=None)
         init_weights(self.config, self.ff_proj, d=self.config.d_model, layer_id=None)
 
-    def _scaled_dot_product_attention(
-        self,
-        q: torch.Tensor,
-        k: torch.Tensor,
-        v: torch.Tensor,
-        attn_mask: Optional[torch.Tensor] = None,
-        dropout_p: float = 0.0,
-        is_causal: bool = False,
-    ) -> torch.Tensor:
-        attn_weights = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(q.size(-1))
-
-        if is_causal:
-            assert attn_mask is None
-
-            query_len, key_len = q.shape[-2], k.shape[-2]  # could be different if layer_past not None
-            attn_bias = get_causal_attention_bias(self.__cache, key_len, q.device)[:, :, :query_len, :key_len]
-        elif attn_mask is not None:
-            attn_bias = attn_mask.to(q.dtype)
-        else:
-            attn_bias = torch.zeros_like(attn_weights)
-
-        attn_weights += attn_bias
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1).to(q.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=dropout_p)
-        return torch.matmul(attn_weights, v)
-
     def forward(
         self,
         x: torch.Tensor,
         attention_bias: Optional[torch.Tensor] = None,
         layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         use_cache: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
+        use_pytorch_sdpa: bool = True,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]], Optional[torch.Tensor]]:
         # Get query, key, value projections.
         # shape:
         #  - for regular attn q, k, v: (batch_size, seq_len, d_model)
@@ -942,7 +991,16 @@ class OLMoLlamaBlock(OLMoBlock):
             v.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
 
         # Get attention scores.
-        att, cache = self.attention(q, k, v, attention_bias, layer_past=layer_past, use_cache=use_cache)
+        att, cache, attn_weights = self.attention(
+            q,
+            k,
+            v,
+            attention_bias,
+            layer_past=layer_past,
+            use_cache=use_cache,
+            use_pytorch_sdpa=use_pytorch_sdpa,
+            output_attentions=output_attentions,
+        )
 
         # Add attention scores.
         # shape: (B, T, C)
@@ -964,7 +1022,7 @@ class OLMoLlamaBlock(OLMoBlock):
         x = self.dropout(x)
         x = og_x + x
 
-        return x, cache
+        return x, cache, attn_weights
 
 
 OLMO_START_DOCSTRING = r"""
@@ -1004,8 +1062,11 @@ class OLMoBlockGroup(nn.ModuleList):
         attention_bias: Optional[torch.FloatTensor] = None,
         layers_past: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = None,
         use_cache: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[List[Tuple[torch.Tensor, torch.Tensor]]]]:
+        use_pytorch_sdpa: bool = True,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[List[Tuple[torch.Tensor, torch.Tensor]]], Optional[List[torch.Tensor]]]:
         attn_key_values: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = [] if use_cache else None
+        attn_weights: Optional[List[torch.Tensor]] = [] if output_attentions else None
         for block_idx, block in enumerate(self):
             layer_past = None if layers_past is None else layers_past[block_idx]
             block_idx += self.layer_offset
@@ -1025,16 +1086,32 @@ class OLMoBlockGroup(nn.ModuleList):
                 )
             ):
                 # shape: (batch_size, seq_len, d_model)
-                x, cache = self._activation_checkpoint_fn(  # type: ignore
-                    block, x, attention_bias=attention_bias, layer_past=layer_past, use_cache=use_cache
+                x, cache, layer_attn_weights = self._activation_checkpoint_fn(  # type: ignore
+                    block,
+                    x,
+                    attention_bias=attention_bias,
+                    layer_past=layer_past,
+                    use_cache=use_cache,
+                    use_pytorch_sdpa=use_pytorch_sdpa,
+                    output_attentions=output_attentions,
                 )
             else:
                 # shape: (batch_size, seq_len, d_model)
-                x, cache = block(x, attention_bias=attention_bias, layer_past=layer_past, use_cache=use_cache)
+                x, cache, layer_attn_weights = block(
+                    x,
+                    attention_bias=attention_bias,
+                    layer_past=layer_past,
+                    use_cache=use_cache,
+                    use_pytorch_sdpa=use_pytorch_sdpa,
+                    output_attentions=output_attentions,
+                )
             if attn_key_values is not None:
                 assert cache is not None
                 attn_key_values.append(cache)
-        return x, attn_key_values
+            if attn_weights is not None:
+                assert layer_attn_weights is not None
+                attn_weights.append(layer_attn_weights)
+        return x, attn_key_values, attn_weights
 
     def reset_parameters(self):
         for block in self:
@@ -1189,6 +1266,7 @@ class OLMo(nn.Module):
         attention_bias: Optional[torch.Tensor] = None,
         past_key_values: Optional[Sequence[Tuple[torch.Tensor, torch.Tensor]]] = None,
         use_cache: bool = False,
+        output_attentions: bool = False,
         last_logits_only: bool = False,
         output_hidden_states: Optional[bool] = None,
     ) -> OLMoOutput:
@@ -1292,6 +1370,7 @@ class OLMo(nn.Module):
                 ensure_finite_(attention_bias, check_neg_inf=True, check_pos_inf=False)
 
         attn_key_values: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = [] if use_cache else None
+        attn_weights: Optional[List[torch.Tensor]] = [] if output_attentions else None
 
         # decoder layers
         all_hidden_states = []
@@ -1320,15 +1399,31 @@ class OLMo(nn.Module):
                     )
                 ):
                     # shape: (batch_size, seq_len, d_model)
-                    x, cache = self._activation_checkpoint_fn(
-                        block, x, attention_bias=attention_bias, layer_past=layer_past, use_cache=use_cache
+                    x, cache, block_attn_weights = self._activation_checkpoint_fn(
+                        block,
+                        x,
+                        attention_bias=attention_bias,
+                        layer_past=layer_past,
+                        use_cache=use_cache,
+                        use_pytorch_sdpa=self.config.use_pytorch_sdpa,
+                        output_attentions=output_attentions,
                     )
                 else:
                     # shape: (batch_size, seq_len, d_model)
-                    x, cache = block(x, attention_bias=attention_bias, layer_past=layer_past, use_cache=use_cache)
+                    x, cache, block_attn_weights = block(
+                        x,
+                        attention_bias=attention_bias,
+                        layer_past=layer_past,
+                        use_cache=use_cache,
+                        use_pytorch_sdpa=self.config.use_pytorch_sdpa,
+                        output_attentions=output_attentions,
+                    )
                 if attn_key_values is not None:
                     assert cache is not None
                     attn_key_values.append(cache)
+                if attn_weights is not None:
+                    assert block_attn_weights is not None
+                    attn_weights.append(block_attn_weights)
         else:
             for group_idx, block_group in enumerate(self.transformer.block_groups):
                 if output_hidden_states:
@@ -1342,10 +1437,20 @@ class OLMo(nn.Module):
                         group_idx * self.config.block_group_size : (group_idx + 1) * self.config.block_group_size
                     ]
                 )
-                x, cache = block_group(x, attention_bias=attention_bias, layers_past=layers_past, use_cache=use_cache)
+                x, cache, block_attn_weights = block_group(
+                    x,
+                    attention_bias=attention_bias,
+                    layers_past=layers_past,
+                    use_cache=use_cache,
+                    use_pytorch_sdpa=self.config.use_pytorch_sdpa,
+                    output_attentions=output_attentions,
+                )
                 if attn_key_values is not None:
                     assert cache is not None
                     attn_key_values.extend(cache)
+                if attn_weights is not None:
+                    assert block_attn_weights is not None
+                    attn_weights.append(block_attn_weights)
 
         if last_logits_only:
             # shape: (batch_size, 1, d_model)
@@ -1371,7 +1476,8 @@ class OLMo(nn.Module):
             logits=logits,
             attn_key_values=attn_key_values,
             hidden_states=tuple(all_hidden_states) if output_hidden_states else None,
-        )  # type: ignore[arg-type]
+            attentions=tuple(attn_weights) if attn_weights is not None else None,
+        )
 
     def get_fsdp_wrap_policy(self, wrap_strategy: Optional[FSDPWrapStrategy] = None):
         if wrap_strategy is None:
