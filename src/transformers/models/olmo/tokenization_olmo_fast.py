@@ -12,146 +12,107 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
-from shutil import copyfile
-from typing import Optional, Tuple
+import json
+from typing import List, Optional, Tuple
 
-from tokenizers import processors
+from tokenizers import pre_tokenizers, processors
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import is_sentencepiece_available, logging
-from ...utils.versions import require_version
+from ...utils import logging
 
-
-require_version("tokenizers>=0.13.3")
-
-if is_sentencepiece_available():
-    from .tokenization_olmo import OLMoTokenizer
-else:
-    OLMoTokenizer = None
 
 logger = logging.get_logger(__name__)
-VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokenizer.json"}
+
+VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "hf-internal-testing/olmo-tokenizer": "https://huggingface.co/hf-internal-testing/olmo-tokenizer/resolve/main/tokenizer.model",
-    },
     "tokenizer_file": {
-        "hf-internal-testing/olmo-tokenizer": "https://huggingface.co/hf-internal-testing/olmo-tokenizer/resolve/main/tokenizer_config.json",
+        "allenai/OLMo-1B": "https://huggingface.co/allenai/OLMo-1B/resolve/main/tokenizer.json",
+        "allenai/OLMo-7B": "https://huggingface.co/allenai/OLMo-7B/resolve/main/tokenizer.json",
+        "allenai/OLMo-7B-Twin-2T": "https://huggingface.co/allenai/OLMo-7B-Twin-2T/resolve/main/tokenizer.json",
     },
 }
-B_INST, E_INST = "[INST]", "[/INST]"
-B_SYS, E_SYS = "<<SYS>>\n", "\n<</SYS>>\n\n"
 
-# fmt: off
-DEFAULT_SYSTEM_PROMPT = """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your \
-answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure\
- that your responses are socially unbiased and positive in nature.
-
-If a question does not make any sense, or is not factually coherent, explain why instead of answering something not \
-correct. If you don't know the answer to a question, please don't share false information."""
-# fmt: on
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "allenai/OLMo-1B": 2048,
+    "allenai/OLMo-7B": 2048,
+    "allenai/OLMo-7B-Twin-2T": 2048,
+}
 
 
 class OLMoTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a OLMo tokenizer. Based on byte-level Byte-Pair-Encoding.
-
-    This uses notably ByteFallback and no normalization.
+    Construct a "fast" OLMo tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
+    Byte-Pair-Encoding.
 
     ```python
     >>> from transformers import OLMoTokenizerFast
 
-    >>> tokenizer = OLMoTokenizerFast.from_pretrained("hf-internal-testing/olmo-tokenizer")
+    >>> tokenizer = OLMoTokenizerFast.from_pretrained("allenai/OLMo-7B")
     >>> tokenizer.encode("Hello this is a test")
-    [1, 15043, 445, 338, 263, 1243]
+    [12092, 436, 310, 247, 1071]
     ```
 
-    If you want to change the `bos_token` or the `eos_token`, make sure to specify them when initializing the model, or
+    If you want to change the `eos_token`, make sure to specify it when initializing the model, or
     call `tokenizer.update_post_processor()` to make sure that the post-processing is correctly done (otherwise the
-    values of the first token and final token of an encoded sequence will not be correct). For more details, checkout
+    values of the final token of an encoded sequence will not be correct). For more details, checkout
     [post-processors] (https://huggingface.co/docs/tokenizers/api/post-processors) documentation.
-
 
     This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`, *optional*):
-            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
-            contains the vocabulary necessary to instantiate a tokenizer.
         tokenizer_file (`str`, *optional*):
             [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
             contains everything needed to load the tokenizer.
-        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
-            Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
-            extra spaces.
-        unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<unk>"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
-        bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<s>"`):
-            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
-        eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"</s>"`):
+        eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
-        add_bos_token (`bool`, *optional*, defaults to `True`):
-            Whether or not to add an `bos_token` at the start of sequences.
-        add_eos_token (`bool`, *optional*, defaults to `False`):
+        pad_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<|padding|>"`):
+            Token for padding a sequence.
+        add_prefix_space (`bool`, *optional*, defaults to `False`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word. (OLMo tokenizer detect beginning of words by the preceding space).
+        add_eos_token (`bool`, *optional*, defaults to `True`):
             Whether or not to add an `eos_token` at the end of sequences.
-        use_default_system_prompt (`bool`, *optional*, defaults to `False`):
-            Whether or not the default system prompt for OLMo should be used.
-        add_prefix_space (`bool`, *optional*):
-            Whether or not the tokenizer should automatically add a prefix space
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    slow_tokenizer_class = OLMoTokenizer
-    padding_side = "left"
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,
-        vocab_file=None,
         tokenizer_file=None,
-        clean_up_tokenization_spaces=False,
-        unk_token="<unk>",
-        bos_token="<s>",
-        eos_token="</s>",
-        add_bos_token=True,
-        add_eos_token=False,
-        use_default_system_prompt=False,
-        add_prefix_space=None,
+        eos_token="<|endoftext|>",
+        pad_token="<|padding|>",
+        add_prefix_space=False,
+        add_eos_token=True,
         **kwargs,
     ):
-        if add_prefix_space is not None:
-            logger.warning_once(
-                "You set `add_prefix_space`. The tokenizer needs to be converted from the slow tokenizers"
-            )
-            kwargs["from_slow"] = True
-
         super().__init__(
-            vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            unk_token=unk_token,
-            bos_token=bos_token,
             eos_token=eos_token,
-            add_bos_token=add_bos_token,
+            pad_token=pad_token,
+            add_prefix_space=add_prefix_space,
             add_eos_token=add_eos_token,
-            use_default_system_prompt=use_default_system_prompt,
             **kwargs,
         )
-        self._add_bos_token = add_bos_token
+
+        # OLMo tokenizer currently does not support a bos token
+        self._add_bos_token = False
         self._add_eos_token = add_eos_token
         self.update_post_processor()
-        self.use_default_system_prompt = use_default_system_prompt
-        self.vocab_file = vocab_file
 
-    @property
-    def can_save_slow_tokenizer(self) -> bool:
-        return os.path.isfile(self.vocab_file) if self.vocab_file else False
+        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
+        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
+            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
+            pre_tok_state["add_prefix_space"] = add_prefix_space
+            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
 
+        self.add_prefix_space = add_prefix_space
+
+    # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.update_post_processor
     def update_post_processor(self):
         """
         Updates the underlying post processor with the current `bos_token` and `eos_token`.
@@ -196,43 +157,53 @@ class OLMoTokenizerFast(PreTrainedTokenizerFast):
         self._add_bos_token = value
         self.update_post_processor()
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        if not self.can_save_slow_tokenizer:
-            raise ValueError(
-                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
-                "tokenizer."
+    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.get_special_tokens_mask
+    def get_special_tokens_mask(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+    ) -> List[int]:
+        """
+        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
+        special tokens using the tokenizer `prepare_for_model` method.
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not the token list is already formatted with special tokens for the model.
+
+        Returns:
+            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+        """
+        if already_has_special_tokens:
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
             )
 
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        bos_token_id = [1] if self.add_bos_token else []
+        eos_token_id = [1] if self.add_eos_token else []
+
+        if token_ids_1 is None:
+            return bos_token_id + ([0] * len(token_ids_0)) + eos_token_id
+        return (
+            bos_token_id
+            + ([0] * len(token_ids_0))
+            + eos_token_id
+            + bos_token_id
+            + ([0] * len(token_ids_1))
+            + eos_token_id
         )
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
-
-        return (out_vocab_file,)
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
+        return tuple(files)
 
     @property
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.default_chat_template
     def default_chat_template(self):
         """
-        OLMo uses [INST] and [/INST] to indicate user messages, and <<SYS>> and <</SYS>> to indicate system messages.
-        Assistant messages do not have special tokens, because OLMo chat models are generally trained with strict
-        user/assistant/user/assistant message ordering, and so assistant messages can be identified from the ordering
-        rather than needing special tokens. The system message is partly 'embedded' in the first user message, which
-        results in an unusual token ordering when it is present. This template should definitely be changed if you wish
-        to fine-tune a model with more flexible role ordering!
-
-        The output should look something like:
-
-        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos><bos>[INST] Prompt [/INST] Answer <eos>
-        <bos>[INST] Prompt [/INST]
-
-        The reference for this chat template is [this code
-        snippet](https://github.com/facebookresearch/olmo/blob/556949fdfb72da27c2f4a40b7f0e4cf0b8153a28/olmo/generation.py#L320-L362)
-        in the original repository.
+        A simple chat template that ignores role information and just concatenates messages with EOS tokens.
         """
         logger.warning_once(
             "\nNo chat template is defined for this tokenizer - using the default template "
@@ -240,42 +211,9 @@ class OLMoTokenizerFast(PreTrainedTokenizerFast):
             "your model, please set `tokenizer.chat_template` to an appropriate template. "
             "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
         )
-        template = (
-            "{% if messages[0]['role'] == 'system' %}"
-            "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present
-            "{% set system_message = messages[0]['content'] %}"
-            "{% elif USE_DEFAULT_PROMPT == true and not '<<SYS>>' in messages[0]['content'] %}"
-            "{% set loop_messages = messages %}"  # Or use the default system message if the flag is set
-            "{% set system_message = 'DEFAULT_SYSTEM_MESSAGE' %}"
-            "{% else %}"
-            "{% set loop_messages = messages %}"
-            "{% set system_message = false %}"
-            "{% endif %}"
-            "{% for message in loop_messages %}"  # Loop over all non-system messages
-            "{% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}"
-            "{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}"
-            "{% endif %}"
-            "{% if loop.index0 == 0 and system_message != false %}"  # Embed system message in first message
-            "{% set content = '<<SYS>>\\n' + system_message + '\\n<</SYS>>\\n\\n' + message['content'] %}"
-            "{% else %}"
-            "{% set content = message['content'] %}"
-            "{% endif %}"
-            "{% if message['role'] == 'user' %}"  # After all of that, handle messages/roles in a fairly normal way
-            "{{ bos_token + '[INST] ' + content.strip() + ' [/INST]' }}"
-            "{% elif message['role'] == 'system' %}"
-            "{{ '<<SYS>>\\n' + content.strip() + '\\n<</SYS>>\\n\\n' }}"
-            "{% elif message['role'] == 'assistant' %}"
-            "{{ ' '  + content.strip() + ' ' + eos_token }}"
-            "{% endif %}"
-            "{% endfor %}"
-        )
-        template = template.replace("USE_DEFAULT_PROMPT", "true" if self.use_default_system_prompt else "false")
-        default_message = DEFAULT_SYSTEM_PROMPT.replace("\n", "\\n").replace("'", "\\'")
-        template = template.replace("DEFAULT_SYSTEM_MESSAGE", default_message)
+        return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
 
-        return template
-
-    # TODO ArthurZ let's rely on the template processor instead, refactor all fast tokenizers
+    # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         bos_token_id = [self.bos_token_id] if self.add_bos_token else []
         eos_token_id = [self.eos_token_id] if self.add_eos_token else []
