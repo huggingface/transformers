@@ -52,7 +52,7 @@ import torch.distributed as dist
 from huggingface_hub import ModelCard, create_repo, upload_folder
 from packaging import version
 from torch import nn
-from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
+from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
 
 from . import __version__
 from .configuration_utils import PretrainedConfig
@@ -83,6 +83,7 @@ from .trainer_pt_utils import (
     DistributedTensorGatherer,
     IterableDatasetShard,
     LabelSmoother,
+    LayerWiseDummyOptimizer,
     LengthGroupedSampler,
     SequentialDistributedSampler,
     distributed_broadcast_scalars,
@@ -111,6 +112,7 @@ from .trainer_utils import (
     RemoveColumnsCollator,
     TrainerMemoryTracker,
     TrainOutput,
+    check_target_module_exists,
     default_compute_objective,
     denumpify_detensorize,
     enable_full_determinism,
@@ -141,6 +143,7 @@ from .utils import (
     is_apex_available,
     is_bitsandbytes_available,
     is_datasets_available,
+    is_galore_torch_available,
     is_in_notebook,
     is_ipex_available,
     is_peft_available,
@@ -217,6 +220,9 @@ if is_accelerate_available():
 
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
+
+if is_accelerate_available("0.28.0"):
+    from accelerate.utils import DataLoaderConfiguration
 
 
 def _is_peft_model(model):
@@ -347,7 +353,7 @@ class Trainer:
         model: Union[PreTrainedModel, nn.Module] = None,
         args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
-        train_dataset: Optional[Dataset] = None,
+        train_dataset: Optional[Union[Dataset, IterableDataset]] = None,
         eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
         model_init: Optional[Callable[[], PreTrainedModel]] = None,
@@ -1010,7 +1016,17 @@ class Trainer:
                 },
             ]
 
-            optimizer_cls, optimizer_kwargs = Trainer.get_optimizer_cls_and_kwargs(self.args)
+            optimizer_cls, optimizer_kwargs = Trainer.get_optimizer_cls_and_kwargs(self.args, opt_model)
+
+            # Overwrite `params` in case it's created by `get_optimizer_cls_and_kwargs`
+            # e.g. for GaLore optimizer.
+            if "params" in optimizer_kwargs:
+                optimizer_grouped_parameters = optimizer_kwargs.pop("params")
+
+            # For layer-wise dummy optimizers we overwrite optimizer_grouped_parameters with `optimizer_dict`
+            # to avoid arguments conflicts.
+            if "optimizer_dict" in optimizer_kwargs:
+                optimizer_grouped_parameters = optimizer_kwargs.pop("optimizer_dict")
 
             self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
             if optimizer_cls.__name__ == "Adam8bit":
@@ -1033,7 +1049,9 @@ class Trainer:
         return self.optimizer
 
     @staticmethod
-    def get_optimizer_cls_and_kwargs(args: TrainingArguments) -> Tuple[Any, Any]:
+    def get_optimizer_cls_and_kwargs(
+        args: TrainingArguments, model: Optional[PreTrainedModel] = None
+    ) -> Tuple[Any, Any]:
         """
         Returns the optimizer class and optimizer parameters based on the training arguments.
 
@@ -1171,6 +1189,133 @@ class Trainer:
             optimizer_cls = torch.optim.Adagrad
         elif args.optim == OptimizerNames.RMSPROP:
             optimizer_cls = torch.optim.RMSprop
+        elif args.optim in [
+            OptimizerNames.GALORE_ADAMW,
+            OptimizerNames.GALORE_ADAMW_8BIT,
+            OptimizerNames.GALORE_ADAFACTOR,
+            OptimizerNames.GALORE_ADAMW_LAYERWISE,
+            OptimizerNames.GALORE_ADAMW_8BIT_LAYERWISE,
+            OptimizerNames.GALORE_ADAFACTOR_LAYERWISE,
+        ]:
+            if not is_galore_torch_available():
+                raise ImportError(
+                    "You need to install `galore_torch` in order to use GaLore optimizers"
+                    " install it with `pip install git+https://github.com/jiaweizzhao/GaLore`"
+                )
+            from galore_torch import GaLoreAdafactor, GaLoreAdamW, GaLoreAdamW8bit
+
+            is_layerwise = args.optim.lower().endswith("layerwise")
+            if is_layerwise and args.parallel_mode == ParallelMode.DISTRIBUTED:
+                raise NotImplementedError("Layer-wise GaLore does not support DDP at this time")
+
+            optimizer_mapping = {
+                OptimizerNames.GALORE_ADAMW: GaLoreAdamW,
+                OptimizerNames.GALORE_ADAMW_8BIT: GaLoreAdamW8bit,
+                OptimizerNames.GALORE_ADAFACTOR: GaLoreAdafactor,
+                OptimizerNames.GALORE_ADAMW_LAYERWISE: GaLoreAdamW,
+                OptimizerNames.GALORE_ADAMW_8BIT_LAYERWISE: GaLoreAdamW8bit,
+                OptimizerNames.GALORE_ADAFACTOR_LAYERWISE: GaLoreAdafactor,
+            }
+
+            optimizer_cls = optimizer_mapping[args.optim]
+
+            if args.optim_target_modules is None:
+                raise ValueError(
+                    "You need to define a `optim_target_modules` in order to properly use GaLore optimizers"
+                )
+
+            if not isinstance(args.optim_target_modules, (list, str)):
+                raise ValueError(
+                    f"`optim_target_modules` has to be a list of strings, a string corresponding to a regex, or a specific module or 'all-linear', you passed {args.optim_target_modules}"
+                )
+
+            if model is None:
+                raise ValueError("You need to pass a model in order to correctly initialize a GaLore optimizer.")
+
+            logger.warning(
+                "Activated GaLoRE fine-tuning, depending on your model size and hardware, the training might take a while before starting. Please be patient !"
+            )
+
+            all_linear = (
+                isinstance(args.optim_target_modules, str)
+                and args.optim_target_modules.replace("_", "-") == "all-linear"
+            )
+
+            galore_params = []
+            galore_params_names = []
+            for module_name, module in model.named_modules():
+                target_module_exists, is_regex = check_target_module_exists(
+                    args.optim_target_modules, module_name, return_is_regex=True
+                )
+
+                if not isinstance(module, nn.Linear):
+                    # Warn in case we match but it's not a linear layer
+                    if target_module_exists and not is_regex:
+                        logger.warning(
+                            f"{module_name} has been matched but ignored as GaLore only supports linear layers. Please double check your `optim_target_modules`!"
+                        )
+
+                    continue
+
+                if not target_module_exists and not all_linear:
+                    continue
+
+                galore_params.append(module.weight)
+                galore_params_names.append(module_name + ".weight")
+
+            if len(galore_params) == 0:
+                raise ValueError(
+                    f"None of the target modules were found! ({args.optim_target_modules}). Please make sure to pass a valid `target_modules`."
+                )
+
+            non_galore_params = [p for n, p in model.named_parameters() if n not in galore_params_names]
+
+            galore_optim_kwargs = {
+                "rank": int(optim_args.pop("rank", 128)),
+                "update_proj_gap": int(optim_args.pop("update_proj_gap", 200)),
+                "scale": float(optim_args.pop("scale", 0.25)),
+                "proj_type": optim_args.pop("proj_type", "std"),
+            }
+
+            # The default args are from the official repository: https://github.com/jiaweizzhao/GaLore
+            param_groups = [
+                {"params": non_galore_params},
+                {"params": galore_params, **galore_optim_kwargs},
+            ]
+
+            if is_layerwise:
+                # For layer-wise optimizers, the optimization step is done through post accumulation
+                # gradient hooks. The trick is to first attach these hooks to the model parameters then
+                # create a dummy optimizer that will perform no-ops in the Trainer.
+                # See the original implementation or the nice implementation from @hiyouga
+                # here: https://github.com/hiyouga/LLaMA-Factory/commit/8664262cde3919e10eaecbd66e8c5d356856362e#diff-ebe08ab14496dfb9e06075f0fdd36799ef6d1535cc4dd4715b74c4e3e06fe3ba
+                if args.gradient_accumulation_steps != 1:
+                    raise ValueError("Layerwise GaLoRE optimizer do not support gradient accumulation !")
+
+                optimizer_dict = {}
+                for param in non_galore_params:
+                    param_groups = [{"params": [param]}]
+                    optimizer_dict[param] = optimizer_cls(param_groups, **optimizer_kwargs)
+                for param in galore_params:
+                    param_groups = [{"params": [param], **galore_optim_kwargs}]
+                    optimizer_dict[param] = optimizer_cls(param_groups, **optimizer_kwargs)
+
+                def optimizer_hook(param):
+                    if param.grad is not None:
+                        optimizer_dict[param].step()
+                        optimizer_dict[param].zero_grad()
+
+                for param in model.parameters():
+                    if param.requires_grad:
+                        param.register_post_accumulate_grad_hook(optimizer_hook)
+
+                optimizer_cls = LayerWiseDummyOptimizer
+                optimizer_kwargs.update({"optimizer_dict": optimizer_dict})
+
+            optimizer_kwargs.update({"params": param_groups})
+
+            if args.optim == OptimizerNames.GALORE_ADAFACTOR:
+                optimizer_kwargs.update({"scale_parameter": False, "relative_step": False})
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
@@ -1383,6 +1528,29 @@ class Trainer:
             )
 
         return model
+
+    def compare_trainer_and_checkpoint_args(self, training_args, trainer_state):
+        attributes_map = {
+            "logging_steps": "logging_steps",
+            "eval_steps": "eval_steps",
+            "save_steps": "save_steps",
+            "per_device_train_batch_size": "train_batch_size",
+        }
+
+        warnings_list = []
+        for arg_attr, state_attr in attributes_map.items():
+            arg_value = getattr(training_args, arg_attr, None)
+            state_value = getattr(trainer_state, state_attr, None)
+
+            if arg_value is not None and state_value is not None and arg_value != state_value:
+                warnings_list.append(
+                    f"Warning: The training argument '{arg_attr}' value ({arg_value}) does not match the trainer state '{state_attr}' value ({state_value}). "
+                    f"This argument will be overridden by the one found in trainer_state.json within the checkpoint directory."
+                )
+
+        if warnings_list:
+            for warning in warnings_list:
+                logger.warning(warning)
 
     def _wrap_model(self, model, training=True, dataloader=None):
         if self.args.use_ipex:
@@ -1846,6 +2014,7 @@ class Trainer:
             os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME)
         ):
             self.state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
+            self.compare_trainer_and_checkpoint_args(self.args, self.state)
             epochs_trained = self.state.global_step // num_update_steps_per_epoch
             if not args.ignore_data_skip:
                 steps_trained_in_current_epoch = self.state.global_step % (num_update_steps_per_epoch)
@@ -1952,7 +2121,12 @@ class Trainer:
                             "a `main_input_name` attribute to the model class you are using."
                         )
                     else:
-                        self.state.num_input_tokens_seen += self.accelerator.gather(inputs[main_input_name]).numel()
+                        input_device = inputs[main_input_name].device
+                        self.state.num_input_tokens_seen += torch.sum(
+                            self.accelerator.gather(
+                                torch.tensor(inputs[main_input_name].numel(), device=input_device, dtype=torch.int64)
+                            )
+                        ).item()
                 if rng_to_sync:
                     self._load_rng_state(resume_from_checkpoint)
                     rng_to_sync = False
@@ -1983,6 +2157,10 @@ class Trainer:
                     # if loss is nan or inf simply add the average of previous logged losses
                     tr_loss += tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
                 else:
+                    if tr_loss.device != tr_loss_step.device:
+                        raise ValueError(
+                            f"Calculated loss must be on the original device: {tr_loss.device} but device in use is {tr_loss_step.device}"
+                        )
                     tr_loss += tr_loss_step
 
                 self.current_flos += float(self.floating_point_ops(inputs))
@@ -4102,12 +4280,26 @@ class Trainer:
         grad_acc_kwargs["sync_with_dataloader"] = False
         gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
 
+        accelerator_config = self.args.accelerator_config.to_dict()
+
+        if is_accelerate_available("0.28.0"):
+            dataloader_config = DataLoaderConfiguration(
+                split_batches=accelerator_config.pop("split_batches"),
+                dispatch_batches=accelerator_config.pop("dispatch_batches"),
+                even_batches=accelerator_config.pop("even_batches"),
+                use_seedable_sampler=accelerator_config.pop("use_seedable_sampler"),
+            )
+        args = {
+            "deepspeed_plugin": self.args.deepspeed_plugin,
+            "gradient_accumulation_plugin": gradient_accumulation_plugin,
+        }
+        if is_accelerate_available("0.28.0"):
+            args["dataloader_config"] = dataloader_config
+        else:
+            args.update(accelerator_config)
+
         # create accelerator object
-        self.accelerator = Accelerator(
-            deepspeed_plugin=self.args.deepspeed_plugin,
-            gradient_accumulation_plugin=gradient_accumulation_plugin,
-            **self.args.accelerator_config.to_dict(),
-        )
+        self.accelerator = Accelerator(**args)
         # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
         self.gather_function = self.accelerator.gather_for_metrics
 

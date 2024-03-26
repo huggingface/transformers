@@ -339,7 +339,6 @@ class FlaxGemmaAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaMLP with Llama->Gemma
 class FlaxGemmaMLP(nn.Module):
     config: GemmaConfig
     dtype: jnp.dtype = jnp.float32
@@ -349,7 +348,18 @@ class FlaxGemmaMLP(nn.Module):
         inner_dim = self.config.intermediate_size if self.config.intermediate_size is not None else 4 * embed_dim
 
         kernel_init = jax.nn.initializers.normal(self.config.initializer_range)
-        self.act = ACT2FN[self.config.hidden_act]
+        if self.config.hidden_activation is None:
+            logger.warning_once(
+                "Gemma's activation function should be approximate GeLU and not exact GeLU. "
+                "Changing the activation function to `gelu_pytorch_tanh`."
+                f"if you want to use the legacy `{self.config.hidden_act}`, "
+                f"edit the `model.config` to set `hidden_activation={self.config.hidden_act}` "
+                "  instead of `hidden_act`. See https://github.com/huggingface/transformers/pull/29402 for more details."
+            )
+            hidden_activation = "gelu_pytorch_tanh"
+        else:
+            hidden_activation = self.config.hidden_activation
+        self.act = ACT2FN[hidden_activation]
 
         self.gate_proj = nn.Dense(inner_dim, use_bias=False, dtype=self.dtype, kernel_init=kernel_init)
         self.down_proj = nn.Dense(embed_dim, use_bias=False, dtype=self.dtype, kernel_init=kernel_init)

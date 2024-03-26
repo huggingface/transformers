@@ -49,10 +49,7 @@ _CHECKPOINT_FOR_DOC = "caidas/swin2SR-classical-sr-x2-64"
 _EXPECTED_OUTPUT_SHAPE = [1, 180, 488, 648]
 
 
-SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "caidas/swin2SR-classical-sr-x2-64",
-    # See all Swin2SR models at https://huggingface.co/models?filter=swin2sr
-]
+from ..deprecated._archive_maps import SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass

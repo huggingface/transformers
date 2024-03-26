@@ -20,9 +20,14 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
+<<<<<<< HEAD
 QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "Qwen/Qwen1.5-7B": "https://huggingface.co/Qwen/Qwen1.5-7B/resolve/main/config.json",
 }
+=======
+
+from ..deprecated._archive_maps import QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
+>>>>>>> origin/master
 
 
 class Qwen2Config(PretrainedConfig):

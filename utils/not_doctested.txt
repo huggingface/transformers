@@ -147,6 +147,7 @@ docs/source/en/model_doc/lilt.md
 docs/source/en/model_doc/llama.md
 docs/source/en/model_doc/llama2.md
 docs/source/en/model_doc/llava.md
+docs/source/en/model_doc/llava_next.md
 docs/source/en/model_doc/longformer.md
 docs/source/en/model_doc/longt5.md
 docs/source/en/model_doc/luke.md
@@ -643,6 +644,8 @@ src/transformers/models/llama/convert_llama_weights_to_hf.py
 src/transformers/models/llama/modeling_llama.py
 src/transformers/models/llava/configuration_llava.py
 src/transformers/models/llava/modeling_llava.py
+src/transformers/models/llava_next/configuration_llava_next.py
+src/transformers/models/llava_next/modeling_llava_next.py
 src/transformers/models/longformer/configuration_longformer.py
 src/transformers/models/longformer/convert_longformer_original_pytorch_lightning_to_pytorch.py
 src/transformers/models/longt5/configuration_longt5.py

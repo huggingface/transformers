@@ -1484,13 +1484,6 @@ INIT_TOKENIZER_DOCSTRING = r"""
           high-level keys being the `__init__` keyword name of each vocabulary file required by the model, the
           low-level being the `short-cut-names` of the pretrained models with, as associated values, the `url` to the
           associated pretrained vocabulary file.
-        - **max_model_input_sizes** (`Dict[str, Optional[int]]`) -- A dictionary with, as keys, the `short-cut-names`
-          of the pretrained models, and as associated values, the maximum length of the sequence inputs of this model,
-          or `None` if the model has no maximum input size.
-        - **pretrained_init_configuration** (`Dict[str, Dict[str, Any]]`) -- A dictionary with, as keys, the
-          `short-cut-names` of the pretrained models, and as associated values, a dictionary of specific arguments to
-          pass to the `__init__` method of the tokenizer class for this pretrained model when loading the tokenizer
-          with the [`~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`] method.
         - **model_input_names** (`List[str]`) -- A list of inputs expected in the forward pass of the model.
         - **padding_side** (`str`) -- The default value for the side on which the model should have padding applied.
           Should be `'right'` or `'left'`.
@@ -1561,8 +1554,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     vocab_files_names: Dict[str, str] = {}
     pretrained_vocab_files_map: Dict[str, Dict[str, str]] = {}
-    pretrained_init_configuration: Dict[str, Dict[str, Any]] = {}
-    max_model_input_sizes: Dict[str, Optional[int]] = {}
     _auto_class: Optional[str] = None
 
     # first name has to correspond to main model input name
@@ -1692,7 +1683,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     def apply_chat_template(
         self,
-        conversation: Union[List[Dict[str, str]], "Conversation"],
+        conversation: Union[List[Dict[str, str]], List[List[Dict[str, str]]], "Conversation"],
         chat_template: Optional[str] = None,
         add_generation_prompt: bool = False,
         tokenize: bool = True,
@@ -1703,15 +1694,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_dict: bool = False,
         tokenizer_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
-    ) -> Union[str, List[int]]:
+    ) -> Union[str, List[int], List[str], List[List[int]], BatchEncoding]:
         """
-        Converts a Conversation object or a list of dictionaries with `"role"` and `"content"` keys to a list of token
+        Converts a list of dictionaries with `"role"` and `"content"` keys to a list of token
         ids. This method is intended for use with chat models, and will read the tokenizer's chat_template attribute to
         determine the format and control tokens to use when converting. When chat_template is None, it will fall back
         to the default_chat_template specified at the class level.
 
         Args:
-            conversation (Union[List[Dict[str, str]], "Conversation"]): A Conversation object or list of dicts
+            conversation (Union[List[Dict[str, str]], List[List[Dict[str, str]]], "Conversation"]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
             chat_template (str, *optional*): A Jinja template to use for this conversion. If
                 this is not passed, the model's default chat template will be used instead.
@@ -1735,19 +1726,22 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
-            return_dict (`bool`, *optional*, defaults to `False`):
+            return_dict (`bool`, defaults to `False`):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
             tokenizer_kwargs (`Dict[str: Any]`, *optional*): Additional kwargs to pass to the tokenizer.
             **kwargs: Additional kwargs to pass to the template renderer. Will be accessible by the chat template.
 
         Returns:
-            `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
-            output is ready to pass to the model, either directly or via methods like `generate()`.
+            `Union[List[int], Dict]`: A list of token ids representing the tokenized chat so far, including control tokens. This
+            output is ready to pass to the model, either directly or via methods like `generate()`. If `return_dict` is
+            set, will return a dict of tokenizer outputs instead.
         """
 
-        if hasattr(conversation, "messages"):
-            # Indicates it's a Conversation object
-            conversation = conversation.messages
+        if return_dict and not tokenize:
+            raise ValueError(
+                "`return_dict=True` is incompatible with `tokenize=False`, because there is no dict "
+                "of tokenizer outputs to return."
+            )
 
         if tokenizer_kwargs is None:
             tokenizer_kwargs = {}
@@ -1779,34 +1773,43 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Compilation function uses a cache to avoid recompiling the same template
         compiled_template = self._compile_jinja_template(chat_template)
 
-        template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
-        rendered = compiled_template.render(
-            messages=conversation, add_generation_prompt=add_generation_prompt, **template_kwargs
-        )
+        if isinstance(conversation, (list, tuple)) and (
+            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
+        ):
+            conversations = conversation
+            is_batched = True
+        else:
+            conversations = [conversation]
+            is_batched = False
 
-        if padding is True:
-            padding = "max_length"  # There's only one sequence here, so "longest" makes no sense
+        rendered = []
+        template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
+        for chat in conversations:
+            if hasattr(chat, "messages"):
+                # Indicates it's a Conversation object
+                chat = chat.messages
+            rendered_chat = compiled_template.render(
+                messages=chat, add_generation_prompt=add_generation_prompt, **template_kwargs
+            )
+            rendered.append(rendered_chat)
+
+        if not is_batched:
+            rendered = rendered[0]
+
         if tokenize:
+            out = self(
+                rendered,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                add_special_tokens=False,
+                return_tensors=return_tensors,
+                **tokenizer_kwargs,
+            )
             if return_dict:
-                return self(
-                    rendered,
-                    padding=padding,
-                    truncation=truncation,
-                    max_length=max_length,
-                    add_special_tokens=False,
-                    return_tensors=return_tensors,
-                    **tokenizer_kwargs,
-                )
+                return out
             else:
-                return self.encode(
-                    rendered,
-                    padding=padding,
-                    truncation=truncation,
-                    max_length=max_length,
-                    add_special_tokens=False,
-                    return_tensors=return_tensors,
-                    **tokenizer_kwargs,
-                )
+                return out["input_ids"]
         else:
             return rendered
 
@@ -1819,7 +1822,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         except ImportError:
             raise ImportError("apply_chat_template requires jinja2 to be installed.")
 
-        if version.parse(jinja2.__version__) <= version.parse("3.0.0"):
+        if version.parse(jinja2.__version__) < version.parse("3.0.0"):
             raise ImportError(
                 "apply_chat_template requires jinja2>=3.0.0 to be installed. Your version is " f"{jinja2.__version__}."
             )
@@ -2211,23 +2214,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Update with newly provided kwargs
         init_kwargs.update(kwargs)
-
-        # Set max length if needed
-        if pretrained_model_name_or_path in cls.max_model_input_sizes:
-            # if we're using a pretrained model, ensure the tokenizer
-            # wont index sequences longer than the number of positional embeddings
-
-            model_max_length = cls.max_model_input_sizes[pretrained_model_name_or_path]
-            if model_max_length is not None and isinstance(model_max_length, (int, float)):
-                model_max_length = min(init_kwargs.get("model_max_length", int(1e30)), model_max_length)
-                # TODO(PVP) - uncomment following line in Transformers v5
-                # init_kwargs["model_max_length"] = model_max_length
-                # TODO(PVP) - remove in Transformers v5
-                # ---
-                init_kwargs["model_max_length"] = cls._eventually_correct_t5_max_length(
-                    pretrained_model_name_or_path, model_max_length, init_kwargs.get("model_max_length")
-                )
-                # ---
 
         # Merge resolved_vocab_files arguments in init_kwargs.
         added_tokens_file = resolved_vocab_files.pop("added_tokens_file", None)
@@ -3645,7 +3631,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 ids = ids[ids_to_move:]
                 pair_ids = pair_ids[pair_ids_to_move:] if pair_ids is not None else None
             else:
-                raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
+                raise ValueError(f"invalid truncation strategy:{self.truncation_side}")
 
         elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
             if len(pair_ids) > num_tokens_to_remove:
@@ -3657,7 +3643,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     overflowing_tokens = pair_ids[:window_len]
                     pair_ids = pair_ids[num_tokens_to_remove:]
                 else:
-                    raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
+                    raise ValueError(f"invalid truncation strategy:{self.truncation_side}")
             else:
                 logger.error(
                     f"We need to remove {num_tokens_to_remove} to truncate the input "
@@ -3741,7 +3727,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
                 encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
             else:
-                raise ValueError("Invalid padding strategy:" + str(self.padding_side))
+                raise ValueError(f"Invalid padding strategy:{self.padding_side}")
 
         return encoded_inputs
 

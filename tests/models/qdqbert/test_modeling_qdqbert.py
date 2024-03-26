@@ -39,7 +39,6 @@ if is_torch_available():
         QDQBertLMHeadModel,
         QDQBertModel,
     )
-    from transformers.models.qdqbert.modeling_qdqbert import QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class QDQBertModelTester:
@@ -537,9 +536,9 @@ class QDQBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = QDQBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google-bert/bert-base-uncased"
+        model = QDQBertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     # Override
     def test_feed_forward_chunking(self):

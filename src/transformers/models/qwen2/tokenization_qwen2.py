@@ -33,10 +33,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"Qwen/Qwen1.5-7B": "https://huggingface.co/Qwen/Qwen1.5-7B/resolve/main/vocab.json"},
-    "merges_file": {"Qwen/Qwen1.5-7B": "https://huggingface.co/Qwen/Qwen1.5-7B/resolve/main/merges.txt"},
-}
 
 MAX_MODEL_INPUT_SIZES = {"Qwen/Qwen1.5-7B": 32768}
 
@@ -136,8 +132,6 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = MAX_MODEL_INPUT_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
