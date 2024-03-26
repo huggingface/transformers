@@ -4672,17 +4672,15 @@ def unwrap_model(model: nn.Module) -> nn.Module:
 
     def recursive_unwrap(module):
         if hasattr(module, "module"):
-            try:
-                unwrapped_module = recursive_unwrap(getattr(module, "module"))
-            except AttributeError:
-                unwrapped_module = module  # Handle cases where wrapped module is inaccessible
-            return unwrapped_module
+            unwrapped_module = recursive_unwrap(getattr(module, "module"))
+        else:
+            unwrapped_module = module  # Handle cases where wrapped module is inaccessible
 
         # Unwrap child sublayers recursively
         for name, child in module.named_children():
             setattr(module, name, recursive_unwrap(child))
 
-        return module
+        return unwrapped_module
 
     # Start with top-level unwrapping
     unwrapped_model = recursive_unwrap(model)
