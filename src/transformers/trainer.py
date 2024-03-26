@@ -1534,7 +1534,6 @@ class Trainer:
             "logging_steps": "logging_steps",
             "eval_steps": "eval_steps",
             "save_steps": "save_steps",
-            "per_device_train_batch_size": "train_batch_size",
         }
 
         has_warning = False
@@ -1546,7 +1545,15 @@ class Trainer:
             if arg_value is not None and state_value is not None and arg_value != state_value:
                 warning_str += f"\n\t{arg_attr}: {arg_value} (from args) != {state_value} (from trainer_state.json)"
                 has_warning = True
-        
+
+        # train bs is special as we need to account for multi-GPU
+        train_bs_args = training_args.per_device_train_batch_size
+        train_bs_state = trainer_state.train_batch_size // training_args.n_gpu
+
+        if train_bs_args != train_bs_state:
+            warning_str += f"\n\tper_device_train_batch_size: {train_bs_args} (from args) != {train_bs_state} (from trainer_state.json)"
+            has_warning = True
+
         if has_warning:
             logger.warning(warning_str)
 
