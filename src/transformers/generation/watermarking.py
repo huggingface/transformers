@@ -81,9 +81,6 @@ class WatermarkDetector:
         ignore_repeated_ngrams (`bool`, *optional*, defaults to `False`):
             Whether to count every unique ngram only once or not.
 
-    Return:
-            [`~generation.WatermarkDetectorOutput`] or `torch.FloatTensor`: A [`~utils.ModelOutput`] (if `return_dict=True`
-            otherwise a `torch.FloatTensor`.
 
     Examples:
 
