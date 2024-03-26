@@ -286,8 +286,7 @@ def unset_hf_deepspeed_config():
 def is_deepspeed_zero3_enabled(check_accelerate=False):
     """
     If `check_accelerate`, will also check if `deepspeed_zero3` has been enabled through
-    the `HfDeepSpeedConfig` and if it was enabled through the environment variables
-    from `accelerate launch`.
+    the environment variables setup during `accelerate launch`.
     """
     accelerate_zero_stage = int(os.environ.get("ACCELERATE_DEEPSPEED_ZERO_STAGE", -1))
     accelerate_zero_init = os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", "0")
