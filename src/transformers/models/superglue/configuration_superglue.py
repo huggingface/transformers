@@ -15,6 +15,7 @@ from typing import List
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
@@ -30,6 +31,7 @@ class SuperGlueConfig(PretrainedConfig):
 
     def __init__(
             self,
+            keypoint_detector_config=None,
             descriptor_dim: int = 256,
             keypoint_encoder_sizes: List[int] = [32, 64, 128, 256],
             gnn_layers_types: List[str] = ['self', 'cross'] * 9,
@@ -39,6 +41,7 @@ class SuperGlueConfig(PretrainedConfig):
             model_version: str = "indoor",
             **kwargs,
     ):
+
         # Check whether all gnn_layers_types are either 'self' or 'cross'
         if not all([layer_type in ['self', 'cross'] for layer_type in gnn_layers_types]):
             raise ValueError("All gnn_layers_types must be either 'self' or 'cross'")
@@ -56,5 +59,16 @@ class SuperGlueConfig(PretrainedConfig):
         self.sinkhorn_iterations = sinkhorn_iterations
         self.matching_threshold = matching_threshold
         self.model_version = model_version
+
+        if isinstance(keypoint_detector_config, dict):
+            keypoint_detector_config["model_type"] = (
+                keypoint_detector_config["model_type"] if "model_type" in keypoint_detector_config else "superpoint"
+            )
+            keypoint_detector_config = CONFIG_MAPPING[keypoint_detector_config["model_type"]](
+                **keypoint_detector_config)
+        if keypoint_detector_config is None:
+            keypoint_detector_config = CONFIG_MAPPING["superpoint"]()
+
+        self.keypoint_detector_config = keypoint_detector_config
 
         super().__init__(**kwargs)
