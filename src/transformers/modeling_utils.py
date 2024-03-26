@@ -1312,7 +1312,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             torch_dtype=torch_dtype,
         )
 
-        if is_deepspeed_zero3_enabled():
+        deepspeed_enabled, accelerate_enabled = is_deepspeed_zero3_enabled(check_accelerate=True)
+
+        if deepspeed_enabled:
+            if not accelerate_enabled:
+                raise ValueError(
+                    "Detected that you want to use `zero-3` Init, but the environment "
+                    "has not been setup yet. Please create `TrainingArguments` before "
+                    "initializing the model."
+                )
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
@@ -3386,7 +3394,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Instantiate model.
         init_contexts = [no_init_weights(_enable=_fast_init)]
 
-        if is_deepspeed_zero3_enabled() and not is_quantized:
+        deepspeed_enabled, accelerate_enabled = is_deepspeed_zero3_enabled(check_accelerate=True)
+
+        if deepspeed_enabled and not is_quantized:
+            if not accelerate_enabled:
+                raise ValueError(
+                    "Detected that you want to use `zero-3` Init, but the environment "
+                    "has not been setup yet. Please create `TrainingArguments` before "
+                    "initializing the model."
+                )
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")

@@ -17,6 +17,7 @@ Integration with Deepspeed
 import copy
 import importlib.metadata as importlib_metadata
 import importlib.util
+import os
 import weakref
 from functools import partialmethod
 
@@ -282,11 +283,22 @@ def unset_hf_deepspeed_config():
     _hf_deepspeed_config_weak_ref = None
 
 
-def is_deepspeed_zero3_enabled():
+def is_deepspeed_zero3_enabled(check_accelerate=False):
+    """
+    If `check_accelerate`, will also check if `deepspeed_zero3` has been enabled through
+    the `HfDeepSpeedConfig` and if it was enabled through the environment variables
+    from `accelerate launch`.
+    """
+    accelerate_zero_stage = int(os.environ.get("ACCELERATE_DEEPSPEED_ZERO_STAGE", -1))
+    accelerate_zero_init = os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", "0")
     if _hf_deepspeed_config_weak_ref is not None and _hf_deepspeed_config_weak_ref() is not None:
-        return _hf_deepspeed_config_weak_ref().is_zero3()
+        return _hf_deepspeed_config_weak_ref().is_zero3(), True
+    # This only gets triggered passively if the user launches code with a configured
+    # `accelerate launch`
+    elif check_accelerate and accelerate_zero_stage != -1 and accelerate_zero_init != "0":
+        return True, False
     else:
-        return False
+        return False, True
 
 
 def deepspeed_config():
