@@ -36,7 +36,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import XGLM_PRETRAINED_MODEL_ARCHIVE_LIST, XGLMForCausalLM, XGLMModel, XGLMTokenizer
+    from transformers import XGLMForCausalLM, XGLMModel, XGLMTokenizer
 
 
 class XGLMModelTester:
@@ -349,9 +349,9 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in XGLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = XGLMModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/xglm-564M"
+        model = XGLMModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip("Does not work on the tiny model as we keep hitting edge cases.")
     def test_model_parallelism(self):
