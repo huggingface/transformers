@@ -98,8 +98,8 @@ def write_model(
     dims_per_head = dim // n_heads
     base = params.get("rope_theta", 10000.0)
     inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
-    use_qk_norm = params["qk_normalization"],
-    use_swin_norm = params["swin_norm"],
+    use_qk_norm = params["qk_normalization"]
+    use_swin_norm = params["swin_norm"]
     if base > 10000.0:
         max_position_embeddings = 16384
     else:

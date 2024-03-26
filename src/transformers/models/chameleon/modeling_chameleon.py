@@ -1203,6 +1203,8 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
         else:
             logits = self.lm_head(hidden_states)
         logits = logits.float()
+        # Disallow image tokens. This does not mask any special tokens, such as begin-image or end-image.
+        logits[:, :, 4:8196] = -math.inf
 
         loss = None
         if labels is not None:
