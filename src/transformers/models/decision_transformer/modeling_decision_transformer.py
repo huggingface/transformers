@@ -549,7 +549,7 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)
 
-        # GPT2Attention mask.
+        # Attention mask.
         if attention_mask is not None:
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
