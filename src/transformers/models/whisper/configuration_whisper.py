@@ -29,9 +29,9 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
+
 
 # fmt: off
 NON_SPEECH_TOKENS = [

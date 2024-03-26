@@ -31,23 +31,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/s2t-wav2vec2-large-en-de": (
-            "https://huggingface.co/facebook/s2t-wav2vec2-large-en-de/resolve/main/vocab.json"
-        ),
-    },
-    "tokenizer_config_file": {
-        "facebook/s2t-wav2vec2-large-en-de": (
-            "https://huggingface.co/facebook/s2t-wav2vec2-large-en-de/resolve/main/tokenizer_config.json"
-        ),
-    },
-    "merges_file": {
-        "facebook/s2t-wav2vec2-large-en-de": (
-            "https://huggingface.co/facebook/s2t-wav2vec2-large-en-de/resolve/main/merges.txt"
-        ),
-    },
-}
 
 BPE_TOKEN_MERGES = "</w>"
 BPE_TOKEN_VOCAB = "@@ "
@@ -67,7 +50,6 @@ def get_pairs(word):
 
 
 # Speech2Text2 has no max input length
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/s2t-wav2vec2-large-en-de": 1024}
 
 
 class Speech2Text2Tokenizer(PreTrainedTokenizer):
@@ -95,8 +77,6 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(

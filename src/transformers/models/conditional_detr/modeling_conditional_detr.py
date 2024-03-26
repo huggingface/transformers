@@ -60,10 +60,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ConditionalDetrConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/conditional-detr-resnet-50"
 
-CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/conditional-detr-resnet-50",
-    # See all Conditional DETR models at https://huggingface.co/models?filter=conditional_detr
-]
+
+from ..deprecated._archive_maps import CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass

@@ -21,9 +21,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/mpnet-base": "https://huggingface.co/microsoft/mpnet-base/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class MPNetConfig(PretrainedConfig):
