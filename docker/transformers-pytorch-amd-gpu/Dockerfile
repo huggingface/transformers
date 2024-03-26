@@ -34,3 +34,6 @@ RUN python3 -m pip uninstall -y tensorflow flax
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
+
+# Remove py3nvml as it is not compatible with ROCm
+RUN pip uninstall py3nvml
