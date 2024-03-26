@@ -19,10 +19,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "tiiuae/falcon-40b": "https://huggingface.co/tiiuae/falcon-40b/resolve/main/config.json",
-    "tiiuae/falcon-7b": "https://huggingface.co/tiiuae/falcon-7b/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class FalconConfig(PretrainedConfig):

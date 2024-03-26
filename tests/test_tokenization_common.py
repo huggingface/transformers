@@ -1023,24 +1023,6 @@ class TokenizerTesterMixin:
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=False)
                 self.assertIn(decoded, ["[ABC][SAMPLE][DEF]", "[ABC][SAMPLE][DEF]".lower()])
 
-    def test_pretrained_model_lists(self):
-        # We should have at least one default checkpoint for each tokenizer
-        # We should specify the max input length as well (used in some part to list the pretrained checkpoints)
-        self.assertGreaterEqual(len(self.tokenizer_class.pretrained_vocab_files_map), 1)
-        self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
-        self.assertEqual(
-            len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]),
-            len(self.tokenizer_class.max_model_input_sizes),
-        )
-
-        weights_list = list(self.tokenizer_class.max_model_input_sizes.keys())
-        weights_lists_2 = []
-        for file_id, map_list in self.tokenizer_class.pretrained_vocab_files_map.items():
-            weights_lists_2.append(list(map_list.keys()))
-
-        for weights_list_2 in weights_lists_2:
-            self.assertListEqual(weights_list, weights_list_2)
-
     def test_mask_output(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:

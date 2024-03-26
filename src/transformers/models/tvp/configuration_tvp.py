@@ -24,9 +24,7 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
-TVP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Intel/tvp-base": "https://huggingface.co/Intel/tvp-base/resolve/main/config.json",
-}
+from ..deprecated._archive_maps import TVP_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class TvpConfig(PretrainedConfig):
