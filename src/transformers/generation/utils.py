@@ -1915,6 +1915,7 @@ class GenerationMixin:
             logger.warning_once(
                 "`eos_token_id` is deprecated in this function and will be removed in v4.41, use"
                 " `stopping_criteria=StoppingCriteriaList([EosTokenCriteria(eos_token_id=eos_token_id)])` instead.",
+                " Otherwise make sure to set `model.generation_config.eos_token_id`"
                 FutureWarning,
             )
             stopping_criteria.append(EosTokenCriteria(eos_token_id=eos_token_id))
