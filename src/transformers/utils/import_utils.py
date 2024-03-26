@@ -180,8 +180,8 @@ if USE_TORCH in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TF not in ENV_VARS_TRUE_VA
         import torch
 
         _torch_version = torch.__version__
-        if '+' in _torch_version:
-            torch_version = _torch_version.split('+')[0]
+        if "+" in _torch_version:
+            torch_version = _torch_version.split("+")[0]
 else:
     logger.info("Disabling PyTorch because USE_TF is set")
     _torch_available = False
