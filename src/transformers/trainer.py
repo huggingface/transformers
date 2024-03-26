@@ -1537,20 +1537,18 @@ class Trainer:
             "per_device_train_batch_size": "train_batch_size",
         }
 
-        warnings_list = []
+        has_warning = False
+        warning_str = "Warning: The following arguments do not match the ones in the `trainer_state.json` within the checkpoint directory: "
         for arg_attr, state_attr in attributes_map.items():
             arg_value = getattr(training_args, arg_attr, None)
             state_value = getattr(trainer_state, state_attr, None)
 
             if arg_value is not None and state_value is not None and arg_value != state_value:
-                warnings_list.append(
-                    f"Warning: The training argument '{arg_attr}' value ({arg_value}) does not match the trainer state '{state_attr}' value ({state_value}). "
-                    f"This argument will be overridden by the one found in trainer_state.json within the checkpoint directory."
-                )
-
-        if warnings_list:
-            for warning in warnings_list:
-                logger.warning(warning)
+                warning_str += f"\n\t{arg_attr}: {arg_value} (from args) != {state_value} (from trainer_state.json)"
+                has_warning = True
+        
+        if has_warning:
+            logger.warning(warning_str)
 
     def _wrap_model(self, model, training=True, dataloader=None):
         if self.args.use_ipex:
