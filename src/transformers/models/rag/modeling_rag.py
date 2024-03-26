@@ -1531,6 +1531,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             encoder_input_ids=context_input_ids,
             prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             logits_processor=logits_processor,
+            device=input_ids.device,
         )
 
         if generation_config.num_beams == 1:
