@@ -57,10 +57,6 @@ if is_torch_available():
         FlavaMultimodalModel,
         FlavaTextModel,
     )
-    from transformers.models.flava.modeling_flava import (
-        FLAVA_CODEBOOK_PRETRAINED_MODEL_ARCHIVE_LIST,
-        FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
 else:
     FlavaModel = None
     FlavaForPreTraining = None
@@ -335,9 +331,9 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlavaImageModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/flava-full"
+        model = FlavaImageModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class FlavaTextModelTester:
@@ -498,9 +494,9 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlavaTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/flava-full"
+        model = FlavaTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class FlavaMultimodalModelTester:
@@ -662,9 +658,9 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlavaMultimodalModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/flava-full"
+        model = FlavaMultimodalModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class FlavaImageCodebookTester:
@@ -795,9 +791,9 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FLAVA_CODEBOOK_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlavaImageCodebook.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/flava-full"
+        model = FlavaImageCodebook.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class FlavaModelTester:
@@ -1081,9 +1077,9 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # overwrite from common since FlavaModel/TFFlavaModel return FLAVAOutput/TFFLAVAOutput
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlavaModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/flava-full"
+        model = FlavaModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class FlavaForPreTrainingTester(FlavaModelTester):

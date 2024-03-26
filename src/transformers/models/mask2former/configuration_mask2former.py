@@ -18,14 +18,8 @@ from typing import Dict, List, Optional
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
+from ..deprecated._archive_maps import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
-
-MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/mask2former-swin-small-coco-instance": (
-        "https://huggingface.co/facebook/mask2former-swin-small-coco-instance/blob/main/config.json"
-    )
-    # See all Mask2Former models at https://huggingface.co/models?filter=mask2former
-}
 
 logger = logging.get_logger(__name__)
 
