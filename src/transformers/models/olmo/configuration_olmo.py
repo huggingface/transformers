@@ -188,16 +188,17 @@ class OLMoConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50280):
+        vocab_size (`int`, *optional*, defaults to 50304):
             Vocabulary size of the OLMo model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`OLMoModel`]
-        embedding_size (`Optional[int]`, *optional*, defaults to 50304):
-            The number of embeddings, i.e. the number of tokens. If set to ``None`` it will default
-            to ``vocab_size``. If ``vocab_size`` is not a multiple of 128, setting this to the
-            next multiple of 128 that's greater than ``vocab_size`` can improve throughput
-            substantially.
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions.
+        output_hidden_states (`bool`, *optional*, defaults to `False`):
+            Whether or not the model should return all hidden-states.
+        output_attentions (`bool`, *optional*, defaults to `False`):
+            Whether or not the model should returns all attentions.
         mlp_ratio (`int`, *optional*, defaults to 4):
             The ratio of the inner MLP dimensionality to ``d_model``.
             This is only used when ``mlp_hidden_size`` is not set.
@@ -209,11 +210,11 @@ class OLMoConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer decoder.
         multi_query_attention (`bool`, *optional*, defaults to `False`):
             If `True`, the model will use Multi Query Attention (MQA). Otherwise the model will use Multi Head Attention (MHA).
-        activation_type (`ActivationType`, *optional*, defaults to `ActivationType.swiglu`):
+        activation_type (`ActivationType`, *optional*, defaults to `swiglu`):
             The non-linear activation function in the decoder.
         max_sequence_length (`int`, *optional*, defaults to 2048):
             The maximum input sequence length supported by the model.
-        block_type (`BlockType`, *optional*, defaults to `BlockType.sequential`):
+        block_type (`BlockType`, *optional*, defaults to `sequential`):
             The transformer block implementation.
         block_group_size (`int`, *optional*, defaults to 1):
             The number of blocks to group together into a single parent block.
@@ -229,7 +230,10 @@ class OLMoConfig(PretrainedConfig):
             If ``True``, apply RoPE embeddings at full precision regardless of the input type. Otherwise,
             apply RoPE at the precision of the input.
         flash_attention (`bool`, *optional*, defaults to `True`):
-            If ``True``, use ``FlashAttention``.
+            If ``True``, use ``FlashAttention``. This is ignored if ``use_pytorch_sdpa`` is ``False``.
+        use_pytorch_sdpa (`bool`, *optional*, defaults to `True`):
+            If ``True``, use Pytorch's ``F.scaled_dot_product_attention`` instead of a manual
+            implementation for the same functionality.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability within the attention modules.
         attention_layer_norm (`bool`, *optional*, defaults to `False`):
@@ -239,7 +243,7 @@ class OLMoConfig(PretrainedConfig):
             The dropout probability for the MLP and attention output within each block.
         embedding_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for embeddings.
-        layer_norm_type (`LayerNormType`, *optional*, defaults to `LayerNormType.default`):
+        layer_norm_type (`LayerNormType`, *optional*, defaults to `default`):
             The layernorm implementation to use.
         layer_norm_with_affine (`bool`, *optional*, defaults to `False`):
             Whether to include bias and weight parameters for the layer norms.
@@ -259,32 +263,48 @@ class OLMoConfig(PretrainedConfig):
             When this is None, it inherits the setting from include_bias.
         scale_logits (`bool`, *optional*, defaults to `False`):
             If ``True``, scale the output logits by ``1 / sqrt(d_model)``.
-        weight_tying (`bool`, *optional*, defaults to `False`):
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie output linear weights to the input embedding.
-        init_device (`Optional[str]`, *optional*, defaults to `meta`):
+        init_device (`Optional[str]`, *optional*, defaults to `"cpu"`):
             The torch device to use when initializing the model parameters, e.g. "cpu", "cuda:0", "meta".
-        init_fn (`InitFnType`, *optional*, defaults to `InitFnType.mitchell`):
+            See also `change_meta_init_to_cpu`.
+        change_meta_init_to_cpu (`bool`, *optional*, defaults to `True`):
+            If `change_meta_init_to_cpu` is `True` and `init_device` is set to "meta", then
+            `init_device` is instead treated as "cpu". This changes the default init device of legacy
+            OLMo checkpoints to "cpu".
+        init_fn (`InitFnType`, *optional*, defaults to `mitchell`):
             The weight initialization strategy.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation to use when initializing weights with a "fixed distribution" ``init_fn``, such
             as "normal".
-        init_cutoff_factor (`Optional[float]`, *optional*, defaults to `None`):
+        init_cutoff_factor (`Optional[float]`, *optional*):
             A positive factor used to scale the cutoff values when initializing weights with a "fixed distribution" ``init_fn``, such
             as "normal". Setting this to None means values are not cutoff.
-        clip_qkv(`Optional[float]`, *optional*, defaults to `None`):
+            Clip QKV to this value when set.
+        clip_qkv (`Optional[float]`, *optional*):
             Clip QKV to this value when set.
         pad_token_id (`int`, *optional*, defaults to 1):
             The ID of the token to use for padding.
         eos_token_id (`int`, *optional*, defaults to 50279):
             The ID of the end-of-sentence special token.
+        d_model (`Optional[int]`, *optional*):
+            *Deprecated* Use `hidden_size` instead. This is kept to support legacy checkpoints.
+        n_layers (`Optional[int]`, *optional*):
+            *Deprecated* Use `num_hidden_layers` instead. This is kept to support legacy checkpoints.
+        n_heads (`Optional[int]`, *optional*):
+            *Deprecated* Use `num_attention_heads` instead. This is kept to support legacy checkpoints.
+        weight_tying (`Optional[bool]`, *optional*):
+            *Deprecated* Use `tie_word_embeddings` instead. This is kept to support legacy checkpoints.
+        embedding_size (`Optional[int]`, *optional*):
+            *Deprecated* Use `vocab_size` instead. This is kept to support legacy checkpoints.
 
     ```python
     >>> from transformers import OLMoModel, OLMoConfig
 
-    >>> # Initializing a OLMo olmo-7b style configuration
+    >>> # Initializing a OLMo 7B style configuration
     >>> configuration = OLMoConfig()
 
-    >>> # Initializing a model from the olmo-7b style configuration
+    >>> # Initializing a model from the OLMo 7B style configuration
     >>> model = OLMoModel(configuration)
 
     >>> # Accessing the model configuration
@@ -296,11 +316,13 @@ class OLMoConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50280,
-        embedding_size=50304,
+        vocab_size=50304,
         hidden_size=4096,
+        use_cache=True,
+        output_hidden_states=False,
+        output_attentions=False,
         mlp_ratio=4,
-        mlp_hidden_size=22016,
+        mlp_hidden_size: int | None = 22016,
         num_hidden_layers=32,
         num_attention_heads=32,
         multi_query_attention=False,
@@ -313,6 +335,7 @@ class OLMoConfig(PretrainedConfig):
         rope=True,
         rope_full_precision=False,
         flash_attention=True,
+        use_pytorch_sdpa=True,
         attention_dropout=0.0,
         attention_layer_norm=False,
         residual_dropout=0.0,
@@ -323,24 +346,42 @@ class OLMoConfig(PretrainedConfig):
         include_bias=False,
         bias_for_layer_norm=False,
         scale_logits=False,
-        weight_tying=False,
-        init_device="meta",
+        tie_word_embeddings=False,
+        init_device="cpu",
+        change_meta_init_to_cpu=True,
         init_fn=InitFnType.mitchell,
         init_std=0.02,
         init_cutoff_factor=None,
         clip_qkv=None,
         pad_token_id=1,
         eos_token_id=50279,
+        d_model=None,
+        n_layers=None,
+        n_heads=None,
+        weight_tying=None,
+        embedding_size=None,
         **kwargs,
     ):
+        super().__init__(
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
+
+        if change_meta_init_to_cpu and init_device.lower() == "meta":
+            init_device = "cpu"
+
         self.vocab_size = vocab_size
-        self.embedding_size = embedding_size
         self.max_sequence_length = max_sequence_length
-        self.d_model = hidden_size
+        self.hidden_size = hidden_size
+        self.use_cache = use_cache
+        self.output_hidden_states = output_hidden_states
+        self.output_attentions = output_attentions
         self.mlp_ratio = mlp_ratio
-        self.mlp_hidden_size = mlp_hidden_size
-        self.n_layers = num_hidden_layers
-        self.n_heads = num_attention_heads
+        self.mlp_hidden_size: int | None = mlp_hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
         self.multi_query_attention = multi_query_attention
         self.activation_type = activation_type
         self.block_type = block_type
@@ -350,6 +391,7 @@ class OLMoConfig(PretrainedConfig):
         self.rope = rope
         self.rope_full_precision = rope_full_precision
         self.flash_attention = flash_attention
+        self.use_pytorch_sdpa = use_pytorch_sdpa
         self.attention_dropout = attention_dropout
         self.attention_layer_norm = attention_layer_norm
         self.residual_dropout = residual_dropout
@@ -360,7 +402,7 @@ class OLMoConfig(PretrainedConfig):
         self.include_bias = include_bias
         self.bias_for_layer_norm = bias_for_layer_norm
         self.scale_logits = scale_logits
-        self.weight_tying = weight_tying
+        self.tie_word_embeddings = tie_word_embeddings
         self.init_device = init_device
         self.init_fn = init_fn
         self.init_std = init_std
@@ -369,12 +411,64 @@ class OLMoConfig(PretrainedConfig):
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=weight_tying,
-            **kwargs,
-        )
+        # OLMo considers 'vocab size' (the number of different tokens the tokenizer can produce)
+        # and 'embedding size' (the number of embeddings) to be different and separately configurable.
+        # HF does not. We set `embedding_size` to `None` so that HF OLMo models always have the
+        # same vocab and embedding sizes, thus avoiding this problem.
+        self.embedding_size = None
+
+        # This currently exists just to make a HF test pass
+        self.init_std_mitchell = 1.0
+
+        # At the time of adding OLMo to HF transformers, the OLMo config in HF hub had different
+        # names for some properties. There are thousands of checkpoints, so changing the names for all
+        # of them would be exceedingly time-consuming.
+        if d_model is not None:
+            self.hidden_size = d_model
+        if n_layers is not None:
+            self.num_hidden_layers = n_layers
+        if n_heads is not None:
+            self.num_attention_heads = n_heads
+        if weight_tying is not None:
+            self.tie_word_embeddings = weight_tying
+        if embedding_size is not None:
+            self.vocab_size = embedding_size
+
+    @property
+    def d_model(self) -> int:
+        """HF calls this hidden_size, OLMo calls it d_model. This property makes them equivalent."""
+        return self.hidden_size
+
+    @d_model.setter
+    def d_model(self, value: int) -> None:
+        self.hidden_size = value
+
+    @property
+    def n_layers(self) -> int:
+        """HF calls this num_hidden_layers, OLMo calls it n_layers. This property makes them equivalent."""
+        return self.num_hidden_layers
+
+    @n_layers.setter
+    def n_layers(self, value: int) -> None:
+        self.num_hidden_layers = value
+
+    @property
+    def n_heads(self) -> int:
+        """HF calls this num_attention_heads, OLMo calls it n_heads. This property makes them equivalent."""
+        return self.num_attention_heads
+
+    @n_heads.setter
+    def n_heads(self, value: int) -> None:
+        self.num_attention_heads = value
+
+    @property
+    def weight_tying(self) -> int:
+        """HF calls this tie_word_embeddings, OLMo calls it weight_tying. This property makes them equivalent."""
+        return self.tie_word_embeddings
+
+    @weight_tying.setter
+    def weight_tying(self, value: int) -> None:
+        self.tie_word_embeddings = value
 
     def _rope_scaling_validation(self):
         """
