@@ -447,7 +447,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
                     batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-1) == 0)
 
                     target_length = input_ids.shape[1]
-                    past_length = first_layer_past_key_value.shape[-1]
+                    past_length = first_layer_past_key_value.shape[-2]
 
                     extended_attention_mask = torch.ones(
                         (attention_mask.shape[0], past_length),
