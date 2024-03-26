@@ -1912,7 +1912,7 @@ class GenerationMixin:
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         if eos_token_id is not None:
-            warnings.warn(
+            logger.warning_once(
                 "`eos_token_id` is deprecated in this function and will be removed in v4.41, use"
                 " `stopping_criteria=StoppingCriteriaList([EosTokenCriteria(eos_token_id=eos_token_id)])` instead.",
                 FutureWarning,
