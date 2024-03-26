@@ -21,10 +21,8 @@ from ..auto.configuration_auto import AutoConfig
 
 logger = logging.get_logger(__name__)
 
-MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/musicgen-small": "https://huggingface.co/facebook/musicgen-small/resolve/main/config.json",
-    # See all Musicgen models at https://huggingface.co/models?filter=musicgen
-}
+
+from ..deprecated._archive_maps import MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class MusicgenDecoderConfig(PretrainedConfig):

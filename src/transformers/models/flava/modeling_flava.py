@@ -55,10 +55,9 @@ _CONFIG_CLASS_FOR_TEXT_MODEL_DOC = "FlavaTextConfig"
 _CONFIG_CLASS_FOR_MULTIMODAL_MODEL_DOC = "FlavaMultimodalConfig"
 _EXPECTED_IMAGE_OUTPUT_SHAPE = [1, 197, 768]
 
-FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/flava-full",
-    # See all flava models at https://huggingface.co/models?filter=flava
-]
+from ..deprecated._archive_maps import FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 FLAVA_CODEBOOK_PRETRAINED_MODEL_ARCHIVE_LIST = ["facebook/flava-image-codebook"]
 LOGIT_SCALE_CLAMP_MIN = 0
 LOGIT_SCALE_CLAMP_MAX = 4.6052

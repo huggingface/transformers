@@ -37,12 +37,6 @@ _CONFIG_FOR_DOC = "Speech2Text2Config"
 _CHECKPOINT_FOR_DOC = "facebook/s2t-wav2vec2-large-en-de"
 
 
-SPEECH_TO_TEXT_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/s2t-wav2vec2-large-en-de",
-    # See all Speech2Text2 models at https://huggingface.co/models?filter=speech2text2
-]
-
-
 # Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding with Speech2Text->Speech2Text2
 class Speech2Text2SinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
