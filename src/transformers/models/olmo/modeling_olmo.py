@@ -376,7 +376,7 @@ def init_weights(
         else:
             nn.init.normal_(module.weight, mean=0.0, std=std)
     elif config.init_fn == InitFnType.mitchell:
-        std = std_factor / math.sqrt(d)
+        std = config.init_std_mitchell * std_factor / math.sqrt(d)
         if layer_id is not None:
             std = std / math.sqrt(2 * (layer_id + 1))
         nn.init.trunc_normal_(module.weight, mean=0.0, std=std, a=-3 * std, b=3 * std)
