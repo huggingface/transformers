@@ -3773,13 +3773,16 @@ class HyperParameterSearchBackendsTest(unittest.TestCase):
 
 class OptimizerAndModelInspectionTest(unittest.TestCase):
     def test_get_num_trainable_parameters(self):
-        in_features = 128
-        out_features = 64
+        model = nn.Sequential(nn.Linear(128, 64), nn.Linear(64, 32))
         # in_features * out_features + bias
-        expected_num_params = in_features * out_features + out_features
-        model = nn.Sequential(nn.Linear(in_features, out_features))
+        layer_1 = 128 * 64 + 64
+        layer_2 = 64 * 32 + 32
         trainer = Trainer(model=model)
-        self.assertEqual(trainer.get_num_trainable_parameters(), expected_num_params)
+        self.assertEqual(trainer.get_num_trainable_parameters(), layer_1 + layer_2)
+        # Freeze the last layer
+        for param in model[-1].parameters():
+            param.requires_grad = False
+        self.assertEqual(trainer.get_num_trainable_parameters(), layer_1)
 
     def test_get_learning_rates(self):
         model = nn.Sequential(nn.Linear(128, 64))
