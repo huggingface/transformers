@@ -36,7 +36,7 @@ import torch
 from datasets import load_dataset
 from transformers import SegGptImageProcessor, SegGptForImageSegmentation
 
-model_id = "BAAI/seggpt-vit-large"
+checkpoint = "BAAI/seggpt-vit-large"
 image_processor = SegGptImageProcessor.from_pretrained(checkpoint)
 model = SegGptForImageSegmentation.from_pretrained(checkpoint)
 
