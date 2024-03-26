@@ -435,6 +435,12 @@ See [`TokenClassificationPipeline`] for all details.
     - __call__
     - all
 
+### BatchedZeroShotClassificationPipeline
+
+[[autodoc]] BatchedZeroShotClassificationPipeline
+    - __call__
+    - all
+
 ## 多模态
 
 可用于多模态任务的pipeline包括以下几种。
