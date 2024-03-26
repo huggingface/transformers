@@ -662,35 +662,57 @@ class BetterLlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         self.config.text_config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
-
+    
     def _merge_input_ids_with_image_features(
         self, image_features, feature_lens, inputs_embeds, input_ids, attention_mask, position_ids=None, labels=None, image_token_index=None,
         ignore_index=-100
     ):
         """
-        NOTE:
-            ** Currently only support batch with right padding **
-        input_ids:      [b, tlen]
-        input_embeds:   [b, tlen, dt]
-        image_features: [all_feat_lens, di]
-        feature_lens:   [num_images]    sum(feature_lens) == all_feat_lens
-        image_feature_lens: [b, ilen]
-        labels: None or [b, tlen] --> must extend labels to input_ids, 
+        Args:
+            input_ids:      [batch_size, tlen]
+            input_embeds:   [batch_size, tlen, dt]
+            image_features: [all_feat_lens, di]
+            feature_lens:   [num_images],
+                num_images=number of image in the batch
+                each value is the length of embedding featres of each image
+                Note: sum(feature_lens) == all_feat_lens
+            labels: None or [batch_size, tlen] --> must extend labels to input_ids, 
+        Returns:
+            final_embedding, final_attention_mask, position_ids, final_labels
 
-        * each image has variable length embeddings
-        input_ids: [
-            a b c d e f X g h i j k Y l m
-            o p q r Z s t u v _ _ _ _ _ _
-        ]
-        input_ids should be: [
-            a b c d e f X X X X X g h i j k Y Y Y l m
-            o p q r Z Z Z Z Z Z Z Z s t u v _ _ _ _ _
-        ]
-        labels should be: [
-            a b c d e f _ _ _ _ _ g h i j k _ _ _ l m
-            o p q r _ _ _ _ _ _ _ _ s t u v _ _ _ _ _
-        ]
-        # mask replace image onto it
+        Explanation:
+            each image has variable length embeddings, with length specified by feature_lens
+            image_features is concatenation of all visual embed vectors
+            task: fill each <image> with the correct number of visual embeddings
+            Example:
+                X (5 patches), Y (3 patches), Z (8)
+                X, Y is on the same sequence (in-context learning)
+            if right padding
+                input_ids: [
+                    a b c d e f X g h i j k Y l m
+                    o p q r Z s t u v _ _ _ _ _ _
+                ]
+                input_ids should be: [
+                    a b c d e f X X X X X g h i j k Y Y Y l m
+                    o p q r Z Z Z Z Z Z Z Z s t u v _ _ _ _ _
+                ]
+                labels should be: [
+                    a b c d e f _ _ _ _ _ g h i j k _ _ _ l m
+                    o p q r _ _ _ _ _ _ _ _ s t u v _ _ _ _ _
+                ]
+            elif left padding
+                input_ids: [
+                    a b c d e f X g h i j k Y l m
+                    _ _ _ _ _ _ o p q r Z s t u v
+                ]
+                input_ids should be: [
+                    a b c d e f X X X X X g h i j k Y Y Y l m
+                    _ _ _ _ _ o p q r Z Z Z Z Z Z Z Z s t u v 
+                ]
+                labels should be: [
+                    a b c d e f _ _ _ _ _ g h i j k _ _ _ l m
+                    _ _ _ _ _ o p q r _ _ _ _ _ _ _ _ s t u v
+                ]
         """
         image_token_index = image_token_index if image_token_index is not None else self.config.image_token_index
         ignore_index = ignore_index if ignore_index is not None else self.config.ignore_index
@@ -701,7 +723,7 @@ class BetterLlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             assert feature_lens.sum() == num_image_features, f'{feature_lens=} / {feature_lens.sum()} != {image_features.shape=}'
             batch_size, sequence_length = input_ids.shape
             left_padding = torch.any(attention_mask[:, 0] == 0)
-
+            # Whether to turn off right padding
             # 1. Create a mask to know where special image tokens are
             special_image_token_mask = input_ids == image_token_index
             # special_image_token_mask: [bsz, seqlen]
@@ -724,14 +746,11 @@ class BetterLlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             # `torch.cumsum` computes how each image token shifts subsequent text token positions.
             # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
             # ! instead of special_image_token_mask * (num_image_patches - 1)
+            #   special_image_token_mask * (num_feature_len - 1)
             special_image_len_mask = special_image_token_mask.clone().long()
             special_image_len_mask[special_image_len_mask == 1] = feature_lens - 1
             new_token_positions = torch.cumsum((special_image_len_mask + 1), -1) - 1
-            
-            nb_image_pad = max_embed_dim - 1 - new_token_positions[:, -1]
-            if left_padding:
-                new_token_positions += nb_image_pad[:, None]  # offset for left padding
-                raise NotImplementedError(f'Cannot be left_padding for now because need to check accuracy')
+
             text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
 
         # 3. Create the full embedding, already padded to the maximum position
@@ -765,10 +784,11 @@ class BetterLlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         with torch.no_grad():
             image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
             if left_padding:
-                image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
-                val = (max_embed_dim - torch.arange(max_embed_dim).unsqueeze(0).to(target_device).expand(batch_size, max_embed_dim)) < embed_sequence_lengths[:, None].to(target_device)
+                # exclude padding on the left
+                val = (max_embed_dim - torch.arange(max_embed_dim).unsqueeze(0).to(target_device).expand(batch_size, max_embed_dim)) <= embed_sequence_lengths[:, None].to(target_device)
                 image_to_overwrite &= val
             else:
+                # exclude padding on the right
                 val = torch.arange(max_embed_dim).unsqueeze(0).to(target_device).expand(batch_size, max_embed_dim) < embed_sequence_lengths[:, None].to(target_device)
                 image_to_overwrite &= val
             
@@ -785,6 +805,7 @@ class BetterLlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             # Making sure its the same
             seq_lens = final_attention_mask.sum(-1)
             for i, (mask, seq_len) in enumerate(zip(final_attention_mask, seq_lens)):
+                # seq_len = mask.sum(-1)
                 assert torch.all(mask[:seq_len] == 1), f'final 1 mask[{i}]: {seq_len=} {final_attention_mask.size()=} {final_attention_mask.tolist()=} \n{text_to_overwrite.tolist()=}'
                 assert torch.all(mask[seq_len:] == 0), f'final 0 mask[{i}]: {seq_len=} {final_attention_mask.size()=} {final_attention_mask.tolist()=}'
         
@@ -804,7 +825,7 @@ class BetterLlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             if image_feature.shape[0] > 1:
                 base_image_feature = image_feature[0]
                 image_feature = image_feature[1:]
-                height = width = self.num_patches_per_side()
+                height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
                 if height * width != base_image_feature.shape[0]:
                     raise ValueError("The number of patches is not consistent with the image size.")
                 num_patch_width, num_patch_height = get_anyres_image_grid_shape(
@@ -918,7 +939,6 @@ class BetterLlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                     )
                     for imsize in image_sizes
                 ]
-                total_num_patches, num_channels, height, width = pixel_values.shape
                 image_features = self.vision_tower(pixel_values, output_hidden_states=True)
                 selected_image_feature = image_features.hidden_states[vision_feature_layer]
 
@@ -929,7 +949,7 @@ class BetterLlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
 
                 image_features = self.multi_modal_projector(selected_image_feature)
 
-                image_features = torch.split(image_num_patches, image_num_patches, dim=0)
+                image_features = torch.split(image_features, image_num_patches, dim=0)
 
                 # NOTE we only support multimodal_patch_merge_type == "spatial_unpad"
                 height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
@@ -1119,7 +1139,7 @@ class BetterAlternativeLlavaNextForConditionalGeneration(BetterLlavaNextForCondi
                     all_num_patches, patch_len, img_dim = image_feature.size()
                     base_image_feature = image_feature[0]
                     num_patches = all_num_patches - 1
-                    height = width = self.num_patches_per_side()
+                    height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
                     if height * width != base_image_feature.shape[0]:
                         raise ValueError("The number of patches is not consistent with the image size.")
                     img_size = image_sizes[image_idx]

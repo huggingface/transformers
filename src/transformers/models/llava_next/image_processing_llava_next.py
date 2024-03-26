@@ -464,7 +464,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        concat_images: Optional[bool] = False,
+        concat_images: Optional[bool] = True,
     ):
         """
         Args:
@@ -517,6 +517,8 @@ class LlavaNextImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            concat_images (`bool`, default to True):
+                instead of stacking, concatenate images
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
