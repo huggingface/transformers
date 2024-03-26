@@ -58,8 +58,18 @@ class TFMistralRMSNorm(tf.keras.layers.Layer):
         TFMistralRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__(**kwargs)
-        self.weight = self.add_weight(shape=hidden_size, initializer="ones", name="weight")
+        self.hidden_size = hidden_size
         self.variance_epsilon = eps
+
+    def build(self, input_shape=None):
+        self.weight = self.add_weight(
+            name="weight",
+            shape=self.hidden_size,
+            initializer="ones",
+        )
+        if self.built:
+            return
+        self.built = True
 
     def call(self, hidden_states):
         input_dtype = hidden_states.dtype
@@ -150,18 +160,18 @@ class TFMistralMLP(tf.keras.layers.Layer):
     def call(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
-    # def build(self, input_shape=None):
-    #     if self.built:
-    #         return
-    #     if getattr(self, "gate_proj", None) is not None:
-    #         with tf.name_scope(self.gate_proj.name):
-    #             self.gate_proj.build(None)
-    #     if getattr(self, "up_proj", None) is not None:
-    #         with tf.name_scope(self.up_proj.name):
-    #             self.up_proj.build(None)
-    #     if getattr(self, "down_proj", None) is not None:
-    #         with tf.name_scope(self.down_proj.name):
-    #             self.down_proj.build(None)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        if getattr(self, "gate_proj", None) is not None:
+            with tf.name_scope(self.gate_proj.name):
+                self.gate_proj.build((self.hidden_size,))
+        if getattr(self, "up_proj", None) is not None:
+            with tf.name_scope(self.up_proj.name):
+                self.up_proj.build((self.hidden_size,))
+        if getattr(self, "down_proj", None) is not None:
+            with tf.name_scope(self.down_proj.name):
+                self.down_proj.build((self.intermediate_size,))
 
 
 def repeat_kv(hidden_states: tf.Tensor, n_rep: int) -> tf.Tensor:
@@ -313,21 +323,21 @@ class TFMistralAttention(tf.keras.layers.Layer):
 
         return attn_output, attn_weights, past_key_value
 
-    # def build(self, input_shape=None):
-    #     if self.built:
-    #         return
-    #     if getattr(self, "q_proj", None) is not None:
-    #         with tf.name_scope(self.q_proj.name):
-    #             self.q_proj.build(None)
-    #     if getattr(self, "k_proj", None) is not None:
-    #         with tf.name_scope(self.k_proj.name):
-    #             self.k_proj.build(None)
-    #     if getattr(self, "v_proj", None) is not None:
-    #         with tf.name_scope(self.v_proj.name):
-    #             self.v_proj.build(None)
-    #     if getattr(self, "o_proj", None) is not None:
-    #         with tf.name_scope(self.o_proj.name):
-    #             self.o_proj.build(None)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        if getattr(self, "q_proj", None) is not None:
+            with tf.name_scope(self.q_proj.name):
+                self.q_proj.build((self.hidden_size,))
+        if getattr(self, "k_proj", None) is not None:
+            with tf.name_scope(self.k_proj.name):
+                self.k_proj.build((self.hidden_size,))
+        if getattr(self, "v_proj", None) is not None:
+            with tf.name_scope(self.v_proj.name):
+                self.v_proj.build((self.hidden_size,))
+        if getattr(self, "o_proj", None) is not None:
+            with tf.name_scope(self.o_proj.name):
+                self.o_proj.build((self.num_heads * self.head_dim,))
 
 
 class TFMistralDecoderLayer(tf.keras.layers.Layer):
@@ -715,7 +725,10 @@ class TFMistralForCausalLM(TFMistralPreTrainedModel, TFCausalLanguageModelingLos
         super().__init__(config, *inputs, **kwargs)
         self.model = TFMistralMainLayer(config, name="model")
         self.lm_head = tf.keras.layers.Dense(
-            config.vocab_size, kernel_initializer=get_initializer(config.initializer_range), name="lm_head"
+            config.vocab_size,
+            use_bias=False,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="lm_head",
         )
         self.config = config
 
@@ -812,9 +825,9 @@ class TFMistralForCausalLM(TFMistralPreTrainedModel, TFCausalLanguageModelingLos
         if getattr(self, "model", None) is not None:
             with tf.name_scope(self.model.name):
                 self.model.build(None)
-        # if getattr(self, "lm_head", None) is not None:
-        #     with tf.name_scope(self.lm_head.name):
-        #         self.lm_head.build([None, None, self.config.vocab_size])
+        if getattr(self, "lm_head", None) is not None:
+            with tf.name_scope(self.lm_head.name):
+                self.lm_head.build((self.config.hidden_size,))
 
 
 @add_start_docstrings(
@@ -838,7 +851,7 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
-        self.model = TFMistralMainLayer(config, name="transformer")
+        self.model = TFMistralMainLayer(config, name="model")
         self.score = tf.keras.layers.Dense(
             self.num_labels,
             use_bias=False,
@@ -937,4 +950,4 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
                 self.model.build(None)
         if getattr(self, "score", None) is not None:
             with tf.name_scope(self.score.name):
-                self.score.build(None)
+                self.score.build((self.config.hidden_size,))
