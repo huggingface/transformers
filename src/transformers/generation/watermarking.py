@@ -216,7 +216,6 @@ class WatermarkDetector:
             prediction = z_score > z_threshold
             confidence = 1 - p_value
 
-        if return_dict:
             return WatermarkDetectorOutput(
                 num_tokens_scored=num_tokens_scored,
                 num_green_tokens=green_token_count,
