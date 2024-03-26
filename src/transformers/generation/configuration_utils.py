@@ -228,7 +228,7 @@ class GenerationConfig(PushToHubMixin):
             Arguments used to watermark the model outputs by adding a small bias to randomly selected set of "green" tokens.
             Accepts the following keys in the dict:
             - greenlist_ratio (`float`):
-                Used for watermaring. The ratio of "green" tokens used to the vocabulary size. Defaults to 0.25.
+                Used for watermarking. The ratio of "green" tokens used to the vocabulary size. Defaults to 0.25.
             - bias (`float`):
                 Used with watermarking. The bias added to the selected "green" tokens' logits. Defaults to 2.0.
             - hashing_key (`int`):
