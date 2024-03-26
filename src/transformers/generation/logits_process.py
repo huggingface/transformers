@@ -2246,7 +2246,7 @@ class WatermarkLogitsProcessor(LogitsProcessor):
     r"""
     Logits processor for watermarking generated text. The processor modifies model output scores by adding a small bias to
     randomized set of "green" tokens before generating the next token. "Green" tokens selection process depends on the
-    `seeding_scheme` used. The code was absed on the [original repo](https://github.com/jwkirchenbauer/lm-watermarking/tree/main).
+    `seeding_scheme` used. The code was based on the [original repo](https://github.com/jwkirchenbauer/lm-watermarking/tree/main).
 
     See [the paper](https://arxiv.org/abs/2306.04634) for more information.
 
