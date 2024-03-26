@@ -1686,7 +1686,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, begin_suppress_tokens, begin_index):
-        self.begin_suppress_tokens = list(begin_suppress_tokens)
+        self.begin_suppress_tokens = torch.tensor(list(begin_suppress_tokens))
         self.begin_index = begin_index
 
     def set_begin_index(self, begin_index):
@@ -1695,8 +1695,8 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        begin_suppress_tokens = torch.tensor(self.begin_suppress_tokens, device=scores.device)
-        suppress_token_mask = torch.isin(vocab_tensor, begin_suppress_tokens)
+        self.begin_suppress_tokens = self.begin_suppress_tokens.to(scores.device)
+        suppress_token_mask = torch.isin(vocab_tensor, self.begin_suppress_tokens)
         scores_processed = scores
         if input_ids.shape[-1] == self.begin_index:
             scores_processed = torch.where(suppress_token_mask, -float("inf"), scores)
@@ -1734,13 +1734,13 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, suppress_tokens):
-        self.suppress_tokens = list(suppress_tokens)
+        self.suppress_tokens = torch.tensor(list(suppress_tokens))
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_tokens = torch.tensor(self.suppress_tokens, device=scores.device)
-        suppress_token_mask = torch.isin(vocab_tensor, suppress_tokens)
+        self.suppress_tokens = self.suppress_tokens.to(scores.device)
+        suppress_token_mask = torch.isin(vocab_tensor, self.suppress_tokens)
         scores = torch.where(suppress_token_mask, -float("inf"), scores)
         return scores
 
