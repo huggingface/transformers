@@ -222,12 +222,6 @@ else:
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
-            (
-                "olmo",
-                (
-                    "OLMoTokenizer" if is_sentencepiece_available() else None,
-                    "OLMoTokenizerFast" if is_tokenizers_available() else None,
-                ),
             ("llava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("llava_next", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
@@ -311,6 +305,7 @@ else:
                     "AlbertTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("olmo", (None, "OLMoTokenizerFast" if is_tokenizers_available() else None)),
             ("oneformer", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "openai-gpt",

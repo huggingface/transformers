@@ -27,14 +27,6 @@ _import_structure = {
 }
 
 try:
-    if not is_sentencepiece_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_olmo"] = ["OLMoTokenizer"]
-
-try:
     if not is_tokenizers_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
@@ -52,20 +44,10 @@ else:
         "OLMoForCausalLM",
         "OLMoModel",
         "OLMoPreTrainedModel",
-        "OLMoForSequenceClassification",
-        "OLMoForQuestionAnswering",
     ]
 
 if TYPE_CHECKING:
     from .configuration_olmo import OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP, OLMoConfig
-
-    try:
-        if not is_sentencepiece_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_olmo import OLMoTokenizer
 
     try:
         if not is_tokenizers_available():
@@ -83,8 +65,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_olmo import (
             OLMoForCausalLM,
-            OLMoForQuestionAnswering,
-            OLMoForSequenceClassification,
             OLMoModel,
             OLMoPreTrainedModel,
         )
