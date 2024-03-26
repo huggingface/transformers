@@ -969,7 +969,8 @@ class Pipeline(_ScikitCompat):
         """
         Torch dtype of the model (if it's Pytorch model), `None` otherwise.
         """
-        return getattr(self.model, "dtype", None)
+        model_dtype = getattr(self.model, "dtype", None)
+        return model_dtype if is_torch_available and isinstance(model_dtype, torch.dtype) else None
 
     @contextmanager
     def device_placement(self):
