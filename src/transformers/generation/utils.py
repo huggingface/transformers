@@ -437,9 +437,6 @@ class GenerationMixin:
             shape = encoder_outputs.last_hidden_state.size()[:-1]
             return torch.ones(shape, dtype=torch.long, device=self.device) * -100
 
-        if bos_token_id is None:
-            raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
-
         # If there is some tensor in `model_kwargs`, we can infer the batch size from it. This is helpful with
         # soft-prompting or in multimodal implementations built on top of decoder-only language models.
         batch_size = 1
@@ -450,6 +447,10 @@ class GenerationMixin:
 
         if "inputs_embeds" in model_kwargs:
             return torch.ones((batch_size, 0), dtype=torch.long, device=self.device)
+
+        if bos_token_id is None:
+            raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
+
         return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
 
     def _prepare_attention_mask_for_generation(

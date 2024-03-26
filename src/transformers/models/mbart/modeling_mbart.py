@@ -61,11 +61,6 @@ _CONFIG_FOR_DOC = "MBartConfig"
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 
-MBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/mbart-large-cc25",
-    # See all MBART models at https://huggingface.co/models?filter=mbart
-]
-
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):

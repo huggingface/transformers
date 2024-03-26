@@ -78,10 +78,7 @@ _QA_EXPECTED_LOSS = 0.59
 _QA_EXPECTED_OUTPUT = "' nice puppet'"
 
 
-BART_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/bart-large",
-    # see all BART models at https://huggingface.co/models?filter=bart
-]
+from ..deprecated._archive_maps import BART_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
