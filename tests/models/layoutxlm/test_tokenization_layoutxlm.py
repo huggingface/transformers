@@ -107,6 +107,10 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         output_text = "unwanted, running"
         return input_text, output_text
 
+    @unittest.skip("Chat template tests don't play well with table/layout models.")
+    def test_chat_template_batched(self):
+        pass
+
     # override test in `test_tokenization_common.py` because of the required input format of the `__call__`` method of
     # this tokenizer
     def test_save_sentencepiece_tokenizer(self) -> None:

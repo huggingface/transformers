@@ -38,7 +38,6 @@ if is_torch_available():
         LxmertForQuestionAnswering,
         LxmertModel,
     )
-    from transformers.models.lxmert.modeling_lxmert import LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_tf_available():
@@ -584,10 +583,10 @@ class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = LxmertModel.from_pretrained(model_name)
-            model.to(torch_device)
-            self.assertIsNotNone(model)
+        model_name = "unc-nlp/lxmert-base-uncased"
+        model = LxmertModel.from_pretrained(model_name)
+        model.to(torch_device)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -772,7 +771,7 @@ class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 class LxmertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = LxmertModel.from_pretrained(LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        model = LxmertModel.from_pretrained("unc-nlp/lxmert-base-uncased")
         input_ids = torch.tensor([[101, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 102]])
         num_visual_features = 10
         _, visual_feats = np.random.seed(0), np.random.rand(1, num_visual_features, model.config.visual_feat_dim)

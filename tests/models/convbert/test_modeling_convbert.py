@@ -38,7 +38,6 @@ if is_torch_available():
         ConvBertForTokenClassification,
         ConvBertModel,
     )
-    from transformers.models.convbert.modeling_convbert import CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class ConvBertModelTester:
@@ -307,9 +306,9 @@ class ConvBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ConvBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "YituTech/conv-bert-base"
+        model = ConvBertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
