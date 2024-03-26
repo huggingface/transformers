@@ -1548,7 +1548,7 @@ class Trainer:
 
         # train bs is special as we need to account for multi-GPU
         train_bs_args = training_args.per_device_train_batch_size
-        train_bs_state = trainer_state.train_batch_size // training_args.n_gpu
+        train_bs_state = trainer_state.train_batch_size // max(1, training_args.n_gpu)
 
         if train_bs_args != train_bs_state:
             warning_str += f"\n\tper_device_train_batch_size: {train_bs_args} (from args) != {train_bs_state} (from trainer_state.json)"
