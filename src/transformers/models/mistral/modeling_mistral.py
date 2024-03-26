@@ -32,7 +32,12 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    CausalLMOutputWithPast,
+    SequenceClassifierOutputWithPast,
+    TokenClassifierOutput,
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
@@ -1388,8 +1393,8 @@ class MistralForSequenceClassification(MistralPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The Bi-Mistral Model with a token classification head on top (a linear layer on top of the hidden-states output) 
-    e.g. for Named-Entity-Recognition (NER) tasks.
+    The Mistral Model transformer with a token classification head on top (a linear layer on top of the hidden-states
+    output) e.g. for Named-Entity-Recognition (NER) tasks.
     """,
     MISTRAL_START_DOCSTRING,
 )
@@ -1398,8 +1403,7 @@ class MistralForTokenClassification(MistralPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = MistralModel(config)
-        self.dropout = nn.Dropout(0.1)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        self.score = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1444,9 +1448,7 @@ class MistralForTokenClassification(MistralPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = outputs[0]
-
-        sequence_output = self.dropout(sequence_output)
-        logits = self.classifier(sequence_output)
+        logits = self.score(sequence_output)
 
         loss = None
         if labels is not None:

@@ -2693,6 +2693,7 @@ else:
         [
             "MistralForCausalLM",
             "MistralForSequenceClassification",
+            "MistralForTokenClassification",
             "MistralModel",
             "MistralPreTrainedModel",
         ]
@@ -7333,6 +7334,7 @@ if TYPE_CHECKING:
         from .models.mistral import (
             MistralForCausalLM,
             MistralForSequenceClassification,
+            MistralForTokenClassification,
             MistralModel,
             MistralPreTrainedModel,
         )
