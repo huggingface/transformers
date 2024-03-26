@@ -541,7 +541,7 @@ class GenerationMixin:
         if decoder_start_token_id.ndim == 1:
             if decoder_start_token_id.shape[0] != batch_size:
                 raise ValueError(
-                    f"`decoder_start_token_id` expcted to have length {batch_size} but got {decoder_start_token_id.shape[0]}"
+                    f"`decoder_start_token_id` expected to have length {batch_size} but got {decoder_start_token_id.shape[0]}"
                 )
             decoder_start_token_id = decoder_start_token_id.view(-1, 1)
         else:
