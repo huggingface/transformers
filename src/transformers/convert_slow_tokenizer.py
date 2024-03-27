@@ -1384,14 +1384,18 @@ class LlamaConverter(SpmConverter):
         return tokenizer
 
     def normalizer(self, proto):
-        sequence = []
-        if hasattr(self.original_tokenizer, "add_prefix_space"):
-            if self.original_tokenizer.add_prefix_space:
-                sequence += [normalizers.Prepend(prepend="▁")]
-        sequence += [normalizers.Replace(pattern=" ", content="▁")]
-        return normalizers.Sequence(sequence)
+        if self.original_tokenizer.legacy:
+            sequence = []
+            if hasattr(self.original_tokenizer, "add_prefix_space"):
+                if self.original_tokenizer.add_prefix_space:
+                    sequence += [normalizers.Prepend(prepend="▁")]
+            sequence += [normalizers.Replace(pattern=" ", content="▁")]
+            return normalizers.Sequence(sequence)
+        return None
 
     def pre_tokenizer(self, replacement, add_prefix_space):
+        if not self.original_tokenizer.legacy:
+            return super().pre_tokenizer(replacement, add_prefix_space)
         return None
 
     def post_processor(self):
