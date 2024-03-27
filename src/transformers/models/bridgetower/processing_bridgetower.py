@@ -16,8 +16,9 @@
 Processor class for BridgeTower.
 """
 
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
+from ...image_utils import ChannelDimension, PILImageResampling
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
@@ -50,11 +51,27 @@ class BridgeTowerProcessor(ProcessorMixin):
         self,
         images,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
+        size_divisor: Optional[int] = None,
+        resample: PILImageResampling = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        do_pad: Optional[bool] = None,
+        pad_and_return_pixel_mask: Optional[bool] = None,
+        do_center_crop: Optional[bool] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
+        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -63,8 +80,6 @@ class BridgeTowerProcessor(ProcessorMixin):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs,
     ) -> BatchEncoding:
         """
         This method uses [`BridgeTowerImageProcessor.__call__`] method to prepare image(s) for the model, and
@@ -79,6 +94,7 @@ class BridgeTowerProcessor(ProcessorMixin):
             truncation=truncation,
             max_length=max_length,
             stride=stride,
+            is_split_into_words=is_split_into_words,
             pad_to_multiple_of=pad_to_multiple_of,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
@@ -86,13 +102,27 @@ class BridgeTowerProcessor(ProcessorMixin):
             return_special_tokens_mask=return_special_tokens_mask,
             return_offsets_mapping=return_offsets_mapping,
             return_length=return_length,
-            verbose=verbose,
             return_tensors=return_tensors,
-            **kwargs,
+            verbose=verbose,
         )
         # add pixel_values + pixel_mask
         encoding_image_processor = self.image_processor(
-            images, return_tensors=return_tensors, do_normalize=True, do_center_crop=True, **kwargs
+            images,
+            do_resize=do_resize,
+            size=size,
+            size_divisor=size_divisor,
+            resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_center_crop=do_center_crop,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            do_pad=do_pad,
+            pad_and_return_pixel_mask=pad_and_return_pixel_mask,
+            return_tensors=return_tensors,
         )
         encoding.update(encoding_image_processor)
 

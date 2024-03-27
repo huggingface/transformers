@@ -39,7 +39,7 @@ class BridgeTowerImageProcessingTester(unittest.TestCase):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        do_center_crop: bool = True,
+        do_center_crop: bool = False,  # Current expected shape are not center-cropped.
         image_mean: Optional[Union[float, List[float]]] = [0.48145466, 0.4578275, 0.40821073],
         image_std: Optional[Union[float, List[float]]] = [0.26862954, 0.26130258, 0.27577711],
         do_pad: bool = True,
@@ -66,10 +66,12 @@ class BridgeTowerImageProcessingTester(unittest.TestCase):
 
     def prepare_image_processor_dict(self):
         return {
+            "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
+            "do_pad": self.do_pad,
             "do_resize": self.do_resize,
+            "do_center_crop": self.do_center_crop,
             "size": self.size,
             "size_divisor": self.size_divisor,
         }

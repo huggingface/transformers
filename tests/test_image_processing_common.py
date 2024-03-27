@@ -291,6 +291,7 @@ class ImageProcessingTestMixin:
         )
 
     def test_image_processor_preprocess_arguments(self):
+        # Test that an instantiated image processor is called with the correct arg spec
         image_processor = self.image_processing_class(**self.image_processor_dict)
         if hasattr(image_processor, "_valid_processor_keys") and hasattr(image_processor, "preprocess"):
             preprocess_parameter_names = inspect.getfullargspec(image_processor.preprocess).args

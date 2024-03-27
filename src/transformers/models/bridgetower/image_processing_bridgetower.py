@@ -166,6 +166,27 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
             the `do_pad` parameter in the `preprocess` method.
+        pad_and_return_pixel_mask (`bool`, *optional*):
+            Deprecated. Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
+            Sets do_pad.
+        return_tensors (`str` or `TensorType`, *optional*):
+            The type of tensors to return. Can be one of:
+            - Unset: Return a list of `np.ndarray`.
+            - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
+            - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+            - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+            - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+        data_format (`ChannelDimension` or `str`, *optional*, defaults to `"channels_first"`):
+            The channel dimension format for the output image. Can be one of:
+            - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+            - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            - Unset: Use the channel dimension format of the input image.
+        input_data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format for the input image. If unset, the channel dimension format is inferred
+            from the input image. Can be one of:
+            - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+            - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
     """
 
     model_input_names = ["pixel_values"]
@@ -184,12 +205,15 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_center_crop: bool = True,
         crop_size: Dict[str, int] = None,
         do_pad: bool = True,
+        pad_and_return_pixel_mask: Optional[bool] = None,
+        return_tensors: Optional[bool] = None,
+        data_format: Optional["ChannelDimension"] = "channels_first",  # noqa: F821
+        input_data_format: Optional[Union[str, "ChannelDimension"]] = None,  # noqa: F821
         **kwargs,
     ) -> None:
-        if "pad_and_return_pixel_mask" in kwargs:
-            do_pad = kwargs.pop("pad_and_return_pixel_mask")
+        if pad_and_return_pixel_mask:
+            do_pad = pad_and_return_pixel_mask
 
-        super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 288}
         size = get_size_dict(size, default_to_square=False)
 
@@ -222,6 +246,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             "return_tensors",
             "data_format",
             "input_data_format",
+            "pad_and_return_pixel_mask",
         ]
 
     # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor.resize
@@ -407,6 +432,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        pad_and_return_pixel_mask: Optional[bool] = None,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -464,6 +490,9 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            pad_and_return_pixel_mask (`bool`, *optional*, deprecated, defaults to `self.do_pad`):
+                Whether to pad the image to the (max_height, max_width) in the batch. If `True`, a pixel mask is also
+                created and returned. Deprecated version of do_pad.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
@@ -482,6 +511,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         )
 
         size = size if size is not None else self.size
+
         size = get_size_dict(size, default_to_square=False)
 
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)

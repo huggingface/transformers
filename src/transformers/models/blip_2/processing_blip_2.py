@@ -78,31 +78,7 @@ class Blip2Processor(ProcessorMixin):
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 
-        # Get only text
-        if images is None:
-            self.current_processor = self.tokenizer
-            text_encoding = self.tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=return_tensors,
-                **kwargs,
-            )
-            return text_encoding
-
-        # add pixel_values
-        encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
+        text_encoding = None
 
         if text is not None:
             text_encoding = self.tokenizer(
@@ -123,13 +99,16 @@ class Blip2Processor(ProcessorMixin):
                 return_tensors=return_tensors,
                 **kwargs,
             )
-        else:
-            text_encoding = None
 
-        if text_encoding is not None:
-            encoding_image_processor.update(text_encoding)
+        # add pixel_values encoding. If we also have text_encoding, update image encoding and return it.
+        # else, return the text encoding.
+        if images is not None:
+            encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
+            if text_encoding is not None:
+                encoding_image_processor.update(text_encoding)
+            return encoding_image_processor
 
-        return encoding_image_processor
+        return text_encoding
 
     # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
     def batch_decode(self, *args, **kwargs):
