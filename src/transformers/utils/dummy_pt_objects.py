@@ -401,6 +401,20 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class WatermarkDetector(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class WatermarkLogitsProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class WhisperTimeStampLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 

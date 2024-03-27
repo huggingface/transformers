@@ -74,6 +74,7 @@ if is_torch_available():
         SampleEncoderDecoderOutput,
         StoppingCriteria,
         StoppingCriteriaList,
+        WatermarkDetector,
     )
     from transformers.generation.utils import _speculative_sampling
 
@@ -2096,6 +2097,45 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             model_inputs, max_new_tokens=40, num_beams=5, early_stopping=True, low_memory=False
         )
         self.assertListEqual(low_output.tolist(), high_output.tolist())
+
+    @slow
+    def test_watermark_generation(self):
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        model_inputs = tokenizer("I will be", return_tensors="pt").to(torch_device)
+        input_len = model_inputs["input_ids"].shape[-1]
+
+        args = {
+            "bias": 2.0,
+            "context_width": 1,
+            "seeding_scheme": "selfhash",
+            "greenlist_ratio": 0.25,
+            "hashing_key": 15485863,
+        }
+        output_selfhash = model.generate(**model_inputs, watermarking_args=args, do_sample=False, max_length=15)
+        output = model.generate(**model_inputs, do_sample=False, max_length=15)
+
+        # check that the watermarked text is generating what is should
+        self.assertListEqual(
+            output.tolist(), [[40, 481, 307, 262, 717, 284, 9159, 326, 314, 716, 407, 257, 4336, 286, 262]]
+        )
+        self.assertListEqual(
+            output_selfhash.tolist(), [[40, 481, 307, 2263, 616, 640, 284, 651, 616, 1621, 503, 612, 553, 531, 367]]
+        )
+
+        detector = WatermarkDetector(
+            bos_token_id=tokenizer.bos_token_id,
+            vocab_size=tokenizer.vocab_size,
+            device="cuda:0",
+            watermarking_args=args,
+        )
+        detection_out_watermarked = detector(output_selfhash[:, input_len:], return_dict=True)
+        detection_out = detector(output[:, input_len:], return_dict=True)
+
+        # check that the detector is detecting watermarked text
+        self.assertListEqual(detection_out_watermarked["prediction"].tolist(), [True])
+        self.assertListEqual(detection_out["prediction"].tolist(), [False])
 
     @slow
     def test_beam_search_example_integration(self):

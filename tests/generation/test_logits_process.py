@@ -52,6 +52,7 @@ if is_torch_available():
         TopPLogitsWarper,
         TypicalLogitsWarper,
         UnbatchedClassifierFreeGuidanceLogitsProcessor,
+        WatermarkLogitsProcessor,
     )
     from transformers.generation.logits_process import BarkEosPrioritizerLogitsProcessor
 
@@ -902,3 +903,26 @@ class LogitsProcessorTest(unittest.TestCase):
             [float("-inf"), float("-inf"), scores[0][0], scores[0][0]],
         ]
         self.assertListEqual(actual_scores.tolist(), expected_scores_list)
+
+    def test_watermarking_processor(self):
+        batch_size = 3
+        vocab_size = 20
+
+        input_ids = ids_tensor((batch_size, 5), vocab_size=20)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+
+        # raise error if incorrect seeding_scheme is passed
+        with self.assertRaises(ValueError):
+            WatermarkLogitsProcessor(vocab_size=vocab_size, device="cpu", seeding_scheme="hash")
+
+        # raise error if the greenlist_ratio in not in range (0.0, 1.0)
+        with self.assertRaises(ValueError):
+            WatermarkLogitsProcessor(vocab_size=vocab_size, device="cpu", greenlist_ratio=1.2)
+
+        watermark = WatermarkLogitsProcessor(vocab_size=vocab_size, device=input_ids.device)
+
+        # use fixed id for last token, needed for reprodicibility and tests
+        input_ids[:, -1] = 10
+        scores_wo_bias = scores[:, -1].clone()
+        out = watermark(input_ids=input_ids, scores=scores)
+        self.assertTrue((out[:, 1] == scores_wo_bias + watermark.bias).all())
