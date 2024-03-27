@@ -20,6 +20,7 @@
 """ OLMo model configuration"""
 
 from enum import Enum
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -321,7 +322,7 @@ class OLMoConfig(PretrainedConfig):
         output_hidden_states=False,
         output_attentions=False,
         mlp_ratio=4,
-        mlp_hidden_size: int | None = 22016,
+        mlp_hidden_size: Optional[int] = 22016,
         n_layers=32,
         n_heads=32,
         multi_query_attention=False,
@@ -373,7 +374,7 @@ class OLMoConfig(PretrainedConfig):
         self.output_hidden_states = output_hidden_states
         self.output_attentions = output_attentions
         self.mlp_ratio = mlp_ratio
-        self.mlp_hidden_size: int | None = mlp_hidden_size
+        self.mlp_hidden_size: Optional[int] = mlp_hidden_size
         self.n_layers = n_layers
         self.n_heads = n_heads
         self.multi_query_attention = multi_query_attention

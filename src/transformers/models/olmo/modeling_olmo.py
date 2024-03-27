@@ -1378,7 +1378,7 @@ class OLMoModel(OLMoPreTrainedModel):
         last_logits_only: bool = False,
         output_hidden_states: Optional[bool] = None,
         return_dict: bool = True,
-    ) -> BaseModelOutputWithPast | Tuple:
+    ) -> Union[BaseModelOutputWithPast, Tuple]:
         if input_ids is None and inputs_embeds is None:
             raise ValueError("Input ids or embeddings must be given to OLMo model")
 
@@ -1775,7 +1775,7 @@ class OLMoForCausalLM(OLMoPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        base_output: BaseModelOutputWithPast | Tuple = self.model.forward(
+        base_output: Union[BaseModelOutputWithPast, Tuple] = self.model.forward(
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,

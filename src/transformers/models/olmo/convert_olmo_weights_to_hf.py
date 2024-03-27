@@ -15,6 +15,7 @@ import argparse
 import os
 import shutil
 from pathlib import Path
+from typing import Optional
 
 import yaml
 from tokenizers import Tokenizer
@@ -117,7 +118,7 @@ def write_model(
     output_path: str,
     input_base_path: str,
     safe_serialization: bool = True,
-    input_tokenizer_path: str | None = None,
+    input_tokenizer_path: Optional[str] = None,
 ):
     os.makedirs(output_path, exist_ok=True)
     tmp_output_path = os.path.join(output_path, "tmp")
