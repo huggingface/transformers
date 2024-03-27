@@ -2066,6 +2066,30 @@ class CodeGenPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class CogvlmForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CogvlmModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CogvlmPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class CohereForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 

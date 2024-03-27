@@ -288,21 +288,16 @@ _import_structure = {
         "ClvpTokenizer",
     ],
     "models.code_llama": [],
-    "models.codegen": [
-        "CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "CodeGenConfig",
-        "CodeGenTokenizer",
+    "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
+    "models.cogvlm": [
+        "COGVLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CogvlmConfig",
+        "CogvlmProcessor",
+        "CogvlmVisionConfig",
     ],
     "models.cohere": ["COHERE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CohereConfig"],
-    "models.conditional_detr": [
-        "CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "ConditionalDetrConfig",
-    ],
-    "models.convbert": [
-        "CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "ConvBertConfig",
-        "ConvBertTokenizer",
-    ],
+    "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
+    "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.convnextv2": [
         "CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1839,6 +1834,14 @@ else:
             "CodeGenForCausalLM",
             "CodeGenModel",
             "CodeGenPreTrainedModel",
+        ]
+    )
+    _import_structure["models.cogvlm"].extend(
+        [
+            "COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CogvlmForCausalLM",
+            "CogvlmModel",
+            "CogvlmPreTrainedModel",
         ]
     )
     _import_structure["models.cohere"].extend(["CohereForCausalLM", "CohereModel", "CoherePreTrainedModel"])
@@ -5186,6 +5189,12 @@ if TYPE_CHECKING:
         CodeGenConfig,
         CodeGenTokenizer,
     )
+    from .models.cogvlm import (
+        COGVLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CogvlmConfig,
+        CogvlmProcessor,
+        CogvlmVisionConfig,
+    )
     from .models.cohere import COHERE_PRETRAINED_CONFIG_ARCHIVE_MAP, CohereConfig
     from .models.conditional_detr import (
         CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6644,6 +6653,12 @@ if TYPE_CHECKING:
             CodeGenForCausalLM,
             CodeGenModel,
             CodeGenPreTrainedModel,
+        )
+        from .models.cogvlm import (
+            COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CogvlmForCausalLM,
+            CogvlmModel,
+            CogvlmPreTrainedModel,
         )
         from .models.cohere import (
             CohereForCausalLM,
