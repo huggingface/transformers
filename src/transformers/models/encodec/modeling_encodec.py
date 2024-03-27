@@ -114,21 +114,25 @@ class EncodecConv1d(nn.Module):
         kernel_size = self.conv.kernel_size[0]
         stride = torch.tensor(self.conv.stride[0], dtype=torch.int64)
         dilation = self.conv.dilation[0]
-        kernel_size = torch.tensor((kernel_size - 1) * dilation + 1, dtype=torch.int64)  # effective kernel size with dilations
+        kernel_size = torch.tensor(
+            (kernel_size - 1) * dilation + 1, dtype=torch.int64
+        )  # effective kernel size with dilations
 
         self.register_buffer("stride", stride, persistent=False)
         self.register_buffer("kernel_size", kernel_size, persistent=False)
         self.register_buffer("padding_total", torch.tensor(kernel_size - stride, dtype=torch.int64), persistent=False)
 
     def _get_extra_padding_for_conv1d(
-        self, hidden_states: torch.Tensor,
+        self,
+        hidden_states: torch.Tensor,
     ) -> torch.Tensor:
         """See `pad_for_conv1d`."""
         length = hidden_states.shape[-1]
         n_frames = (length - self.kernel_size + self.padding_total) / self.stride + 1
-        ideal_length = ((torch.ceil(n_frames).to(torch.int64) - 1) * self.stride + (self.kernel_size - self.padding_total))
+        ideal_length = (torch.ceil(n_frames).to(torch.int64) - 1) * self.stride + (
+            self.kernel_size - self.padding_total
+        )
         return ideal_length - length
-
 
     @staticmethod
     def _pad1d(hidden_states: torch.Tensor, paddings: Tuple[int, int], mode: str = "zero", value: float = 0.0):
