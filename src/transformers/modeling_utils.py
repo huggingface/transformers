@@ -2461,7 +2461,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # These are all the pointers of shared tensors.
             shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
-            warn_names = collections.defaultdict(set)
             error_names = set()
             to_delete_names = set()
             for names in shared_ptrs.values():
