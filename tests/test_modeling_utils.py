@@ -229,7 +229,7 @@ def check_state_dict_keys_equal(state_dict_keys_model1, state_dict_keys_model2):
     return True
 
 
-def unwrap_model_old(model: nn.Module) -> nn.Module:
+def unwrap_model_old(model):
     """Old unwrap implementation"""
     if hasattr(model, "module"):
         return unwrap_model_old(model.module)
