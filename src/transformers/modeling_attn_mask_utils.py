@@ -418,10 +418,8 @@ def _prepare_4d_attention_mask_for_sdpa(mask: torch.Tensor, dtype: torch.dtype, 
         or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
     )
 
-    if torch.all(mask == 1):
-        if is_tracing:
-            pass
-        elif tgt_len == 1:
+    if not is_tracing and torch.all(mask == 1):
+        if tgt_len == 1:
             # For query_length == 1, causal attention and bi-directional attention are the same.
             return None
         elif key_value_length == tgt_len:

@@ -783,7 +783,7 @@ class XmodModel(XmodPreTrainedModel):
 
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Xmod
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->Xmod
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config

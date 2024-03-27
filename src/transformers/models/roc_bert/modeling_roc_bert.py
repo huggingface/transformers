@@ -431,11 +431,18 @@ class RoCBertSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->RoCBert
+ROC_BERT_SELF_ATTENTION_CLASSES = {
+    "eager": RoCBertSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->RoCBert,BERT->ROC_BERT
 class RoCBertAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = RoCBertSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = ROC_BERT_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = RoCBertSelfOutput(config)
         self.pruned_heads = set()
 
@@ -759,7 +766,6 @@ class RoCBertOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel with Bert->RoCBert,bert->roc_bert
 class RoCBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -880,7 +886,7 @@ class RoCBertModel(RoCBertPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->RoCBert
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->RoCBert
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
