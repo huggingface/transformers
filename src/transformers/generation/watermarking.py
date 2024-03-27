@@ -193,7 +193,7 @@ class WatermarkDetector:
         device: str,
         watermarking_config: Union[WatermarkingConfig, Dict],
         ignore_repeated_ngrams: bool = False,
-        max_size: int = 2**8,
+        max_size: int = 128,
     ):
         if isinstance(watermarking_config, WatermarkingConfig):
             watermarking_config = watermarking_config.to_dict()
