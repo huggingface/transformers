@@ -1210,6 +1210,11 @@ class AcceleratorConfig:
         },
     )
 
+    mixed_precision: str = field(
+        default="no",
+        metadata={"help": "Whether or not use mixed precision and what type. Generally already set by TrainerArguments or during `accelerate launch`"},
+    )
+
     @classmethod
     def from_json_file(cls, json_file):
         # Check if exists
