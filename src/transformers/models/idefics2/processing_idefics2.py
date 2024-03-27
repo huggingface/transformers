@@ -16,17 +16,35 @@
 Processor class for IDEFICS2.
 """
 
-from typing import List, Optional, Union
+from functools import lru_cache
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
+
+from packaging import version
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image
+from ...image_utils import ImageInput, is_valid_image, load_image
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...tokenization_utils_base import AddedToken, BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
+from ...utils import TensorType, logging
+
+
+if TYPE_CHECKING:
+    from .pipelines.conversational import Conversation
+
+
+logger = logging.get_logger(__name__)
+
+
+def is_url(val) -> bool:
+    return isinstance(val, str) and val.startswith("http")
+
+
+def is_image_or_image_url(elem):
+    return is_url(elem) or is_valid_image(elem)
 
 
 def _is_str_or_image(elem):
-    return isinstance(elem, (str)) or is_valid_image(elem)
+    return isinstance(elem, (str)) or is_image_or_image_url(elem)
 
 
 def build_string_from_input(prompt, image_seq_len, bos_token, image_token, fake_image_token):
@@ -99,15 +117,18 @@ class Idefics2Processor(ProcessorMixin):
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
 
-        self.fake_image_token = "<fake_token_around_image>"
-        self.image_token = "<image>"
+        self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True)
+        self.image_token = AddedToken("<image>", normalized=False, special=True)
+        self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True)
         self.image_seq_len = image_seq_len
 
-        tokens_to_add = {"additional_special_tokens": [self.fake_image_token, self.image_token]}
+        tokens_to_add = {
+            "additional_special_tokens": [self.fake_image_token, self.image_token, self.end_of_utterance_token]
+        }
         tokenizer.add_special_tokens(tokens_to_add)
 
-        bad_words_ids = tokenizer.convert_tokens_to_ids([self.image_token, self.fake_image_token])
-        self.bad_words_ids = [[id_] for id_ in bad_words_ids]
+        # Stores a Jinja template that formats chat histories into tokenizable strings
+        self.chat_template = kwargs.pop("chat_template", None)
 
         super().__init__(image_processor, tokenizer)
 
@@ -158,8 +179,15 @@ class Idefics2Processor(ProcessorMixin):
         )
         inputs.update(text_inputs)
 
-        # Extract the images from the prompts
-        images = [[elem for elem in prompt if is_valid_image(elem)] for prompt in prompts]
+        # Extract the images from the prompts, loading them if necessary
+        images = []
+        for prompt in prompts:
+            for elem in prompt:
+                if is_valid_image(elem):
+                    images.append(elem)
+                elif is_url(elem):
+                    images.append(load_image(elem))
+
         image_inputs = self.image_processor(images, return_tensors=return_tensors)
         inputs.update(image_inputs)
 
@@ -184,3 +212,197 @@ class Idefics2Processor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+    # Copied from transformers.tokenization_utils_base.PreTrainedTokenizerBase.apply_chat_template
+    def apply_chat_template(
+        self,
+        conversation: Union[List[Dict[str, str]], "Conversation"],
+        chat_template: Optional[str] = None,
+        add_generation_prompt: bool = False,
+        tokenize: bool = True,
+        padding: bool = False,
+        truncation: bool = False,
+        max_length: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_dict: bool = False,
+        **tokenizer_kwargs,
+    ) -> Union[str, List[int]]:
+        """
+        Converts a Conversation object or a list of dictionaries with `"role"` and `"content"` keys to a list of token
+        ids.
+
+        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.apply_chat_template`]. Please
+        refer to the docstring of this method for more information.
+
+        for use with chat models, and will read the tokenizer's chat_template attribute to
+        determine the format and control tokens to use when converting. When chat_template is None, it will fall back
+        to the default_chat_template specified at the class level.
+
+        Args:
+            conversation (Union[List[Dict[str, str]], "Conversation"]): A Conversation object or list of dicts
+                with "role" and "content" keys, representing the chat history so far.
+            chat_template (str, *optional*): A Jinja template to use for this conversion. If
+                this is not passed, the model's default chat template will be used instead.
+            add_generation_prompt (bool, *optional*): Whether to end the prompt with the token(s) that indicate
+                the start of an assistant message. This is useful when you want to generate a response from the model.
+                Note that this argument will be passed to the chat template, and so it must be supported in the
+                template for this argument to have any effect.
+            tokenize (`bool`, defaults to `True`):
+                Whether to tokenize the output. If `False`, the output will be a string.
+            padding (`bool`, defaults to `False`):
+                Whether to pad sequences to the maximum length. Has no effect if tokenize is `False`.
+            truncation (`bool`, defaults to `False`):
+                Whether to truncate sequences at the maximum length. Has no effect if tokenize is `False`.
+            max_length (`int`, *optional*):
+                Maximum length (in tokens) to use for padding or truncation. Has no effect if tokenize is `False`. If
+                not specified, the tokenizer's `max_length` attribute will be used as a default.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Has no effect if tokenize is `False`. Acceptable
+                values are:
+                - `'tf'`: Return TensorFlow `tf.Tensor` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+            return_dict (`bool`, *optional*, defaults to `False`):
+                Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
+            **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
+
+        Returns:
+            `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
+            output is ready to pass to the model, either directly or via methods like `generate()`.
+        """
+
+        if hasattr(conversation, "messages"):
+            # Indicates it's a Conversation object
+            conversation = conversation.messages
+
+        # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template`
+        if chat_template is None:
+            if self.chat_template is not None:
+                chat_template = self.chat_template
+            else:
+                chat_template = self.default_chat_template
+
+        # Compilation function uses a cache to avoid recompiling the same template
+        compiled_template = self._compile_jinja_template(chat_template)
+
+        # Ignore copy
+        rendered = compiled_template.render(
+            messages=conversation,
+            add_generation_prompt=add_generation_prompt,
+            image_tokens=self.image_token.content * self.image_seq_len,
+            **self.tokenizer.special_tokens_map,
+        )
+        # We do a hack here - it's not possible to have the same if/else logic in Jinja to match build_string_from_input so
+        # we just remove cases when <fake_image_token> has been added twice in a row
+        rendered = rendered.replace(
+            f"{self.fake_image_token.content}{self.fake_image_token.content}", f"{self.fake_image_token.content}"
+        )
+
+        if padding is True:
+            padding = "max_length"  # There's only one sequence here, so "longest" makes no sense
+        if tokenize:
+            if return_dict:
+                # Ignore copy
+                return self.tokenizer(
+                    rendered,
+                    padding=padding,
+                    truncation=truncation,
+                    max_length=max_length,
+                    add_special_tokens=False,
+                    return_tensors=return_tensors,
+                    **tokenizer_kwargs,
+                )
+            else:
+                # Ignore copy
+                return self.tokenizer.encode(
+                    rendered,
+                    padding=padding,
+                    truncation=truncation,
+                    max_length=max_length,
+                    add_special_tokens=False,
+                    return_tensors=return_tensors,
+                    **tokenizer_kwargs,
+                )
+        else:
+            return rendered
+
+    @lru_cache
+    # Copied from transformers.tokenization_utils_base.PreTrainedTokenizerBase._compile_jinja_template
+    def _compile_jinja_template(self, chat_template):
+        try:
+            import jinja2
+            from jinja2.exceptions import TemplateError
+            from jinja2.sandbox import ImmutableSandboxedEnvironment
+        except ImportError:
+            raise ImportError("apply_chat_template requires jinja2 to be installed.")
+
+        if version.parse(jinja2.__version__) <= version.parse("3.0.0"):
+            raise ImportError(
+                "apply_chat_template requires jinja2>=3.0.0 to be installed. Your version is " f"{jinja2.__version__}."
+            )
+
+        def raise_exception(message):
+            raise TemplateError(message)
+
+        jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
+        jinja_env.globals["raise_exception"] = raise_exception
+        # Ignore copy
+        jinja_env.filters["is_image"] = is_image_or_image_url
+        return jinja_env.from_string(chat_template)
+
+    @property
+    def default_chat_template(self):
+        """
+        This template formats inputs in the form of a chat history. For each message in the chat history:
+        * the template will output the role of the speaker followed by the content of the message.
+        * content can be a single string or a list of strings and images.
+        * If the content element is an image, the template will output a sequence of <image> tokens and <fake_token_around_image> token before and after each image
+        * The template will output an <end_of_utterance> token at the end of each message.
+
+        Example:
+
+        ```python
+        messages = [
+            {"role": "user", "content": ["What is in this Image?", image1, "https://upload.wikimedia.org/wikipedia/commons/8/86/Id%C3%A9fix.JPG"]},
+            {"role": "assistant", "content": "This picture depicts Idefix, the dog of Obelix in Asterix and Obelix. Idefix is running on the ground."},
+            {"role": "user", "content": ["And who is that?"]},
+        ]
+        ```
+
+        Will create outputs like:
+        ```
+        User:What is in this Image?<fake_token_around_image><image><image><image><fake_token_around_image><image><image><image><end_of_utterance>
+        Assistant:This picture depicts Idefix, the dog of Obelix in Asterix and Obelix. Idefix is running on the ground.<end_of_utterance>
+        User:And who is that?<end_of_utterance>
+        Assistant:
+        ```
+        """
+        logger.warning_once(
+            "\nNo chat template is defined for this processor - using a default chat template "
+            "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
+            "your model, please set `tokenizer.chat_template` to an appropriate template. "
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+        )
+        # fmt: off
+        return (
+            "{% for message in messages %}"
+                "{% if message is iterable and message is not string %}"
+                    "{{message['role'].capitalize() + ':'}}"
+                    "{% for content_elem in message.content %}"
+                        "{% if content_elem | is_image %}"
+                            "{{'<fake_token_around_image>' + image_tokens + '<fake_token_around_image>'}}"
+                        "{% else %}"
+                            "{{content_elem}}"
+                        "{% endif %}"
+                    "{% endfor %}"
+                    "<end_of_utterance>\n"
+                "{% else %}"
+                    "{{message['role'].capitalize() + ':' + message['content'] + '<end_of_utterance>' + '\n'}}"
+                "{% endif %}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}"
+                "{{ 'Assistant:\n' }}"
+            "{% endif %}"
+        )
+        # fmt: on

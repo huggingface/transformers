@@ -133,3 +133,38 @@ class Idefics2ProcessorTest(unittest.TestCase):
         self.assertEqual(inputs['pixel_values'].shape, (2, 2, 3, 767, 980))
         self.assertEqual(inputs['pixel_attention_mask'].shape, (2, 2, 767, 980))
         # fmt: on
+
+    def test_apply_chat_template(self):
+        # Message contains content which a mix of lists with images and image urls and string
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    "What do these images show?",
+                    self.image1,
+                    "https://upload.wikimedia.org/wikipedia/commons/8/86/Id%C3%A9fix.JPG",
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": "The first image shows the statue of Liberty in New York. The second image picture depicts Idefix, the dog of Obelix in Asterix and Obelix.",
+            },
+            {"role": "user", "content": ["And who is that?"]},
+        ]
+
+        processor = self.processor
+        old_seq_len = processor.image_seq_len
+        # Make short sequence length to test that the fake tokens are added correctly
+        processor.image_seq_len = 2
+        rendered = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+
+        expected_rendered = (
+            "User:What do these images show?<fake_token_around_image><image><image><fake_token_around_image><image><image><fake_token_around_image><end_of_utterance>\n"
+            "Assistant:The first image shows the statue of Liberty in New York. The second image picture depicts Idefix, the dog of Obelix in Asterix and Obelix.<end_of_utterance>\n"
+            "User:And who is that?<end_of_utterance>\n"
+            "Assistant:\n"
+        )
+
+        self.assertEqual(rendered, expected_rendered)
+        # Set back to prevent tests from being stateful
+        processor.image_seq_len = old_seq_len
