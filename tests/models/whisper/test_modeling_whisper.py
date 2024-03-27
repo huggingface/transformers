@@ -3341,19 +3341,19 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
         pass
 
     @unittest.skip(
-        "Duplicated test with WhisperModelTester + the FA2 testing suite needs to be refactored to be compatible with WhisperStandaloneDecoder for that test"
+        "Duplicated test with WhisperModelTest + the FA2 testing suite needs to be refactored to be compatible with WhisperDecoder for that test"
     )
     def test_flash_attn_2_generate_padding_right(self):
         pass
 
     @unittest.skip(
-        "Duplicated test with WhisperModelTester + the FA2 testing suite needs to be refactored to be compatible with WhisperStandaloneDecoder for that test"
+        "Duplicated test with WhisperModelTest + the FA2 testing suite needs to be refactored to be compatible with WhisperDecoder for that test"
     )
     def test_flash_attn_2_inference(self):
         pass
 
     @unittest.skip(
-        "Duplicated test with WhisperModelTester + the FA2 testing suite needs to be refactored to be compatible with WhisperStandaloneDecoder for that test"
+        "Duplicated test with WhisperModelTest + the FA2 testing suite needs to be refactored to be compatible with WhisperDecoder for that test"
     )
     def test_flash_attn_2_inference_padding_right(self):
         pass
