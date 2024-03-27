@@ -4,7 +4,6 @@ import requests
 from PIL import Image
 
 from transformers import LlavaNextForConditionalGeneration, LlavaNextProcessor
-from transformers.models.llava_next.modeling_better_llava_next import BetterLlavaNextForConditionalGeneration
 
 
 device = "cuda:0"
@@ -33,6 +32,7 @@ output = model.generate(**inputs, max_new_tokens=1024, do_sample=False, pad_toke
 for o in output:
     print(processor.decode(o, skip_special_tokens=True))
 
+# expected output
 """
 [INST]  
 What is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multivariate chart that displays values for multiple variables represented on axes starting from the same point. This particular radar chart is showing the performance of different models or systems across various metrics.
@@ -59,6 +59,7 @@ output = model.generate(**inputs, max_new_tokens=1024, do_sample=False, pad_toke
 for o in output:
     print(processor.decode(o, skip_special_tokens=True))
 
+# expected output
 """
 [INST]  
 What is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multivariate chart that displays values for multiple variables represented on axes starting from the same point. This particular radar chart is showing the performance of different models or systems across various metrics.
@@ -96,6 +97,8 @@ output = model.generate(**inputs, max_new_tokens=1024, do_sample=False, pad_toke
 
 for o in output:
     print(processor.decode(o, skip_special_tokens=True))
+
+# expected output
 """
 [INST]   What are the things I should be cautious about when I visit here? [/INST] When visiting a location like the one shown in the image, which appears to be a serene lake with a dock and surrounded by forest, there are several things you should be cautious about:
 
