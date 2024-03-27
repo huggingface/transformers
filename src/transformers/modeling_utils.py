@@ -582,7 +582,7 @@ def _end_ptr(tensor: torch.Tensor) -> int:
     return stop
 
 
-def _find_disjoint(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]) -> Tuple[List[Set[str]], Set[str]]:
+def _find_disjoint(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]) -> Tuple[List[Set[str]], List[str]]:
     filtered_tensors = []
     for shared in tensors:
         if len(shared) < 2:
@@ -2493,10 +2493,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 known = inames.intersection(to_delete_names)
                 for name in known:
                     del state_dict[name]
-                unknown = sorted(inames.difference(to_delete_names))
-                for name in unknown[1:]:
-                    del state_dict[name]
-                    error_names.add(name)
+                unknown = inames.difference(to_delete_names)
+                if len(unknown) > 1:
+                    error_names.update(unknown)
 
             error_names.update(shared_names)
 

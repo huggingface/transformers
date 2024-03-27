@@ -83,6 +83,7 @@ if is_torch_available():
     import torch
     from safetensors.torch import save_file as safe_save_file
     from test_module.custom_modeling import CustomModel, NoSuperInitModel
+    from transformers.modeling_utils import _find_disjoint, _find_identical
     from torch import nn
 
     from transformers import (
@@ -2242,3 +2243,39 @@ class Mask4DTestHard(unittest.TestCase):
         ]
 
         self.assertEqual(decoded_0, decoded_1b)
+
+class TestTensorSharing(TestCasePlus):
+    def test_disjoint(self):
+        main = torch.zeros(10)
+        a = main[:5]
+        b = main[5:]
+        state_dict = {"a": a, "b": b}
+
+        shared_names, disjoint_names = _find_disjoint([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [])
+        self.assertEqual(disjoint_names, ["a", "b"])
+
+        a = main[::2]
+        b = main[1::2]
+        state_dict = {"a": a, "b": b}
+
+        shared_names, disjoint_names = _find_disjoint([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [{"a","b"}])
+        self.assertEqual(disjoint_names, [])
+
+    def test_identical(self):
+        a = torch.zeros(10)
+        b = a
+        state_dict = {"a": a, "b": b}
+
+        shared_names, identical_names = _find_identical([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [])
+        self.assertEqual(identical_names, [{"a", "b"}])
+
+        b = a[:5]
+        state_dict = {"a": a, "b": b}
+
+        shared_names, identical_names = _find_identical([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [{"a", "b"}])
+        self.assertEqual(identical_names, [])
+
