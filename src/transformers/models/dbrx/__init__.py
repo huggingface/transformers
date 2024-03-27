@@ -31,16 +31,10 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_dbrx"] = [
         "DBRX_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "DbrxForMaskedLM",
         "DbrxForCausalLM",
-        "DbrxForMultipleChoice",
-        "DbrxForQuestionAnswering",
-        "DbrxForSequenceClassification",
-        "DbrxForTokenClassification",
-        "DbrxLayer",
+        "DbrxBlock",
         "DbrxModel",
         "DbrxPreTrainedModel",
-        "load_tf_weights_in_dbrx",
     ]
 
 
@@ -57,16 +51,10 @@ if TYPE_CHECKING:
     else:
         from .modeling_dbrx import (
             DBRX_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DbrxForMaskedLM,
             DbrxForCausalLM,
-            DbrxForMultipleChoice,
-            DbrxForQuestionAnswering,
-            DbrxForSequenceClassification,
-            DbrxForTokenClassification,
-            DbrxLayer,
+            DbrxBlock,
             DbrxModel,
             DbrxPreTrainedModel,
-            load_tf_weights_in_dbrx,
         )
 
 
