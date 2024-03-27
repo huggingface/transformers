@@ -78,6 +78,59 @@ class ContextPooler(nn.Module):
         return self.config.hidden_size
 
 
+def _traceable(cls):
+    class _Function(object):
+        @staticmethod
+        def apply(*args):
+            if torch.jit.is_tracing():
+                return cls.forward(_Function, *args)
+            else:
+                return cls.apply(*args)
+
+        @staticmethod
+        def save_for_backward(*args):
+            pass
+
+    _Function.__name__ = cls.__name__
+    _Function.__doc__ = cls.__doc__
+    return _Function
+
+
+@torch.jit.script
+def _get_float_min_value(
+    tensor,
+    f16_min=torch.tensor(torch.finfo(torch.float16).min),
+    f32_min=torch.tensor(torch.finfo(torch.float32).min),
+    f64_min=torch.tensor(torch.finfo(torch.float64).min),
+):
+    if tensor.dtype == torch.float16:
+        return f16_min
+    elif tensor.dtype == torch.float32:
+        return f32_min
+    else:
+        return f64_min
+
+
+def get_min_for_tensor(tensor):
+    """
+    Returns the minimum value supported by the tensor's datatype
+    if the tensor is of float type. For other datatypes returns
+    the minimum value of the traced datatype.
+
+    Args:
+        tensor (`torch.tensor`): The tensor from which to infer the datatype.
+
+    Return:
+        `torch.LongTensor`: The minimum value possible for the input tensor datatye.
+    """
+    if tensor.dtype in [torch.float16, torch.float32, torch.float64]:
+        # Will not be baked in during tracing
+        return _get_float_min_value(tensor)
+    # Will be baked in during tracing
+    return torch.tensor(torch.finfo(tensor.dtype).min)
+
+
+@_traceable
 class XSoftmax(torch.autograd.Function):
     """
     Masked Softmax which is optimized for saving memory
@@ -110,8 +163,8 @@ class XSoftmax(torch.autograd.Function):
     def forward(self, input, mask, dim):
         self.dim = dim
         rmask = ~(mask.to(torch.bool))
-
-        output = input.masked_fill(rmask, torch.tensor(torch.finfo(input.dtype).min))
+        ## Future reference: replace with masked tensor when the API goes stable
+        output = input.masked_fill(rmask, get_min_for_tensor(input))
         output = torch.softmax(output, self.dim)
         output.masked_fill_(rmask, 0)
         self.save_for_backward(output)
@@ -168,6 +221,7 @@ def get_mask(input, local_context):
     return mask, dropout
 
 
+@_traceable
 class XDropout(torch.autograd.Function):
     """Optimized dropout function to save computation and memory by using mask operation instead of multiplication."""
 
@@ -420,8 +474,10 @@ class DebertaEncoder(nn.Module):
 
     def get_rel_pos(self, hidden_states, query_states=None, relative_pos=None):
         if self.relative_attention and relative_pos is None:
-            q = query_states.size(-2) if query_states is not None else hidden_states.size(-2)
-            relative_pos = build_relative_position(q, hidden_states.size(-2), hidden_states.device)
+            if query_states is not None:
+                relative_pos = build_relative_position(query_states, hidden_states)
+            else:
+                relative_pos = build_relative_position(hidden_states, hidden_states)
         return relative_pos
 
     def forward(
@@ -492,7 +548,8 @@ class DebertaEncoder(nn.Module):
         )
 
 
-def build_relative_position(query_size, key_size, device):
+@torch.jit.script
+def build_relative_position(query_layer, key_layer):
     """
     Build relative position according to the query and key
 
@@ -501,16 +558,19 @@ def build_relative_position(query_size, key_size, device):
     P_k\\)
 
     Args:
-        query_size (int): the length of query
-        key_size (int): the length of key
+        query_layer (Tensor): the query layer or tensor from which to infer size and device
+        key_layer (Tensor): the key layer or tensor from which to infer size and device
 
     Return:
-        `torch.LongTensor`: A tensor with shape [1, query_size, key_size]
+        `torch.LongTensor`: A tensor with shape [1, query_layer.size, key-layer.size]
 
     """
 
-    q_ids = torch.arange(query_size, dtype=torch.long, device=device)
-    k_ids = torch.arange(key_size, dtype=torch.long, device=device)
+    query_size = query_layer.size(-2)
+    key_size = key_layer.size(-2)
+
+    q_ids = torch.arange(query_size, dtype=torch.long, device=query_layer.device)
+    k_ids = torch.arange(key_size, dtype=torch.long, device=key_layer.device)
     rel_pos_ids = q_ids[:, None] - k_ids.view(1, -1).repeat(query_size, 1)
     rel_pos_ids = rel_pos_ids[:query_size, :]
     rel_pos_ids = rel_pos_ids.unsqueeze(0)
@@ -530,6 +590,45 @@ def p2c_dynamic_expand(c2p_pos, query_layer, key_layer):
 @torch.jit.script
 def pos_dynamic_expand(pos_index, p2c_att, key_layer):
     return pos_index.expand(p2c_att.size()[:2] + (pos_index.size(-2), key_layer.size(-2)))
+
+
+@torch.jit.script
+def get_attention_mask_on_device(device_discriminator, using_ids: bool):
+    input_shape = device_discriminator.size() if using_ids else device_discriminator.size()[:-1]
+    return torch.ones(input_shape, device=device_discriminator.device)
+
+
+@torch.jit.script
+def get_token_type_ids_on_device(device_discriminator, using_ids: bool):
+    input_shape = device_discriminator.size() if using_ids else device_discriminator.size()[:-1]
+    return torch.zeros(input_shape, dtype=torch.long, device=device_discriminator.device)
+
+
+@torch.jit.script
+def scaled_size_sqrt(query_layer, scale_factor: int):
+    return torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
+
+
+@torch.jit.script
+def build_rpos(query_layer, key_layer, relative_pos):
+    if query_layer.size(-2) != key_layer.size(-2):
+        return build_relative_position(key_layer, key_layer)
+    else:
+        return relative_pos
+
+
+@torch.jit.script
+def compute_attention_span(query_layer, key_layer, max_relative_positions: int):
+    return torch.tensor(min(max(query_layer.size(-2), key_layer.size(-2)), max_relative_positions))
+
+
+@torch.jit.script
+def uneven_size_corrected(p2c_att, query_layer, key_layer, relative_pos):
+    if query_layer.size(-2) != key_layer.size(-2):
+        pos_index = relative_pos[:, :, :, 0].unsqueeze(-1)
+        return torch.gather(p2c_att, dim=2, index=pos_dynamic_expand(pos_index, p2c_att, key_layer))
+    else:
+        return p2c_att
 
 
 class DisentangledSelfAttention(nn.Module):
@@ -646,7 +745,7 @@ class DisentangledSelfAttention(nn.Module):
         rel_att = None
         # Take the dot product between "query" and "key" to get the raw attention scores.
         scale_factor = 1 + len(self.pos_att_type)
-        scale = torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
+        scale = scaled_size_sqrt(query_layer, scale_factor)
         query_layer = query_layer / scale.to(dtype=query_layer.dtype)
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         if self.relative_attention:
@@ -676,8 +775,7 @@ class DisentangledSelfAttention(nn.Module):
 
     def disentangled_att_bias(self, query_layer, key_layer, relative_pos, rel_embeddings, scale_factor):
         if relative_pos is None:
-            q = query_layer.size(-2)
-            relative_pos = build_relative_position(q, key_layer.size(-2), query_layer.device)
+            relative_pos = build_relative_position(query_layer, key_layer)
         if relative_pos.dim() == 2:
             relative_pos = relative_pos.unsqueeze(0).unsqueeze(0)
         elif relative_pos.dim() == 3:
@@ -686,8 +784,8 @@ class DisentangledSelfAttention(nn.Module):
         elif relative_pos.dim() != 4:
             raise ValueError(f"Relative position ids must be of dim 2 or 3 or 4. {relative_pos.dim()}")
 
-        att_span = min(max(query_layer.size(-2), key_layer.size(-2)), self.max_relative_positions)
-        relative_pos = relative_pos.long().to(query_layer.device)
+        att_span = compute_attention_span(query_layer, key_layer, self.max_relative_positions)
+        relative_pos = relative_pos.long()
         rel_embeddings = rel_embeddings[
             self.max_relative_positions - att_span : self.max_relative_positions + att_span, :
         ].unsqueeze(0)
@@ -707,20 +805,17 @@ class DisentangledSelfAttention(nn.Module):
         if "p2c" in self.pos_att_type:
             pos_query_layer = self.pos_q_proj(rel_embeddings)
             pos_query_layer = self.transpose_for_scores(pos_query_layer)
-            pos_query_layer /= torch.sqrt(torch.tensor(pos_query_layer.size(-1), dtype=torch.float) * scale_factor)
-            if query_layer.size(-2) != key_layer.size(-2):
-                r_pos = build_relative_position(key_layer.size(-2), key_layer.size(-2), query_layer.device)
-            else:
-                r_pos = relative_pos
+            pos_query_layer /= scaled_size_sqrt(pos_query_layer, scale_factor)
+
+            r_pos = build_rpos(query_layer, key_layer, relative_pos)
             p2c_pos = torch.clamp(-r_pos + att_span, 0, att_span * 2 - 1)
             p2c_att = torch.matmul(key_layer, pos_query_layer.transpose(-1, -2).to(dtype=key_layer.dtype))
             p2c_att = torch.gather(
                 p2c_att, dim=-1, index=p2c_dynamic_expand(p2c_pos, query_layer, key_layer)
             ).transpose(-1, -2)
 
-            if query_layer.size(-2) != key_layer.size(-2):
-                pos_index = relative_pos[:, :, :, 0].unsqueeze(-1)
-                p2c_att = torch.gather(p2c_att, dim=-2, index=pos_dynamic_expand(pos_index, p2c_att, key_layer))
+            p2c_att = uneven_size_corrected(p2c_att, query_layer, key_layer, relative_pos)
+
             score += p2c_att
 
         return score
@@ -758,8 +853,12 @@ class DebertaEmbeddings(nn.Module):
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, mask=None, inputs_embeds=None):
         if input_ids is not None:
             input_shape = input_ids.size()
+            device_discriminator = input_ids
+            using_ids = True
         else:
             input_shape = inputs_embeds.size()[:-1]
+            device_discriminator = inputs_embeds
+            using_ids = False
 
         seq_length = input_shape[1]
 
@@ -767,7 +866,7 @@ class DebertaEmbeddings(nn.Module):
             position_ids = self.position_ids[:, :seq_length]
 
         if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+            token_type_ids = get_token_type_ids_on_device(device_discriminator, using_ids)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -943,18 +1042,18 @@ class DebertaModel(DebertaPreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            input_shape = input_ids.size()
+            device_discriminator = input_ids
+            using_ids = True
         elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
+            device_discriminator = inputs_embeds
+            using_ids = False
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
         if attention_mask is None:
-            attention_mask = torch.ones(input_shape, device=device)
+            attention_mask = get_attention_mask_on_device(device_discriminator, using_ids)
         if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+            token_type_ids = get_token_type_ids_on_device(device_discriminator, using_ids)
 
         embedding_output = self.embeddings(
             input_ids=input_ids,

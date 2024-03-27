@@ -71,6 +71,62 @@ class ContextPooler(nn.Module):
         return self.config.hidden_size
 
 
+# copied from transformers.models.deberta.modeling_deberta._traceable
+def _traceable(cls):
+    class _Function(object):
+        @staticmethod
+        def apply(*args):
+            if torch.jit.is_tracing():
+                return cls.forward(_Function, *args)
+            else:
+                return cls.apply(*args)
+
+        @staticmethod
+        def save_for_backward(*args):
+            pass
+
+    _Function.__name__ = cls.__name__
+    _Function.__doc__ = cls.__doc__
+    return _Function
+
+
+@torch.jit.script
+# copied from transformers.models.deberta.modeling_deberta._get_float_min_value
+def _get_float_min_value(
+    tensor,
+    f16_min=torch.tensor(torch.finfo(torch.float16).min),
+    f32_min=torch.tensor(torch.finfo(torch.float32).min),
+    f64_min=torch.tensor(torch.finfo(torch.float64).min),
+):
+    if tensor.dtype == torch.float16:
+        return f16_min
+    elif tensor.dtype == torch.float32:
+        return f32_min
+    else:
+        return f64_min
+
+
+# copied from transformers.models.deberta.modeling_deberta.get_min_for_tensor
+def get_min_for_tensor(tensor):
+    """
+    Returns the minimum value supported by the tensor's datatype
+    if the tensor is of float type. For other datatypes returns
+    the minimum value of the traced datatype.
+
+    Args:
+        tensor (`torch.tensor`): The tensor from which to infer the datatype.
+
+    Return:
+        `torch.LongTensor`: The minimum value possible for the input tensor datatye.
+    """
+    if tensor.dtype in [torch.float16, torch.float32, torch.float64]:
+        # Will not be baked in during tracing
+        return _get_float_min_value(tensor)
+    # Will be baked in during tracing
+    return torch.tensor(torch.finfo(tensor.dtype).min)
+
+
+@_traceable
 # Copied from transformers.models.deberta.modeling_deberta.XSoftmax with deberta->deberta_v2
 class XSoftmax(torch.autograd.Function):
     """
@@ -104,8 +160,8 @@ class XSoftmax(torch.autograd.Function):
     def forward(self, input, mask, dim):
         self.dim = dim
         rmask = ~(mask.to(torch.bool))
-
-        output = input.masked_fill(rmask, torch.tensor(torch.finfo(input.dtype).min))
+        ## Future reference: replace with masked tensor when the API goes stable
+        output = input.masked_fill(rmask, get_min_for_tensor(input))
         output = torch.softmax(output, self.dim)
         output.masked_fill_(rmask, 0)
         self.save_for_backward(output)
@@ -164,6 +220,7 @@ def get_mask(input, local_context):
     return mask, dropout
 
 
+@_traceable
 # Copied from transformers.models.deberta.modeling_deberta.XDropout
 class XDropout(torch.autograd.Function):
     """Optimized dropout function to save computation and memory by using mask operation instead of multiplication."""
@@ -393,7 +450,7 @@ class ConvLayer(nn.Module):
         out = ACT2FN[self.conv_act](self.dropout(out))
 
         layer_norm_input = residual_states + out
-        output = self.LayerNorm(layer_norm_input).to(layer_norm_input)
+        output = self.LayerNorm(layer_norm_input).to(dtype=layer_norm_input.dtype)
 
         if input_mask is None:
             output_states = output
@@ -456,13 +513,11 @@ class DebertaV2Encoder(nn.Module):
 
     def get_rel_pos(self, hidden_states, query_states=None, relative_pos=None):
         if self.relative_attention and relative_pos is None:
-            q = query_states.size(-2) if query_states is not None else hidden_states.size(-2)
             relative_pos = build_relative_position(
-                q,
-                hidden_states.size(-2),
+                query_states if query_states is not None else hidden_states,
+                hidden_states,
                 bucket_size=self.position_buckets,
                 max_position=self.max_relative_positions,
-                device=hidden_states.device,
             )
         return relative_pos
 
@@ -542,7 +597,8 @@ class DebertaV2Encoder(nn.Module):
         )
 
 
-def make_log_bucket_position(relative_pos, bucket_size, max_position):
+@torch.jit.script
+def make_log_bucket_position(relative_pos, bucket_size: int, max_position: int):
     sign = torch.sign(relative_pos)
     mid = bucket_size // 2
     abs_pos = torch.where(
@@ -557,7 +613,8 @@ def make_log_bucket_position(relative_pos, bucket_size, max_position):
     return bucket_pos
 
 
-def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-1, device=None):
+@torch.jit.script
+def build_relative_position(query_layer, key_layer, bucket_size: int = -1, max_position: int = -1):
     """
     Build relative position according to the query and key
 
@@ -566,18 +623,20 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
     P_k\\)
 
     Args:
-        query_size (int): the length of query
-        key_size (int): the length of key
+        query_layer (Tensor): the query layer or tensor from which to infer size and device
+        key_layer (Tensor): the key layer or tensor from which to infer size and device
         bucket_size (int): the size of position bucket
         max_position (int): the maximum allowed absolute position
-        device (`torch.device`): the device on which tensors will be created.
 
     Return:
-        `torch.LongTensor`: A tensor with shape [1, query_size, key_size]
+        `torch.LongTensor`: A tensor with shape [1, query_layer.size, key_layer.size]
     """
 
-    q_ids = torch.arange(0, query_size, device=device)
-    k_ids = torch.arange(0, key_size, device=device)
+    query_size = query_layer.size(-2)
+    key_size = key_layer.size(-2)
+
+    q_ids = torch.arange(0, query_size, device=query_layer.device)
+    k_ids = torch.arange(0, key_size, device=key_layer.device)
     rel_pos_ids = q_ids[:, None] - k_ids[None, :]
     if bucket_size > 0 and max_position > 0:
         rel_pos_ids = make_log_bucket_position(rel_pos_ids, bucket_size, max_position)
@@ -603,6 +662,51 @@ def p2c_dynamic_expand(c2p_pos, query_layer, key_layer):
 # Copied from transformers.models.deberta.modeling_deberta.pos_dynamic_expand
 def pos_dynamic_expand(pos_index, p2c_att, key_layer):
     return pos_index.expand(p2c_att.size()[:2] + (pos_index.size(-2), key_layer.size(-2)))
+
+
+@torch.jit.script
+# Copied from transformers.models.deberta.modeling_deberta.get_attention_mask_on_device
+def get_attention_mask_on_device(device_discriminator, using_ids: bool):
+    input_shape = device_discriminator.size() if using_ids else device_discriminator.size()[:-1]
+    return torch.ones(input_shape, device=device_discriminator.device)
+
+
+@torch.jit.script
+# Copied from transformers.models.deberta.modeling_deberta.get_token_type_ids_on_device
+def get_token_type_ids_on_device(device_discriminator, using_ids: bool):
+    input_shape = device_discriminator.size() if using_ids else device_discriminator.size()[:-1]
+    return torch.zeros(input_shape, dtype=torch.long, device=device_discriminator.device)
+
+
+@torch.jit.script
+# Copied from transformers.models.deberta.modeling_deberta.scaled_size_sqrt
+def scaled_size_sqrt(query_layer, scale_factor: int):
+    return torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
+
+
+@torch.jit.script
+def build_rpos(query_layer, key_layer, relative_pos, bucket_size: int, max_position: int):
+    if key_layer.size(-2) != query_layer.size(-2):
+        r_pos = build_relative_position(key_layer, key_layer, bucket_size=bucket_size, max_position=max_position)
+        return r_pos.unsqueeze(0)
+    else:
+        return relative_pos
+
+
+@torch.jit.script
+# Copied from transformers.models.deberta.modeling_deberta.compute_attention_span
+def compute_attention_span(query_layer, key_layer, max_relative_positions: int):
+    return torch.tensor(min(max(query_layer.size(-2), key_layer.size(-2)), max_relative_positions))
+
+
+@torch.jit.script
+# Copied from transformers.models.deberta.modeling_deberta.uneven_size_corrected
+def uneven_size_corrected(p2c_att, query_layer, key_layer, relative_pos):
+    if query_layer.size(-2) != key_layer.size(-2):
+        pos_index = relative_pos[:, :, :, 0].unsqueeze(-1)
+        return torch.gather(p2c_att, dim=2, index=pos_dynamic_expand(pos_index, p2c_att, key_layer))
+    else:
+        return p2c_att
 
 
 class DisentangledSelfAttention(nn.Module):
@@ -710,7 +814,7 @@ class DisentangledSelfAttention(nn.Module):
             scale_factor += 1
         if "p2c" in self.pos_att_type:
             scale_factor += 1
-        scale = torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
+        scale = scaled_size_sqrt(query_layer, scale_factor)
         attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2) / scale.to(dtype=query_layer.dtype))
         if self.relative_attention:
             rel_embeddings = self.pos_dropout(rel_embeddings)
@@ -745,13 +849,11 @@ class DisentangledSelfAttention(nn.Module):
 
     def disentangled_attention_bias(self, query_layer, key_layer, relative_pos, rel_embeddings, scale_factor):
         if relative_pos is None:
-            q = query_layer.size(-2)
             relative_pos = build_relative_position(
-                q,
-                key_layer.size(-2),
+                query_layer,
+                key_layer,
                 bucket_size=self.position_buckets,
                 max_position=self.max_relative_positions,
-                device=query_layer.device,
             )
         if relative_pos.dim() == 2:
             relative_pos = relative_pos.unsqueeze(0).unsqueeze(0)
@@ -762,7 +864,7 @@ class DisentangledSelfAttention(nn.Module):
             raise ValueError(f"Relative position ids must be of dim 2 or 3 or 4. {relative_pos.dim()}")
 
         att_span = self.pos_ebd_size
-        relative_pos = relative_pos.long().to(query_layer.device)
+        relative_pos = relative_pos.long()
 
         rel_embeddings = rel_embeddings[0 : att_span * 2, :].unsqueeze(0)
         if self.share_att_key:
@@ -785,7 +887,7 @@ class DisentangledSelfAttention(nn.Module):
         score = 0
         # content->position
         if "c2p" in self.pos_att_type:
-            scale = torch.sqrt(torch.tensor(pos_key_layer.size(-1), dtype=torch.float) * scale_factor)
+            scale = scaled_size_sqrt(pos_key_layer, scale_factor)
             c2p_att = torch.bmm(query_layer, pos_key_layer.transpose(-1, -2))
             c2p_pos = torch.clamp(relative_pos + att_span, 0, att_span * 2 - 1)
             c2p_att = torch.gather(
@@ -797,18 +899,10 @@ class DisentangledSelfAttention(nn.Module):
 
         # position->content
         if "p2c" in self.pos_att_type:
-            scale = torch.sqrt(torch.tensor(pos_query_layer.size(-1), dtype=torch.float) * scale_factor)
-            if key_layer.size(-2) != query_layer.size(-2):
-                r_pos = build_relative_position(
-                    key_layer.size(-2),
-                    key_layer.size(-2),
-                    bucket_size=self.position_buckets,
-                    max_position=self.max_relative_positions,
-                    device=query_layer.device,
-                )
-                r_pos = r_pos.unsqueeze(0)
-            else:
-                r_pos = relative_pos
+            scale = scaled_size_sqrt(pos_query_layer, scale_factor)
+            r_pos = build_rpos(
+                query_layer, key_layer, relative_pos, self.position_buckets, self.max_relative_positions
+            )
 
             p2c_pos = torch.clamp(-r_pos + att_span, 0, att_span * 2 - 1)
             p2c_att = torch.bmm(key_layer, pos_query_layer.transpose(-1, -2))
@@ -822,7 +916,7 @@ class DisentangledSelfAttention(nn.Module):
         return score
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DebertaEmbeddings with DebertaLayerNorm->LayerNorm
+# Copied from transformers.models.deberta.modeling_deberta.DebertaEmbeddings with DebertaLayerNorm->LayerNorm, Deberta->DebertaV2
 class DebertaV2Embeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -855,8 +949,12 @@ class DebertaV2Embeddings(nn.Module):
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, mask=None, inputs_embeds=None):
         if input_ids is not None:
             input_shape = input_ids.size()
+            device_discriminator = input_ids
+            using_ids = True
         else:
             input_shape = inputs_embeds.size()[:-1]
+            device_discriminator = inputs_embeds
+            using_ids = False
 
         seq_length = input_shape[1]
 
@@ -864,7 +962,7 @@ class DebertaV2Embeddings(nn.Module):
             position_ids = self.position_ids[:, :seq_length]
 
         if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+            token_type_ids = get_token_type_ids_on_device(device_discriminator, using_ids)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -1042,18 +1140,18 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            input_shape = input_ids.size()
+            device_discriminator = input_ids
+            using_ids = True
         elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
+            device_discriminator = inputs_embeds
+            using_ids = False
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
         if attention_mask is None:
-            attention_mask = torch.ones(input_shape, device=device)
+            attention_mask = get_attention_mask_on_device(device_discriminator, using_ids)
         if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+            token_type_ids = get_token_type_ids_on_device(device_discriminator, using_ids)
 
         embedding_output = self.embeddings(
             input_ids=input_ids,

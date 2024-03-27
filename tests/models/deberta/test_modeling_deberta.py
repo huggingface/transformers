@@ -12,7 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import io
 import unittest
+from copy import deepcopy
 
 from transformers import DebertaConfig, is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
@@ -197,6 +199,31 @@ class DebertaModelTester(object):
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
+    def create_and_check_deberta_for_tracing_output_validity(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config_trace = deepcopy(config)
+        config_trace.torchscript = True
+
+        model = DebertaModel(config=config_trace)
+        model.to(torch_device)
+        model.eval()
+        sequence_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        sequence_output = sequence_output[0].flatten().tolist()
+
+        trace_input = (input_ids, input_mask, token_type_ids)
+        traced_model_data = torch.jit.trace(model, trace_input)
+        model_bytes = io.BytesIO()
+        torch.jit.save(traced_model_data, model_bytes)
+        model_bytes.seek(0)
+
+        traced_model = torch.jit.load(model_bytes)
+        traced_model.eval()
+        traced_sequence_output = traced_model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        traced_sequence_output = traced_sequence_output[0].flatten().tolist()
+
+        self.parent.assertListEqual(sequence_output, traced_sequence_output)
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -266,6 +293,10 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deberta_for_question_answering(*config_and_inputs)
+
+    def test_for_tracing_output_validity(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_deberta_for_tracing_output_validity(*config_and_inputs)
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

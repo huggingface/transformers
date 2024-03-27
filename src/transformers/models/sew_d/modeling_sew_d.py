@@ -179,7 +179,6 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.make_log_bucket_position
 def make_log_bucket_position(relative_pos, bucket_size, max_position):
     sign = torch.sign(relative_pos)
     mid = bucket_size // 2
@@ -195,7 +194,6 @@ def make_log_bucket_position(relative_pos, bucket_size, max_position):
     return bucket_pos
 
 
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.build_relative_position
 def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-1, device=None):
     """
     Build relative position according to the query and key
@@ -487,7 +485,6 @@ class ContextPooler(nn.Module):
         return self.config.hidden_size
 
 
-# Copied from transformers.models.deberta.modeling_deberta.XSoftmax with deberta->deberta_v2
 class XSoftmax(torch.autograd.Function):
     """
     Masked Softmax which is optimized for saving memory
@@ -665,7 +662,6 @@ class SEWDSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.DisentangledSelfAttention with attention_probs_dropout_prob->attention_dropout, hidden_dropout_prob->activation_dropout
 class DisentangledSelfAttention(nn.Module):
     """
     Disentangled self-attention module
@@ -987,7 +983,6 @@ class SEWDLayer(nn.Module):
             return layer_output
 
 
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.ConvLayer
 class ConvLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1024,7 +1019,6 @@ class ConvLayer(nn.Module):
         return output_states
 
 
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.DebertaV2Encoder with DebertaV2->SEWD
 class SEWDTransformerEncoder(nn.Module):
     """Modified BertEncoder with relative position bias support"""
 
