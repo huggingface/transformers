@@ -238,15 +238,20 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
             The maximum ngram size to be considered for matching in the prompt
         num_output_tokens (`int`):
             The number of tokens to be output as candidate tokens.
+        max_length (`int`):
+            The number of total maximum tokens that can be generated. For decoder-only models that includes the prompt length.
+            Defaults to 20, which is the max length used as default in generation config.
     """
 
     def __init__(
         self,
         num_output_tokens: int = 10,
         max_matching_ngram_size: int = None,
+        max_length: int = 20,
     ):
         self.num_output_tokens = num_output_tokens
         self.max_matching_ngram_size = max_matching_ngram_size if max_matching_ngram_size else 2
+        self.max_length = max_length
 
         if self.max_matching_ngram_size <= 0 or self.num_output_tokens <= 0:
             raise ValueError("Invalid max_matching_ngram_size or num_output_tokens")
@@ -263,6 +268,10 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
             `torch.LongTensor` of shape `(num_candidates, candidate_length)`: The candidate sequences to be tried.
         """
         input_length = input_ids.size(1)
+
+        # Don't generate more than `max_length - 1` candidates since the target model generates one extra token.
+        if self.max_length == input_length + 1:
+            return input_ids, None
 
         chosen_ids = None
         match_found = False
@@ -283,7 +292,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
             for idx in match_indices:
                 start_idx = idx + ngram_size
                 end_idx = start_idx + self.num_output_tokens
-                end_idx = min(end_idx, input_length)
+                end_idx = min(end_idx, input_length, self.max_length)
 
                 if start_idx < end_idx:
                     chosen_ids = input_ids[0, start_idx:end_idx]

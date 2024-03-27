@@ -462,6 +462,8 @@
         title: QDQBert
       - local: model_doc/qwen2
         title: Qwen2
+      - local: model_doc/qwen2_moe
+        title: Qwen2MoE
       - local: model_doc/rag
         title: RAG
       - local: model_doc/realm

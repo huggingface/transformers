@@ -37,6 +37,7 @@ if is_torch_available():
         DistilBertForTokenClassification,
         DistilBertModel,
     )
+    from transformers.models.distilbert.modeling_distilbert import _create_sinusoidal_embeddings
 
 
 class DistilBertModelTester(object):
@@ -237,6 +238,15 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_distilbert_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_distilbert_model(*config_and_inputs)
+
+    def test_distilbert_model_with_sinusoidal_encodings(self):
+        config = DistilBertConfig(sinusoidal_pos_embds=True)
+        model = DistilBertModel(config=config)
+        sinusoidal_pos_embds = torch.empty((config.max_position_embeddings, config.dim), dtype=torch.float32)
+        _create_sinusoidal_embeddings(config.max_position_embeddings, config.dim, sinusoidal_pos_embds)
+        self.model_tester.parent.assertTrue(
+            torch.equal(model.embeddings.position_embeddings.weight, sinusoidal_pos_embds)
+        )
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
