@@ -15,12 +15,11 @@
 """ PyTorch RT-DETR model."""
 
 
-import copy
 import math
 import os
 import warnings
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import lru_cache, partial
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -358,8 +357,8 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     dn_meta: Optional[Dict] = None
 
 
-def _get_clones(module, N):
-    return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
+def _get_clones(partial_module, N):
+    return nn.ModuleList([partial_module() for i in range(N)])
 
 
 def inverse_sigmoid(x, eps=1e-5):
@@ -2453,23 +2452,21 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         self.model = RTDetrModel(config)
 
         # Detection heads on top
-        self.class_embed = nn.Linear(config.d_model, config.num_labels)
-        self.bbox_embed = RTDetrMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
+        self.class_embed = partial(nn.Linear, config.d_model, config.num_labels)
+        self.bbox_embed = partial(RTDetrMLPPredictionHead, config, config.d_model, config.d_model, 4, num_layers=3)
 
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         num_pred = config.decoder_layers
         if config.with_box_refine:
             self.class_embed = _get_clones(self.class_embed, num_pred)
             self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
-            # hack implementation for iterative bounding box refinement
-            self.model.decoder.bbox_embed = self.bbox_embed
         else:
-            self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
-            self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
+            self.class_embed = nn.ModuleList([self.class_embed() for _ in range(num_pred)])
+            self.bbox_embed = nn.ModuleList([self.bbox_embed() for _ in range(num_pred)])
 
-        self.model.decoder.bbox_embed = self.bbox_embed
-        # hack implementation for two-stage
+        # hack implementation for iterative bounding box refinement
         self.model.decoder.class_embed = self.class_embed
+        self.model.decoder.bbox_embed = self.bbox_embed
 
         # Initialize weights and apply final processing
         self.post_init()
