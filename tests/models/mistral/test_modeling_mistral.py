@@ -571,7 +571,9 @@ class MistralIntegrationTest(unittest.TestCase):
         }
 
         print(out[0, 0, :30])
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE[self.cuda_compute_capability_major_version], atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(
+            out[0, 0, :30], EXPECTED_SLICE[self.cuda_compute_capability_major_version], atol=1e-4, rtol=1e-4
+        )
 
         del model
         backend_empty_cache(torch_device)
