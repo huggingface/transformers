@@ -36,7 +36,9 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import (
     ModelOutput,
+    PushToHubMixin,
     add_end_docstrings,
+    copy_func,
     infer_framework,
     is_tf_available,
     is_torch_available,
@@ -779,7 +781,7 @@ if is_torch_available():
 
 
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True, has_feature_extractor=True, has_image_processor=True))
-class Pipeline(_ScikitCompat):
+class Pipeline(_ScikitCompat, PushToHubMixin):
     """
     The Pipeline class is the class from which all pipelines inherit. Refer to this class for methods shared across
     different pipelines.
@@ -902,16 +904,29 @@ class Pipeline(_ScikitCompat):
                 # then we should keep working
                 self.image_processor = self.feature_extractor
 
-    def save_pretrained(self, save_directory: str, safe_serialization: bool = True):
+    def save_pretrained(
+        self,
+        save_directory: Union[str, os.PathLike],
+        safe_serialization: bool = True,
+        token: Optional[Union[str, bool]] = None,
+        **kwargs,
+    ):
         """
         Save the pipeline's model and tokenizer.
 
         Args:
-            save_directory (`str`):
+            save_directory (`str` or `os.PathLike`):
                 A path to the directory where to saved. It will be created if it doesn't exist.
             safe_serialization (`str`):
                 Whether to save the model using `safetensors` or the traditional way for PyTorch or Tensorflow.
+            token (`str` or `bool`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
+                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+            kwargs (`Dict[str, Any]`, *optional*):
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        self._set_token_in_kwargs(kwargs, token=token)
+
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
@@ -938,19 +953,45 @@ class Pipeline(_ScikitCompat):
             # Save the pipeline custom code
             custom_object_save(self, save_directory)
 
-        self.model.save_pretrained(save_directory, safe_serialization=safe_serialization)
+        kwargs["safe_serialization"] = safe_serialization
+        self.model.save_pretrained(save_directory, **kwargs)
 
         if self.tokenizer is not None:
-            self.tokenizer.save_pretrained(save_directory)
+            self.tokenizer.save_pretrained(save_directory, **kwargs)
 
         if self.feature_extractor is not None:
-            self.feature_extractor.save_pretrained(save_directory)
+            self.feature_extractor.save_pretrained(save_directory, **kwargs)
 
         if self.image_processor is not None:
-            self.image_processor.save_pretrained(save_directory)
+            self.image_processor.save_pretrained(save_directory, **kwargs)
 
         if self.modelcard is not None:
             self.modelcard.save_pretrained(save_directory)
+
+    @staticmethod
+    def _set_token_in_kwargs(kwargs, token=None):
+        """Temporary method to deal with `token` and `use_auth_token`.
+        This method is to avoid apply the same changes in all model config classes that overwrite `from_pretrained`.
+        Need to clean up `use_auth_token` in a follow PR.
+        """
+        # Some model config classes like CLIP define their own `from_pretrained` without the new argument `token` yet.
+        if token is None:
+            token = kwargs.pop("token", None)
+        use_auth_token = kwargs.pop("use_auth_token", None)
+
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
+
+        if token is not None:
+            kwargs["token"] = token
 
     def transform(self, X):
         """
@@ -1224,6 +1265,13 @@ class Pipeline(_ScikitCompat):
         # easy solution.
         for input_ in inputs:
             yield self.run_single(input_, preprocess_params, forward_params, postprocess_params)
+
+
+Pipeline.push_to_hub = copy_func(Pipeline.push_to_hub)
+if Pipeline.push_to_hub.__doc__ is not None:
+    Pipeline.push_to_hub.__doc__ = Pipeline.push_to_hub.__doc__.format(
+        object="pipe", object_class="pipeline", object_files="pipeline file"
+    ).replace(".from_pretrained", "")
 
 
 class ChunkPipeline(Pipeline):
