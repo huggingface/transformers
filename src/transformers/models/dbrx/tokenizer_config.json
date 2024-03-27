@@ -1,0 +1,60 @@
+{
+    "add_bos_token": false,
+    "add_eos_token": false,
+    "add_prefix_space": false,
+    "added_tokens_decoder": {
+      "100257": {
+        "content": "<|endoftext|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "100277": {
+        "content": "<|pad|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "100278": {
+        "content": "<|im_start|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "100279": {
+        "content": "<|im_end|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      }
+    },
+    "additional_special_tokens": [
+      "<|im_start|>",
+      "<|im_end|>"
+    ],
+    "auto_map": {
+      "AutoTokenizer": [
+        "tiktoken.TiktokenTokenizerWrapper",
+        null
+      ]
+    },
+    "bos_token": "<|endoftext|>",
+    "clean_up_tokenization_spaces": true,
+    "encoding_name": null,
+    "eos_token": "<|endoftext|>",
+    "errors": "replace",
+    "model_max_length": 1000000000000000019884624838656,
+    "model_name": "gpt-4",
+    "pad_token": "<|pad|>",
+    "tokenizer_class": "TiktokenTokenizerWrapper",
+    "unk_token": "<|endoftext|>",
+    "use_default_system_prompt": true
+  }
