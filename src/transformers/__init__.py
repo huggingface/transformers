@@ -131,6 +131,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.dbrx": ["DbrxConfig"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1441,6 +1442,15 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.dbrx"].extend(
+        [
+            "DbrxForCausalLM",
+            "DbrxBlock",
+            "DbrxModel",
+            "DbrxPreTrainedModel",
+        ]
+    )
 
     _import_structure["models.albert"].extend(
         [
@@ -7786,6 +7796,13 @@ if TYPE_CHECKING:
         )
 
         # PyTorch model imports
+
+        from .models.dbrx import (
+            DbrxForCausalLM,
+            DbrxBlock,
+            DbrxModel,
+            DbrxPreTrainedModel,
+        )
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeamlessM4TCodeHifiGan,
