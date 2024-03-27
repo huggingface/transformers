@@ -131,6 +131,27 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         log_spec = (log_spec + 4.0) / 4.0
         return log_spec.numpy()
 
+    def _torch_extract_fbank_features_batch(self, waveforms: np.array, device: str) -> np.ndarray:
+        """
+        Compute the log-mel spectrogram of the provided audio using the PyTorch STFT implementation.
+        """
+        waveforms = torch.from_numpy(waveforms).type(torch.float32).to(device)
+
+        window = torch.hann_window(self.n_fft).to(device)
+        stft = torch.stft(waveforms, self.n_fft, self.hop_length, window=window, return_complex=True)
+        magnitudes = stft[..., :-1].abs() ** 2
+
+        mel_filters = torch.from_numpy(self.mel_filters).type(torch.float32).to(device)
+        mel_spec = mel_filters.T @ magnitudes
+
+        log_spec = torch.clamp(mel_spec, min=1e-10).log10()
+        max_val = log_spec.max(dim=2, keepdim=True)[0].max(dim=1, keepdim=True)[0]
+        log_spec = torch.maximum(log_spec, max_val - 8.0)
+        log_spec = (log_spec + 4.0) / 4.0
+        if device != 'cpu':
+            log_spec = log_spec.detach().cpu()
+        return log_spec.numpy()
+
     @staticmethod
     # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
     def zero_mean_unit_var_norm(
@@ -165,6 +186,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,
         do_normalize: Optional[bool] = None,
+        device: Optional[str] = 'cpu',
         **kwargs,
     ) -> BatchFeature:
         """
@@ -270,9 +292,12 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
 
         extract_fbank_features = (
-            self._torch_extract_fbank_features if is_torch_available() else self._np_extract_fbank_features
+            self._torch_extract_fbank_features_batch if is_torch_available() else self._np_extract_fbank_features
         )
-        input_features = [extract_fbank_features(waveform) for waveform in input_features[0]]
+        if is_torch_available():
+            input_features = extract_fbank_features(input_features[0], device)
+        else:
+            input_features = [extract_fbank_features(waveform) for waveform in input_features[0]]
 
         if isinstance(input_features[0], List):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
