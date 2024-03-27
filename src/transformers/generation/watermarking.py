@@ -25,11 +25,10 @@ import numpy as np
 
 from ..configuration_utils import PretrainedConfig
 from ..utils import is_torch_available, logging
-from .logits_process import WatermarkLogitsProcessor
-
 
 if is_torch_available():
     import torch
+    from .logits_process import WatermarkLogitsProcessor
 
 
 logger = logging.get_logger(__name__)
