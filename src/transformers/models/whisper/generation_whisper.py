@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 import math
 import warnings
 import zlib
@@ -474,11 +473,8 @@ class WhisperGenerationMixin:
                 "The input name `inputs` is deprecated. Please make sure to use `input_features` instead.",
                 FutureWarning,
             )
-        # 1. copy generation config
-        if generation_config is None:
-            generation_config = copy.deepcopy(self.generation_config)
-        else:
-            generation_config = copy.deepcopy(generation_config)
+        # 1. prepare generation config
+        generation_config, kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
         # 2. set global generate variables
         input_stride = self.model.encoder.conv1.stride[0] * self.model.encoder.conv2.stride[0]
