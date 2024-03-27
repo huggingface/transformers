@@ -790,10 +790,12 @@ class Idefics2PerceiverAttention(nn.Module):
         self.head_dim = config.perceiver_config.resampler_head_dim
         self.num_key_value_heads = config.perceiver_config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.qk_layer_norms = config.perceiver_config.qk_layer_norms
         self.attention_dropout = config.perceiver_config.attention_dropout
 
-        self.q_layer_norm = Idefics2RMSNorm(self.head_dim)
-        self.k_layer_norm = Idefics2RMSNorm(self.head_dim)
+        if self.qk_layer_norms:
+            self.q_layer_norm = Idefics2RMSNorm(self.head_dim)
+            self.k_layer_norm = Idefics2RMSNorm(self.head_dim)
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -844,6 +846,10 @@ class Idefics2PerceiverAttention(nn.Module):
 
         query_states = self.q_layer_norm(query_states)
         key_states = self.k_layer_norm(key_states)
+
+        if self.qk_layer_norms:
+            query_states = self.q_layer_norm(query_states)
+            key_states = self.k_layer_norm(key_states)
 
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -962,6 +968,11 @@ class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
 
         query_states = self.q_layer_norm(query_states)
         key_states = self.k_layer_norm(key_states)
+
+        # Ignore copy
+        if self.qk_layer_norms:
+            query_states = self.q_layer_norm(query_states)
+            key_states = self.k_layer_norm(key_states)
 
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
