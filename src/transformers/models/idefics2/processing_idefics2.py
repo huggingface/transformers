@@ -162,8 +162,8 @@ class Idefics2Processor(ProcessorMixin):
                 prompt=prompt,
                 image_seq_len=image_seq_len,
                 bos_token=self.tokenizer.bos_token,
-                image_token=self.image_token,
-                fake_image_token=self.fake_image_token,
+                image_token=self.image_token.content,
+                fake_image_token=self.fake_image_token.content,
             )
             for prompt in prompts
         ]
