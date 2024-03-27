@@ -359,10 +359,21 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self._added_tokens_decoder.update(kwargs.pop("added_tokens_decoder", {}))
         self._added_tokens_encoder: Dict[str, int] = {k.content: v for v, k in self._added_tokens_decoder.items()}
 
-        # 4 init the parent class
+        # 4. init the parent class
         super().__init__(**kwargs)
 
-        # 4. If some of the special tokens are not part of the vocab, we add them, at the end.
+        # 5. Set the behavior when encountering an OOV token id
+        # Note: this must be set before _add_tokens, because _add_tokens
+        # relies on the behavior of the OOV token ids for some tokenizers.
+        self.oov_error = kwargs.pop("oov_error", "")
+        # TODO @ArthurZ in version 4.42
+        if self.oov_error == "":
+            logger.warning_once(
+                "The `oov_error` argument is set to the default `'replace'`. It will default to `'strict'` in transformers v4.42."
+            )
+            self.oov_error = "replace"
+
+        # 6. If some of the special tokens are not part of the vocab, we add them, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
         self._add_tokens(
             [token for token in self.all_special_tokens_extended if token not in self._added_tokens_encoder],
@@ -966,11 +977,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Returns:
             `str` or `List[str]`: The decoded token(s).
         """
-        if isinstance(ids, int):
-            if ids in self._added_tokens_decoder:
-                return self._added_tokens_decoder[ids].content
-            else:
-                return self._convert_id_to_token(ids)
+        is_single_element = isinstance(ids, int)
+        if is_single_element:
+            ids = [ids]
+
         tokens = []
         for index in ids:
             index = int(index)
@@ -978,9 +988,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 continue
             if index in self._added_tokens_decoder:
                 tokens.append(self._added_tokens_decoder[index].content)
+            elif index >= self.vocab_size and self.oov_error == "replace":
+                tokens.append("")
             else:
                 tokens.append(self._convert_id_to_token(index))
-        return tokens
+        return tokens if not is_single_element else tokens[0]
 
     def _convert_id_to_token(self, index: int) -> str:
         raise NotImplementedError
