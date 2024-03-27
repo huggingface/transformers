@@ -31,6 +31,7 @@ from .utils import (
     IMAGE_PROCESSOR_NAME,
     PushToHubMixin,
     add_model_info_to_auto_map,
+    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     download_url,
@@ -375,11 +376,15 @@ class ImageProcessingMixin(PushToHubMixin):
                 f"loading configuration file {image_processor_file} from cache at {resolved_image_processor_file}"
             )
 
-        if "auto_map" in image_processor_dict and not is_local:
-            image_processor_dict["auto_map"] = add_model_info_to_auto_map(
-                image_processor_dict["auto_map"], pretrained_model_name_or_path
-            )
-
+        if not is_local:
+            if "auto_map" in image_processor_dict:
+                image_processor_dict["auto_map"] = add_model_info_to_auto_map(
+                    image_processor_dict["auto_map"], pretrained_model_name_or_path
+                )
+            if "custom_pipelines" in image_processor_dict:
+                image_processor_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
+                    image_processor_dict["custom_pipelines"], pretrained_model_name_or_path
+                )
         return image_processor_dict, kwargs
 
     @classmethod
