@@ -148,7 +148,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         max_val = log_spec.max(dim=2, keepdim=True)[0].max(dim=1, keepdim=True)[0]
         log_spec = torch.maximum(log_spec, max_val - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
-        if device != 'cpu':
+        if device != "cpu":
             log_spec = log_spec.detach().cpu()
         return log_spec.numpy()
 
@@ -186,7 +186,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,
         do_normalize: Optional[bool] = None,
-        device: Optional[str] = 'cpu',
+        device: Optional[str] = "cpu",
         **kwargs,
     ) -> BatchFeature:
         """
