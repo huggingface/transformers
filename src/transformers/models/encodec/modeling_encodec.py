@@ -114,9 +114,9 @@ class EncodecConv1d(nn.Module):
         kernel_size = self.conv.kernel_size[0]
         stride = torch.tensor(self.conv.stride[0], dtype=torch.int64)
         dilation = self.conv.dilation[0]
-        kernel_size = torch.tensor(
-            (kernel_size - 1) * dilation + 1, dtype=torch.int64
-        )  # effective kernel size with dilations
+
+        # Effective kernel size with dilations.
+        kernel_size = torch.tensor((kernel_size - 1) * dilation + 1, dtype=torch.int64)
 
         self.register_buffer("stride", stride, persistent=False)
         self.register_buffer("kernel_size", kernel_size, persistent=False)
@@ -129,9 +129,9 @@ class EncodecConv1d(nn.Module):
         """See `pad_for_conv1d`."""
         length = hidden_states.shape[-1]
         n_frames = (length - self.kernel_size + self.padding_total) / self.stride + 1
-        ideal_length = (torch.ceil(n_frames).to(torch.int64) - 1) * self.stride + (
-            self.kernel_size - self.padding_total
-        )
+        n_frames = torch.ceil(n_frames).to(torch.int64) - 1
+        ideal_length = n_frames * self.stride + self.kernel_size - self.padding_total
+
         return ideal_length - length
 
     @staticmethod
