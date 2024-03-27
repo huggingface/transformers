@@ -52,7 +52,7 @@ Activate Virtual environment on Windows
 Now you're ready to install 🤗 Transformers with the following command:
 
 ```bash
-pip install transformers evaluate accelerate
+pip install transformers
 ```
 
 For CPU-support only, you can conveniently install 🤗 Transformers and a deep learning library in one line. For example, install 🤗 Transformers and PyTorch with:
