@@ -236,13 +236,11 @@ def verify_logits(model, processor):
     prompt = ["answer en Where is the cow standing?\n", "\n"]
 
     model_inputs = processor(text=prompt, images=list_images, max_length=16, padding="max_length", return_tensors="pt")
-
-    image_captioning_inputs = processor(text="\n", images=list_images[0], max_length=16, padding="do_not_pad", return_tensors="pt")
+    image_captioning_inputs = processor(text="\n", images=list_images[0], max_length=16, padding="max_length", return_tensors="pt")
     with torch.inference_mode():
         outputs = model(**model_inputs)
 
         manual_probs = torch.nn.functional.softmax(outputs.logits[:, -1, :], dim=-1)
-        breakpoint()
         next_token_id = torch.argmax(manual_probs, dim=-1)
         if processor.decode(next_token_id[0]) != "beach":
             raise ValueError("Next token prediction is wrong.")
@@ -250,7 +248,6 @@ def verify_logits(model, processor):
             print("It seems that the forward pass predicts a correct next token. Go to .generate()!")
 
         # Test image captioning generation
-
         captioning_generation = model.generate(**image_captioning_inputs, max_new_tokens=10)
         captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
         if captioning_output[0] != "\ncow standing on the beach on the sea":
