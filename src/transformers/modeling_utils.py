@@ -1716,7 +1716,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if getattr(self.config, "is_encoder_decoder", False) and getattr(self.config, "tie_encoder_decoder", False):
             if hasattr(self, self.base_model_prefix):
                 self = getattr(self, self.base_model_prefix)
-            self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
+            tied_weights = self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
+            if self._tied_weights_keys is not None:
+                self._tied_weights_keys.extend(tied_weights)
+            else:
+                self._tied_weights_keys = tied_weights
 
         for module in self.modules():
             if hasattr(module, "_tie_weights"):
@@ -1725,6 +1729,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @staticmethod
     def _tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str):
         uninitialized_encoder_weights: List[str] = []
+        tied_weights: List[str] = []
         if decoder.__class__ != encoder.__class__:
             logger.info(
                 f"{decoder.__class__} and {encoder.__class__} are not equal. In this case make sure that all encoder"
@@ -1737,6 +1742,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             module_name: str,
             uninitialized_encoder_weights: List[str],
             depth=0,
+            total_decoder_name="",
+            total_encoder_name="",
         ):
             assert isinstance(decoder_pointer, nn.Module) and isinstance(
                 encoder_pointer, nn.Module
@@ -1744,8 +1751,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if hasattr(decoder_pointer, "weight"):
                 assert hasattr(encoder_pointer, "weight")
                 encoder_pointer.weight = decoder_pointer.weight
+                tied_weights.append(f"encoder{total_encoder_name}.weight")
                 if hasattr(decoder_pointer, "bias"):
                     assert hasattr(encoder_pointer, "bias")
+                    tied_weights.append(f"encoder{total_encoder_name}.bias")
                     encoder_pointer.bias = decoder_pointer.bias
                 return
 
@@ -1785,6 +1794,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         module_name + "/" + name,
                         uninitialized_encoder_weights,
                         depth=depth + 1,
+                        total_encoder_name=f"{total_encoder_name}.{encoder_name}",
+                        total_decoder_name=f"{total_decoder_name}.{decoder_name}",
                     )
                     all_encoder_weights.remove(module_name + "/" + encoder_name)
 
@@ -1792,10 +1803,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # tie weights recursively
         tie_encoder_to_decoder_recursively(decoder, encoder, base_model_prefix, uninitialized_encoder_weights)
+
         if len(uninitialized_encoder_weights) > 0:
             logger.warning(
                 f"The following encoder weights were not tied to the decoder {uninitialized_encoder_weights}"
             )
+        return tied_weights
 
     def _tie_or_clone_weights(self, output_embeddings, input_embeddings):
         """Tie or clone module weights depending of whether we are using TorchScript or not"""
@@ -2472,7 +2485,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # These are all the pointers of shared tensors.
             shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
-            error_names = set()
+            error_names = list()
             to_delete_names = set()
             # Recursively descend to find tied weight keys
             _tied_weights_keys = _get_tied_weight_keys(self)
@@ -2507,9 +2520,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     del state_dict[name]
                 unknown = inames.difference(to_delete_names)
                 if len(unknown) > 1:
-                    error_names.update(unknown)
+                    error_names.append(unknown)
 
-            error_names.update(shared_names)
+            if shared_names:
+                error_names.append(set(shared_names))
 
             if len(error_names) > 0:
                 raise RuntimeError(

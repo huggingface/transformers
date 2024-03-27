@@ -2244,6 +2244,7 @@ class Mask4DTestHard(unittest.TestCase):
         self.assertEqual(decoded_0, decoded_1b)
 
 
+@require_torch
 class TestTensorSharing(TestCasePlus):
     def test_disjoint(self):
         main = torch.zeros(10)
