@@ -18,12 +18,14 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_flax_available,
+    is_tf_available,
     is_torch_available,
     is_vision_available,
 )
 
 
 _import_structure = {"configuration_beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig", "BeitOnnxConfig"]}
+
 
 try:
     if not is_vision_available():
@@ -48,6 +50,15 @@ else:
         "BeitModel",
         "BeitPreTrainedModel",
         "BeitBackbone",
+    ]
+
+if is_tf_available():
+    _import_structure["modeling_tf_beit"] = [
+        "TFBeitForImageClassification",
+        "TFBeitForMaskedImageModeling",
+        "TFBeitForSemanticSegmentation",
+        "TFBeitModel",
+        "TFBeitPreTrainedModel",
     ]
 
 
@@ -90,6 +101,14 @@ if TYPE_CHECKING:
             BeitForSemanticSegmentation,
             BeitModel,
             BeitPreTrainedModel,
+        )
+    if is_tf_available():
+        from .modeling_tf_beit import (
+            TFBeitForImageClassification,
+            TFBeitForMaskedImageModeling,
+            TFBeitForSemanticSegmentation,
+            TFBeitModel,
+            TFBeitPreTrainedModel,
         )
 
     try:

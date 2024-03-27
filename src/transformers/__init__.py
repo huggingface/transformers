@@ -3959,6 +3959,15 @@ else:
             "TFBartPretrainedModel",
         ]
     )
+    _import_structure["models.beit"].extend(
+        [
+            "TFBeitForImageClassification",
+            "TFBeitForMaskedImageModeling",
+            "TFBeitForSemanticSegmentation",
+            "TFBeitModel",
+            "TFBeitPreTrainedModel",
+        ]
+    )
     _import_structure["models.bert"].extend(
         [
             "TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -8382,6 +8391,13 @@ if TYPE_CHECKING:
             TFBartForSequenceClassification,
             TFBartModel,
             TFBartPretrainedModel,
+        )
+        from .models.beit import (
+            TFBeitForImageClassification,
+            TFBeitForMaskedImageModeling,
+            TFBeitForSemanticSegmentation,
+            TFBeitModel,
+            TFBeitPreTrainedModel,
         )
         from .models.bert import (
             TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,

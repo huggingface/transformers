@@ -211,6 +211,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "TFSegformerDecodeHead",
     "FlaxBeitForMaskedImageModeling",
     "BeitForMaskedImageModeling",
+    "TFBeitForMaskedImageModeling",
     "ChineseCLIPTextModel",
     "ChineseCLIPVisionModel",
     "CLIPTextModel",

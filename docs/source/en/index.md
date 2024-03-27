@@ -68,7 +68,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [BART](model_doc/bart)                          |       ✅        |         ✅         |      ✅      |
 |                       [BARThez](model_doc/barthez)                       |       ✅        |         ✅         |      ✅      |
 |                       [BARTpho](model_doc/bartpho)                       |       ✅        |         ✅         |      ✅      |
-|                          [BEiT](model_doc/beit)                          |       ✅        |         ❌         |      ✅      |
+|                          [BEiT](model_doc/beit)                          |       ✅        |         ✅         |      ✅      |
 |                          [BERT](model_doc/bert)                          |       ✅        |         ✅         |      ✅      |
 |               [Bert Generation](model_doc/bert-generation)               |       ✅        |         ❌         |      ❌      |
 |                 [BertJapanese](model_doc/bert-japanese)                  |       ✅        |         ✅         |      ✅      |
@@ -120,7 +120,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                         [DiNAT](model_doc/dinat)                         |       ✅        |         ❌         |      ❌      |
 |                        [DINOv2](model_doc/dinov2)                        |       ✅        |         ❌         |      ❌      |
 |                    [DistilBERT](model_doc/distilbert)                    |       ✅        |         ✅         |      ✅      |
-|                           [DiT](model_doc/dit)                           |       ✅        |         ❌         |      ✅      |
+|                           [DiT](model_doc/dit)                           |       ✅        |         ✅         |      ✅      |
 |                       [DonutSwin](model_doc/donut)                       |       ✅        |         ❌         |      ❌      |
 |                           [DPR](model_doc/dpr)                           |       ✅        |         ✅         |      ❌      |
 |                           [DPT](model_doc/dpt)                           |       ✅        |         ❌         |      ❌      |
