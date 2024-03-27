@@ -77,8 +77,8 @@ class Idefics2ProcessorTest(unittest.TestCase):
         inputs = self.processor(prompt)
 
         bos_token = self.processor.tokenizer.bos_token
-        image_token = self.processor.image_token
-        fake_image_token = self.processor.fake_image_token
+        image_token = self.processor.image_token.content
+        fake_image_token = self.processor.fake_image_token.content
 
         bos_token_id = self.processor.tokenizer.convert_tokens_to_ids(bos_token)
         image_token_id = self.processor.tokenizer.convert_tokens_to_ids(image_token)

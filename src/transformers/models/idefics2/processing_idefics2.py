@@ -208,6 +208,10 @@ class Idefics2Processor(ProcessorMixin):
         return self.tokenizer.decode(*args, **kwargs)
 
     @property
+    def bad_words_ids(self):
+        return [[x] for x in self.tokenizer.additional_special_tokens_ids]
+
+    @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names

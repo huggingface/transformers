@@ -837,15 +837,12 @@ class Idefics2PerceiverAttention(nn.Module):
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim)
+        value_states = value_states.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx)
-
-        query_states = self.q_layer_norm(query_states)
-        key_states = self.k_layer_norm(key_states)
 
         if self.qk_layer_norms:
             query_states = self.q_layer_norm(query_states)
@@ -965,9 +962,6 @@ class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
         past_key_value = (key_states, value_states) if use_cache else None
-
-        query_states = self.q_layer_norm(query_states)
-        key_states = self.k_layer_norm(key_states)
 
         # Ignore copy
         if self.qk_layer_norms:
@@ -1519,10 +1513,17 @@ class Idefics2Model(Idefics2PreTrainedModel):
         )
 
     def get_input_embeddings(self):
-        return self.embed_tokens
+        return self.text_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.embed_tokens = value
+        self.text_model.set_input_embeddings(value)
+
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
+        model_embeds = self.text_model.resize_token_embeddings(
+            new_num_tokens=new_num_tokens, pad_to_multiple_of=pad_to_multiple_of
+        )
+        self.config.text_config.vocab_size = model_embeds.num_embeddings
+        return model_embeds
 
     def inputs_merger(
         self,
@@ -1717,6 +1718,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         self.image_token_id = self.config.image_token_id
 
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.vocab_size = config.text_config.vocab_size
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1736,16 +1738,32 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         )
 
     def get_input_embeddings(self):
-        return self.model.text_model.embed_tokens
+        return self.model.text_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.model.text_model.embed_tokens = value
+        self.model.text_model.set_input_embeddings(value)
 
     def get_output_embeddings(self):
         return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
+        # model_embeds = self.model.resize_token_embeddings(new_num_tokens=new_num_tokens, pad_to_multiple_of=pad_to_multiple_of)
+        model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        if new_num_tokens is None and pad_to_multiple_of is None:
+            return model_embeds
+
+        # Update base model and current model config
+        # Ignore copy
+        self.config.text_config.vocab_size = model_embeds.weight.shape[0]
+        self.vocab_size = self.config.text_config.vocab_size
+
+        # Tie weights again if needed
+        self.tie_weights()
+
+        return model_embeds
 
     def tie_weights(self):
         """

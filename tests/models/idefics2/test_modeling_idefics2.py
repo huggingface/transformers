@@ -14,6 +14,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Idefics2 model."""
 
+import copy
 import gc
 import unittest
 from io import BytesIO
@@ -52,57 +53,51 @@ class Idefics2VisionText2TextModelTester:
         batch_size=2,
         num_images=2,
         seq_length=10,
-        additional_vocab_size=0,
-        vocab_size=100,
-        hidden_size=64,
-        intermediate_size=56,
-        num_hidden_layers=3,
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        hidden_act="silu",
-        max_position_embeddings=256,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=0,  # None in the original configuration_mistral, we set it to the unk_token_id
-        bos_token_id=1,
-        eos_token_id=2,
-        image_token_id=32_001,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        sliding_window=32,
-        qk_layer_norms=False,
-        freeze_text_layers=True,
-        freeze_text_module_exceptions=[],
-        freeze_lm_head=False,
-        freeze_vision_layers=True,
-        freeze_vision_module_exceptions=[],
-        attention_dropout=0.0,
         vision_config={
             "image_size": 12,
-            "patch_size": 2,
+            "patch_size": 12,
             "num_channels": 3,
-            "is_training": True,
             "hidden_size": 32,
-            "projection_dim": 32,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
-            "intermediate_size": 37,
+            "intermediate_size": 32,
             "dropout": 0.1,
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
         perceiver_config={
-            # "hidden_size": 4096,
             "hidden_act": "silu",
             "resampler_n_latents": 2,
             "resampler_depth": 2,
             "resampler_n_heads": 2,
             "num_key_value_heads": 1,
             "resampler_head_dim": 12,
-            "qk_layer_norms_perceiver": False,
+            "qk_layer_norms": False,
             "attention_dropout": 0.0,
         },
+        text_config={
+            "vocab_size": 100,
+            "hidden_size": 64,
+            "intermediate_size": 56,
+            "num_hidden_layers": 3,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 2,
+            "hidden_act": "silu",
+            "max_position_embeddings": 256,
+            "initializer_range": 0.02,
+            "rms_norm_eps": 1e-6,
+            "pad_token_id": 0,  # None in the original configuration_mistral, we set it to the unk_token_id
+            "bos_token_id": 1,
+            "eos_token_id": 2,
+            "image_token_id": 32_001,
+            "tie_word_embeddings": False,
+            "rope_theta": 10000.0,
+            "sliding_window": 32,
+            "attention_dropout": 0.0,
+        },
+        use_cache=False,
+        tie_word_embeddings=False,
+        image_token_id=32_001,
     ):
         self.parent = parent
         self.is_training = is_training
@@ -110,66 +105,28 @@ class Idefics2VisionText2TextModelTester:
         self.num_images = num_images
         self.num_channels = 3
         self.seq_length = seq_length
-        self.additional_vocab_size = additional_vocab_size
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
         self.image_token_id = image_token_id
         self.tie_word_embeddings = tie_word_embeddings
-        self.rope_theta = rope_theta
-        self.sliding_window = sliding_window
-        self.qk_layer_norms = qk_layer_norms
-        self.freeze_text_layers = freeze_text_layers
-        self.freeze_text_module_exceptions = freeze_text_module_exceptions
-        self.freeze_lm_head = freeze_lm_head
-        self.freeze_vision_layers = freeze_vision_layers
-        self.freeze_vision_module_exceptions = freeze_vision_module_exceptions
-        self.attention_dropout = attention_dropout
+        # Hack - add properties here so use common tests
+        self.vocab_size = text_config["vocab_size"]
+        self.num_hidden_layers = text_config["num_hidden_layers"]
+        self.num_attention_heads = text_config["num_attention_heads"]
+        self.hidden_size = text_config["hidden_size"]
 
         self.vision_config = vision_config
         self.perceiver_config = perceiver_config
+        self.text_config = text_config
 
     def get_config(self):
         return Idefics2Config(
-            vision_config=self.vision_config,
-            perceiver_config=self.perceiver_config,
-            additional_vocab_size=self.additional_vocab_size,
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-            hidden_act=self.hidden_act,
-            max_position_embeddings=self.max_position_embeddings,
-            initializer_range=self.initializer_range,
-            rms_norm_eps=self.rms_norm_eps,
             use_cache=self.use_cache,
-            pad_token_id=self.pad_token_id,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
             image_token_id=self.image_token_id,
             tie_word_embeddings=self.tie_word_embeddings,
-            rope_theta=self.rope_theta,
-            sliding_window=self.sliding_window,
-            qk_layer_norms=self.qk_layer_norms,
-            freeze_text_layers=self.freeze_text_layers,
-            freeze_text_module_exceptions=self.freeze_text_module_exceptions,
-            freeze_lm_head=self.freeze_lm_head,
-            freeze_vision_layers=self.freeze_vision_layers,
-            freeze_vision_module_exceptions=self.freeze_vision_module_exceptions,
-            attention_dropout=self.attention_dropout,
+            vision_config=self.vision_config,
+            perceiver_config=self.perceiver_config,
+            text_config=self.text_config,
+            vocab_size=self.vocab_size,
         )
 
     def prepare_config_and_inputs(self):
@@ -189,7 +146,7 @@ class Idefics2VisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.vocab_size - 1) + 1
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
         inputs_dict = {
             "pixel_values": pixel_values,
@@ -228,6 +185,139 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_flash_attn_2_inference_padding_right(self):
         pass
 
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_resize_tokens_embeddings with config.vocab_size->config.text_config.vocab_size
+    def test_resize_tokens_embeddings(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+
+            if self.model_tester.is_training is False:
+                model.eval()
+
+            model_vocab_size = config.text_config.vocab_size
+            # Retrieve the embeddings and clone theme
+            model_embed = model.resize_token_embeddings(model_vocab_size)
+            cloned_embeddings = model_embed.weight.clone()
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size + 10)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            # Input ids should be clamped to the maximum size of the vocabulary
+            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+
+            # make sure that decoder_input_ids are resized as well
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
+            models_equal = True
+            for p1, p2 in zip(cloned_embeddings, model_embed.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+
+            self.assertTrue(models_equal)
+
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+
+            model_vocab_size = config.text_config.vocab_size
+            model.resize_token_embeddings(model_vocab_size + 10, pad_to_multiple_of=1)
+            self.assertTrue(model.config.text_config.vocab_size + 10, model_vocab_size)
+
+            model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
+            self.assertTrue(model_embed.weight.shape[0] // 64, 0)
+
+            self.assertTrue(model_embed.weight.shape[0], model.config.text_config.vocab_size)
+            self.assertTrue(model.config.text_config.vocab_size, model.vocab_size)
+
+            model_embed = model.resize_token_embeddings(model_vocab_size + 13, pad_to_multiple_of=64)
+            self.assertTrue(model_embed.weight.shape[0] // 64, 0)
+
+            # Check that resizing a model to a multiple of pad_to_multiple leads to a model of exactly that size
+            target_dimension = 128
+            model_embed = model.resize_token_embeddings(target_dimension, pad_to_multiple_of=64)
+            self.assertTrue(model_embed.weight.shape[0], target_dimension)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "Asking to pad the embedding matrix to a multiple of `1.3`, which is not and integer. Please make sure to pass an integer",
+            ):
+                model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=1.3)
+
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_resize_embeddings_untied with config.vocab_size->config.text_config.vocab_size
+    def test_resize_embeddings_untied(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
+
+        original_config.tie_word_embeddings = False
+
+        # if model cannot untied embeddings -> leave test
+        if original_config.tie_word_embeddings:
+            return
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config).to(torch_device)
+
+            # if no output embeddings -> leave test
+            if model.get_output_embeddings() is None:
+                continue
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_vocab_size = config.text_config.vocab_size
+            model.resize_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size + 10)
+            output_embeds = model.get_output_embeddings()
+            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
+            # Check bias if present
+            if output_embeds.bias is not None:
+                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model.resize_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            output_embeds = model.get_output_embeddings()
+            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size - 15)
+            # Check bias if present
+            if output_embeds.bias is not None:
+                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            # Input ids should be clamped to the maximum size of the vocabulary
+            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
 
 @require_torch
 class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTesterMixin, unittest.TestCase):
@@ -257,6 +347,139 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     @unittest.skip("Model does not support padding right")
     def test_flash_attn_2_inference_padding_right(self):
         pass
+
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_resize_tokens_embeddings with config.vocab_size->config.text_config.vocab_size
+    def test_resize_tokens_embeddings(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+
+            if self.model_tester.is_training is False:
+                model.eval()
+
+            model_vocab_size = config.text_config.vocab_size
+            # Retrieve the embeddings and clone theme
+            model_embed = model.resize_token_embeddings(model_vocab_size)
+            cloned_embeddings = model_embed.weight.clone()
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size + 10)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            # Input ids should be clamped to the maximum size of the vocabulary
+            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+
+            # make sure that decoder_input_ids are resized as well
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
+            models_equal = True
+            for p1, p2 in zip(cloned_embeddings, model_embed.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+
+            self.assertTrue(models_equal)
+
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+
+            model_vocab_size = config.text_config.vocab_size
+            model.resize_token_embeddings(model_vocab_size + 10, pad_to_multiple_of=1)
+            self.assertTrue(model.config.text_config.vocab_size + 10, model_vocab_size)
+
+            model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
+            self.assertTrue(model_embed.weight.shape[0] // 64, 0)
+
+            self.assertTrue(model_embed.weight.shape[0], model.config.text_config.vocab_size)
+            self.assertTrue(model.config.text_config.vocab_size, model.vocab_size)
+
+            model_embed = model.resize_token_embeddings(model_vocab_size + 13, pad_to_multiple_of=64)
+            self.assertTrue(model_embed.weight.shape[0] // 64, 0)
+
+            # Check that resizing a model to a multiple of pad_to_multiple leads to a model of exactly that size
+            target_dimension = 128
+            model_embed = model.resize_token_embeddings(target_dimension, pad_to_multiple_of=64)
+            self.assertTrue(model_embed.weight.shape[0], target_dimension)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "Asking to pad the embedding matrix to a multiple of `1.3`, which is not and integer. Please make sure to pass an integer",
+            ):
+                model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=1.3)
+
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_resize_embeddings_untied with config.vocab_size->config.text_config.vocab_size
+    def test_resize_embeddings_untied(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
+
+        original_config.tie_word_embeddings = False
+
+        # if model cannot untied embeddings -> leave test
+        if original_config.tie_word_embeddings:
+            return
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config).to(torch_device)
+
+            # if no output embeddings -> leave test
+            if model.get_output_embeddings() is None:
+                continue
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_vocab_size = config.text_config.vocab_size
+            model.resize_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size + 10)
+            output_embeds = model.get_output_embeddings()
+            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
+            # Check bias if present
+            if output_embeds.bias is not None:
+                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model.resize_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            output_embeds = model.get_output_embeddings()
+            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size - 15)
+            # Check bias if present
+            if output_embeds.bias is not None:
+                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            # Input ids should be clamped to the maximum size of the vocabulary
+            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
 
 
 @require_torch
@@ -305,7 +528,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, bad_words_ids=self.processor.bad_words_ids, max_new_tokens=10)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        # Batch affects generated text. Single batch output: ['In this image, we see the Statue of Liberty in New York City.']
+        # Batch affects generated text. Single batch output: ['In this image, we see the Statue of Liberty in the foreground and']
         expected_generated_text = "In this image, we see the beautiful city skyline. The city is a"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
@@ -329,5 +552,5 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, bad_words_ids=self.processor.bad_words_ids, max_new_tokens=10)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "In this image, we see the beautiful cityscape of New York City. The"
+        expected_generated_text = "In this image, we see the Statue of Liberty in the foreground and"
         self.assertEqual(generated_texts[0], expected_generated_text)
