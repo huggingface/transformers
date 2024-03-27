@@ -28,6 +28,7 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
 from ..models.auto.modeling_auto import AutoModelForDepthEstimation, AutoModelForImageToImage
+from ..models.auto.processing_auto import PROCESSOR_MAPPING, AutoProcessor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import (
@@ -66,6 +67,7 @@ from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
 from .image_feature_extraction import ImageFeatureExtractionPipeline
 from .image_segmentation import ImageSegmentationPipeline
+from .image_text_to_text import ImageTextToTextPipeline
 from .image_to_image import ImageToImagePipeline
 from .image_to_text import ImageToTextPipeline
 from .mask_generation import MaskGenerationPipeline
@@ -118,6 +120,7 @@ if is_torch_available():
         AutoModelForDocumentQuestionAnswering,
         AutoModelForImageClassification,
         AutoModelForImageSegmentation,
+        AutoModelForImageTextToText,
         AutoModelForMaskedLM,
         AutoModelForMaskGeneration,
         AutoModelForObjectDetection,
@@ -392,6 +395,17 @@ SUPPORTED_TASKS = {
         },
         "type": "multimodal",
     },
+    "image-text-to-text": {
+        "impl": ImageTextToTextPipeline,
+        "tf": (),
+        "pt": (AutoModelForImageTextToText,) if is_torch_available() else (),
+        "default": {
+            "model": {
+                "pt": ("Salesforce/blip-image-captioning-base", "89b09ea"),
+            }
+        },
+        "type": "multimodal",
+    },
     "object-detection": {
         "impl": ObjectDetectionPipeline,
         "tf": (),
@@ -566,6 +580,7 @@ def pipeline(
     tokenizer: Optional[Union[str, PreTrainedTokenizer, "PreTrainedTokenizerFast"]] = None,
     feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None,
     image_processor: Optional[Union[str, BaseImageProcessor]] = None,
+    processor: Optional = None,
     framework: Optional[str] = None,
     revision: Optional[str] = None,
     use_fast: bool = True,
@@ -917,6 +932,7 @@ def pipeline(
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
     load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
+    load_processor = type(model_config) in PROCESSOR_MAPPING or processor is not None
 
     # If `model` (instance of `PretrainedModel` instead of `str`) is passed (and/or same for config), while
     # `image_processor` or `feature_extractor` is `None`, the loading will fail. This happens particularly for some
@@ -1079,6 +1095,27 @@ def pipeline(
                     if not is_pyctcdecode_available():
                         logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
 
+    if load_processor:
+        # Try to infer processor from model or config name (if provided as str)
+        if processor is None:
+            if isinstance(model_name, str):
+                processor = model_name
+            elif isinstance(config, str):
+                processor = config
+            elif load_image_processor or load_feature_extractor:
+                pass
+            else:
+                # Impossible to guess what is the right processor here
+                raise Exception(
+                    "Impossible to guess which processor to use. "
+                    "Please provide a ProcessorMixin class or a path/identifier "
+                    "to a pretrained processor."
+                )
+
+        # Instantiate processor if needed
+        if isinstance(processor, (str, tuple)):
+            processor = AutoProcessor.from_pretrained(processor, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:
             if key.startswith("translation"):
@@ -1100,6 +1137,9 @@ def pipeline(
 
     if image_processor is not None:
         kwargs["image_processor"] = image_processor
+
+    if processor is not None:
+        kwargs["processor"] = processor
 
     if device is not None:
         kwargs["device"] = device
