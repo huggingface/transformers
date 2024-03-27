@@ -14,92 +14,24 @@
 # limitations under the License.
 
 import collections
-import copy
-import json
-import os
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Dict, Optional, Union
+from typing import Dict, Optional, Union
 
 import numpy as np
 
 from ..configuration_utils import PretrainedConfig
 from ..utils import is_torch_available, logging
+from .configuration_utils import WatermarkingConfig
+
 
 if is_torch_available():
     import torch
+
     from .logits_process import WatermarkLogitsProcessor
 
 
 logger = logging.get_logger(__name__)
-
-
-@dataclass
-class WatermarkingConfig:
-    def __init__(
-        self,
-        greenlist_ratio: Optional[float] = 0.25,
-        bias: Optional[float] = 2.0,
-        hashing_key: Optional[int] = 15485863,
-        seeding_scheme: Optional[str] = "lefthash",
-        context_width: Optional[int] = 1,
-    ):
-        self.greenlist_ratio = greenlist_ratio
-        self.bias = bias
-        self.hashing_key = hashing_key
-        self.seeding_scheme = seeding_scheme
-        self.context_width = context_width
-
-    @classmethod
-    def from_dict(cls, config_dict, **kwargs):
-        if config_dict is None:
-            return None
-        config = cls(**config_dict)
-        to_remove = []
-        for key, value in kwargs.items():
-            if hasattr(config, key):
-                setattr(config, key, value)
-                to_remove.append(key)
-        for key in to_remove:
-            kwargs.pop(key, None)
-        return config
-
-    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
-        """
-        Save this instance to a JSON file.
-
-        Args:
-            json_file_path (`str` or `os.PathLike`):
-                Path to the JSON file in which this configuration instance's parameters will be saved.
-        """
-        with open(json_file_path, "w", encoding="utf-8") as writer:
-            config_dict = self.to_dict()
-            json_string = json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
-
-            writer.write(json_string)
-
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Serializes this instance to a Python dictionary. Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
-        """
-        output = copy.deepcopy(self.__dict__)
-        return output
-
-    def __iter__(self):
-        for attr, value in copy.deepcopy(self.__dict__).items():
-            yield attr, value
-
-    def __repr__(self):
-        return f"{self.__class__.__name__} {self.to_json_string()}"
-
-    def to_json_string(self):
-        return json.dumps(self.__dict__, indent=2) + "\n"
-
-    def update(self, **kwargs):
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
 
 
 @dataclass

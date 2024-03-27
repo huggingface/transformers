@@ -107,7 +107,6 @@ _import_structure = {
         "GenerationConfig",
         "TextIteratorStreamer",
         "TextStreamer",
-        "WatermarkDetector",
         "WatermarkingConfig",
     ],
     "hf_argparser": ["HfArgumentParser"],
@@ -1435,6 +1434,7 @@ else:
             "TopPLogitsWarper",
             "TypicalLogitsWarper",
             "UnbatchedClassifierFreeGuidanceLogitsProcessor",
+            "WatermarkDetector",
             "WatermarkLogitsProcessor",
             "WhisperTimeStampLogitsProcessor",
         ]
@@ -4988,7 +4988,7 @@ if TYPE_CHECKING:
     from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 
     # Generation
-    from .generation import GenerationConfig, TextIteratorStreamer, TextStreamer, WatermarkDetector, WatermarkingConfig
+    from .generation import GenerationConfig, TextIteratorStreamer, TextStreamer, WatermarkingConfig
     from .hf_argparser import HfArgumentParser
 
     # Integrations
@@ -6296,6 +6296,7 @@ if TYPE_CHECKING:
             TopPLogitsWarper,
             TypicalLogitsWarper,
             UnbatchedClassifierFreeGuidanceLogitsProcessor,
+            WatermarkDetector,
             WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
         )

@@ -18,7 +18,7 @@ from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_availab
 
 
 _import_structure = {
-    "configuration_utils": ["GenerationConfig", "GenerationMode"],
+    "configuration_utils": ["GenerationConfig", "GenerationMode", "WatermarkingConfig"],
     "streamers": ["TextIteratorStreamer", "TextStreamer"],
 }
 
@@ -106,7 +106,6 @@ else:
     ]
     _import_structure["watermarking"] = [
         "WatermarkDetector",
-        "WatermarkingConfig",
         "WatermarkDetectorOutput",
     ]
 
@@ -176,7 +175,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_utils import GenerationConfig, GenerationMode
+    from .configuration_utils import GenerationConfig, GenerationMode, WatermarkingConfig
     from .streamers import TextIteratorStreamer, TextStreamer
 
     try:
@@ -250,7 +249,6 @@ if TYPE_CHECKING:
         from .watermarking import (
             WatermarkDetector,
             WatermarkDetectorOutput,
-            WatermarkingConfig,
         )
 
     try:
