@@ -34,7 +34,7 @@ OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class StrEnum(str, Enum):
     """
-    This is equivalent to Python's :class:`enum.StrEnum` since version 3.11.
+    This is equivalent to Python's `enum.StrEnum` since version 3.11.
     We include this here for compatibility with older version of Python.
     """
 
@@ -58,7 +58,7 @@ class LayerNormType(StrEnum):
 
     rms = "rms"
     """
-    An RMSNorm implementation. When using ``torch.compile`` this is
+    An RMSNorm implementation. When using `torch.compile` this is
     probably the fastest implementation.
     """
 
@@ -117,7 +117,7 @@ class InitFnType(StrEnum):
 
     fan_in = "fan_in"
     """
-    "Fan-in variance scaling", i.e. normal with a standard deviation of ``1/sqrt(d_in)`` where ``d_in``
+    "Fan-in variance scaling", i.e. normal with a standard deviation of `1/sqrt(d_in)` where `d_in`
     is the input dimensionality of the kernel.
     """
 
@@ -152,7 +152,7 @@ class FSDPWrapStrategy(StrEnum):
     by_block_group = "by_block_group"
     """
     Wrap each block group together into its own FSDP instance.
-    This requires :attr:`~ModelConfig.block_group_size` to be bigger than 1.
+    This requires `~ModelConfig.block_group_size` to be bigger than 1.
     """
 
     by_block_group_and_size = "by_block_group_and_size"
@@ -181,7 +181,7 @@ class OLMoConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`OLMoModel`]. It is used to instantiate an OLMo
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the OLMo-7B.
+    defaults will yield a similar configuration to that of the [allenai/OLMo-7B](https://huggingface.co/allenai/OLMo-7B).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -191,7 +191,7 @@ class OLMoConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 50304):
             Vocabulary size of the OLMo model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`OLMoModel`]
-        d_model (`int`, *optional*, defaults to 4096):
+        d_model (`Optional[int]`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions.
@@ -200,13 +200,13 @@ class OLMoConfig(PretrainedConfig):
         output_attentions (`bool`, *optional*, defaults to `False`):
             Whether or not the model should returns all attentions.
         mlp_ratio (`int`, *optional*, defaults to 4):
-            The ratio of the inner MLP dimensionality to ``d_model``.
-            This is only used when ``mlp_hidden_size`` is not set.
+            The ratio of the inner MLP dimensionality to `d_model`.
+            This is only used when `mlp_hidden_size` is not set.
         mlp_hidden_size (`Optional[int]`, *optional*, defaults to 22016):
             Set the exact hidden size for the MLP. Otherwise the inner MLP hidden size will be set to `mlp_ratio * d_model`.
-        n_layers (`int`, *optional*, defaults to 32):
+        n_layers (`Optional[int]`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer decoder.
-        n_heads (`int`, *optional*, defaults to 32):
+        n_heads (`Optional[int]`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
         multi_query_attention (`bool`, *optional*, defaults to `False`):
             If `True`, the model will use Multi Query Attention (MQA). Otherwise the model will use Multi Head Attention (MHA).
@@ -221,18 +221,18 @@ class OLMoConfig(PretrainedConfig):
             This has no affect on the number of parameters in the model and is only used to wrap groups
             of blocks together with a single FSDP wrapper during training.
         alibi (`bool`, *optional*, defaults to `False`):
-            If ``True``, use ALiBi embeddings. Mutually exclusive with ``rope``.
+            If `True`, use ALiBi embeddings. Mutually exclusive with `rope`.
         alibi_bias_max (`float`, *optional*, defaults to 8.0):
             Maximum absolute value of ALiBi bias.
         rope (`bool`, *optional*, defaults to `True`):
-            Use rotary positional embeddings (RoPE). Mutually exclusive with ``alibi``.
+            Use rotary positional embeddings (RoPE). Mutually exclusive with `alibi`.
         rope_full_precision (`bool`, *optional*, defaults to `False`):
-            If ``True``, apply RoPE embeddings at full precision regardless of the input type. Otherwise,
+            If `True`, apply RoPE embeddings at full precision regardless of the input type. Otherwise,
             apply RoPE at the precision of the input.
         flash_attention (`bool`, *optional*, defaults to `True`):
-            If ``True``, use ``FlashAttention``. This is ignored if ``use_pytorch_sdpa`` is ``False``.
+            If `True`, use `FlashAttention`. This is ignored if `use_pytorch_sdpa` is `False`.
         use_pytorch_sdpa (`bool`, *optional*, defaults to `True`):
-            If ``True``, use Pytorch's ``F.scaled_dot_product_attention`` instead of a manual
+            If `True`, use Pytorch's `F.scaled_dot_product_attention` instead of a manual
             implementation for the same functionality.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability within the attention modules.
@@ -248,8 +248,8 @@ class OLMoConfig(PretrainedConfig):
         layer_norm_with_affine (`bool`, *optional*, defaults to `False`):
             Whether to include bias and weight parameters for the layer norms.
             This only affects layer norms that are immediately followed by a linear layer in the forward pass,
-            so everything except QK-norms. To turn off affines for QK norms as well, set :attr:`attention_layer_norm_with_affine`
-            to ``False``.
+            so everything except QK-norms. To turn off affines for QK norms as well, set `attention_layer_norm_with_affine`
+            to `False`.
         attention_layer_norm_with_affine (`bool`, *optional*, defaults to `False`):
             Toggle affine transform for the QK norms.
         include_bias (`bool`, *optional*, defaults to `False`):
@@ -262,9 +262,9 @@ class OLMoConfig(PretrainedConfig):
             layer norm.
             When this is None, it inherits the setting from include_bias.
         scale_logits (`bool`, *optional*, defaults to `False`):
-            If ``True``, scale the output logits by ``1 / sqrt(d_model)``.
-        weight_tying (`bool`, *optional*, defaults to `False`):
-            Whether to tie output linear weights to the input embedding.
+            If `True`, scale the output logits by `1 / sqrt(d_model)`.
+        weight_tying (`Optional[bool]`, *optional*, defaults to `False`):
+            *Deprecated* Use `tie_word_embeddings` instead. This is kept to support legacy checkpoints.
         init_device (`Optional[str]`, *optional*, defaults to `"cpu"`):
             The torch device to use when initializing the model parameters, e.g. "cpu", "cuda:0", "meta".
             See also `change_meta_init_to_cpu`.
@@ -275,10 +275,10 @@ class OLMoConfig(PretrainedConfig):
         init_fn (`InitFnType`, *optional*, defaults to `mitchell`):
             The weight initialization strategy.
         init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation to use when initializing weights with a "fixed distribution" ``init_fn``, such
+            The standard deviation to use when initializing weights with a "fixed distribution" `init_fn`, such
             as "normal".
         init_cutoff_factor (`Optional[float]`, *optional*):
-            A positive factor used to scale the cutoff values when initializing weights with a "fixed distribution" ``init_fn``, such
+            A positive factor used to scale the cutoff values when initializing weights with a "fixed distribution" `init_fn`, such
             as "normal". Setting this to None means values are not cutoff.
             Clip QKV to this value when set.
         clip_qkv (`Optional[float]`, *optional*):
@@ -290,7 +290,7 @@ class OLMoConfig(PretrainedConfig):
         embedding_size (`Optional[int]`, *optional*):
             *Deprecated* Use `vocab_size` instead. This is kept to support legacy checkpoints.
 
-    ```python
+    ```py
     >>> from transformers import OLMoModel, OLMoConfig
 
     >>> # Initializing a OLMo 7B style configuration

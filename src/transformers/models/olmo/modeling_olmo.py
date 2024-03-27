@@ -115,7 +115,7 @@ class LayerNormBase(nn.Module):
 
 class LayerNorm(LayerNormBase):
     """
-    The default :class:`LayerNorm` implementation which can optionally run in low precision.
+    The default [`LayerNorm`] implementation which can optionally run in low precision.
     """
 
     def __init__(
@@ -145,7 +145,7 @@ class LayerNorm(LayerNormBase):
 
 class RMSLayerNorm(LayerNormBase):
     """
-    RMS layer norm, a simplified :class:`LayerNorm` implementation
+    RMS layer norm, a simplified [`LayerNorm`] implementation
     """
 
     def __init__(
@@ -333,8 +333,8 @@ def activation_checkpoint_function(cfg: OLMoConfig):
 
 def ensure_finite_(x: torch.Tensor, check_neg_inf: bool = True, check_pos_inf: bool = False):
     """
-    Modify ``x`` in place to replace ``float("-inf")`` with the minimum value of the dtype when ``check_neg_inf``
-    is ``True`` and to replace ``float("inf")`` with the maximum value of the dtype when ``check_pos_inf`` is ``True``.
+    Modify `x` in place to replace `float("-inf")` with the minimum value of the dtype when `check_neg_inf`
+    is `True` and to replace `float("inf")` with the maximum value of the dtype when `check_pos_inf` is `True`.
     """
     if check_neg_inf:
         x.masked_fill_(x == float("-inf"), torch.finfo(x.dtype).min)
@@ -365,7 +365,7 @@ def init_weights(
     :param d: The effective input dimensionality of the weights. This could be smaller than the actual dimensions
         for fused layers.
     :param layer_id: When set, the standard deviation for the "mitchell" method will be adjusted by
-        ``1 / sqrt(2 * (layer_id + 1))``.
+        `1 / sqrt(2 * (layer_id + 1))`.
     """
     d = d if d is not None else config.d_model
     if config.init_fn == InitFnType.normal:
@@ -672,7 +672,7 @@ class OLMoBlock(nn.Module):
 
 class OLMoSequentialBlock(OLMoBlock):
     """
-    This is a typical transformer block where the output is computed as ``MLP(LN(x + Attention(LN(x))))``
+    This is a typical transformer block where the output is computed as `MLP(LN(x + Attention(LN(x))))`
     (plus another skip connection).
     """
 
@@ -778,9 +778,9 @@ class OLMoSequentialBlock(OLMoBlock):
 
 class OLMoParallelBlock(OLMoBlock):
     """
-    This is a transformer block where the output is computed as ``MLP(LN(x)) + Attention(LN(x))``
-    as in the PaLM architecture, as opposed to the typical ``MLP(LN(x + Attention(LN(x))))``
-    as in :class:`OLMoSequentialBlock` (ignoring some skip connections).
+    This is a transformer block where the output is computed as `MLP(LN(x)) + Attention(LN(x))`
+    as in the PaLM architecture, as opposed to the typical `MLP(LN(x + Attention(LN(x))))`
+    as in [`OLMoSequentialBlock`] (ignoring some skip connections).
 
     The decoupling of the MLP and Attention functions allow us to fuse the separate input projections
     into a single linear layer to increase throughput. In this configuration it's also straight-forward
@@ -927,7 +927,7 @@ def alibi_attention_bias(seq_len: int, config: OLMoConfig, device: torch.device)
 
 class OLMoLlamaBlock(OLMoBlock):
     """
-    This is a transformer block where the output is computed as ``MLP(LN(x + Attention(LN(x))))``
+    This is a transformer block where the output is computed as `MLP(LN(x + Attention(LN(x))))`
     (plus another skip connection). This block is similar to `OLMoSequentialBlock`
     but some operations have slightly different implementations to imitate the
     behavior of Llama.
@@ -1219,7 +1219,14 @@ OLMO_INPUTS_DOCSTRING = r"""
     OLMO_START_DOCSTRING,
 )
 class OLMoModel(OLMoPreTrainedModel):
-    def __init__(self, config: OLMoConfig, init_params: bool = True):
+    """
+    Transformer decoder consisting of `config.n_layers` layers. Each layer is a [`OLMoBlock`]
+
+    Args:
+        config: OLMoConfig
+    """
+
+    def __init__(self, config: OLMoConfig):
         super().__init__(config)
         self.__cache = BufferCache()
 
@@ -1286,7 +1293,7 @@ class OLMoModel(OLMoPreTrainedModel):
                 }
             )
         # When `init_device="meta"` FSDP will call `reset_parameters()` to initialize weights.
-        if init_params and self.config.init_device != "meta":
+        if self.config.init_device != "meta":
             self.reset_parameters()
         self.__num_fwd_flops: Optional[int] = None
 
