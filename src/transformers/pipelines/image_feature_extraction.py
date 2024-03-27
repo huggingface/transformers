@@ -14,6 +14,8 @@ if is_vision_available():
         image_processor_kwargs (`dict`, *optional*):
                 Additional dictionary of keyword arguments passed along to the image processor e.g.
                 {"size": {"height": 100, "width": 100}}
+        pool (`bool`, *optional*, defaults to `False`):
+            Whether or not to return the pooled output. If `False`, the model will return the raw hidden states.
     """,
 )
 class ImageFeatureExtractionPipeline(Pipeline):
@@ -41,9 +43,14 @@ class ImageFeatureExtractionPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models).
     """
 
-    def _sanitize_parameters(self, image_processor_kwargs=None, return_tensors=None, **kwargs):
+    def _sanitize_parameters(self, image_processor_kwargs=None, return_tensors=None, pool=None, **kwargs):
         preprocess_params = {} if image_processor_kwargs is None else image_processor_kwargs
-        postprocess_params = {"return_tensors": return_tensors} if return_tensors is not None else {}
+
+        postprocess_params = {}
+        if pool is not None:
+            postprocess_params["pool"] = pool
+        if return_tensors is not None:
+            postprocess_params["return_tensors"] = return_tensors
 
         if "timeout" in kwargs:
             preprocess_params["timeout"] = kwargs["timeout"]
@@ -59,14 +66,25 @@ class ImageFeatureExtractionPipeline(Pipeline):
         model_outputs = self.model(**model_inputs)
         return model_outputs
 
-    def postprocess(self, model_outputs, return_tensors=False):
-        # [0] is the first available tensor, logits or last_hidden_state.
+    def postprocess(self, model_outputs, pool=None, return_tensors=False):
+        pool = pool if pool is not None else False
+
+        if pool:
+            if "pooler_output" not in model_outputs:
+                raise ValueError(
+                    "No pooled output was returned. Make sure the model has a `pooler` layer when using the `pool` option."
+                )
+            outputs = model_outputs["pooler_output"]
+        else:
+            # [0] is the first available tensor, logits or last_hidden_state.
+            outputs = model_outputs[0]
+
         if return_tensors:
-            return model_outputs[0]
+            return outputs
         if self.framework == "pt":
-            return model_outputs[0].tolist()
+            return outputs.tolist()
         elif self.framework == "tf":
-            return model_outputs[0].numpy().tolist()
+            return outputs.numpy().tolist()
 
     def __call__(self, *args, **kwargs):
         """

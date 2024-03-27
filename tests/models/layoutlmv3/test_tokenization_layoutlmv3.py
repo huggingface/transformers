@@ -49,6 +49,7 @@ logger = logging.get_logger(__name__)
 @require_tokenizers
 @require_pandas
 class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/layoutlmv3-base"
     tokenizer_class = LayoutLMv3Tokenizer
     rust_tokenizer_class = LayoutLMv3TokenizerFast
     test_rust_tokenizer = True
@@ -138,6 +139,10 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_text = "lower newer"
         output_text = "lower newer"
         return input_text, output_text
+
+    @unittest.skip("Chat template tests don't play well with table/layout models.")
+    def test_chat_template_batched(self):
+        pass
 
     def test_full_tokenizer(self):
         tokenizer = self.tokenizer_class(self.vocab_file, self.merges_file, **self.special_tokens_map)

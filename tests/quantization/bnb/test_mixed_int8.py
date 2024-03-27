@@ -97,6 +97,8 @@ class BaseMixedInt8Test(unittest.TestCase):
     input_text = "Hello my name is"
     EXPECTED_OUTPUTS = set()
     EXPECTED_OUTPUTS.add("Hello my name is John.\nI am a friend of the family.\n")
+    # Expected values on a A10
+    EXPECTED_OUTPUTS.add("Hello my name is John.\nI am a friend of your father.\n")
     MAX_NEW_TOKENS = 10
 
     def setUp(self):
@@ -847,6 +849,8 @@ class MixedInt8GPT2Test(MixedInt8Test):
     EXPECTED_OUTPUTS = set()
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, and I'm a big fan of")
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, and I'm a fan of the")
+    # Expected values on a A10
+    EXPECTED_OUTPUTS.add("Hello my name is John Doe, and I am a member of the")
 
     def test_int8_from_pretrained(self):
         r"""

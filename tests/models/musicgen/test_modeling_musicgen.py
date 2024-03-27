@@ -55,8 +55,6 @@ if is_torch_available():
     from transformers.generation import (
         GenerateDecoderOnlyOutput,
         GenerateEncoderDecoderOutput,
-        InfNanRemoveLogitsProcessor,
-        LogitsProcessorList,
     )
 
 
@@ -103,7 +101,7 @@ class MusicgenDecoderTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=4,  # need batch_size != num_hidden_layers
         seq_length=7,
         is_training=False,
         use_labels=False,
@@ -247,142 +245,24 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         return config, input_ids, attention_mask, max_length
 
     @staticmethod
-    def _get_logits_processor_and_kwargs(
+    def _get_logits_processor_and_warper_kwargs(
         input_length,
-        eos_token_id,
         forced_bos_token_id=None,
         forced_eos_token_id=None,
         max_length=None,
-        diversity_penalty=None,
     ):
         process_kwargs = {
             "min_length": input_length + 1 if max_length is None else max_length - 1,
         }
-        logits_processor = LogitsProcessorList()
-        return process_kwargs, logits_processor
-
-    # override since we don't expect the outputs of `.generate` and `.greedy_search` to be the same, since we perform
-    # additional post-processing in the former
-    def test_greedy_generate_dict_outputs(self):
-        for model_class in self.greedy_sample_model_classes:
-            # disable cache
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-            config.use_cache = False
-            model = model_class(config).to(torch_device).eval()
-            output_greedy, output_generate = self._greedy_generate(
-                model=model,
-                input_ids=input_ids.to(torch_device),
-                attention_mask=attention_mask.to(torch_device),
-                max_length=max_length,
-                output_scores=True,
-                output_hidden_states=True,
-                output_attentions=True,
-                return_dict_in_generate=True,
-            )
-
-            self.assertIsInstance(output_greedy, GenerateDecoderOnlyOutput)
-            self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
-
-            self.assertNotIn(config.pad_token_id, output_generate)
-
-    # override since we don't expect the outputs of `.generate` and `.greedy_search` to be the same, since we perform
-    # additional post-processing in the former
-    def test_greedy_generate_dict_outputs_use_cache(self):
-        for model_class in self.greedy_sample_model_classes:
-            # enable cache
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-
-            config.use_cache = True
-            config.is_decoder = True
-            model = model_class(config).to(torch_device).eval()
-            output_greedy, output_generate = self._greedy_generate(
-                model=model,
-                input_ids=input_ids.to(torch_device),
-                attention_mask=attention_mask.to(torch_device),
-                max_length=max_length,
-                output_scores=True,
-                output_hidden_states=True,
-                output_attentions=True,
-                return_dict_in_generate=True,
-            )
-
-            self.assertIsInstance(output_greedy, GenerateDecoderOnlyOutput)
-            self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
-
-    # override since we don't expect the outputs of `.generate` and `.sample` to be the same, since we perform
-    # additional post-processing in the former
-    def test_sample_generate(self):
-        for model_class in self.greedy_sample_model_classes:
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-            model = model_class(config).to(torch_device).eval()
-
-            process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-                input_ids.shape[-1],
-                model.config.eos_token_id,
-                forced_bos_token_id=model.config.forced_bos_token_id,
-                forced_eos_token_id=model.config.forced_eos_token_id,
-                max_length=max_length,
-            )
-            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=2)
-
-            # check `generate()` and `sample()` are equal
-            output_sample, output_generate = self._sample_generate(
-                model=model,
-                input_ids=input_ids.to(torch_device),
-                attention_mask=attention_mask.to(torch_device),
-                max_length=max_length,
-                num_return_sequences=3,
-                logits_processor=logits_processor,
-                logits_warper=logits_warper,
-                logits_warper_kwargs=logits_warper_kwargs,
-                process_kwargs=process_kwargs,
-            )
-            self.assertIsInstance(output_sample, torch.Tensor)
-            self.assertIsInstance(output_generate, torch.Tensor)
-
-    # override since we don't expect the outputs of `.generate` and `.sample` to be the same, since we perform
-    # additional post-processing in the former
-    def test_sample_generate_dict_output(self):
-        for model_class in self.greedy_sample_model_classes:
-            # disable cache
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-            config.use_cache = False
-            model = model_class(config).to(torch_device).eval()
-
-            process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-                input_ids.shape[-1],
-                model.config.eos_token_id,
-                forced_bos_token_id=model.config.forced_bos_token_id,
-                forced_eos_token_id=model.config.forced_eos_token_id,
-                max_length=max_length,
-            )
-            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
-
-            output_sample, output_generate = self._sample_generate(
-                model=model,
-                input_ids=input_ids.to(torch_device),
-                attention_mask=attention_mask.to(torch_device),
-                max_length=max_length,
-                num_return_sequences=1,
-                logits_processor=logits_processor,
-                logits_warper=logits_warper,
-                logits_warper_kwargs=logits_warper_kwargs,
-                process_kwargs=process_kwargs,
-                output_scores=True,
-                output_hidden_states=True,
-                output_attentions=True,
-                return_dict_in_generate=True,
-            )
-
-            self.assertIsInstance(output_sample, GenerateDecoderOnlyOutput)
-            self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
+        warper_kwargs = {}
+        return process_kwargs, warper_kwargs
 
     def test_greedy_generate_stereo_outputs(self):
         for model_class in self.greedy_sample_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
             config.audio_channels = 2
             model = model_class(config).to(torch_device).eval()
-            output_greedy, output_generate = self._greedy_generate(
+            output_generate = self._greedy_generate(
                 model=model,
                 input_ids=input_ids.to(torch_device),
                 attention_mask=attention_mask.to(torch_device),
@@ -393,7 +273,6 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 return_dict_in_generate=True,
             )
 
-            self.assertIsInstance(output_greedy, GenerateDecoderOnlyOutput)
             self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
 
             self.assertNotIn(config.pad_token_id, output_generate)
@@ -441,7 +320,7 @@ class MusicgenTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=4,  # need batch_size != num_hidden_layers
         seq_length=7,
         is_training=False,
         use_labels=False,
@@ -834,10 +713,8 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long)
 
         # generate max 3 tokens
-        decoder_input_ids = inputs_dict["decoder_input_ids"]
-        max_length = decoder_input_ids.shape[-1] + 3
-        decoder_input_ids = decoder_input_ids[: batch_size * config.decoder.num_codebooks, :]
-        return config, input_ids, attention_mask, decoder_input_ids, max_length
+        max_length = 3
+        return config, input_ids, attention_mask, max_length
 
     # override since the `input_ids` cannot be used as the `decoder_input_ids` for musicgen (input / outputs are
     # different modalities -> different shapes)
@@ -846,18 +723,14 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         model,
         input_ids,
         attention_mask,
-        decoder_input_ids,
         max_length,
         output_scores=False,
         output_attentions=False,
         output_hidden_states=False,
         return_dict_in_generate=False,
     ):
-        logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+        logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
             input_ids.shape[-1],
-            eos_token_id=model.config.eos_token_id,
-            forced_bos_token_id=model.config.forced_bos_token_id,
-            forced_eos_token_id=model.config.forced_eos_token_id,
             max_length=max_length,
         )
 
@@ -876,28 +749,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             **model_kwargs,
         )
 
-        encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
-            model,
-            input_ids,
-            attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-
-        with torch.no_grad():
-            model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
-            output_greedy = model.greedy_search(
-                decoder_input_ids,
-                max_length=max_length,
-                logits_processor=logits_processor,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                output_scores=output_scores,
-                return_dict_in_generate=return_dict_in_generate,
-                encoder_outputs=encoder_outputs,
-                **model_kwargs,
-            )
-        return output_greedy, output_generate
+        return output_generate
 
     # override since the `input_ids` cannot be used as the `decoder_input_ids` for musicgen (input / outputs are
     # different modalities -> different shapes)
@@ -906,11 +758,8 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         model,
         input_ids,
         attention_mask,
-        decoder_input_ids,
         max_length,
         num_return_sequences,
-        logits_processor,
-        logits_warper,
         logits_warper_kwargs,
         process_kwargs,
         output_scores=False,
@@ -936,62 +785,31 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             **model_kwargs,
         )
 
-        torch.manual_seed(0)
-        encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
-            model,
-            input_ids,
-            attention_mask,
-            num_interleave=num_return_sequences,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-
-        # prevent flaky generation test failures
-        logits_processor.append(InfNanRemoveLogitsProcessor())
-
-        with torch.no_grad():
-            model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
-            output_sample = model.sample(
-                decoder_input_ids.repeat_interleave(num_return_sequences, dim=0),
-                max_length=max_length,
-                logits_processor=logits_processor,
-                logits_warper=logits_warper,
-                output_scores=output_scores,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict_in_generate=return_dict_in_generate,
-                encoder_outputs=encoder_outputs,
-                **model_kwargs,
-            )
-
-        return output_sample, output_generate
+        return output_generate
 
     @staticmethod
-    def _get_logits_processor_and_kwargs(
+    def _get_logits_processor_and_warper_kwargs(
         input_length,
-        eos_token_id,
         forced_bos_token_id=None,
         forced_eos_token_id=None,
         max_length=None,
-        diversity_penalty=None,
     ):
         process_kwargs = {
             "min_length": input_length + 1 if max_length is None else max_length - 1,
         }
-        logits_processor = LogitsProcessorList()
-        return process_kwargs, logits_processor
+        warper_kwargs = {}
+        return process_kwargs, warper_kwargs
 
     def test_greedy_generate_dict_outputs(self):
         for model_class in self.greedy_sample_model_classes:
             # disable cache
-            config, input_ids, attention_mask, decoder_input_ids, max_length = self._get_input_ids_and_config()
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
             config.use_cache = False
             model = model_class(config).to(torch_device).eval()
-            output_greedy, output_generate = self._greedy_generate(
+            output_generate = self._greedy_generate(
                 model=model,
                 input_ids=input_ids.to(torch_device),
                 attention_mask=attention_mask.to(torch_device),
-                decoder_input_ids=decoder_input_ids,
                 max_length=max_length,
                 output_scores=True,
                 output_hidden_states=True,
@@ -999,7 +817,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 return_dict_in_generate=True,
             )
 
-            self.assertIsInstance(output_greedy, GenerateEncoderDecoderOutput)
             self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
 
             self.assertNotIn(config.pad_token_id, output_generate)
@@ -1007,16 +824,15 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_greedy_generate_dict_outputs_use_cache(self):
         for model_class in self.greedy_sample_model_classes:
             # enable cache
-            config, input_ids, attention_mask, decoder_input_ids, max_length = self._get_input_ids_and_config()
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
 
             config.use_cache = True
             config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
-            output_greedy, output_generate = self._greedy_generate(
+            output_generate = self._greedy_generate(
                 model=model,
                 input_ids=input_ids.to(torch_device),
                 attention_mask=attention_mask.to(torch_device),
-                decoder_input_ids=decoder_input_ids,
                 max_length=max_length,
                 output_scores=True,
                 output_hidden_states=True,
@@ -1024,64 +840,48 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 return_dict_in_generate=True,
             )
 
-            self.assertIsInstance(output_greedy, GenerateEncoderDecoderOutput)
             self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
 
     def test_sample_generate(self):
         for model_class in self.greedy_sample_model_classes:
-            config, input_ids, attention_mask, decoder_input_ids, max_length = self._get_input_ids_and_config()
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
             model = model_class(config).to(torch_device).eval()
 
-            process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+            process_kwargs, logits_warper_kwargs = self._get_logits_processor_and_warper_kwargs(
                 input_ids.shape[-1],
-                model.config.eos_token_id,
-                forced_bos_token_id=model.config.forced_bos_token_id,
-                forced_eos_token_id=model.config.forced_eos_token_id,
                 max_length=max_length,
             )
-            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=2)
 
             # check `generate()` and `sample()` are equal
-            output_sample, output_generate = self._sample_generate(
+            output_generate = self._sample_generate(
                 model=model,
                 input_ids=input_ids.to(torch_device),
                 attention_mask=attention_mask.to(torch_device),
-                decoder_input_ids=decoder_input_ids,
                 max_length=max_length,
                 num_return_sequences=1,
-                logits_processor=logits_processor,
-                logits_warper=logits_warper,
                 logits_warper_kwargs=logits_warper_kwargs,
                 process_kwargs=process_kwargs,
             )
-            self.assertIsInstance(output_sample, torch.Tensor)
             self.assertIsInstance(output_generate, torch.Tensor)
 
     def test_sample_generate_dict_output(self):
         for model_class in self.greedy_sample_model_classes:
             # disable cache
-            config, input_ids, attention_mask, decoder_input_ids, max_length = self._get_input_ids_and_config()
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
             config.use_cache = False
             model = model_class(config).to(torch_device).eval()
 
-            process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+            process_kwargs, logits_warper_kwargs = self._get_logits_processor_and_warper_kwargs(
                 input_ids.shape[-1],
-                model.config.eos_token_id,
-                forced_bos_token_id=model.config.forced_bos_token_id,
-                forced_eos_token_id=model.config.forced_eos_token_id,
                 max_length=max_length,
             )
-            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
 
-            output_sample, output_generate = self._sample_generate(
+            output_generate = self._sample_generate(
                 model=model,
                 input_ids=input_ids.to(torch_device),
                 attention_mask=attention_mask.to(torch_device),
-                decoder_input_ids=decoder_input_ids,
                 max_length=max_length,
                 num_return_sequences=3,
-                logits_processor=logits_processor,
-                logits_warper=logits_warper,
                 logits_warper_kwargs=logits_warper_kwargs,
                 process_kwargs=process_kwargs,
                 output_scores=True,
@@ -1090,11 +890,10 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 return_dict_in_generate=True,
             )
 
-            self.assertIsInstance(output_sample, GenerateEncoderDecoderOutput)
             self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
 
     def test_generate_without_input_ids(self):
-        config, _, _, _, max_length = self._get_input_ids_and_config()
+        config, _, _, max_length = self._get_input_ids_and_config()
 
         # if no bos token id => cannot generate from None
         if config.bos_token_id is None:
@@ -1123,15 +922,14 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     def test_greedy_generate_stereo_outputs(self):
         for model_class in self.greedy_sample_model_classes:
-            config, input_ids, attention_mask, decoder_input_ids, max_length = self._get_input_ids_and_config()
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
             config.audio_channels = 2
 
             model = model_class(config).to(torch_device).eval()
-            output_greedy, output_generate = self._greedy_generate(
+            output_generate = self._greedy_generate(
                 model=model,
                 input_ids=input_ids.to(torch_device),
                 attention_mask=attention_mask.to(torch_device),
-                decoder_input_ids=decoder_input_ids,
                 max_length=max_length,
                 output_scores=True,
                 output_hidden_states=True,
@@ -1139,14 +937,9 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 return_dict_in_generate=True,
             )
 
-            self.assertIsInstance(output_greedy, GenerateEncoderDecoderOutput)
             self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
 
             self.assertNotIn(config.pad_token_id, output_generate)
-
-    @unittest.skip("Fails with - TypeError: _weight_norm_interface() missing 1 required positional argument: 'dim'")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
 
 
 def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):

@@ -39,6 +39,8 @@ from ...image_utils import (
     is_scaled_image,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
+    validate_preprocess_arguments,
 )
 from ...utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -438,6 +440,25 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.ignore_index = ignore_index
         self.reduce_labels = reduce_labels
+        self._valid_processor_keys = [
+            "images",
+            "segmentation_maps",
+            "instance_id_to_semantic_id",
+            "do_resize",
+            "size",
+            "size_divisor",
+            "resample",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "ignore_index",
+            "reduce_labels",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -707,20 +728,24 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
         reduce_labels = reduce_labels if reduce_labels is not None else self.reduce_labels
 
-        if do_resize is not None and size is None or size_divisor is None:
-            raise ValueError("If `do_resize` is True, `size` and `size_divisor` must be provided.")
-
-        if do_rescale is not None and rescale_factor is None:
-            raise ValueError("If `do_rescale` is True, `rescale_factor` must be provided.")
-
-        if do_normalize is not None and (image_mean is None or image_std is None):
-            raise ValueError("If `do_normalize` is True, `image_mean` and `image_std` must be provided.")
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
+
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
 
         if segmentation_maps is not None and not valid_images(segmentation_maps):
             raise ValueError(

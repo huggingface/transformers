@@ -28,42 +28,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "squeezebert/squeezebert-uncased": (
-            "https://huggingface.co/squeezebert/squeezebert-uncased/resolve/main/vocab.txt"
-        ),
-        "squeezebert/squeezebert-mnli": "https://huggingface.co/squeezebert/squeezebert-mnli/resolve/main/vocab.txt",
-        "squeezebert/squeezebert-mnli-headless": (
-            "https://huggingface.co/squeezebert/squeezebert-mnli-headless/resolve/main/vocab.txt"
-        ),
-    },
-    "tokenizer_file": {
-        "squeezebert/squeezebert-uncased": (
-            "https://huggingface.co/squeezebert/squeezebert-uncased/resolve/main/tokenizer.json"
-        ),
-        "squeezebert/squeezebert-mnli": (
-            "https://huggingface.co/squeezebert/squeezebert-mnli/resolve/main/tokenizer.json"
-        ),
-        "squeezebert/squeezebert-mnli-headless": (
-            "https://huggingface.co/squeezebert/squeezebert-mnli-headless/resolve/main/tokenizer.json"
-        ),
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "squeezebert/squeezebert-uncased": 512,
-    "squeezebert/squeezebert-mnli": 512,
-    "squeezebert/squeezebert-mnli-headless": 512,
-}
-
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "squeezebert/squeezebert-uncased": {"do_lower_case": True},
-    "squeezebert/squeezebert-mnli": {"do_lower_case": True},
-    "squeezebert/squeezebert-mnli-headless": {"do_lower_case": True},
-}
-
 
 # Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast with Bert->SqueezeBert,BERT->SqueezeBERT
 class SqueezeBertTokenizerFast(PreTrainedTokenizerFast):
@@ -107,9 +71,6 @@ class SqueezeBertTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = SqueezeBertTokenizer
 
     def __init__(

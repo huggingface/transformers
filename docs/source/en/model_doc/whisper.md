@@ -31,7 +31,6 @@ The original code can be found [here](https://github.com/openai/whisper).
 
 - The model usually performs well without requiring any finetuning.
 - The architecture follows a classic encoder-decoder architecture, which means that it relies on the [`~generation.GenerationMixin.generate`] function for inference.
-- Inference is currently only implemented for short-form i.e. audio is pre-segmented into <=30s segments. Long-form (including timestamps) will be implemented in a future release.
 - One can use [`WhisperProcessor`] to prepare audio for the model, and decode the predicted ID's back into text.
 
 - To convert the model and the processor, we recommend using the following:

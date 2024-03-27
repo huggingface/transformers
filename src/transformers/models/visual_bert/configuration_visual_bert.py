@@ -20,24 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "uclanlp/visualbert-vqa": "https://huggingface.co/uclanlp/visualbert-vqa/resolve/main/config.json",
-    "uclanlp/visualbert-vqa-pre": "https://huggingface.co/uclanlp/visualbert-vqa-pre/resolve/main/config.json",
-    "uclanlp/visualbert-vqa-coco-pre": (
-        "https://huggingface.co/uclanlp/visualbert-vqa-coco-pre/resolve/main/config.json"
-    ),
-    "uclanlp/visualbert-vcr": "https://huggingface.co/uclanlp/visualbert-vcr/resolve/main/config.json",
-    "uclanlp/visualbert-vcr-pre": "https://huggingface.co/uclanlp/visualbert-vcr-pre/resolve/main/config.json",
-    "uclanlp/visualbert-vcr-coco-pre": (
-        "https://huggingface.co/uclanlp/visualbert-vcr-coco-pre/resolve/main/config.json"
-    ),
-    "uclanlp/visualbert-nlvr2": "https://huggingface.co/uclanlp/visualbert-nlvr2/resolve/main/config.json",
-    "uclanlp/visualbert-nlvr2-pre": "https://huggingface.co/uclanlp/visualbert-nlvr2-pre/resolve/main/config.json",
-    "uclanlp/visualbert-nlvr2-coco-pre": (
-        "https://huggingface.co/uclanlp/visualbert-nlvr2-coco-pre/resolve/main/config.json"
-    ),
-    # See all VisualBERT models at https://huggingface.co/models?filter=visual_bert
-}
+
+from ..deprecated._archive_maps import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class VisualBertConfig(PretrainedConfig):

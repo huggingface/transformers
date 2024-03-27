@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
-from typing import TYPE_CHECKING, Any, Dict, List, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from packaging import version
 
@@ -116,12 +116,17 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             )
 
     def check_quantized_param(
-        self, model: "PreTrainedModel", param_value: "torch.Tensor", param_name: str, state_dict: Dict[str, Any]
+        self,
+        model: "PreTrainedModel",
+        param_value: "torch.Tensor",
+        param_name: str,
+        state_dict: Dict[str, Any],
+        **kwargs,
     ) -> bool:
         import bitsandbytes as bnb
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module._parameters[tensor_name], bnb.nn.Params4bit):
+        if isinstance(module._parameters.get(tensor_name, None), bnb.nn.Params4bit):
             # Add here check for loaded components' dtypes once serialization is implemented
             return True
         elif isinstance(module, bnb.nn.Linear4bit) and tensor_name == "bias":
@@ -138,7 +143,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: Dict[str, Any],
-        unexpected_keys: List[str],
+        unexpected_keys: Optional[List[str]] = None,
     ):
         """
         combines logic from _load_state_dict_into_meta_model and .integrations.bitsandbytes.py::set_module_quantized_tensor_to_device()
@@ -193,7 +198,8 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             for k, v in state_dict.items():
                 if param_name + "." in k:
                     quantized_stats[k] = v
-                    unexpected_keys.remove(k)
+                    if unexpected_keys is not None and k in unexpected_keys:
+                        unexpected_keys.remove(k)
 
             new_value = bnb.nn.Params4bit.from_prequantized(
                 data=param_value,

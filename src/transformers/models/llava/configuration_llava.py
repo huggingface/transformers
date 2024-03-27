@@ -13,6 +13,8 @@
 # limitations under the License.
 """ Llava model configuration"""
 
+import warnings
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
@@ -20,9 +22,8 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "llava-hf/llava-v1.5-7b": "https://huggingface.co/llava-hf/llava-v1.5-7b/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class LlavaConfig(PretrainedConfig):
@@ -37,10 +38,10 @@ class LlavaConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`LlavaVisionConfig`,  *optional*):
-            Custom vision config or dict
-        text_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
+        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
+            The config object or dictionary of the vision backbone.
+        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
+            The config object or dictionary of the text backbone.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 32000):
@@ -48,12 +49,10 @@ class LlavaConfig(PretrainedConfig):
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the CLIP backbone.
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`.
         vision_feature_layer (`int`, *optional*, defaults to -2):
             The index of the layer to select the vision feature.
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the Llava model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~LlavaForConditionalGeneration`]
 
     Example:
 
@@ -88,25 +87,34 @@ class LlavaConfig(PretrainedConfig):
         projector_hidden_act="gelu",
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
-        vocab_size=32000,
         **kwargs,
     ):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
+
+        if vision_feature_select_strategy not in ["default", "full"]:
+            raise ValueError(
+                "vision_feature_select_strategy should be one of 'default', 'full'."
+                f"Got: {vision_feature_select_strategy}"
+            )
+
+        if "vocab_size" in kwargs:
+            warnings.warn(
+                "The `vocab_size` argument is deprecated and will be removed in v4.42, since it can be inferred from the `text_config`. Passing this argument has no effect",
+                FutureWarning,
+            )
+
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
-        self.vocab_size = vocab_size
 
-        self.vision_config = vision_config
-
-        if isinstance(self.vision_config, dict):
+        if isinstance(vision_config, dict):
             vision_config["model_type"] = (
                 vision_config["model_type"] if "model_type" in vision_config else "clip_vision_model"
             )
-            self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
+            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
-            self.vision_config = CONFIG_MAPPING["clip_vision_model"](
+            vision_config = CONFIG_MAPPING["clip_vision_model"](
                 intermediate_size=4096,
                 hidden_size=1024,
                 patch_size=14,
@@ -116,15 +124,33 @@ class LlavaConfig(PretrainedConfig):
                 vocab_size=32000,
                 projection_dim=768,
             )
-        self.vocab_size = self.vocab_size
+
+        self.vision_config = vision_config
+
+        if isinstance(text_config, dict):
+            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        elif text_config is None:
+            text_config = CONFIG_MAPPING["llama"]()
 
         self.text_config = text_config
-
-        if isinstance(self.text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
-            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-            self.vocab_size = self.text_config.vocab_size
-        elif text_config is None:
-            self.text_config = CONFIG_MAPPING["llama"]()
+        self._vocab_size = self.text_config.vocab_size
 
         super().__init__(**kwargs)
+
+    @property
+    def vocab_size(self):
+        warnings.warn(
+            "The `vocab_size` attribute is deprecated and will be removed in v4.42, Please use `text_config.vocab_size` instead.",
+            FutureWarning,
+        )
+        return self._vocab_size
+
+    @vocab_size.setter
+    def vocab_size(self, value):
+        self._vocab_size = value
+
+    def to_dict(self):
+        output = super().to_dict()
+        output.pop("_vocab_size", None)
+        return output

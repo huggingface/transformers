@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_timm,
     require_torch,
     require_torch_accelerator,
+    require_torch_bf16,
     require_vision,
     slow,
     torch_device,
@@ -564,10 +565,6 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
-    @unittest.skip("Cannot be initialized on meta device as some weights are modified during the initialization")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
     def test_two_stage_training(self):
         model_class = DeformableDetrForObjectDetection
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -590,6 +587,18 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         model = model_class(config)
         model.to(torch_device)
         model.half()
+        model.eval()
+        inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+        output = model(**inputs)["last_hidden_state"]
+        self.parent.assertFalse(torch.isnan(output).any().item())
+
+    @require_torch_bf16
+    def create_and_check_model_bf16_forward(self):
+        model_class = DeformableDetrForObjectDetection
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        model = model_class(config, torch_dtype=torch.bfloat16)
+        model.to(torch_device)
         model.eval()
         inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
         output = model(**inputs)["last_hidden_state"]

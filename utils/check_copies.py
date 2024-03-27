@@ -119,12 +119,52 @@ LOCALIZED_READMES = {
             "अनुसंधान पत्र {paper_title_link} के साथ जारी किया गया"
         ),
     },
+    "README_ru.md": {
+        "start_prompt": "🤗 В настоящее время Transformers предоставляет следующие архитектуры",
+        "end_prompt": "1. Хотите внести новую модель?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
+    "README_pt-br.md": {
+        "start_prompt": "🤗 Transformers atualmente fornece as seguintes arquiteturas",
+        "end_prompt": "1. Quer contribuir com um novo modelo?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
+    "README_te.md": {
+        "start_prompt": "🤗 ట్రాన్స్‌ఫార్మర్లు ప్రస్తుతం కింది ఆర్కిటెక్చర్‌లను అందజేస్తున్నాయి",
+        "end_prompt": "1. కొత్త మోడల్‌ను అందించాలనుకుంటున్నారా?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
     "README_fr.md": {
         "start_prompt": "🤗 Transformers fournit actuellement les architectures suivantes",
         "end_prompt": "1. Vous souhaitez contribuer avec un nouveau modèle ?",
         "format_model_list": (
             "**[{title}]({model_link})** (de {paper_affiliations}) publié dans l'article {paper_title_link} par"
             "{paper_authors}.{supplements}"
+        ),
+    },
+    "README_de.md": {
+        "start_prompt": "🤗 Transformers bietet derzeit die folgenden Architekturen an",
+        "end_prompt": "1. Möchten Sie ein neues Modell beitragen?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
+    "README_vi.md": {
+        "start_prompt": "🤗 Transformers hiện đang cung cấp các kiến trúc sau đây",
+        "end_prompt": "1. Muốn đóng góp một mô hình mới?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (từ {paper_affiliations}) được phát hành với bài báo {paper_title_link} by"
+            " {paper_authors}.{supplements}"
         ),
     },
 }
@@ -898,8 +938,10 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
     _re_capture_meta = re.compile(
         r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\* \(from ([^)]*)\)[^\[]*([^\)]*\)).*?by (.*?[A-Za-z\*]{2,}?)\. (.*)$"
     )
-    # This regex is used to synchronize link.
+    # This regex is used to synchronize title link.
     _re_capture_title_link = re.compile(r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\*")
+    # This regex is used to synchronize paper title and link.
+    _re_capture_paper_link = re.compile(r" \[([^\]]*)\]\(([^\)]*)\)")
 
     if len(localized_model_list) == 0:
         localized_model_index = {}
@@ -931,10 +973,22 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
                 readmes_match = False
                 localized_model_index[title] = update
         else:
-            # Synchronize link
-            localized_model_index[title] = _re_capture_title_link.sub(
+            # Synchronize title link
+            converted_model = _re_capture_title_link.sub(
                 f"**[{title}]({model_link})**", localized_model_index[title], count=1
             )
+
+            # Synchronize paper title and its link (if found)
+            paper_title_link = _re_capture_paper_link.search(model)
+            if paper_title_link is not None:
+                paper_title, paper_link = paper_title_link.groups()
+                converted_model = _re_capture_paper_link.sub(
+                    f" [{paper_title}]({paper_link})", converted_model, count=1
+                )
+
+            if converted_model != localized_model_index[title]:
+                readmes_match = False
+                localized_model_index[title] = converted_model
 
     sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
 
@@ -1070,6 +1124,7 @@ MODELS_NOT_IN_README = [
     "VisionTextDualEncoder",
     "CLIPVisionModel",
     "SiglipVisionModel",
+    "ChineseCLIPVisionModel",
 ]
 
 # Template for new entries to add in the main README when we have missing models.

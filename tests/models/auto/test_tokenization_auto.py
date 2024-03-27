@@ -25,8 +25,6 @@ import pytest
 
 import transformers
 from transformers import (
-    BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
     AutoTokenizer,
     BertConfig,
     BertTokenizer,
@@ -72,13 +70,13 @@ class AutoTokenizerTest(unittest.TestCase):
 
     @slow
     def test_tokenizer_from_pretrained(self):
-        for model_name in (x for x in BERT_PRETRAINED_CONFIG_ARCHIVE_MAP.keys() if "japanese" not in x):
+        for model_name in {"google-bert/bert-base-uncased", "google-bert/bert-base-cased"}:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             self.assertIsNotNone(tokenizer)
             self.assertIsInstance(tokenizer, (BertTokenizer, BertTokenizerFast))
             self.assertGreater(len(tokenizer), 0)
 
-        for model_name in GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP.keys():
+        for model_name in ["openai-community/gpt2", "openai-community/gpt2-medium"]:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             self.assertIsNotNone(tokenizer)
             self.assertIsInstance(tokenizer, (GPT2Tokenizer, GPT2TokenizerFast))
@@ -223,7 +221,7 @@ class AutoTokenizerTest(unittest.TestCase):
         config = get_tokenizer_config("google-bert/bert-base-cased")
         _ = config.pop("_commit_hash", None)
         # If we ever update google-bert/bert-base-cased tokenizer config, this dict here will need to be updated.
-        self.assertEqual(config, {"do_lower_case": False})
+        self.assertEqual(config, {"do_lower_case": False, "model_max_length": 512})
 
         # This model does not have a tokenizer_config so we get back an empty dict.
         config = get_tokenizer_config(SMALL_MODEL_IDENTIFIER)
