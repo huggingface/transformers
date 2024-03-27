@@ -874,16 +874,16 @@ class GenerationMixin:
                 FutureWarning,
             )
             processors.append(ForceTokensLogitsProcessor(generation_config.forced_decoder_ids, _has_warned=True))
-        if generation_config.watermarking_args is not None:
+        if generation_config.watermarking_config is not None:
             processors.append(
                 WatermarkLogitsProcessor(
                     vocab_size=self.config.vocab_size,
                     device=device,
-                    greenlist_ratio=generation_config.watermarking_args["greenlist_ratio"],
-                    bias=generation_config.watermarking_args["bias"],
-                    hashing_key=generation_config.watermarking_args["hashing_key"],
-                    seeding_scheme=generation_config.watermarking_args["seeding_scheme"],
-                    context_width=generation_config.watermarking_args["context_width"],
+                    greenlist_ratio=generation_config.watermarking_config.greenlist_ratio,
+                    bias=generation_config.watermarking_config.bias,
+                    hashing_key=generation_config.watermarking_config.hashing_key,
+                    seeding_scheme=generation_config.watermarking_config.seeding_scheme,
+                    context_width=generation_config.watermarking_config.context_width,
                 )
             )
         processors = self._merge_criteria_processor_list(processors, logits_processor)

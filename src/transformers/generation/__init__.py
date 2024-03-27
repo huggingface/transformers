@@ -106,6 +106,7 @@ else:
     ]
     _import_structure["watermarking"] = [
         "WatermarkDetector",
+        "WatermarkingConfig",
         "WatermarkDetectorOutput",
     ]
 
@@ -249,6 +250,7 @@ if TYPE_CHECKING:
         from .watermarking import (
             WatermarkDetector,
             WatermarkDetectorOutput,
+            WatermarkingConfig,
         )
 
     try:

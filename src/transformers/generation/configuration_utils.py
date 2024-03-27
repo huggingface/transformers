@@ -18,6 +18,7 @@ import copy
 import json
 import os
 import warnings
+from dataclasses import is_dataclass
 from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 from .. import __version__
@@ -32,6 +33,7 @@ from ..utils import (
     is_remote_url,
     logging,
 )
+from .watermarking import WatermarkingConfig
 
 
 if TYPE_CHECKING:
@@ -224,9 +226,10 @@ class GenerationConfig(PushToHubMixin):
         low_memory (`bool`, *optional*):
             Switch to sequential beam search and sequential topk for contrastive search to reduce peak memory.
             Used with beam search and contrastive search.
-        watermarking_args (`Dict`, *optional*):
+        watermarking_config (Union[`~WatermarkingConfig`, `dict`], *optional*):
             Arguments used to watermark the model outputs by adding a small bias to randomly selected set of "green" tokens.
-            Accepts the following keys in the dict:
+            See [this paper](https://arxiv.org/abs/2306.04634) for more details.
+            Accepts the following keys:
             - greenlist_ratio (`float`):
                 Used for watermarking. The ratio of "green" tokens used to the vocabulary size. Defaults to 0.25.
             - bias (`float`):
@@ -235,8 +238,8 @@ class GenerationConfig(PushToHubMixin):
                 Hahsing key used for watermarking. Defaults to 15485863 (the millionth prime).
             - seeding_scheme (`str`):
                 Algorithm to use for watermarking. Accepts values:
-                    - "lefthash" (default): "green" tokens selection depend on the last token (Algorithm 2 from paper)
-                    - "selfhash": "green" tokens selection depends on the current token itself (Algorithm 3 from paper)
+                    - "lefthash" (default): "green" tokens selection depend on the last token (Algorithm 2 from the paper)
+                    - "selfhash": "green" tokens selection depends on the current token itself (Algorithm 3 from the paper)
                         The downside of this scheme is that it considers all possible next tokens and can be slower than "lefthash".
             - context_width(`int`):
                 The context length of previous tokens to use in seeding. Higher context length makes watermarking more robust.
@@ -355,7 +358,7 @@ class GenerationConfig(PushToHubMixin):
         self.sequence_bias = kwargs.pop("sequence_bias", None)
         self.guidance_scale = kwargs.pop("guidance_scale", None)
         self.low_memory = kwargs.pop("low_memory", None)
-        self.watermarking_args = kwargs.pop("watermarking_args", None)
+        self.watermarking_config = WatermarkingConfig.from_dict(kwargs.pop("watermarking_config", None))
 
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
@@ -627,30 +630,36 @@ class GenerationConfig(PushToHubMixin):
                 )
 
         # check watermarking arguments
-        if self.watermarking_args is not None:
+        if self.watermarking_config is not None:
             watermark_missing_arg_msg = (
-                "Some of the keys in `watermarking_args` are defined. However, `{key}` is set to `None`. "
-                "You should set all the keys to use watermarking."
+                "Some of the keys in `watermarking_config` are defined incorrectly. `{key}` should be {correct_value}` "
+                "but found {found_value}"
             )
-            if self.watermarking_args.get("greenlist_ratio") is None:
+            if self.watermarking_config.seeding_scheme not in ["selfhash", "lefthash"]:
                 raise ValueError(
-                    watermark_missing_arg_msg.format(key="greenlist_ratio"),
+                    watermark_missing_arg_msg.format(
+                        key="seeding_scheme",
+                        correct_value="[`selfhash`, `lefthash`]",
+                        found_value=self.watermarking_config.seeding_scheme,
+                    ),
                 )
-            if self.watermarking_args.get("bias") is None:
+
+            if not 0.0 <= self.watermarking_config.greenlist_ratio <= 1.0:
                 raise ValueError(
-                    watermark_missing_arg_msg.format(key="bias"),
+                    watermark_missing_arg_msg.format(
+                        key="greenlist_ratio",
+                        correct_value="in range between 0.0 and 1.0",
+                        found_value=self.watermarking_config.seeding_scheme,
+                    ),
                 )
-            if self.watermarking_args.get("hashing_key") is None:
+
+            if not self.watermarking_config.context_width >= 1:
                 raise ValueError(
-                    watermark_missing_arg_msg.format(key="hashing_key"),
-                )
-            if self.watermarking_args.get("seeding_scheme") is None:
-                raise ValueError(
-                    watermark_missing_arg_msg.format(key="seeding_scheme"),
-                )
-            if self.watermarking_args.get("context_width") is None:
-                raise ValueError(
-                    watermark_missing_arg_msg.format(key="context_width"),
+                    watermark_missing_arg_msg.format(
+                        key="context_width",
+                        correct_value="a positive integer",
+                        found_value=self.watermarking_config.context_width,
+                    ),
                 )
 
         # 5. check common issue: passing `generate` arguments inside the generation config
@@ -1061,7 +1070,16 @@ class GenerationConfig(PushToHubMixin):
             else:
                 return obj
 
+        def convert_dataclass_to_dict(obj):
+            if isinstance(obj, dict):
+                return {key: convert_dataclass_to_dict(value) for key, value in obj.items()}
+            elif is_dataclass(obj):
+                return obj.to_dict()
+            else:
+                return obj
+
         config_dict = convert_keys_to_string(config_dict)
+        config_dict = convert_dataclass_to_dict(config_dict)
 
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
