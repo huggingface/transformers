@@ -560,10 +560,10 @@ class NllbMoeRouterTest(unittest.TestCase):
         # `sampling` and `random` do not affect the mask of the top_1 router
         # fmt: on
 
-        torch.testing.assert_close(router_probs_all, EXPECTED_ROUTER_ALL, 1e-4, 1e-4)
-        torch.testing.assert_close(router_probs_sp, EXPECTED_ROUTER_SP, 1e-4, 1e-4)
-        torch.testing.assert_close(router_probs, EXPECTED_ROUTER, 1e-4, 1e-4)
+        torch.testing.assert_close(router_probs_all, EXPECTED_ROUTER_ALL, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(router_probs_sp, EXPECTED_ROUTER_SP, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(router_probs, EXPECTED_ROUTER, rtol=1e-4, atol=1e-4)
 
-        torch.testing.assert_close(top_1_mask_all, EXPECTED_TOP_1_ALL, 1e-4, 1e-4)
-        torch.testing.assert_close(top_1_mask_sp, EXPECTED_TOP_1_SP, 1e-4, 1e-4)
-        torch.testing.assert_close(top_1_mask, EXPECTED_TOP_1_SP, 1e-4, 1e-4)
+        torch.testing.assert_close(top_1_mask_all, EXPECTED_TOP_1_ALL, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(top_1_mask_sp, EXPECTED_TOP_1_SP, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(top_1_mask, EXPECTED_TOP_1_SP, rtol=1e-4, atol=1e-4)
