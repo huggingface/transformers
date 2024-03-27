@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Mistral AI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 Mistral AI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its
@@ -31,14 +31,14 @@ from ...modeling_tf_outputs import (
     TFSequenceClassifierOutputWithPast,
 )
 from ...modeling_tf_utils import (
-    get_initializer,
-    TFSequenceClassificationLoss,
-    TFPreTrainedModel,
     TFCausalLanguageModelingLoss,
-    unpack_inputs,
+    TFPreTrainedModel,
+    TFSequenceClassificationLoss,
+    get_initializer,
+    get_tf_activation,
     keras_serializable,
     shape_list,
-    get_tf_activation,
+    unpack_inputs,
 )
 from ...utils import (
     add_start_docstrings,
@@ -46,6 +46,7 @@ from ...utils import (
     logging,
 )
 from .configuration_mistral import MistralConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -86,8 +87,12 @@ class TFMistralRotaryEmbedding(tf.keras.layers.Layer):
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        self.inv_freq = 1.0 / (self.base ** (tf.range(0, self.dim, 2, dtype=tf.float32) / self.dim))
-
+        self.inv_freq = self.add_weight(
+            "inv_freq", shape=(self.dim // 2,), dtype=tf.float32, initializer=get_initializer(1.0), trainable=False
+        )
+        self.inv_freq.assign(
+            1.0 / (self.base ** (tf.range(start=0, limit=self.dim, delta=2, dtype=tf.float32) / self.dim))
+        )
         self._set_cos_sin_cache(seq_len=max_position_embeddings, dtype=tf.float32)
 
     def _set_cos_sin_cache(self, seq_len, dtype):
@@ -122,11 +127,11 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`):
+        q (`tf.Tensor`): The query tensor.
+        k (`tf.Tensor`): The key tensor.
+        cos (`tf.Tensor`): The cosine part of the rotary embedding.
+        sin (`tf.Tensor`): The sine part of the rotary embedding.
+        position_ids (`tf.Tensor`):
             The position indices of the tokens corresponding to the query and key tensors. For example, this can be
             used to pass offsetted position ids when working with a KV-cache.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
@@ -137,7 +142,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
             cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
             the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
     Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+        `tuple(tf.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
     cos = tf.expand_dims(tf.gather(cos, position_ids), unsqueeze_dim)
     sin = tf.expand_dims(tf.gather(sin, position_ids), unsqueeze_dim)
@@ -369,8 +374,8 @@ class TFMistralDecoderLayer(tf.keras.layers.Layer):
             )
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
+            hidden_states (`tf.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`tf.Tensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -378,7 +383,7 @@ class TFMistralDecoderLayer(tf.keras.layers.Layer):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_value (`Tuple(tf.Tensor)`, *optional*): cached past key and value projection states
         """
 
         residual = hidden_states
@@ -615,7 +620,7 @@ MISTRAL_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -640,14 +645,14 @@ MISTRAL_INPUTS_DOCSTRING = r"""
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+        past_key_values (`Cache` or `tuple(tuple(tf.Tensor))`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
             returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
             Two formats are allowed:
             - a [`~cache_utils.Cache`] instance;
-            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+            - Tuple of `tuple(tf.Tensor)` of length `config.n_layers`, with each tuple having 2 tensors of
             shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
             cache format.
 
@@ -657,7 +662,7 @@ MISTRAL_INPUTS_DOCSTRING = r"""
             If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
             have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
             of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
