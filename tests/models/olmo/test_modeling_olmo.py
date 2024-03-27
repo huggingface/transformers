@@ -47,10 +47,10 @@ class OLMoModelTester:
         use_token_type_ids=False,
         use_labels=True,
         vocab_size=99,
-        hidden_size=32,
+        d_model=32,
         mlp_hidden_size=None,
-        num_hidden_layers=2,
-        num_attention_heads=2,
+        n_layers=2,
+        n_heads=2,
         use_python_sdpa=True,
         eos_token_id=42,
         type_vocab_size=16,
@@ -66,10 +66,10 @@ class OLMoModelTester:
         self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
         self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
+        self.d_model = d_model
         self.mlp_hidden_size = mlp_hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+        self.n_layers = n_layers
+        self.n_heads = n_heads
         self.max_sequence_length = seq_length
         self.use_python_sdpa = use_python_sdpa
         self.eos_token_id = eos_token_id
@@ -77,6 +77,11 @@ class OLMoModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.num_labels = num_labels
         self.num_choices = num_choices
+
+        # `test_attention_outputs` and `test_hidden_states_output` don't seem to respect the attribute map
+        self.num_hidden_layers = n_layers
+        self.num_attention_heads = n_heads
+        self.hidden_size = d_model
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -104,9 +109,9 @@ class OLMoModelTester:
     def get_config(self):
         return OLMoConfig(
             vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
+            d_model=self.d_model,
+            n_layers=self.n_layers,
+            n_heads=self.n_heads,
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             mlp_hidden_size=self.mlp_hidden_size,
@@ -123,7 +128,7 @@ class OLMoModelTester:
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.d_model))
 
     def create_and_check_model_as_decoder(
         self,
@@ -153,7 +158,7 @@ class OLMoModelTester:
             encoder_hidden_states=encoder_hidden_states,
         )
         result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.d_model))
 
     def create_and_check_for_causal_lm(
         self,
@@ -268,7 +273,9 @@ class OLMoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def setUp(self):
         self.model_tester = OLMoModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=OLMoConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=OLMoConfig, d_model=37, common_properties=["d_model", "n_heads", "n_layers"]
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()

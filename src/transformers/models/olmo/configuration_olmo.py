@@ -191,7 +191,7 @@ class OLMoConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 50304):
             Vocabulary size of the OLMo model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`OLMoModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
+        d_model (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions.
@@ -204,9 +204,9 @@ class OLMoConfig(PretrainedConfig):
             This is only used when ``mlp_hidden_size`` is not set.
         mlp_hidden_size (`Optional[int]`, *optional*, defaults to 22016):
             Set the exact hidden size for the MLP. Otherwise the inner MLP hidden size will be set to `mlp_ratio * d_model`.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
+        n_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
+        n_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
         multi_query_attention (`bool`, *optional*, defaults to `False`):
             If `True`, the model will use Multi Query Attention (MQA). Otherwise the model will use Multi Head Attention (MHA).
@@ -263,7 +263,7 @@ class OLMoConfig(PretrainedConfig):
             When this is None, it inherits the setting from include_bias.
         scale_logits (`bool`, *optional*, defaults to `False`):
             If ``True``, scale the output logits by ``1 / sqrt(d_model)``.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+        weight_tying (`bool`, *optional*, defaults to `False`):
             Whether to tie output linear weights to the input embedding.
         init_device (`Optional[str]`, *optional*, defaults to `"cpu"`):
             The torch device to use when initializing the model parameters, e.g. "cpu", "cuda:0", "meta".
@@ -287,14 +287,6 @@ class OLMoConfig(PretrainedConfig):
             The ID of the token to use for padding.
         eos_token_id (`int`, *optional*, defaults to 50279):
             The ID of the end-of-sentence special token.
-        d_model (`Optional[int]`, *optional*):
-            *Deprecated* Use `hidden_size` instead. This is kept to support legacy checkpoints.
-        n_layers (`Optional[int]`, *optional*):
-            *Deprecated* Use `num_hidden_layers` instead. This is kept to support legacy checkpoints.
-        n_heads (`Optional[int]`, *optional*):
-            *Deprecated* Use `num_attention_heads` instead. This is kept to support legacy checkpoints.
-        weight_tying (`Optional[bool]`, *optional*):
-            *Deprecated* Use `tie_word_embeddings` instead. This is kept to support legacy checkpoints.
         embedding_size (`Optional[int]`, *optional*):
             *Deprecated* Use `vocab_size` instead. This is kept to support legacy checkpoints.
 
@@ -314,17 +306,24 @@ class OLMoConfig(PretrainedConfig):
     model_type = "olmo"
     keys_to_ignore_at_inference = ["past_key_values"]
 
+    attribute_map = {
+        "hidden_size": "d_model",
+        "num_attention_heads": "n_heads",
+        "num_hidden_layers": "n_layers",
+        "tie_word_embeddings": "weight_tying",
+    }
+
     def __init__(
         self,
         vocab_size=50304,
-        hidden_size=4096,
+        d_model=4096,
         use_cache=True,
         output_hidden_states=False,
         output_attentions=False,
         mlp_ratio=4,
         mlp_hidden_size: int | None = 22016,
-        num_hidden_layers=32,
-        num_attention_heads=32,
+        n_layers=32,
+        n_heads=32,
         multi_query_attention=False,
         activation_type=ActivationType.swiglu,
         max_sequence_length=2048,
@@ -346,7 +345,7 @@ class OLMoConfig(PretrainedConfig):
         include_bias=False,
         bias_for_layer_norm=False,
         scale_logits=False,
-        tie_word_embeddings=False,
+        weight_tying=False,
         init_device="cpu",
         change_meta_init_to_cpu=True,
         init_fn=InitFnType.mitchell,
@@ -355,17 +354,12 @@ class OLMoConfig(PretrainedConfig):
         clip_qkv=None,
         pad_token_id=1,
         eos_token_id=50279,
-        d_model=None,
-        n_layers=None,
-        n_heads=None,
-        weight_tying=None,
         embedding_size=None,
         **kwargs,
     ):
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
 
@@ -374,14 +368,14 @@ class OLMoConfig(PretrainedConfig):
 
         self.vocab_size = vocab_size
         self.max_sequence_length = max_sequence_length
-        self.hidden_size = hidden_size
+        self.d_model = d_model
         self.use_cache = use_cache
         self.output_hidden_states = output_hidden_states
         self.output_attentions = output_attentions
         self.mlp_ratio = mlp_ratio
         self.mlp_hidden_size: int | None = mlp_hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+        self.n_layers = n_layers
+        self.n_heads = n_heads
         self.multi_query_attention = multi_query_attention
         self.activation_type = activation_type
         self.block_type = block_type
@@ -402,7 +396,7 @@ class OLMoConfig(PretrainedConfig):
         self.include_bias = include_bias
         self.bias_for_layer_norm = bias_for_layer_norm
         self.scale_logits = scale_logits
-        self.tie_word_embeddings = tie_word_embeddings
+        self.weight_tying = weight_tying
         self.init_device = init_device
         self.init_fn = init_fn
         self.init_std = init_std
@@ -416,77 +410,8 @@ class OLMoConfig(PretrainedConfig):
         # HF does not. We set `embedding_size` to `None` so that HF OLMo models always have the
         # same vocab and embedding sizes, thus avoiding this problem.
         self.embedding_size = None
-
-        # This currently exists just to make a HF test pass
-        self.init_std_mitchell = 1.0
-
-        # At the time of adding OLMo to HF transformers, the OLMo config in HF hub had different
-        # names for some properties. There are thousands of checkpoints, so changing the names for all
-        # of them would be exceedingly time-consuming.
-        if d_model is not None:
-            self.hidden_size = d_model
-        if n_layers is not None:
-            self.num_hidden_layers = n_layers
-        if n_heads is not None:
-            self.num_attention_heads = n_heads
-        if weight_tying is not None:
-            self.tie_word_embeddings = weight_tying
         if embedding_size is not None:
             self.vocab_size = embedding_size
 
-    @property
-    def d_model(self) -> int:
-        """HF calls this hidden_size, OLMo calls it d_model. This property makes them equivalent."""
-        return self.hidden_size
-
-    @d_model.setter
-    def d_model(self, value: int) -> None:
-        self.hidden_size = value
-
-    @property
-    def n_layers(self) -> int:
-        """HF calls this num_hidden_layers, OLMo calls it n_layers. This property makes them equivalent."""
-        return self.num_hidden_layers
-
-    @n_layers.setter
-    def n_layers(self, value: int) -> None:
-        self.num_hidden_layers = value
-
-    @property
-    def n_heads(self) -> int:
-        """HF calls this num_attention_heads, OLMo calls it n_heads. This property makes them equivalent."""
-        return self.num_attention_heads
-
-    @n_heads.setter
-    def n_heads(self, value: int) -> None:
-        self.num_attention_heads = value
-
-    @property
-    def weight_tying(self) -> int:
-        """HF calls this tie_word_embeddings, OLMo calls it weight_tying. This property makes them equivalent."""
-        return self.tie_word_embeddings
-
-    @weight_tying.setter
-    def weight_tying(self, value: int) -> None:
-        self.tie_word_embeddings = value
-
-    def _rope_scaling_validation(self):
-        """
-        Validate the `rope_scaling` configuration.
-        """
-        if self.rope_scaling is None:
-            return
-
-        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
-            raise ValueError(
-                "`rope_scaling` must be a dictionary with with two fields, `type` and `factor`, "
-                f"got {self.rope_scaling}"
-            )
-        rope_scaling_type = self.rope_scaling.get("type", None)
-        rope_scaling_factor = self.rope_scaling.get("factor", None)
-        if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic"]:
-            raise ValueError(
-                f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
-            )
-        if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
-            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
+        # This currently exists just to make a HF test pass
+        self.init_std_mitchell = 1.0
