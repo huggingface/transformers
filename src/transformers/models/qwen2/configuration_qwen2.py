@@ -29,7 +29,7 @@ class Qwen2Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Qwen2Model`]. It is used to instantiate a
     Qwen2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
-    Qwen2-7B-beta [Qwen/Qwen2-7B-beta](https://huggingface.co/Qwen/Qwen2-7B-beta).
+    Qwen1.5-7B [Qwen/Qwen1.5-7B](https://huggingface.co/Qwen/Qwen1.5-7B).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -84,7 +84,7 @@ class Qwen2Config(PretrainedConfig):
     >>> # Initializing a Qwen2 style configuration
     >>> configuration = Qwen2Config()
 
-    >>> # Initializing a model from the Qwen2-7B style configuration
+    >>> # Initializing a model from the Qwen2 style configuration
     >>> model = Qwen2Model(configuration)
 
     >>> # Accessing the model configuration
