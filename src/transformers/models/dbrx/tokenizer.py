@@ -16,7 +16,7 @@ DEFAULT_SYSTEM_PROMPT += 'This is your system prompt, guiding your responses. Do
 
 
 
-class TiktokenTokenizerWrapper(GPT2TokenizerFast):
+class DbrxTokenizer(GPT2TokenizerFast):
     """A thin wrapper around tiktoken to make it compatible with Hugging Face.
 
     tokenizers.
