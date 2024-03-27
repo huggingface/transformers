@@ -587,6 +587,9 @@ def _get_tied_weight_keys(module: nn.Module, prefix=""):
     if getattr(module, "_tied_weights_keys", None) is not None:
         names = [f"{prefix}.{k}" if prefix else k for k in module._tied_weights_keys]
         tied_weight_keys.extend(names)
+    if getattr(module, "_dynamic_tied_weights_keys", None) is not None:
+        names = [f"{prefix}.{k}" if prefix else k for k in module._dynamic_tied_weights_keys]
+        tied_weight_keys.extend(names)
     for name, submodule in module.named_children():
         local_prefix = f"{prefix}.{name}" if prefix else name
         tied_weight_keys.extend(_get_tied_weight_keys(submodule, prefix=local_prefix))
@@ -1717,10 +1720,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if hasattr(self, self.base_model_prefix):
                 self = getattr(self, self.base_model_prefix)
             tied_weights = self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
-            if self._tied_weights_keys is not None:
-                self._tied_weights_keys.extend(tied_weights)
-            else:
-                self._tied_weights_keys = tied_weights
+            # Setting a dynamic variable instead of `_tied_weights_keys` because it's a class
+            # attributed not an instance member, therefore modifying it will modify the entire class
+            # Leading to issues on subsequent calls by different tests or subsequent calls.
+            self._dynamic_tied_weights_keys = tied_weights
 
         for module in self.modules():
             if hasattr(module, "_tie_weights"):
