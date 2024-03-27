@@ -112,13 +112,13 @@ class EncodecConv1d(nn.Module):
             self.norm = nn.GroupNorm(1, out_channels)
 
         kernel_size = self.conv.kernel_size[0]
-        stride = torch.tensor(self.conv.stride[0])
+        stride = torch.tensor(self.conv.stride[0], dtype=torch.int64)
         dilation = self.conv.dilation[0]
-        kernel_size = torch.tensor((kernel_size - 1) * dilation + 1)  # effective kernel size with dilations
+        kernel_size = torch.tensor((kernel_size - 1) * dilation + 1, dtype=torch.int64)  # effective kernel size with dilations
 
         self.register_buffer("stride", stride, persistent=False)
         self.register_buffer("kernel_size", kernel_size, persistent=False)
-        self.register_buffer("padding_total", torch.tensor(kernel_size - stride), persistent=False)
+        self.register_buffer("padding_total", torch.tensor(kernel_size - stride, dtype=torch.int64), persistent=False)
 
     def _get_extra_padding_for_conv1d(
         self, hidden_states: torch.Tensor,
@@ -126,8 +126,8 @@ class EncodecConv1d(nn.Module):
         """See `pad_for_conv1d`."""
         length = hidden_states.shape[-1]
         n_frames = (length - self.kernel_size + self.padding_total) / self.stride + 1
-        ideal_length = ((torch.ceil(n_frames) - 1) * self.stride + (self.kernel_size - self.padding_total)) / 1.  # Fixes Cannot input a tensor of type Float as an integral argument
-        return (ideal_length - length).to(torch.int64)
+        ideal_length = ((torch.ceil(n_frames).to(torch.int64) - 1) * self.stride + (self.kernel_size - self.padding_total))
+        return ideal_length - length
 
 
     @staticmethod
