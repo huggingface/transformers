@@ -640,8 +640,10 @@ class BetterLlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         return model_embeds
     
     def _merge_input_ids_with_image_features(
-        self, image_features, feature_lens, inputs_embeds, input_ids, attention_mask, position_ids=None, labels=None, image_token_index=None,
-        ignore_index=-100
+        self, image_features, feature_lens, inputs_embeds, input_ids, attention_mask, position_ids=None,
+        labels=None, image_token_index=None,
+        ignore_index=-100,
+        padding_side: Optional[str] = "left",
     ):
         """
         Args:
@@ -653,6 +655,9 @@ class BetterLlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 each value is the length of embedding featres of each image
                 Note: sum(feature_lens) == all_feat_lens
             labels: None or [batch_size, tlen] --> must extend labels to input_ids, 
+            padding_side:   `left` or `right`, 
+                must specify for generation because we cannot tell that from input_ids
+                see below
         Returns:
             final_embedding, final_attention_mask, position_ids, final_labels
 
@@ -689,16 +694,60 @@ class BetterLlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                     a b c d e f _ _ _ _ _ g h i j k _ _ _ l m
                     _ _ _ _ _ o p q r _ _ _ _ _ _ _ _ s t u v
                 ]
+            Edge cases:
+                * If tokens are same but image token sizes are different, then cannot infer left or right padding
+                ```python
+                cat_img = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+                chart_img = Image.open(requests.get("https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true", stream=True).raw)
+                prompts = [
+                    "[INST] <image>\nWhat is shown in this image? [/INST]",
+                    "[INST] <image>\nWhat is shown in this image? [/INST]",
+                ]
+                inputs = processor(prompts, [chart_img, cat_img], return_tensors='pt', padding=True).to("cuda")
+                    chart_img has 2634 tokens, while cat_img has 2340 tokens
+                ```
+
+                input_ids: [
+                    a b c d X g h
+                    i j Y k l m n
+                ]
+                where X is 3 tokens while Y is 5, this mean after merge
+                if left-padding (batched generation)
+                    input_ids should be: [
+                        _ _ a b c d X X X g h
+                        i j Y Y Y Y Y k l m n
+                    ]
+                elif (right padding) (training)
+                    input_ids should be: [
+                        a b c d X X X g h _ _
+                        i j Y Y Y Y Y k l m n
+                    ]
+
+
         """
         image_token_index = image_token_index if image_token_index is not None else self.config.image_token_index
         ignore_index = ignore_index if ignore_index is not None else self.config.ignore_index
+        
         with torch.no_grad():
             # ! in llava 1.6, number of patches is variable
             num_images = feature_lens.size(0)
             num_image_features, embed_dim = image_features.shape
             assert feature_lens.sum() == num_image_features, f'{feature_lens=} / {feature_lens.sum()} != {image_features.shape=}'
             batch_size, sequence_length = input_ids.shape
-            left_padding = torch.any(attention_mask[:, 0] == 0)
+            _left_padding = torch.any(attention_mask[:, 0] == 0)
+            _right_padding = torch.any(attention_mask[:, -1] == 0)
+
+            if _left_padding and not _right_padding:
+                left_padding = True
+            elif not _left_padding and _right_padding:
+                left_padding = False
+            elif not _left_padding and not _right_padding:
+                # both side is 1, so cannot tell
+                left_padding = padding_side == "left"
+            else:
+                # invalid attention_mask
+                raise ValueError(f'both side of attention_mask has zero, invalid. {attention_mask}')
+            
             # Whether to turn off right padding
             # 1. Create a mask to know where special image tokens are
             special_image_token_mask = input_ids == image_token_index
@@ -707,7 +756,9 @@ class BetterLlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             # num_special_image_tokens: [bsz]
             # Reserve for padding of num_images
             total_num_special_image_tokens = torch.sum(special_image_token_mask)
-            assert total_num_special_image_tokens == num_images, f'{total_num_special_image_tokens=} != {num_images=} | {image_features.shape} {input_ids}'
+            assert total_num_special_image_tokens == num_images, (
+                f'{total_num_special_image_tokens=} != {num_images=} | {image_features.shape} {input_ids}'
+            )
             # Compute the maximum embed dimension
             # max_image_feature_lens is max_feature_lens per batch
             feature_lens_batch = feature_lens.split(num_special_image_tokens.tolist(), dim=0)
@@ -726,6 +777,58 @@ class BetterLlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             special_image_len_mask = special_image_token_mask.clone().long()
             special_image_len_mask[special_image_len_mask == 1] = feature_lens - 1
             new_token_positions = torch.cumsum((special_image_len_mask + 1), -1) - 1
+            """
+            right padding:
+                [0, 0, 0, 0, 4, 0, 0, 0, 6, 0, 0, 0]
+                [0, 0, 6, 0, 4, 0, 0, 0, 0,-1,-1,-1]
+
+                [0, 1, 2, 3, 7, 8, 9,10,16,17,18,19]
+                [0, 1, 7, 8,12,13,14,15,16,17,18,19]
+            if left
+                left padding
+                    [0, 0, 0, 0, 4, 0, 0, 0, 6, 0, 0, 0]
+                    [-1,-1,-1,0, 0, 6, 0, 4, 0, 0, 0, 0]
+                non_image_indices
+                    [0, 1, 2, 3, 5, 6, 7, 9,10,11]
+                    [3, 4, 6, 8, 9,10,11]
+                new_token_positions
+                    [0, 1, 2, 3, 7, 8, 9,10,16,17,18,19]
+                    [0, 1, 2, 3, 4,10,11,15,16,17,18,19]
+                text_to_overwrite
+                    [0, 1, 2, 3, 8, 9,10,17,18,19]
+                    [3, 4, 11,16,17,18,19]
+                final_embeding
+                    [0, 1, 2, 3, _, _, _, _, 8, 9,10, _, _, _, _, _, _, 17, 18, 19]
+                    [x, x, x, 3, 4, _, _, _, _, _, _,11, _, _, _, _, 16,17, 18, 19]
+                final_image_to_overwite
+                    [4, 5, 6, 7,11,12,13,14,15,16]
+                    [5, 6, 7, 8, 9,10,12,13,14,15]
+            if left padding but same tokens
+                    [0, 0, 0, 0, 4, 0]
+                    [0, 0, 6, 0, 0, 0]
+                non_image_indices
+                    [0, 1, 2, 3, 5]
+                    [0, 1, 3, 4, 5]
+                new_token_positions
+                    [0, 1, 2, 3, 7, 8]
+                    [0, 1, 7, 8, 9,10]
+                shifted_token_position
+                    [2, 3, 4, 5, 9,10]
+                    [0, 1, 7, 8, 9,10]
+                text_to_overwrite
+                    [0, 1, 2, 3, 8] + [0, 1, 8, 9,10]
+                    shoyld be
+                    [2, 3, 4, 5,10] + [0, 1, 8, 9,10]
+                final_embeding
+                    [0, 1, 2, 3, _, _, _, _, 8, x, x]
+                    [0, 1, _, _, _, _, _, _, 8, 9,10]
+                    should be
+                    [x, x, 2, 3, 4, 5, _, _, _, _,10]
+                    [0, 1, _, _, _, _, _, _, 8, 9,10]
+            """
+            if left_padding:
+                # new_token_positions += (max_embed_dim - embed_sequence_lengths).unsqueeze_(-1)
+                new_token_positions += (new_token_positions[:, -1].max() - new_token_positions[:, -1:])
 
             text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
 
@@ -770,8 +873,10 @@ class BetterLlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             
             if image_to_overwrite.sum() != num_image_features:
                 raise ValueError(
-                    f"{image_to_overwrite.sum()=} != {num_image_features=} The input provided to the model are wrong. The number of image tokens is {torch.sum(special_image_token_mask)} while"
-                    f" the number of image given to the model is {num_images}. This prevents correct indexing and breaks batch generation."
+                    f"{image_to_overwrite.sum()=} != {num_image_features=} The input provided to the model are wrong. "
+                    f"The number of image tokens is {torch.sum(special_image_token_mask)} while"
+                    f" the number of image given to the model is {num_images}. "
+                    f"This prevents correct indexing and breaks batch generation."
                 )
         final_embedding[image_to_overwrite] = image_features.to(target_device)
         final_attention_mask |= image_to_overwrite
@@ -851,6 +956,7 @@ class BetterLlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        padding_side: Optional[str] = "left",
     ) -> Union[Tuple, LlavaNextCausalLMOutputWithPast]:
         r"""
         Args:
@@ -937,7 +1043,8 @@ class BetterLlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
 
                 inputs_embeds, attention_mask, position_ids, labels = self._merge_input_ids_with_image_features(
                     image_features, feature_lens, inputs_embeds, input_ids, attention_mask, position_ids,
-                    labels=labels
+                    labels=labels,
+                    padding_side=padding_side,
                 )
 
             # pixel_values is not None but is empty ---> text only cases
@@ -974,8 +1081,11 @@ class BetterLlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 # Zero-out the places where we don't need to attend
                 extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
 
-                attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
+                # !(nxphi47) must ensure left-padding
+                #   attention_mask is the new in-coming mask, while extended_attention_mask is the previous one
+                attention_mask = torch.cat((extended_attention_mask, attention_mask), dim=1)
                 position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+        
 
         outputs = self.language_model(
             attention_mask=attention_mask,
