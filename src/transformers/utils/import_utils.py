@@ -586,6 +586,29 @@ def is_torch_npu_available(check_device=False):
     return hasattr(torch, "npu") and torch.npu.is_available()
 
 
+@lru_cache()
+def is_torch_mlu_available(check_device=False):
+    "Checks if `torch_mlu` is installed and potentially if a MLU is in the environment"
+    if not _torch_available or importlib.util.find_spec("torch_mlu") is None:
+        return False
+
+    import torch
+    import torch_mlu  # noqa: F401
+
+    from ..dependency_versions_table import deps
+
+    deps["deepspeed"] = "deepspeed-mlu>=0.10.1"
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no MLU is found
+            _ = torch.mlu.device_count()
+            return torch.mlu.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "mlu") and torch.mlu.is_available()
+
+
 def is_torchdynamo_available():
     if not is_torch_available():
         return False
