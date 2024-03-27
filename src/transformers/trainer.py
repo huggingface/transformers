@@ -59,6 +59,7 @@ from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
+from .image_processing_utils import BaseImageProcessor
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
@@ -70,7 +71,6 @@ from .models.auto.modeling_auto import (
 from .optimization import Adafactor, get_scheduler
 from .pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
 from .tokenization_utils_base import PreTrainedTokenizerBase
-from .image_processing_utils import BaseImageProcessor
 from .trainer_callback import (
     CallbackHandler,
     DefaultFlowCallback,
@@ -546,7 +546,7 @@ class Trainer:
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
         callbacks = default_callbacks if callbacks is None else default_callbacks + callbacks
         self.callback_handler = CallbackHandler(
-            callbacks, self.model, self.tokenizer, self.optimizer, self.lr_scheduler
+            callbacks, self.model, self.tokenizer, self.image_processor, self.optimizer, self.lr_scheduler
         )
         self.add_callback(PrinterCallback if self.args.disable_tqdm else DEFAULT_PROGRESS_CALLBACK)
 
@@ -3229,6 +3229,8 @@ class Trainer:
             )
         if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
+        if self.image_processor is not None and self.args.should_save:
+            self.image_processor.save_pretrained(output_dir)
 
         # We moved the model from TPU -> CPU for saving the weights.
         # Now we should move it back to subsequent compute still works.
@@ -3266,6 +3268,8 @@ class Trainer:
 
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
+        if self.image_processor is not None:
+            self.image_processor.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
@@ -3962,6 +3966,9 @@ class Trainer:
         # Saving the tokenizer is fast and we don't know how many files it may have spawned, so we resave it to be sure.
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
+        # Same for the image processor
+        if self.image_processor is not None:
+            self.image_processor.save_pretrained(output_dir)
         # Same for the training arguments
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
 
@@ -4009,7 +4016,7 @@ class Trainer:
 
     def push_to_hub(self, commit_message: Optional[str] = "End of training", blocking: bool = True, **kwargs) -> str:
         """
-        Upload `self.model` and `self.tokenizer` to the 🤗 model hub on the repo `self.args.hub_model_id`.
+        Upload `self.model` and `self.tokenizer` or `self.image_processor` to the 🤗 model hub on the repo `self.args.hub_model_id`.
 
         Parameters:
             commit_message (`str`, *optional*, defaults to `"End of training"`):
