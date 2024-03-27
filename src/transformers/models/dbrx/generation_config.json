@@ -1,8 +1,0 @@
-{
-    "_from_model_config": true,
-    "eos_token_id": [
-      100257,
-      100279
-    ],
-    "transformers_version": "4.38.2"
-}
