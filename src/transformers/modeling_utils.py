@@ -582,6 +582,17 @@ def _end_ptr(tensor: torch.Tensor) -> int:
     return stop
 
 
+def _get_tied_weight_keys(module: nn.Module, prefix=""):
+    tied_weight_keys = []
+    if getattr(module, "_tied_weights_keys", None) is not None:
+        names = [f"{prefix}.{k}" if prefix else k for k in module._tied_weights_keys]
+        tied_weight_keys.extend(names)
+    for name, submodule in module.named_children():
+        local_prefix = f"{prefix}.{name}" if prefix else name
+        tied_weight_keys.extend(_get_tied_weight_keys(submodule, prefix=local_prefix))
+    return tied_weight_keys
+
+
 def _find_disjoint(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]) -> Tuple[List[Set[str]], List[str]]:
     filtered_tensors = []
     for shared in tensors:
@@ -2463,13 +2474,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
             error_names = set()
             to_delete_names = set()
+            # Recursively descend to find tied weight keys
+            _tied_weights_keys = _get_tied_weight_keys(self)
             for names in shared_ptrs.values():
                 # Removing the keys which are declared as known duplicates on
                 # load. This allows to make sure the name which is kept is consistent.
-                if self._tied_weights_keys is not None:
+                if _tied_weights_keys is not None:
                     found = 0
                     for name in sorted(names):
-                        matches_pattern = any(re.search(pat, name) for pat in self._tied_weights_keys)
+                        matches_pattern = any(re.search(pat, name) for pat in _tied_weights_keys)
                         if matches_pattern and name in state_dict:
                             found += 1
                             if found < len(names):
