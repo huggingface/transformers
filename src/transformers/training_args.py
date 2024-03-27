@@ -1769,7 +1769,16 @@ class TrainingArguments:
                 else:
                     self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
 
-            self.accelerator_config.mixed_precision = mixed_precision_dtype
+            if self.accelerator_config.mixed_precision == "no":
+                self.accelerator_config.mixed_precision = mixed_precision_dtype
+            elif mixed_precision_dtype != "no" and self.accelerator_config.mixed_precision != mixed_precision_dtype:
+                raise ValueError(
+                    "Mismatch on specified mixed precision dtype: "
+                    f"The specified mixed precision dtype ({mixed_precision_dtype}) does not match "
+                    f"the accelerator's configuration ({self.accelerator_config.mixed_precision}). "
+                    "Please ensure consistency or set the mixed precision dtype through only one configuration."
+                )
+            mixed_precision_dtype = self.accelerator_config.mixed_precision
 
             if self.dispatch_batches is not None:
                 warnings.warn(
