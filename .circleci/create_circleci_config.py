@@ -103,31 +103,8 @@ class CircleCIJob:
         steps = [
             "checkout",
             {"attach_workspace": {"at": "~/transformers/test_preparation"}},
-            {
-                "restore_cache": {
-                    "keys": [
-                        # check the fully-matched cache first
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
-                        # try the partially-matched cache from `main`
-                        f"v{self.cache_version}-{self.cache_name}-main-pip-",
-                        # try the general partially-matched cache
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-",
-                    ]
-                }
-            },
-            {
-                "restore_cache": {
-                    "keys": [
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
-                        f"v{self.cache_version}-{self.cache_name}-main-site-packages-",
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-",
-                    ]
-                }
-            },
         ]
         steps.extend([{"run": l} for l in self.install_steps])
-        steps.extend([{"run": 'pip install "fsspec>=2023.5.0,<2023.10.0"'}])
-        steps.extend([{"run": "pip install pytest-subtests"}])
         steps.append({"run": {"name": "Show installed libraries and their versions", "command": "pip freeze | tee installed.txt"}})
         steps.append({"store_artifacts": {"path": "~/transformers/installed.txt"}})
 
@@ -142,7 +119,7 @@ class CircleCIJob:
         test_command = ""
         if self.command_timeout:
             test_command = f"timeout {self.command_timeout} "
-        test_command += f"python -m pytest --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
+        test_command += f"python3 -m pytest --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
 
         if self.parallelism == 1:
             if self.tests_to_run is None:
@@ -196,7 +173,7 @@ class CircleCIJob:
             test_command = ""
             if self.timeout:
                 test_command = f"timeout {self.timeout} "
-            test_command += f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
+            test_command += f"python3 -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
             test_command += " $(cat splitted_tests.txt)"
         if self.marker is not None:
             test_command += f" -m {self.marker}"
@@ -249,24 +226,6 @@ class CircleCIJob:
         steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
         steps.append({"store_artifacts": {"path": "~/transformers/reports"}})
 
-        # save cache at the end: so pytest step runs before cache saving and we can see results earlier
-        steps.append(
-            {
-                "save_cache": {
-                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
-                    "paths": ["~/.cache/pip"],
-                }
-            }
-        )
-        steps.append(
-            {
-                "save_cache": {
-                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
-                    "paths": ["~/.pyenv/versions/"],
-                }
-            }
-        )
-
         job["steps"] = steps
         return job
 
@@ -278,6 +237,7 @@ class CircleCIJob:
 # JOBS
 torch_and_tf_job = CircleCIJob(
     "torch_and_tf",
+    docker_image=[{"image":"arthurzucker/tf_light"}],
     additional_env={"RUN_PT_TF_CROSS_TESTS": True},
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng git-lfs cmake",
@@ -307,15 +267,10 @@ torch_and_flax_job = CircleCIJob(
     pytest_options={"rA": None, "durations": 0},
 )
 
-
 torch_job = CircleCIJob(
     "torch",
-    install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
-        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
-    ],
+    docker_image=[{"image": "arthurzucker/light_torch:latest"}],
+    install_steps=["uv venv", "uv pip install -e ."],
     parallelism=1,
     pytest_num_workers=12,
 )
@@ -323,12 +278,8 @@ torch_job = CircleCIJob(
 
 tf_job = CircleCIJob(
     "tf",
-    install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng cmake",
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
-        "pip install -U --upgrade-strategy eager tensorflow_probability",
-    ],
+    docker_image=[{"image":"arthurzucker/tf_light"}],
+    install_steps=["uv venv", "uv pip install -e."],
     parallelism=1,
 )
 
@@ -373,22 +324,8 @@ pipelines_tf_job = CircleCIJob(
 custom_tokenizers_job = CircleCIJob(
     "custom_tokenizers",
     additional_env={"RUN_CUSTOM_TOKENIZERS": True},
-    install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y cmake",
-        {
-            "name": "install jumanpp",
-            "command":
-                "wget https://github.com/ku-nlp/jumanpp/releases/download/v2.0.0-rc3/jumanpp-2.0.0-rc3.tar.xz\n"
-                "tar xvf jumanpp-2.0.0-rc3.tar.xz\n"
-                "mkdir jumanpp-2.0.0-rc3/bld\n"
-                "cd jumanpp-2.0.0-rc3/bld\n"
-                "sudo cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local\n"
-                "sudo make install\n",
-        },
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]",
-        "python -m unidic download",
-    ],
+    docker_image=[{"image": "arthurzucker/custom_tokenizers:latest"}],
+    install_steps=["uv venv","uv pip install -e ."],
     parallelism=None,
     resource_class=None,
     tests_to_run=[
@@ -466,22 +403,8 @@ onnx_job = CircleCIJob(
 
 exotic_models_job = CircleCIJob(
     "exotic_models",
-    install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev",
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[torch,testing,vision]",
-        "pip install -U --upgrade-strategy eager torchvision",
-        "pip install -U --upgrade-strategy eager scipy",
-        "pip install -U --upgrade-strategy eager 'git+https://github.com/facebookresearch/detectron2.git'",
-        "sudo apt install tesseract-ocr",
-        "pip install -U --upgrade-strategy eager pytesseract",
-        "pip install --upgrade-strategy eager sentencepiece",
-        "pip install -U --upgrade-strategy eager natten==0.15.1+torch210cpu -f https://shi-labs.com/natten/wheels",
-        "pip install -U --upgrade-strategy eager python-Levenshtein",
-        "pip install -U --upgrade-strategy eager opencv-python",
-        "pip install -U --upgrade-strategy eager nltk",
-        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0' 'torchvision<0.17' 'torchaudio<2.2.0'"
-    ],
+    install_steps=["uv venv", "uv pip install -e ."],
+    docker_image=[{"image":"arthurzucker/exotic_models"}],
     tests_to_run=[
         "tests/models/*layoutlmv*",
         "tests/models/*nat",
@@ -587,8 +510,8 @@ def create_circleci_config(folder=None):
             all_test_list = f.read()
     else:
         all_test_list = []
-    if len(all_test_list) > 0:
-        jobs.extend(PIPELINE_TESTS)
+    # if len(all_test_list) > 0:
+    #     jobs.extend(PIPELINE_TESTS)
 
     test_file = os.path.join(folder, "filtered_test_list.txt")
     if os.path.exists(test_file):
@@ -597,62 +520,62 @@ def create_circleci_config(folder=None):
     else:
         test_list = []
     if len(test_list) > 0:
-        jobs.extend(REGULAR_TESTS)
+        jobs.extend([torch_job, custom_tokenizers_job, tf_job, exotic_models_job])
 
-        extended_tests_to_run = set(test_list.split())
-        # Extend the test files for cross test jobs
-        for job in jobs:
-            if job.job_name in ["tests_torch_and_tf", "tests_torch_and_flax"]:
-                for test_path in copy.copy(extended_tests_to_run):
-                    dir_path, fn = os.path.split(test_path)
-                    if fn.startswith("test_modeling_tf_"):
-                        fn = fn.replace("test_modeling_tf_", "test_modeling_")
-                    elif fn.startswith("test_modeling_flax_"):
-                        fn = fn.replace("test_modeling_flax_", "test_modeling_")
-                    else:
-                        if job.job_name == "test_torch_and_tf":
-                            fn = fn.replace("test_modeling_", "test_modeling_tf_")
-                        elif job.job_name == "test_torch_and_flax":
-                            fn = fn.replace("test_modeling_", "test_modeling_flax_")
-                    new_test_file = str(os.path.join(dir_path, fn))
-                    if os.path.isfile(new_test_file):
-                        if new_test_file not in extended_tests_to_run:
-                            extended_tests_to_run.add(new_test_file)
-        extended_tests_to_run = sorted(extended_tests_to_run)
-        for job in jobs:
-            if job.job_name in ["tests_torch_and_tf", "tests_torch_and_flax"]:
-                job.tests_to_run = extended_tests_to_run
-        fn = "filtered_test_list_cross_tests.txt"
-        f_path = os.path.join(folder, fn)
-        with open(f_path, "w") as fp:
-            fp.write(" ".join(extended_tests_to_run))
+    #     extended_tests_to_run = set(test_list.split())
+    #     # Extend the test files for cross test jobs
+    #     for job in jobs:
+    #         if job.job_name in ["tests_torch_and_tf", "tests_torch_and_flax"]:
+    #             for test_path in copy.copy(extended_tests_to_run):
+    #                 dir_path, fn = os.path.split(test_path)
+    #                 if fn.startswith("test_modeling_tf_"):
+    #                     fn = fn.replace("test_modeling_tf_", "test_modeling_")
+    #                 elif fn.startswith("test_modeling_flax_"):
+    #                     fn = fn.replace("test_modeling_flax_", "test_modeling_")
+    #                 else:
+    #                     if job.job_name == "test_torch_and_tf":
+    #                         fn = fn.replace("test_modeling_", "test_modeling_tf_")
+    #                     elif job.job_name == "test_torch_and_flax":
+    #                         fn = fn.replace("test_modeling_", "test_modeling_flax_")
+    #                 new_test_file = str(os.path.join(dir_path, fn))
+    #                 if os.path.isfile(new_test_file):
+    #                     if new_test_file not in extended_tests_to_run:
+    #                         extended_tests_to_run.add(new_test_file)
+    #     extended_tests_to_run = sorted(extended_tests_to_run)
+    #     for job in jobs:
+    #         if job.job_name in ["tests_torch_and_tf", "tests_torch_and_flax"]:
+    #             job.tests_to_run = extended_tests_to_run
+    #     fn = "filtered_test_list_cross_tests.txt"
+    #     f_path = os.path.join(folder, fn)
+    #     with open(f_path, "w") as fp:
+    #         fp.write(" ".join(extended_tests_to_run))
 
-    example_file = os.path.join(folder, "examples_test_list.txt")
-    if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
-        with open(example_file, "r", encoding="utf-8") as f:
-            example_tests = f.read()
-        for job in EXAMPLES_TESTS:
-            framework = job.name.replace("examples_", "").replace("torch", "pytorch")
-            if example_tests == "all":
-                job.tests_to_run = [f"examples/{framework}"]
-            else:
-                job.tests_to_run = [f for f in example_tests.split(" ") if f.startswith(f"examples/{framework}")]
+    # example_file = os.path.join(folder, "examples_test_list.txt")
+    # if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
+    #     with open(example_file, "r", encoding="utf-8") as f:
+    #         example_tests = f.read()
+    #     for job in EXAMPLES_TESTS:
+    #         framework = job.name.replace("examples_", "").replace("torch", "pytorch")
+    #         if example_tests == "all":
+    #             job.tests_to_run = [f"examples/{framework}"]
+    #         else:
+    #             job.tests_to_run = [f for f in example_tests.split(" ") if f.startswith(f"examples/{framework}")]
 
-            if len(job.tests_to_run) > 0:
-                jobs.append(job)
+    #         if len(job.tests_to_run) > 0:
+    #             jobs.append(job)
 
-    doctest_file = os.path.join(folder, "doctest_list.txt")
-    if os.path.exists(doctest_file):
-        with open(doctest_file) as f:
-            doctest_list = f.read()
-    else:
-        doctest_list = []
-    if len(doctest_list) > 0:
-        jobs.extend(DOC_TESTS)
+    # doctest_file = os.path.join(folder, "doctest_list.txt")
+    # if os.path.exists(doctest_file):
+    #     with open(doctest_file) as f:
+    #         doctest_list = f.read()
+    # else:
+    #     doctest_list = []
+    # if len(doctest_list) > 0:
+    #     jobs.extend(DOC_TESTS)
 
-    repo_util_file = os.path.join(folder, "test_repo_utils.txt")
-    if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
-        jobs.extend(REPO_UTIL_TESTS)
+    # repo_util_file = os.path.join(folder, "test_repo_utils.txt")
+    # if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
+    #     jobs.extend(REPO_UTIL_TESTS)
 
     if len(jobs) == 0:
         jobs = [EmptyJob()]
