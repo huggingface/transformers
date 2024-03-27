@@ -162,6 +162,7 @@ else:
         "FlaxTopKLogitsWarper",
         "FlaxTopPLogitsWarper",
         "FlaxWhisperTimeStampLogitsProcessor",
+        "FlaxNoRepeatNGramLogitsProcessor",
     ]
     _import_structure["flax_utils"] = [
         "FlaxGenerationMixin",
@@ -294,6 +295,7 @@ if TYPE_CHECKING:
             FlaxLogitsProcessorList,
             FlaxLogitsWarper,
             FlaxMinLengthLogitsProcessor,
+            FlaxNoRepeatNGramLogitsProcessor,
             FlaxSuppressTokensAtBeginLogitsProcessor,
             FlaxSuppressTokensLogitsProcessor,
             FlaxTemperatureLogitsWarper,

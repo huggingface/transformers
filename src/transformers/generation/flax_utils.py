@@ -40,6 +40,7 @@ from .flax_logits_process import (
     FlaxForceTokensLogitsProcessor,
     FlaxLogitsProcessorList,
     FlaxMinLengthLogitsProcessor,
+    FlaxNoRepeatNGramLogitsProcessor,
     FlaxSuppressTokensAtBeginLogitsProcessor,
     FlaxSuppressTokensLogitsProcessor,
     FlaxTemperatureLogitsWarper,
@@ -534,6 +535,8 @@ class FlaxGenerationMixin:
                 [input_ids_seq_length + i[0] - 1, i[1]] for i in generation_config.forced_decoder_ids
             ]
             processors.append(FlaxForceTokensLogitsProcessor(forced_decoder_ids))
+        if generation_config.no_repeat_ngram_size is not None and generation_config.no_repeat_ngram_size > 0:
+            processors.append(FlaxNoRepeatNGramLogitsProcessor(generation_config.no_repeat_ngram_size))
         processors = self._merge_criteria_processor_list(processors, logits_processor)
 
         return processors
