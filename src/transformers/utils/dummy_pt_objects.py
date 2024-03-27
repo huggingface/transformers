@@ -6806,9 +6806,6 @@ class PvtPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
 class PvtV2Backbone(metaclass=DummyObject):
     _backends = ["torch"]
 

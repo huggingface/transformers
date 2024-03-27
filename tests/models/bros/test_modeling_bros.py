@@ -35,9 +35,6 @@ if is_torch_available():
         BrosSpadeEEForTokenClassification,
         BrosSpadeELForTokenClassification,
     )
-    from transformers.models.bros.modeling_bros import (
-        BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
 
 
 class BrosModelTester:
@@ -370,9 +367,9 @@ class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BROS_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BrosModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "jinho8345/bros-base-uncased"
+        model = BrosModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 def prepare_bros_batch_inputs():

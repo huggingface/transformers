@@ -30,7 +30,6 @@
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
     _import_structure["models.{{cookiecutter.lowercase_modelname}}"].extend(
         [
-            "{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST",
             "{{cookiecutter.camelcase_modelname}}ForMaskedLM",
             "{{cookiecutter.camelcase_modelname}}ForCausalLM",
             "{{cookiecutter.camelcase_modelname}}ForMultipleChoice",
@@ -46,7 +45,6 @@
 {% else %}
     _import_structure["models.{{cookiecutter.lowercase_modelname}}"].extend(
         [
-            "{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST",
             "{{cookiecutter.camelcase_modelname}}ForCausalLM",
             "{{cookiecutter.camelcase_modelname}}ForConditionalGeneration",
             "{{cookiecutter.camelcase_modelname}}ForQuestionAnswering",
@@ -63,7 +61,6 @@
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
     _import_structure["models.{{cookiecutter.lowercase_modelname}}"].extend(
         [
-            "TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TF{{cookiecutter.camelcase_modelname}}ForMaskedLM",
             "TF{{cookiecutter.camelcase_modelname}}ForCausalLM",
             "TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice",
@@ -122,7 +119,7 @@
 
 # Below: "    # Models"
 # Replace with:
-    "models.{{cookiecutter.lowercase_modelname}}": ["{{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP", "{{cookiecutter.camelcase_modelname}}Config", "{{cookiecutter.camelcase_modelname}}Tokenizer"],
+    "models.{{cookiecutter.lowercase_modelname}}": ["{{cookiecutter.camelcase_modelname}}Config", "{{cookiecutter.camelcase_modelname}}Tokenizer"],
 # End.
 
 # To replace in: "src/transformers/__init__.py"
@@ -130,7 +127,6 @@
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
         from .models.{{cookiecutter.lowercase_modelname}} import (
-            {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
             {{cookiecutter.camelcase_modelname}}ForMaskedLM,
             {{cookiecutter.camelcase_modelname}}ForCausalLM,
             {{cookiecutter.camelcase_modelname}}ForMultipleChoice,
@@ -144,7 +140,6 @@
         )
 {% else %}
         from .models.{{cookiecutter.lowercase_modelname}} import (
-            {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
             {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
             {{cookiecutter.camelcase_modelname}}ForCausalLM,
             {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
@@ -159,8 +154,7 @@
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
         from .models.{{cookiecutter.lowercase_modelname}} import (
-            TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
+            TF_{{cookiecutter.uppercase_modelname}}            TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
             TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
             TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
             TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
@@ -209,9 +203,9 @@
         from .models.{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}TokenizerFast
 # End.
 
-# Below: "    from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig"
+# Below: "    from .models.albert import AlbertConfig"
 # Replace with:
-    from .models.{{cookiecutter.lowercase_modelname}} import {{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP, {{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}Tokenizer
+    from .models.{{cookiecutter.lowercase_modelname}} import {{cookiecutter.uppercase_modelname}}{{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}Tokenizer
 # End.
 
 
@@ -227,11 +221,6 @@
 # Below: "# Add configs here"
 # Replace with:
         ("{{cookiecutter.lowercase_modelname}}", "{{cookiecutter.camelcase_modelname}}Config"),
-# End.
-
-# Below: "# Add archive maps here"
-# Replace with:
-        ("{{cookiecutter.lowercase_modelname}}", "{{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP"),
 # End.
 
 # Below: "# Add full (and cased) model names here"
