@@ -14,12 +14,12 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from transformers.cache_utils import Cache, DynamicCache, StaticCache
-from transformers.modeling_attn_mask_utils import AttentionMaskConverter
-from transformers.modeling_outputs import (MoeCausalLMOutputWithPast,
+from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_outputs import (MoeCausalLMOutputWithPast,
                                            MoeModelOutputWithPast)
-from transformers.modeling_utils import PreTrainedModel
-from transformers.utils import is_flash_attn_2_available, logging
+from ...modeling_utils import PreTrainedModel
+from ...utils import is_flash_attn_2_available, logging
 
 from .configuration_dbrx import DbrxAttentionConfig, DbrxConfig, DbrxFFNConfig
 
