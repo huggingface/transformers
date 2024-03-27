@@ -23,7 +23,7 @@ Get up and running with 🤗 Transformers! Whether you're a developer or an ever
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-!pip install transformers datasets evaluate accelerate
+!pip install transformers datasets
 ```
 
 You'll also need to install your preferred machine learning framework:
