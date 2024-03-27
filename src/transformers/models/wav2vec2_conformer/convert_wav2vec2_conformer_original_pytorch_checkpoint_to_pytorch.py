@@ -18,9 +18,11 @@
 import argparse
 import json
 import os
+from collections import namedtuple
 
 import fairseq
 import torch
+from fairseq import utils
 from fairseq.data import Dictionary
 
 from transformers import (
@@ -37,6 +39,7 @@ from transformers import (
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
+SAMPLE_RATE = 8000  # 8000, 16000
 MAPPING = {
     "post_extract_proj": "feature_projection.projection",
     "encoder.pos_conv.0": "encoder.pos_conv_embed.conv",
@@ -217,13 +220,21 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
         unused_weights.append(full_name)
 
 
+def import_user_module(user_dir: str):
+    arg = namedtuple("Arg", ["user_dir"])
+    arg = arg(user_dir.__str__())
+    utils.import_user_module(arg)
+
+
 @torch.no_grad()
 def convert_wav2vec2_conformer_checkpoint(
-    checkpoint_path, pytorch_dump_folder_path, config_path=None, dict_path=None, is_finetuned=True
+    checkpoint_path, pytorch_dump_folder_path, config_path=None, dict_path=None, is_finetuned=True, extension_path=None
 ):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
+    import_user_module(user_dir=extension_path)
+
     if config_path is not None:
         config = Wav2Vec2ConformerConfig.from_pretrained(config_path, hidden_act="swish")
     else:
@@ -266,7 +277,7 @@ def convert_wav2vec2_conformer_checkpoint(
             return_attention_mask = True if config.feat_extract_norm == "layer" else False
             feature_extractor = Wav2Vec2FeatureExtractor(
                 feature_size=1,
-                sampling_rate=16000,
+                sampling_rate=SAMPLE_RATE,
                 padding_value=0,
                 do_normalize=True,
                 return_attention_mask=return_attention_mask,
@@ -304,7 +315,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--not_finetuned", action="store_true", help="Whether the model to convert is a fine-tuned model or not"
     )
+    parser.add_argument("--extension_path", default=None, type=str, help="Extension path to override the task")
     args = parser.parse_args()
     convert_wav2vec2_conformer_checkpoint(
-        args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.dict_path, not args.not_finetuned
+        args.checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.config_path,
+        args.dict_path,
+        not args.not_finetuned,
+        args.extension_path,
     )
