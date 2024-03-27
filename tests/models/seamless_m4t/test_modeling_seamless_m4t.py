@@ -46,9 +46,6 @@ if is_torch_available():
         SeamlessM4TForTextToText,
         SeamlessM4TModel,
     )
-    from transformers.models.seamless_m4t.modeling_seamless_m4t import (
-        SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
 
 if is_speech_available():
     from transformers import SeamlessM4TProcessor
@@ -379,9 +376,9 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SeamlessM4TModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/hf-seamless-m4t-medium"
+        model = SeamlessM4TModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def _get_input_ids_and_config(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -667,9 +664,9 @@ class SeamlessM4TModelWithTextInputTest(
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SeamlessM4TModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/hf-seamless-m4t-medium"
+        model = SeamlessM4TModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

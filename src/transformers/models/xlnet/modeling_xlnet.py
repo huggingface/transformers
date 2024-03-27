@@ -43,11 +43,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "xlnet/xlnet-base-cased"
 _CONFIG_FOR_DOC = "XLNetConfig"
 
-XLNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "xlnet/xlnet-base-cased",
-    "xlnet/xlnet-large-cased",
-    # See all XLNet models at https://huggingface.co/models?filter=xlnet
-]
+
+from ..deprecated._archive_maps import XLNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):

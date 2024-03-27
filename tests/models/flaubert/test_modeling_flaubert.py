@@ -36,7 +36,6 @@ if is_torch_available():
         FlaubertModel,
         FlaubertWithLMHeadModel,
     )
-    from transformers.models.flaubert.modeling_flaubert import FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class FlaubertModelTester(object):
@@ -458,9 +457,9 @@ class FlaubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlaubertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "flaubert/flaubert_small_cased"
+        model = FlaubertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     @require_torch_accelerator

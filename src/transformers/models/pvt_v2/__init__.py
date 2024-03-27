@@ -25,7 +25,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_pvt_v2": ["PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtV2Config"],
+    "configuration_pvt_v2": ["PvtV2Config"],
 }
 
 try:
@@ -35,7 +35,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_pvt_v2"] = [
-        "PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "PvtV2ForImageClassification",
         "PvtV2Model",
         "PvtV2PreTrainedModel",
@@ -44,7 +43,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_pvt_v2 import PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtV2Config
+    from .configuration_pvt_v2 import PvtV2Config
 
     try:
         if not is_torch_available():
@@ -53,7 +52,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_pvt_v2 import (
-            PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
             PvtV2Backbone,
             PvtV2ForImageClassification,
             PvtV2Model,

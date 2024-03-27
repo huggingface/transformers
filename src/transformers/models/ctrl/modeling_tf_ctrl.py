@@ -43,10 +43,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "Salesforce/ctrl"
 _CONFIG_FOR_DOC = "CTRLConfig"
 
-TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Salesforce/ctrl"
-    # See all CTRL models at https://huggingface.co/models?filter=Salesforce/ctrl
-]
+
+from ..deprecated._archive_maps import TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def angle_defn(pos, i, d_model_size):

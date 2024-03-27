@@ -53,11 +53,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "microsoft/layoutlmv2-base-uncased"
 _CONFIG_FOR_DOC = "LayoutLMv2Config"
 
-LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/layoutlmv2-base-uncased",
-    "microsoft/layoutlmv2-large-uncased",
-    # See all LayoutLMv2 models at https://huggingface.co/models?filter=layoutlmv2
-]
+
+from ..deprecated._archive_maps import LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class LayoutLMv2Embeddings(nn.Module):
@@ -489,7 +486,6 @@ class LayoutLMv2PreTrainedModel(PreTrainedModel):
     """
 
     config_class = LayoutLMv2Config
-    pretrained_model_archive_map = LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST
     base_model_prefix = "layoutlmv2"
 
     def _init_weights(self, module):

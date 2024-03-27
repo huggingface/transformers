@@ -30,7 +30,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.models.openai.modeling_tf_openai import (
-        TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFOpenAIGPTDoubleHeadsModel,
         TFOpenAIGPTForSequenceClassification,
         TFOpenAIGPTLMHeadModel,
@@ -253,9 +252,9 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFOpenAIGPTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openai-community/openai-gpt"
+        model = TFOpenAIGPTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_tf

@@ -20,11 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "caidas/swin2sr-classicalsr-x2-64": (
-        "https://huggingface.co/caidas/swin2sr-classicalsr-x2-64/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class Swin2SRConfig(PretrainedConfig):

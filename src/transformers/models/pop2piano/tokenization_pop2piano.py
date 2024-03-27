@@ -35,12 +35,6 @@ VOCAB_FILES_NAMES = {
     "vocab": "vocab.json",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab": {
-        "sweetcocoa/pop2piano": "https://huggingface.co/sweetcocoa/pop2piano/blob/main/vocab.json",
-    },
-}
-
 
 def token_time_to_note(number, cutoff_time_idx, current_idx):
     current_idx += number
@@ -83,7 +77,6 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     model_input_names = ["token_ids", "attention_mask"]
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
 
     def __init__(
         self,

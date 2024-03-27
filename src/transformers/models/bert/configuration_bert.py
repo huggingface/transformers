@@ -24,49 +24,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google-bert/bert-base-uncased": "https://huggingface.co/google-bert/bert-base-uncased/resolve/main/config.json",
-    "google-bert/bert-large-uncased": "https://huggingface.co/google-bert/bert-large-uncased/resolve/main/config.json",
-    "google-bert/bert-base-cased": "https://huggingface.co/google-bert/bert-base-cased/resolve/main/config.json",
-    "google-bert/bert-large-cased": "https://huggingface.co/google-bert/bert-large-cased/resolve/main/config.json",
-    "google-bert/bert-base-multilingual-uncased": "https://huggingface.co/google-bert/bert-base-multilingual-uncased/resolve/main/config.json",
-    "google-bert/bert-base-multilingual-cased": "https://huggingface.co/google-bert/bert-base-multilingual-cased/resolve/main/config.json",
-    "google-bert/bert-base-chinese": "https://huggingface.co/google-bert/bert-base-chinese/resolve/main/config.json",
-    "google-bert/bert-base-german-cased": "https://huggingface.co/google-bert/bert-base-german-cased/resolve/main/config.json",
-    "google-bert/bert-large-uncased-whole-word-masking": (
-        "https://huggingface.co/google-bert/bert-large-uncased-whole-word-masking/resolve/main/config.json"
-    ),
-    "google-bert/bert-large-cased-whole-word-masking": (
-        "https://huggingface.co/google-bert/bert-large-cased-whole-word-masking/resolve/main/config.json"
-    ),
-    "google-bert/bert-large-uncased-whole-word-masking-finetuned-squad": (
-        "https://huggingface.co/google-bert/bert-large-uncased-whole-word-masking-finetuned-squad/resolve/main/config.json"
-    ),
-    "google-bert/bert-large-cased-whole-word-masking-finetuned-squad": (
-        "https://huggingface.co/google-bert/bert-large-cased-whole-word-masking-finetuned-squad/resolve/main/config.json"
-    ),
-    "google-bert/bert-base-cased-finetuned-mrpc": "https://huggingface.co/google-bert/bert-base-cased-finetuned-mrpc/resolve/main/config.json",
-    "google-bert/bert-base-german-dbmdz-cased": "https://huggingface.co/google-bert/bert-base-german-dbmdz-cased/resolve/main/config.json",
-    "google-bert/bert-base-german-dbmdz-uncased": "https://huggingface.co/google-bert/bert-base-german-dbmdz-uncased/resolve/main/config.json",
-    "cl-tohoku/bert-base-japanese": "https://huggingface.co/cl-tohoku/bert-base-japanese/resolve/main/config.json",
-    "cl-tohoku/bert-base-japanese-whole-word-masking": (
-        "https://huggingface.co/cl-tohoku/bert-base-japanese-whole-word-masking/resolve/main/config.json"
-    ),
-    "cl-tohoku/bert-base-japanese-char": (
-        "https://huggingface.co/cl-tohoku/bert-base-japanese-char/resolve/main/config.json"
-    ),
-    "cl-tohoku/bert-base-japanese-char-whole-word-masking": (
-        "https://huggingface.co/cl-tohoku/bert-base-japanese-char-whole-word-masking/resolve/main/config.json"
-    ),
-    "TurkuNLP/bert-base-finnish-cased-v1": (
-        "https://huggingface.co/TurkuNLP/bert-base-finnish-cased-v1/resolve/main/config.json"
-    ),
-    "TurkuNLP/bert-base-finnish-uncased-v1": (
-        "https://huggingface.co/TurkuNLP/bert-base-finnish-uncased-v1/resolve/main/config.json"
-    ),
-    "wietsedv/bert-base-dutch-cased": "https://huggingface.co/wietsedv/bert-base-dutch-cased/resolve/main/config.json",
-    # See all BERT models at https://huggingface.co/models?filter=bert
-}
+
+from ..deprecated._archive_maps import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class BertConfig(PretrainedConfig):

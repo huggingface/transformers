@@ -50,10 +50,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "mnaylor/mega-base-wikitext"
 _CONFIG_FOR_DOC = "MegaConfig"
 
-MEGA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "mnaylor/mega-base-wikitext",
-    # See all Mega models at https://huggingface.co/models?filter=mega
-]
+
+from ..deprecated._archive_maps import MEGA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class MegaEmbeddings(nn.Module):

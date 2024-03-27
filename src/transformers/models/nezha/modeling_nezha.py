@@ -55,13 +55,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "sijunhe/nezha-cn-base"
 _CONFIG_FOR_DOC = "NezhaConfig"
 
-NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "sijunhe/nezha-cn-base",
-    "sijunhe/nezha-cn-large",
-    "sijunhe/nezha-base-wwm",
-    "sijunhe/nezha-large-wwm",
-    # See all Nezha models at https://huggingface.co/models?filter=nezha
-]
+
+from ..deprecated._archive_maps import NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def load_tf_weights_in_nezha(model, config, tf_checkpoint_path):

@@ -32,7 +32,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import BitBackbone, BitForImageClassification, BitImageProcessor, BitModel
-    from transformers.models.bit.modeling_bit import BIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -269,9 +268,9 @@ class BitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BitModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/bit-50"
+        model = BitModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -285,13 +284,11 @@ def prepare_img():
 class BitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            BitImageProcessor.from_pretrained(BIT_PRETRAINED_MODEL_ARCHIVE_LIST[0]) if is_vision_available() else None
-        )
+        return BitImageProcessor.from_pretrained("google/bit-50") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = BitForImageClassification.from_pretrained(BIT_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
+        model = BitForImageClassification.from_pretrained("google/bit-50").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

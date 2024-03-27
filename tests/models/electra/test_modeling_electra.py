@@ -39,7 +39,6 @@ if is_torch_available():
         ElectraForTokenClassification,
         ElectraModel,
     )
-    from transformers.models.electra.modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class ElectraModelTester:
@@ -463,9 +462,9 @@ class ElectraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ElectraModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/electra-small-generator"
+        model = ElectraModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()

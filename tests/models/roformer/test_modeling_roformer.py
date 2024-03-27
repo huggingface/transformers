@@ -38,7 +38,6 @@ if is_torch_available():
         RoFormerModel,
     )
     from transformers.models.roformer.modeling_roformer import (
-        ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         RoFormerSelfAttention,
         RoFormerSinusoidalPositionalEmbedding,
     )
@@ -482,9 +481,9 @@ class RoFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = RoFormerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "junnyu/roformer_chinese_small"
+        model = RoFormerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"

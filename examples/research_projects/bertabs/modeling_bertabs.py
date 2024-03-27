@@ -33,10 +33,6 @@ from transformers import BertConfig, BertModel, PreTrainedModel
 
 MAX_SIZE = 5000
 
-BERTABS_FINETUNED_MODEL_ARCHIVE_LIST = [
-    "remi/bertabs-finetuned-cnndm-extractive-abstractive-summarization",
-]
-
 
 class BertAbsPreTrainedModel(PreTrainedModel):
     config_class = BertAbsConfig

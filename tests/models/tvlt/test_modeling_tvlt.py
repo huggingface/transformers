@@ -41,7 +41,6 @@ if is_torch_available():
     import torch.nn as nn
 
     from transformers import TvltForAudioVisualClassification, TvltForPreTraining, TvltModel
-    from transformers.models.tvlt.modeling_tvlt import TVLT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_datasets_available():
@@ -414,9 +413,9 @@ class TvltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TVLT_PRETRAINED_MODEL_ARCHIVE_LIST:
-            model = TvltModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "ZinengTang/tvlt-base"
+        model = TvltModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_training(self):
         if not self.model_tester.is_training:

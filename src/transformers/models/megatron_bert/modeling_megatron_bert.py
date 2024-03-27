@@ -57,10 +57,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MegatronBertConfig"
 _CHECKPOINT_FOR_DOC = "nvidia/megatron-bert-cased-345m"
 
-MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nvidia/megatron-bert-cased-345m",
-    # See all MegatronBERT models at https://huggingface.co/models?filter=megatron_bert
-]
+
+from ..deprecated._archive_maps import MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def load_tf_weights_in_megatron_bert(model, config, tf_checkpoint_path):

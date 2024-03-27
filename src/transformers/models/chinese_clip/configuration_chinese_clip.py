@@ -30,11 +30,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "OFA-Sys/chinese-clip-vit-base-patch16": (
-        "https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class ChineseCLIPTextConfig(PretrainedConfig):

@@ -16,6 +16,7 @@ jobs:
       package: transformers
       notebook_folder: transformers_doc
       languages: de en es fr hi it ko pt tr zh ja te
+      custom_container: huggingface/transformers-doc-builder
     secrets:
       token: ${{ secrets.HUGGINGFACE_PUSH }}
       hf_token: ${{ secrets.HF_DOC_BUILD_PUSH }}

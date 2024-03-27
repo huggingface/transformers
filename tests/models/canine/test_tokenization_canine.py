@@ -320,10 +320,6 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_torch_encode_plus_sent_to_model(self):
         pass
 
-    # tokenizer can be instantiated without any pretrained files, so no need for pretrained tokenizer list
-    def test_pretrained_model_lists(self):
-        pass
-
     # tokenizer does not have vocabulary
     def test_get_vocab(self):
         pass

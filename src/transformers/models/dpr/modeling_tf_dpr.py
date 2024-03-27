@@ -39,18 +39,12 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DPRConfig"
 
-TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/dpr-ctx_encoder-single-nq-base",
-    "facebook/dpr-ctx_encoder-multiset-base",
-]
-TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/dpr-question_encoder-single-nq-base",
-    "facebook/dpr-question_encoder-multiset-base",
-]
-TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/dpr-reader-single-nq-base",
-    "facebook/dpr-reader-multiset-base",
-]
+
+from ..deprecated._archive_maps import (  # noqa: F401, E402
+    TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,  # noqa: F401, E402
+    TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,  # noqa: F401, E402
+    TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,  # noqa: F401, E402
+)
 
 
 ##########

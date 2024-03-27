@@ -40,11 +40,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "EncodecConfig"
 
 
-ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/encodec_24khz",
-    "facebook/encodec_48khz",
-    # See all EnCodec models at https://huggingface.co/models?filter=encodec
-]
+from ..deprecated._archive_maps import ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass

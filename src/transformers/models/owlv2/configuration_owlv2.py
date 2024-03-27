@@ -27,9 +27,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-OWLV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/owlv2-base-patch16": "https://huggingface.co/google/owlv2-base-patch16/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import OWLV2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTTextConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2

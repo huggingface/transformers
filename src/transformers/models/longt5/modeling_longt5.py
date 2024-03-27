@@ -51,12 +51,8 @@ _CONFIG_FOR_DOC = "LongT5Config"
 _CHECKPOINT_FOR_DOC = "google/long-t5-local-base"
 
 # TODO: Update before the merge
-LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/long-t5-local-base",
-    "google/long-t5-local-large",
-    "google/long-t5-tglobal-base",
-    "google/long-t5-tglobal-large",
-]
+
+from ..deprecated._archive_maps import LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def _pad_to_multiple(x: torch.Tensor, block_len: int, dim: int, pad_value: int = 0) -> torch.Tensor:

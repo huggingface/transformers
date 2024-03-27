@@ -21,10 +21,8 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 logger = logging.get_logger(__name__)
 
-DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "shi-labs/dinat-mini-in1k-224": "https://huggingface.co/shi-labs/dinat-mini-in1k-224/resolve/main/config.json",
-    # See all Dinat models at https://huggingface.co/models?filter=dinat
-}
+
+from ..deprecated._archive_maps import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class DinatConfig(BackboneConfigMixin, PretrainedConfig):

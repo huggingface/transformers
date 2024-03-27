@@ -31,7 +31,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.models.layoutlm.modeling_tf_layoutlm import (
-        TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFLayoutLMForMaskedLM,
         TFLayoutLMForQuestionAnswering,
         TFLayoutLMForSequenceClassification,
@@ -265,9 +264,9 @@ class TFLayoutLMModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFLayoutLMModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/layoutlm-base-uncased"
+        model = TFLayoutLMModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     # TODO (Joao): fix me
     @unittest.skip("Onnx compliancy broke with TF 2.10")

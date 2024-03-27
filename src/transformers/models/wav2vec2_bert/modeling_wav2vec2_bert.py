@@ -64,10 +64,7 @@ _CTC_EXPECTED_OUTPUT = "'mr quilter is the apostle of the middle classes and we 
 _CTC_EXPECTED_LOSS = 17.04
 
 
-WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/w2v-bert-2.0",
-    # See all Wav2Vec2-BERT models at https://huggingface.co/models?filter=wav2vec2-bert
-]
+from ..deprecated._archive_maps import WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.seamless_m4t_v2.modeling_seamless_m4t_v2._compute_new_attention_mask

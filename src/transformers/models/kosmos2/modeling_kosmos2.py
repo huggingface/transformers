@@ -46,10 +46,8 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = Kosmos2Config
 
-KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/kosmos-2-patch14-224",
-    # See all KOSMOS-2 models at https://huggingface.co/models?filter=kosmos-2
-]
+
+from ..deprecated._archive_maps import KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):

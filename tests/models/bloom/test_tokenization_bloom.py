@@ -132,13 +132,6 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         predicted_text = [tokenizer.decode(x, clean_up_tokenization_spaces=False) for x in output_tokens]
         self.assertListEqual(predicted_text, input_text)
 
-    def test_pretrained_model_lists(self):
-        # The test has to be overriden because BLOOM uses ALiBi positional embeddings that does not have
-        # any sequence length constraints. This test of the parent class will fail since it relies on the
-        # maximum sequence length of the positoonal embeddings.
-        self.assertGreaterEqual(len(self.tokenizer_class.pretrained_vocab_files_map), 1)
-        self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
-
     @require_jinja
     def test_tokenization_for_chat(self):
         tokenizer = self.get_rust_tokenizer()

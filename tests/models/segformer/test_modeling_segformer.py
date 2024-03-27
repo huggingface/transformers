@@ -34,7 +34,6 @@ if is_torch_available():
         SegformerModel,
     )
     from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
-    from transformers.models.segformer.modeling_segformer import SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -335,9 +334,9 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SegformerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "nvidia/segformer-b0-finetuned-ade-512-512"
+        model = SegformerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

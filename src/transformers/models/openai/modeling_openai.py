@@ -46,10 +46,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "openai-community/openai-gpt"
 _CONFIG_FOR_DOC = "OpenAIGPTConfig"
 
-OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai-community/openai-gpt",
-    # See all OpenAI GPT models at https://huggingface.co/models?filter=openai-community/openai-gpt
-]
+
+from ..deprecated._archive_maps import OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):

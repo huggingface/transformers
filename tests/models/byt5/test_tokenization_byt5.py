@@ -300,10 +300,6 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 self.assertTrue(tokenizer.decode([255]) == "")
 
-    # tokenizer can be instantiated without any pretrained files, so no need for pretrained tokenizer list
-    def test_pretrained_model_lists(self):
-        pass
-
     # tokenizer does not have vocabulary
     def test_get_vocab(self):
         pass

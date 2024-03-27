@@ -24,11 +24,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "andreasmadsen/efficient_mlm_m0.40": (
-        "https://huggingface.co/andreasmadsen/efficient_mlm_m0.40/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 # Copied from transformers.models.roberta.configuration_roberta.RobertaConfig with FacebookAI/roberta-base->andreasmadsen/efficient_mlm_m0.40,RoBERTa->RoBERTa-PreLayerNorm,Roberta->RobertaPreLayerNorm,roberta->roberta-prelayernorm

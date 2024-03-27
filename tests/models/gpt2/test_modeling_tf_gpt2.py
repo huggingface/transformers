@@ -31,7 +31,6 @@ if is_tf_available():
 
     from transformers import GPT2Tokenizer
     from transformers.models.gpt2.modeling_tf_gpt2 import (
-        TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFGPT2DoubleHeadsModel,
         TFGPT2ForSequenceClassification,
         TFGPT2LMHeadModel,
@@ -422,9 +421,9 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFGPT2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openai-community/gpt2"
+        model = TFGPT2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     # overwrite from common since ONNX runtime optimization doesn't work with tf.gather() when the argument
     # `batch_dims` > 0"

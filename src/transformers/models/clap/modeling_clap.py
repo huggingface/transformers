@@ -44,11 +44,8 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "laion/clap-htsat-fused"
 
-CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "laion/clap-htsat-fused",
-    "laion/clap-htsat-unfused",
-    # See all clap models at https://huggingface.co/models?filter=clap
-]
+
+from ..deprecated._archive_maps import CLAP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Adapted from: https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/utils.py#L191

@@ -43,10 +43,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ProphenetConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/prophetnet-large-uncased"
 
-PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/prophetnet-large-uncased",
-    # See all ProphetNet models at https://huggingface.co/models?filter=prophetnet
-]
+
+from ..deprecated._archive_maps import PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 PROPHETNET_START_DOCSTRING = r"""

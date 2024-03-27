@@ -27,9 +27,8 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 logger = logging.get_logger(__name__)
 
-DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/dinov2-base": "https://huggingface.co/facebook/dinov2-base/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class Dinov2Config(BackboneConfigMixin, PretrainedConfig):

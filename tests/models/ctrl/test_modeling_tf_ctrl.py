@@ -31,7 +31,6 @@ if is_tf_available():
 
     from transformers.modeling_tf_utils import keras
     from transformers.models.ctrl.modeling_tf_ctrl import (
-        TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFCTRLForSequenceClassification,
         TFCTRLLMHeadModel,
         TFCTRLModel,
@@ -249,9 +248,9 @@ class TFCTRLModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFCTRLModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/ctrl"
+        model = TFCTRLModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_tf

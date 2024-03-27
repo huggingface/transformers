@@ -40,7 +40,6 @@ if is_torch_available():
         TimesformerForVideoClassification,
         TimesformerModel,
     )
-    from transformers.models.timesformer.modeling_timesformer import TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -213,9 +212,9 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TimesformerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/timesformer-base-finetuned-k400"
+        model = TimesformerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         if not self.has_attentions:

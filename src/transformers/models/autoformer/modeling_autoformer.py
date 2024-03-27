@@ -167,10 +167,7 @@ class AutoformerModelOutput(ModelOutput):
     static_features: Optional[torch.FloatTensor] = None
 
 
-AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "huggingface/autoformer-tourism-monthly",
-    # See all Autoformer models at https://huggingface.co/models?filter=autoformer
-]
+from ..deprecated._archive_maps import AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesFeatureEmbedder with TimeSeries->Autoformer

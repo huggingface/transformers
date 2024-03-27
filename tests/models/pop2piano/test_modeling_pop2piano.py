@@ -44,7 +44,6 @@ if is_torch_available():
     import torch
 
     from transformers import Pop2PianoForConditionalGeneration
-    from transformers.models.pop2piano.modeling_pop2piano import POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
@@ -607,9 +606,9 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Pop2PianoForConditionalGeneration.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "sweetcocoa/pop2piano"
+        model = Pop2PianoForConditionalGeneration.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @require_onnx
     def test_export_to_onnx(self):

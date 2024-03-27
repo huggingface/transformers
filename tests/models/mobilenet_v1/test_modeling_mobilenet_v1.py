@@ -30,7 +30,6 @@ if is_torch_available():
     import torch
 
     from transformers import MobileNetV1ForImageClassification, MobileNetV1Model
-    from transformers.models.mobilenet_v1.modeling_mobilenet_v1 import MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -212,9 +211,9 @@ class MobileNetV1ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MobileNetV1Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/mobilenet_v1_1.0_224"
+        model = MobileNetV1Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

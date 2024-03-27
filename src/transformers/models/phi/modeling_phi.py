@@ -62,12 +62,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "microsoft/phi-1"
 _CONFIG_FOR_DOC = "PhiConfig"
 
-PHI_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/phi-1",
-    "microsoft/phi-1_5",
-    "microsoft/phi-2",
-    # See all Phi models at https://huggingface.co/models?filter=phi
-]
+
+from ..deprecated._archive_maps import PHI_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data

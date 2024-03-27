@@ -44,10 +44,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "Speech2TextConfig"
 
 
-SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/s2t-small-librispeech-asr",
-    # See all Speech2Text models at https://huggingface.co/models?filter=speech_to_text
-]
+from ..deprecated._archive_maps import SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right

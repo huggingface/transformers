@@ -50,12 +50,6 @@ _CHECKPOINT_FOR_DOC = "google/pegasus-large"
 _CONFIG_FOR_DOC = "PegasusConfig"
 
 
-PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/pegasus-large",
-    # See all PEGASUS models at https://huggingface.co/models?filter=pegasus
-]
-
-
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """

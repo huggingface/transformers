@@ -30,7 +30,6 @@ if is_torch_available():
     import torch
 
     from transformers import EfficientNetForImageClassification, EfficientNetModel
-    from transformers.models.efficientnet.modeling_efficientnet import EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -212,9 +211,9 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = EfficientNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/efficientnet-b7"
+        model = EfficientNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @is_pipeline_test
     @require_vision

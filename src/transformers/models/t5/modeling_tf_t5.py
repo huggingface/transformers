@@ -58,14 +58,9 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
 
-TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google-t5/t5-small",
-    "google-t5/t5-base",
-    "google-t5/t5-large",
-    "google-t5/t5-3b",
-    "google-t5/t5-11b",
-    # See all T5 models at https://huggingface.co/models?filter=t5
-]
+
+from ..deprecated._archive_maps import TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
 
 ####################################################
 # TF 2.0 Models are constructed using Keras imperative API by sub-classing

@@ -58,14 +58,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "openai-community/gpt2"
 _CONFIG_FOR_DOC = "GPT2Config"
 
-TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai-community/gpt2",
-    "openai-community/gpt2-medium",
-    "openai-community/gpt2-large",
-    "openai-community/gpt2-xl",
-    "distilbert/distilgpt2",
-    # See all GPT-2 models at https://huggingface.co/models?filter=openai-community/gpt2
-]
+
+from ..deprecated._archive_maps import TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class TFAttention(keras.layers.Layer):

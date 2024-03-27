@@ -23,10 +23,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "nielsr/canine-s": 2048,
-}
-
 # Unicode defines 1,114,112 total “codepoints”
 UNICODE_VOCAB_SIZE = 1114112
 
@@ -72,8 +68,6 @@ class CanineTokenizer(PreTrainedTokenizer):
         model_max_length (`int`, *optional*, defaults to 2048):
                 The maximum sentence length the model accepts.
     """
-
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,

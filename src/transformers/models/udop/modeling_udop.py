@@ -46,10 +46,8 @@ from ...utils import (
 
 logger = logging.getLogger(__name__)
 
-UDOP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/udop-large",
-    # See all UDOP models at https://huggingface.co/models?filter=udop
-]
+
+from ..deprecated._archive_maps import UDOP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 _CONFIG_FOR_DOC = "UdopConfig"

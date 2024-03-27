@@ -57,11 +57,9 @@ _DUMMY_BBOX = [
     [[13, 14, 15, 16], [17, 18, 19, 20], [21, 22, 23, 24]],
 ]
 
-TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/layoutlmv3-base",
-    "microsoft/layoutlmv3-large",
-    # See all LayoutLMv3 models at https://huggingface.co/models?filter=layoutlmv3
-]
+
+from ..deprecated._archive_maps import TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
 
 LARGE_NEGATIVE = -1e8
 

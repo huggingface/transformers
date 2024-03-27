@@ -65,10 +65,6 @@ if is_tf_available():
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         TF_MODEL_MAPPING,
     )
-    from transformers.models.bert.modeling_tf_bert import TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.models.gpt2.modeling_tf_gpt2 import TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.models.t5.modeling_tf_t5 import TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.models.tapas.modeling_tf_tapas import TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class NewModelConfig(BertConfig):
@@ -107,54 +103,54 @@ class TFAutoModelTest(unittest.TestCase):
 
     @slow
     def test_model_for_causal_lm(self):
-        for model_name in TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, GPT2Config)
+        model_name = "openai-community/gpt2"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, GPT2Config)
 
-            model = TFAutoModelForCausalLM.from_pretrained(model_name)
-            model, loading_info = TFAutoModelForCausalLM.from_pretrained(model_name, output_loading_info=True)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, TFGPT2LMHeadModel)
+        model = TFAutoModelForCausalLM.from_pretrained(model_name)
+        model, loading_info = TFAutoModelForCausalLM.from_pretrained(model_name, output_loading_info=True)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, TFGPT2LMHeadModel)
 
     @slow
     def test_lmhead_model_from_pretrained(self):
-        for model_name in TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, BertConfig)
+        model_name = "openai-community/gpt2"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, BertConfig)
 
-            model = TFAutoModelWithLMHead.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, TFBertForMaskedLM)
+        model = TFAutoModelWithLMHead.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, TFBertForMaskedLM)
 
     @slow
     def test_model_for_masked_lm(self):
-        for model_name in TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, BertConfig)
+        model_name = "openai-community/gpt2"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, BertConfig)
 
-            model = TFAutoModelForMaskedLM.from_pretrained(model_name)
-            model, loading_info = TFAutoModelForMaskedLM.from_pretrained(model_name, output_loading_info=True)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, TFBertForMaskedLM)
+        model = TFAutoModelForMaskedLM.from_pretrained(model_name)
+        model, loading_info = TFAutoModelForMaskedLM.from_pretrained(model_name, output_loading_info=True)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, TFBertForMaskedLM)
 
     @slow
     def test_model_for_encoder_decoder_lm(self):
-        for model_name in TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, T5Config)
+        model_name = "openai-community/gpt2"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, T5Config)
 
-            model = TFAutoModelForSeq2SeqLM.from_pretrained(model_name)
-            model, loading_info = TFAutoModelForSeq2SeqLM.from_pretrained(model_name, output_loading_info=True)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, TFT5ForConditionalGeneration)
+        model = TFAutoModelForSeq2SeqLM.from_pretrained(model_name)
+        model, loading_info = TFAutoModelForSeq2SeqLM.from_pretrained(model_name, output_loading_info=True)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, TFT5ForConditionalGeneration)
 
     @slow
     def test_sequence_classification_model_from_pretrained(self):
-        # for model_name in TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        #     model_name = 'openai-community/gpt2'
         for model_name in ["google-bert/bert-base-uncased"]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
@@ -166,7 +162,7 @@ class TFAutoModelTest(unittest.TestCase):
 
     @slow
     def test_question_answering_model_from_pretrained(self):
-        # for model_name in TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        #     model_name = 'openai-community/gpt2'
         for model_name in ["google-bert/bert-base-uncased"]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
@@ -179,17 +175,17 @@ class TFAutoModelTest(unittest.TestCase):
     @slow
     @require_tensorflow_probability
     def test_table_question_answering_model_from_pretrained(self):
-        for model_name in TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST[5:6]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, TapasConfig)
+        model_name = "google/tapas-base"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, TapasConfig)
 
-            model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_name)
-            model, loading_info = TFAutoModelForTableQuestionAnswering.from_pretrained(
-                model_name, output_loading_info=True
-            )
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, TFTapasForQuestionAnswering)
+        model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_name)
+        model, loading_info = TFAutoModelForTableQuestionAnswering.from_pretrained(
+            model_name, output_loading_info=True
+        )
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, TFTapasForQuestionAnswering)
 
     def test_from_pretrained_identifier(self):
         model = TFAutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)

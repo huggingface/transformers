@@ -39,7 +39,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SegGptForImageSegmentation, SegGptModel
-    from transformers.models.seggpt.modeling_seggpt import SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -301,9 +300,9 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SegGptModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "BAAI/seggpt-vit-large"
+        model = SegGptModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 def prepare_img():

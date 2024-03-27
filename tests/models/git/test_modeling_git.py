@@ -33,7 +33,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, GitForCausalLM, GitModel, GitVisionModel
-    from transformers.models.git.modeling_git import GIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -196,9 +195,9 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in GIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GitVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/git-base"
+        model = GitVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class GitModelTester:
@@ -450,9 +449,9 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in GIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GitModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/git-base"
+        model = GitModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="GIT has pixel values as additional input")
     def test_beam_search_generate_dict_outputs_use_cache(self):

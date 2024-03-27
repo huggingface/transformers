@@ -36,10 +36,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "openbmb/cpm-ant-10b"
 _CONFIG_FOR_DOC = "CpmAntConfig"
 
-CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openbmb/cpm-ant-10b",
-    # See all CPMAnt models at https://huggingface.co/models?filter=cpmant
-]
+
+from ..deprecated._archive_maps import CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class CpmAntLayerNorm(nn.Module):

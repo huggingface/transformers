@@ -25,13 +25,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "openai-community/gpt2": "https://huggingface.co/openai-community/gpt2/resolve/main/config.json",
-    "openai-community/gpt2-medium": "https://huggingface.co/openai-community/gpt2-medium/resolve/main/config.json",
-    "openai-community/gpt2-large": "https://huggingface.co/openai-community/gpt2-large/resolve/main/config.json",
-    "openai-community/gpt2-xl": "https://huggingface.co/openai-community/gpt2-xl/resolve/main/config.json",
-    "distilbert/distilgpt2": "https://huggingface.co/distilbert/distilgpt2/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class GPT2Config(PretrainedConfig):

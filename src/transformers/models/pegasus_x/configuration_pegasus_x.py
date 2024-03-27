@@ -20,11 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/pegasus-x-base": "https://huggingface.co/google/pegasus-x-base/resolve/main/config.json",
-    "google/pegasus-x-large": "https://huggingface.co/google/pegasus-x-large/resolve/main/config.json",
-    # See all PEGASUS-X models at https://huggingface.co/models?filter=pegasus-x
-}
+
+from ..deprecated._archive_maps import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class PegasusXConfig(PretrainedConfig):

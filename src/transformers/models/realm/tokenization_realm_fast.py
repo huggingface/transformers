@@ -29,75 +29,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "google/realm-cc-news-pretrained-embedder": (
-            "https://huggingface.co/google/realm-cc-news-pretrained-embedder/resolve/main/vocab.txt"
-        ),
-        "google/realm-cc-news-pretrained-encoder": (
-            "https://huggingface.co/google/realm-cc-news-pretrained-encoder/resolve/main/vocab.txt"
-        ),
-        "google/realm-cc-news-pretrained-scorer": (
-            "https://huggingface.co/google/realm-cc-news-pretrained-scorer/resolve/main/vocab.txt"
-        ),
-        "google/realm-cc-news-pretrained-openqa": (
-            "https://huggingface.co/google/realm-cc-news-pretrained-openqa/aresolve/main/vocab.txt"
-        ),
-        "google/realm-orqa-nq-openqa": "https://huggingface.co/google/realm-orqa-nq-openqa/resolve/main/vocab.txt",
-        "google/realm-orqa-nq-reader": "https://huggingface.co/google/realm-orqa-nq-reader/resolve/main/vocab.txt",
-        "google/realm-orqa-wq-openqa": "https://huggingface.co/google/realm-orqa-wq-openqa/resolve/main/vocab.txt",
-        "google/realm-orqa-wq-reader": "https://huggingface.co/google/realm-orqa-wq-reader/resolve/main/vocab.txt",
-    },
-    "tokenizer_file": {
-        "google/realm-cc-news-pretrained-embedder": (
-            "https://huggingface.co/google/realm-cc-news-pretrained-embedder/resolve/main/tokenizer.jsont"
-        ),
-        "google/realm-cc-news-pretrained-encoder": (
-            "https://huggingface.co/google/realm-cc-news-pretrained-encoder/resolve/main/tokenizer.json"
-        ),
-        "google/realm-cc-news-pretrained-scorer": (
-            "https://huggingface.co/google/realm-cc-news-pretrained-scorer/resolve/main/tokenizer.json"
-        ),
-        "google/realm-cc-news-pretrained-openqa": (
-            "https://huggingface.co/google/realm-cc-news-pretrained-openqa/aresolve/main/tokenizer.json"
-        ),
-        "google/realm-orqa-nq-openqa": (
-            "https://huggingface.co/google/realm-orqa-nq-openqa/resolve/main/tokenizer.json"
-        ),
-        "google/realm-orqa-nq-reader": (
-            "https://huggingface.co/google/realm-orqa-nq-reader/resolve/main/tokenizer.json"
-        ),
-        "google/realm-orqa-wq-openqa": (
-            "https://huggingface.co/google/realm-orqa-wq-openqa/resolve/main/tokenizer.json"
-        ),
-        "google/realm-orqa-wq-reader": (
-            "https://huggingface.co/google/realm-orqa-wq-reader/resolve/main/tokenizer.json"
-        ),
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/realm-cc-news-pretrained-embedder": 512,
-    "google/realm-cc-news-pretrained-encoder": 512,
-    "google/realm-cc-news-pretrained-scorer": 512,
-    "google/realm-cc-news-pretrained-openqa": 512,
-    "google/realm-orqa-nq-openqa": 512,
-    "google/realm-orqa-nq-reader": 512,
-    "google/realm-orqa-wq-openqa": 512,
-    "google/realm-orqa-wq-reader": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "google/realm-cc-news-pretrained-embedder": {"do_lower_case": True},
-    "google/realm-cc-news-pretrained-encoder": {"do_lower_case": True},
-    "google/realm-cc-news-pretrained-scorer": {"do_lower_case": True},
-    "google/realm-cc-news-pretrained-openqa": {"do_lower_case": True},
-    "google/realm-orqa-nq-openqa": {"do_lower_case": True},
-    "google/realm-orqa-nq-reader": {"do_lower_case": True},
-    "google/realm-orqa-wq-openqa": {"do_lower_case": True},
-    "google/realm-orqa-wq-reader": {"do_lower_case": True},
-}
-
 
 class RealmTokenizerFast(PreTrainedTokenizerFast):
     r"""
@@ -143,9 +74,6 @@ class RealmTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = RealmTokenizer
 
     def __init__(

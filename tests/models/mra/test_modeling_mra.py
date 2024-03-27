@@ -36,7 +36,6 @@ if is_torch_available():
         MraForTokenClassification,
         MraModel,
     )
-    from transformers.models.mra.modeling_mra import MRA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class MraModelTester:
@@ -352,9 +351,9 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MRA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MraModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "uw-madison/mra-base-512-4"
+        model = MraModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="MRA does not output attentions")
     def test_attention_outputs(self):

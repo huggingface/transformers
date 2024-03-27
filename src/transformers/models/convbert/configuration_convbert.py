@@ -24,14 +24,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "YituTech/conv-bert-base": "https://huggingface.co/YituTech/conv-bert-base/resolve/main/config.json",
-    "YituTech/conv-bert-medium-small": (
-        "https://huggingface.co/YituTech/conv-bert-medium-small/resolve/main/config.json"
-    ),
-    "YituTech/conv-bert-small": "https://huggingface.co/YituTech/conv-bert-small/resolve/main/config.json",
-    # See all ConvBERT models at https://huggingface.co/models?filter=convbert
-}
+
+from ..deprecated._archive_maps import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class ConvBertConfig(PretrainedConfig):

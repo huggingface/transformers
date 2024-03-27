@@ -49,10 +49,7 @@ _CONFIG_FOR_DOC = "M2M100Config"
 _CHECKPOINT_FOR_DOC = "facebook/m2m100_418M"
 
 
-M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/m2m100_418M",
-    # See all M2M100 models at https://huggingface.co/models?filter=m2m_100
-]
+from ..deprecated._archive_maps import M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right

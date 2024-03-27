@@ -65,17 +65,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "andreasmadsen/efficient_mlm_m0.40"
 _CONFIG_FOR_DOC = "RobertaPreLayerNormConfig"
 
-TF_ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "andreasmadsen/efficient_mlm_m0.15",
-    "andreasmadsen/efficient_mlm_m0.20",
-    "andreasmadsen/efficient_mlm_m0.30",
-    "andreasmadsen/efficient_mlm_m0.40",
-    "andreasmadsen/efficient_mlm_m0.50",
-    "andreasmadsen/efficient_mlm_m0.60",
-    "andreasmadsen/efficient_mlm_m0.70",
-    "andreasmadsen/efficient_mlm_m0.80",
-    # See all RoBERTaWithPreLayerNorm models at https://huggingface.co/models?filter=roberta_with_prelayernorm
-]
+
+from ..deprecated._archive_maps import TF_ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaEmbeddings with Roberta->RobertaPreLayerNorm

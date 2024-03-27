@@ -47,10 +47,7 @@ _IMAGE_CLASS_CHECKPOINT = "google/vit-hybrid-base-bit-384"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/vit-hybrid-base-bit-384",
-    # See all ViT hybrid models at https://huggingface.co/models?filter=vit-hybrid
-]
+from ..deprecated._archive_maps import VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class ViTHybridEmbeddings(nn.Module):

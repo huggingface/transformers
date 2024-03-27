@@ -28,43 +28,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "microsoft/deberta-base": "https://huggingface.co/microsoft/deberta-base/resolve/main/vocab.json",
-        "microsoft/deberta-large": "https://huggingface.co/microsoft/deberta-large/resolve/main/vocab.json",
-        "microsoft/deberta-xlarge": "https://huggingface.co/microsoft/deberta-xlarge/resolve/main/vocab.json",
-        "microsoft/deberta-base-mnli": "https://huggingface.co/microsoft/deberta-base-mnli/resolve/main/vocab.json",
-        "microsoft/deberta-large-mnli": "https://huggingface.co/microsoft/deberta-large-mnli/resolve/main/vocab.json",
-        "microsoft/deberta-xlarge-mnli": (
-            "https://huggingface.co/microsoft/deberta-xlarge-mnli/resolve/main/vocab.json"
-        ),
-    },
-    "merges_file": {
-        "microsoft/deberta-base": "https://huggingface.co/microsoft/deberta-base/resolve/main/merges.txt",
-        "microsoft/deberta-large": "https://huggingface.co/microsoft/deberta-large/resolve/main/merges.txt",
-        "microsoft/deberta-xlarge": "https://huggingface.co/microsoft/deberta-xlarge/resolve/main/merges.txt",
-        "microsoft/deberta-base-mnli": "https://huggingface.co/microsoft/deberta-base-mnli/resolve/main/merges.txt",
-        "microsoft/deberta-large-mnli": "https://huggingface.co/microsoft/deberta-large-mnli/resolve/main/merges.txt",
-        "microsoft/deberta-xlarge-mnli": (
-            "https://huggingface.co/microsoft/deberta-xlarge-mnli/resolve/main/merges.txt"
-        ),
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "microsoft/deberta-base": 512,
-    "microsoft/deberta-large": 512,
-    "microsoft/deberta-xlarge": 512,
-    "microsoft/deberta-base-mnli": 512,
-    "microsoft/deberta-large-mnli": 512,
-    "microsoft/deberta-xlarge-mnli": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "microsoft/deberta-base": {"do_lower_case": False},
-    "microsoft/deberta-large": {"do_lower_case": False},
-}
-
 
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
@@ -172,8 +135,6 @@ class DebertaTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask", "token_type_ids"]
 
     def __init__(

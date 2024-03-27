@@ -29,7 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import BlipTextModel
-    from transformers.models.blip.modeling_blip import BLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class BlipTextModelTester:
@@ -173,9 +172,9 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BlipTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip-vqa-base"
+        model = BlipTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_pt_tf_model_equivalence(self):
         super().test_pt_tf_model_equivalence(allow_missing_keys=True)

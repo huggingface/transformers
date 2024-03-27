@@ -51,12 +51,6 @@ _CONFIG_FOR_DOC = "MarianConfig"
 _CHECKPOINT_FOR_DOC = "Helsinki-NLP/opus-mt-en-de"
 
 
-MARIAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Helsinki-NLP/opus-mt-en-de",
-    # See all Marian models at https://huggingface.co/models?filter=marian
-]
-
-
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """

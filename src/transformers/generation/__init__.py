@@ -82,6 +82,7 @@ else:
         "MaxNewTokensCriteria",
         "MaxLengthCriteria",
         "MaxTimeCriteria",
+        "EosTokenCriteria",
         "StoppingCriteria",
         "StoppingCriteriaList",
         "validate_stopping_criteria",
@@ -217,6 +218,7 @@ if TYPE_CHECKING:
             WhisperTimeStampLogitsProcessor,
         )
         from .stopping_criteria import (
+            EosTokenCriteria,
             MaxLengthCriteria,
             MaxNewTokensCriteria,
             MaxTimeCriteria,

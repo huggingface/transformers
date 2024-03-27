@@ -39,22 +39,6 @@ VOCAB_FILES_NAMES = {
     "genres_file": "genres.json",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "artists_file": {
-        "jukebox": "https://huggingface.co/ArthurZ/jukebox/blob/main/artists.json",
-    },
-    "genres_file": {
-        "jukebox": "https://huggingface.co/ArthurZ/jukebox/blob/main/genres.json",
-    },
-    "lyrics_file": {
-        "jukebox": "https://huggingface.co/ArthurZ/jukebox/blob/main/lyrics.json",
-    },
-}
-
-PRETRAINED_LYRIC_TOKENS_SIZES = {
-    "jukebox": 512,
-}
-
 
 class JukeboxTokenizer(PreTrainedTokenizer):
     """
@@ -112,8 +96,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_lyric_input_size = PRETRAINED_LYRIC_TOKENS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(

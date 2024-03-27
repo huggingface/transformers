@@ -39,7 +39,6 @@ if is_torch_available():
     import torch
 
     from transformers import UdopEncoderModel, UdopForConditionalGeneration, UdopModel, UdopProcessor
-    from transformers.models.udop.modeling_udop import UDOP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -359,9 +358,9 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in UDOP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = UdopForConditionalGeneration.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/udop-large"
+        model = UdopForConditionalGeneration.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class UdopEncoderOnlyModelTester:

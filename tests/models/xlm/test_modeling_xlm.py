@@ -36,7 +36,6 @@ if is_torch_available():
         XLMModel,
         XLMWithLMHeadModel,
     )
-    from transformers.models.xlm.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class XLMModelTester:
@@ -505,9 +504,9 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in XLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = XLMModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "FacebookAI/xlm-mlm-en-2048"
+        model = XLMModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

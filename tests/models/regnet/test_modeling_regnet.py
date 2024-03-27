@@ -31,7 +31,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import RegNetForImageClassification, RegNetModel
-    from transformers.models.regnet.modeling_regnet import REGNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -220,9 +219,9 @@ class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in REGNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = RegNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/regnet-y-040"
+        model = RegNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -236,15 +235,11 @@ def prepare_img():
 class RegNetModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            AutoImageProcessor.from_pretrained(REGNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
-            if is_vision_available()
-            else None
-        )
+        return AutoImageProcessor.from_pretrained("facebook/regnet-y-040") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = RegNetForImageClassification.from_pretrained(REGNET_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
+        model = RegNetForImageClassification.from_pretrained("facebook/regnet-y-040").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

@@ -32,7 +32,6 @@ if is_torch_available():
     import torch
 
     from transformers import UperNetForSemanticSegmentation
-    from transformers.models.upernet.modeling_upernet import UPERNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -248,9 +247,9 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in UPERNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = UperNetForSemanticSegmentation.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openmmlab/upernet-convnext-tiny"
+        model = UperNetForSemanticSegmentation.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of ADE20k

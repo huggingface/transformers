@@ -59,14 +59,6 @@ _CHECKPOINT_FOR_DOC = "mt5-small"
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
-MT5_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/mt5-small",
-    "google/mt5-base",
-    "google/mt5-large",
-    "google/mt5-xl",
-    "google/mt5-xxl",
-    # See all mT5 models at https://huggingface.co/models?filter=mt5
-]
 
 PARALLELIZE_DOCSTRING = r"""
     This is an experimental feature and is a subject to change at a moment's notice.

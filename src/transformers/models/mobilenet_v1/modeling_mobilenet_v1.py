@@ -43,11 +43,7 @@ _IMAGE_CLASS_CHECKPOINT = "google/mobilenet_v1_1.0_224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/mobilenet_v1_1.0_224",
-    "google/mobilenet_v1_0.75_192",
-    # See all MobileNetV1 models at https://huggingface.co/models?filter=mobilenet_v1
-]
+from ..deprecated._archive_maps import MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def _build_tf_to_pytorch_map(model, config, tf_weights=None):

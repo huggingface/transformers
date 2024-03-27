@@ -26,10 +26,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "hustvl/yolos-small": "https://huggingface.co/hustvl/yolos-small/resolve/main/config.json",
-    # See all YOLOS models at https://huggingface.co/models?filter=yolos
-}
+
+from ..deprecated._archive_maps import YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class YolosConfig(PretrainedConfig):

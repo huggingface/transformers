@@ -40,7 +40,6 @@ if is_torch_available():
         NezhaForTokenClassification,
         NezhaModel,
     )
-    from transformers.models.nezha.modeling_nezha import NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class NezhaModelTester:
@@ -432,9 +431,9 @@ class NezhaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = NezhaModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "sijunhe/nezha-cn-base"
+        model = NezhaModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     @require_torch_gpu

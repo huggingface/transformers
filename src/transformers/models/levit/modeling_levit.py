@@ -47,10 +47,8 @@ _EXPECTED_OUTPUT_SHAPE = [1, 16, 384]
 _IMAGE_CLASS_CHECKPOINT = "facebook/levit-128S"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/levit-128S",
-    # See all LeViT models at https://huggingface.co/models?filter=levit
-]
+
+from ..deprecated._archive_maps import LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass

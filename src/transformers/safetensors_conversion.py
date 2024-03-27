@@ -84,24 +84,28 @@ def get_conversion_pr_reference(api: HfApi, model_id: str, **kwargs):
     return sha
 
 
-def auto_conversion(pretrained_model_name_or_path: str, **cached_file_kwargs):
-    api = HfApi(token=cached_file_kwargs.get("token"))
-    sha = get_conversion_pr_reference(api, pretrained_model_name_or_path, **cached_file_kwargs)
+def auto_conversion(pretrained_model_name_or_path: str, ignore_errors_during_conversion=False, **cached_file_kwargs):
+    try:
+        api = HfApi(token=cached_file_kwargs.get("token"))
+        sha = get_conversion_pr_reference(api, pretrained_model_name_or_path, **cached_file_kwargs)
 
-    if sha is None:
-        return None, None
-    cached_file_kwargs["revision"] = sha
-    del cached_file_kwargs["_commit_hash"]
+        if sha is None:
+            return None, None
+        cached_file_kwargs["revision"] = sha
+        del cached_file_kwargs["_commit_hash"]
 
-    # This is an additional HEAD call that could be removed if we could infer sharded/non-sharded from the PR
-    # description.
-    sharded = api.file_exists(
-        pretrained_model_name_or_path,
-        "model.safetensors.index.json",
-        revision=sha,
-        token=cached_file_kwargs.get("token"),
-    )
-    filename = "model.safetensors.index.json" if sharded else "model.safetensors"
+        # This is an additional HEAD call that could be removed if we could infer sharded/non-sharded from the PR
+        # description.
+        sharded = api.file_exists(
+            pretrained_model_name_or_path,
+            "model.safetensors.index.json",
+            revision=sha,
+            token=cached_file_kwargs.get("token"),
+        )
+        filename = "model.safetensors.index.json" if sharded else "model.safetensors"
 
-    resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
-    return resolved_archive_file, sha, sharded
+        resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
+        return resolved_archive_file, sha, sharded
+    except Exception as e:
+        if not ignore_errors_during_conversion:
+            raise e

@@ -20,10 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/pegasus-large": "https://huggingface.co/google/pegasus-large/resolve/main/config.json",
-    # See all PEGASUS models at https://huggingface.co/models?filter=pegasus
-}
+
+from ..deprecated._archive_maps import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class PegasusConfig(PretrainedConfig):

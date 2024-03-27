@@ -41,7 +41,6 @@ if is_tf_available():
         TFDeiTModel,
     )
     from transformers.modeling_tf_utils import keras
-    from transformers.models.deit.modeling_tf_deit import TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -252,9 +251,9 @@ class TFDeiTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFDeiTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/deit-base-distilled-patch16-224"
+        model = TFDeiTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

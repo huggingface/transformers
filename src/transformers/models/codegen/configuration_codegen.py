@@ -25,20 +25,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Salesforce/codegen-350M-nl": "https://huggingface.co/Salesforce/codegen-350M-nl/resolve/main/config.json",
-    "Salesforce/codegen-350M-multi": "https://huggingface.co/Salesforce/codegen-350M-multi/resolve/main/config.json",
-    "Salesforce/codegen-350M-mono": "https://huggingface.co/Salesforce/codegen-350M-mono/resolve/main/config.json",
-    "Salesforce/codegen-2B-nl": "https://huggingface.co/Salesforce/codegen-2B-nl/resolve/main/config.json",
-    "Salesforce/codegen-2B-multi": "https://huggingface.co/Salesforce/codegen-2B-multi/resolve/main/config.json",
-    "Salesforce/codegen-2B-mono": "https://huggingface.co/Salesforce/codegen-2B-mono/resolve/main/config.json",
-    "Salesforce/codegen-6B-nl": "https://huggingface.co/Salesforce/codegen-6B-nl/resolve/main/config.json",
-    "Salesforce/codegen-6B-multi": "https://huggingface.co/Salesforce/codegen-6B-multi/resolve/main/config.json",
-    "Salesforce/codegen-6B-mono": "https://huggingface.co/Salesforce/codegen-6B-mono/resolve/main/config.json",
-    "Salesforce/codegen-16B-nl": "https://huggingface.co/Salesforce/codegen-16B-nl/resolve/main/config.json",
-    "Salesforce/codegen-16B-multi": "https://huggingface.co/Salesforce/codegen-16B-multi/resolve/main/config.json",
-    "Salesforce/codegen-16B-mono": "https://huggingface.co/Salesforce/codegen-16B-mono/resolve/main/config.json",
-}
+from ..deprecated._archive_maps import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class CodeGenConfig(PretrainedConfig):

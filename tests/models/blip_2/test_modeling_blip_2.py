@@ -32,6 +32,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -48,7 +49,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import Blip2ForConditionalGeneration, Blip2Model, Blip2VisionModel
-    from transformers.models.blip_2.modeling_blip_2 import BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -216,9 +216,9 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Blip2VisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip2-opt-2.7b"
+        model = Blip2VisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class Blip2QFormerModelTester:
@@ -434,7 +434,7 @@ class Blip2ForConditionalGenerationDecoderOnlyModelTester:
 
 
 @require_torch
-class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unittest.TestCase):
+class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
@@ -503,9 +503,9 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unittest.Te
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST:
-            model = Blip2ForConditionalGeneration.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip2-opt-2.7b"
+        model = Blip2ForConditionalGeneration.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # this class is based on `T5ModelTester` found in tests/models/t5/test_modeling_t5.py
@@ -683,7 +683,7 @@ class Blip2ModelTester:
 
 
 @require_torch
-class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration, Blip2Model) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -765,9 +765,9 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST:
-            model = Blip2ForConditionalGeneration.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip2-opt-2.7b"
+        model = Blip2ForConditionalGeneration.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_get_text_features(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -869,7 +869,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         prompt = "Question: which city is this? Answer:"
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
 
-        predictions = model.generate(**inputs)
+        # max_length for BLIP includes prompt length from now on, use max_new_tokens
+        predictions = model.generate(**inputs, max_new_tokens=11)
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output

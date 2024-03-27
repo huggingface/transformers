@@ -25,15 +25,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "almanach/camembert-base": "https://huggingface.co/almanach/camembert-base/resolve/main/config.json",
-    "umberto-commoncrawl-cased-v1": (
-        "https://huggingface.co/Musixmatch/umberto-commoncrawl-cased-v1/resolve/main/config.json"
-    ),
-    "umberto-wikipedia-uncased-v1": (
-        "https://huggingface.co/Musixmatch/umberto-wikipedia-uncased-v1/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class CamembertConfig(PretrainedConfig):

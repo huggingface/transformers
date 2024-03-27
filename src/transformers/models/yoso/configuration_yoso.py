@@ -20,10 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "uw-madison/yoso-4096": "https://huggingface.co/uw-madison/yoso-4096/resolve/main/config.json",
-    # See all YOSO models at https://huggingface.co/models?filter=yoso
-}
+
+from ..deprecated._archive_maps import YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class YosoConfig(PretrainedConfig):

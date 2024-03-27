@@ -39,7 +39,6 @@ if is_torch_available():
         RoCBertForTokenClassification,
         RoCBertModel,
     )
-    from transformers.models.roc_bert.modeling_roc_bert import ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class RoCBertModelTester:
@@ -718,9 +717,9 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = RoCBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "weiweishi/roc-bert-base-zh"
+        model = RoCBertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

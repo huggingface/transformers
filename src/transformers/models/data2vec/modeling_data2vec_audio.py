@@ -62,13 +62,7 @@ _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND
 _CTC_EXPECTED_LOSS = 66.95
 
 
-DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/data2vec-audio-base",
-    "facebook/data2vec-audio-base-10m",
-    "facebook/data2vec-audio-base-100h",
-    "facebook/data2vec-audio-base-960h",
-    # See all Data2VecAudio models at https://huggingface.co/models?filter=data2vec-audio
-]
+from ..deprecated._archive_maps import DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices

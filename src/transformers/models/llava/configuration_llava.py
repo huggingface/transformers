@@ -22,9 +22,8 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "llava-hf/llava-v1.5-7b": "https://huggingface.co/llava-hf/llava-v1.5-7b/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class LlavaConfig(PretrainedConfig):
@@ -146,6 +145,10 @@ class LlavaConfig(PretrainedConfig):
             FutureWarning,
         )
         return self._vocab_size
+
+    @vocab_size.setter
+    def vocab_size(self, value):
+        self._vocab_size = value
 
     def to_dict(self):
         output = super().to_dict()

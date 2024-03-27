@@ -23,11 +23,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/wav2vec2-conformer-rel-pos-large": (
-        "https://huggingface.co/facebook/wav2vec2-conformer-rel-pos-large/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class Wav2Vec2ConformerConfig(PretrainedConfig):

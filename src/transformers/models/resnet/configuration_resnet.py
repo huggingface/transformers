@@ -27,9 +27,8 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 logger = logging.get_logger(__name__)
 
-RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/resnet-50": "https://huggingface.co/microsoft/resnet-50/blob/main/config.json",
-}
+
+from ..deprecated._archive_maps import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class ResNetConfig(BackboneConfigMixin, PretrainedConfig):

@@ -23,17 +23,11 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "espnet/fastspeech2_conformer": "https://huggingface.co/espnet/fastspeech2_conformer/raw/main/config.json",
-}
-
-FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "espnet/fastspeech2_conformer_hifigan": "https://huggingface.co/espnet/fastspeech2_conformer_hifigan/raw/main/config.json",
-}
-
-FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "espnet/fastspeech2_conformer_with_hifigan": "https://huggingface.co/espnet/fastspeech2_conformer_with_hifigan/raw/main/config.json",
-}
+from ..deprecated._archive_maps import (  # noqa: F401, E402
+    FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,  # noqa: F401, E402
+    FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,  # noqa: F401, E402
+    FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,  # noqa: F401, E402
+)
 
 
 class FastSpeech2ConformerConfig(PretrainedConfig):

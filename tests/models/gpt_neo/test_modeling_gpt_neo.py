@@ -31,7 +31,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2Tokenizer,
         GPTNeoForCausalLM,
         GPTNeoForQuestionAnswering,
@@ -601,6 +600,6 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GPTNeoModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "EleutherAI/gpt-neo-1.3B"
+        model = GPTNeoModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)

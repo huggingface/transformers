@@ -26,12 +26,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/deit-base-distilled-patch16-224": (
-        "https://huggingface.co/facebook/deit-base-patch16-224/resolve/main/config.json"
-    ),
-    # See all DeiT models at https://huggingface.co/models?filter=deit
-}
+
+from ..deprecated._archive_maps import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class DeiTConfig(PretrainedConfig):
