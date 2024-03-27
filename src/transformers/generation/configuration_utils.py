@@ -225,7 +225,7 @@ class GenerationConfig(PushToHubMixin):
         low_memory (`bool`, *optional*):
             Switch to sequential beam search and sequential topk for contrastive search to reduce peak memory.
             Used with beam search and contrastive search.
-        watermarking_config (Union[`~WatermarkingConfig`, `dict`], *optional*):
+        watermarking_config (Union[`WatermarkingConfig`, `dict`], *optional*):
             Arguments used to watermark the model outputs by adding a small bias to randomly selected set of "green" tokens.
             See [this paper](https://arxiv.org/abs/2306.04634) for more details.
             Accepts the following keys:
@@ -1154,6 +1154,26 @@ class GenerationConfig(PushToHubMixin):
 
 @dataclass
 class WatermarkingConfig:
+    """
+    Class that holds arguments for watermark generation and should be passed into `GenerationConfig` during `generate`.
+    See [this paper](https://arxiv.org/abs/2306.04634) for more details on the arguments.
+
+    Accepts the following keys:
+        - greenlist_ratio (`float`):
+            Used for watermarking. The ratio of "green" tokens used to the vocabulary size. Defaults to 0.25.
+        - bias (`float`):
+            Used with watermarking. The bias added to the selected "green" tokens' logits. Defaults to 2.0.
+        - hashing_key (`int`):
+            Hashing key used for watermarking. Defaults to 15485863 (the millionth prime).
+        - seeding_scheme (`str`):
+            Algorithm to use for watermarking. Accepts values:
+                - "lefthash" (default): "green" tokens selection depend on the last token (Algorithm 2 from the paper)
+                - "selfhash": "green" tokens selection depends on the current token itself (Algorithm 3 from the paper)
+                    The downside of this scheme is that it considers all possible next tokens and can be slower than "lefthash".
+        - context_width(`int`):
+            The context length of previous tokens to use in seeding. Higher context length makes watermarking more robust.
+    """
+
     def __init__(
         self,
         greenlist_ratio: Optional[float] = 0.25,
@@ -1170,6 +1190,16 @@ class WatermarkingConfig:
 
     @classmethod
     def from_dict(cls, config_dict, **kwargs):
+        """
+        Constructs a WatermarkingConfig instance from a dictionary of parameters.
+
+        Args:
+            config_dict (Dict[str, Any]): Dictionary containing configuration parameters.
+            **kwargs: Additional keyword arguments to override dictionary values.
+
+        Returns:
+            WatermarkingConfig: Instance of WatermarkingConfig constructed from the dictionary.
+        """
         if config_dict is None:
             return None
         config = cls(**config_dict)
@@ -1187,8 +1217,7 @@ class WatermarkingConfig:
         Save this instance to a JSON file.
 
         Args:
-            json_file_path (`str` or `os.PathLike`):
-                Path to the JSON file in which this configuration instance's parameters will be saved.
+            json_file_path (Union[str, os.PathLike]): Path to the JSON file in which this configuration instance's parameters will be saved.
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
             config_dict = self.to_dict()
@@ -1198,8 +1227,10 @@ class WatermarkingConfig:
 
     def to_dict(self) -> Dict[str, Any]:
         """
-        Serializes this instance to a Python dictionary. Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        Serializes this instance to a Python dictionary.
+
+        Returns:
+            Dict[str, Any]: Dictionary of all the attributes that make up this configuration instance.
         """
         output = copy.deepcopy(self.__dict__)
         return output
@@ -1212,9 +1243,21 @@ class WatermarkingConfig:
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
     def to_json_string(self):
+        """
+        Serializes this instance to a JSON formatted string.
+
+        Returns:
+            str: JSON formatted string representing the configuration instance.
+        """
         return json.dumps(self.__dict__, indent=2) + "\n"
 
     def update(self, **kwargs):
+        """
+        Update the configuration attributes with new values.
+
+        Args:
+            **kwargs: Keyword arguments representing configuration attributes and their new values.
+        """
         for key, value in kwargs.items():
             if hasattr(self, key):
                 setattr(self, key, value)
