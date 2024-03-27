@@ -36,6 +36,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -157,14 +158,19 @@ class LlavaVisionText2TextModelTester:
         }
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_generation(self, inputs_dict):
+        inputs_dict["input_name"] = "input_ids"
+        return inputs_dict
+
 
 @require_torch
-class LlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
+class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `LlavaForConditionalGeneration`.
     """
 
     all_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-to-text": LlavaForConditionalGeneration} if is_torch_available() else {}
     test_pruning = False
     test_head_masking = False
@@ -355,6 +361,14 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase
             model_tied.resize_token_embeddings(config.text_config.vocab_size + 10)
             params_tied_2 = list(model_tied.parameters())
             self.assertEqual(len(params_tied_2), len(params_tied))
+
+    @unittest.skip("no need to check if the LM backbone is passing already")
+    def test_generate_from_inputs_embeds_decoder_only(self):
+        pass
+
+    @unittest.skip("also assume that it works if the LM backbone is working")
+    def test_left_padding_compatibility(self):
+        pass
 
 
 @require_torch

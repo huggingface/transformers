@@ -470,7 +470,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
-    def _get_input_ids_and_config(self, batch_size=3):
+    def _get_input_ids_and_config(self, model_class, batch_size=3):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict[self.input_name]
 
@@ -482,8 +482,10 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         if config.eos_token_id is not None and config.pad_token_id is None:
             # hack to allow generate for models such as GPT2 as is done in `generate()`
             config.pad_token_id = config.eos_token_id
+        attention_mask = torch.ones_like(input_ids)
+        model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask, "input_name": "input_ids"}
 
-        return config, input_ids, None, max_length
+        return config, model_kwargs, max_length
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -842,8 +844,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         attention_mask = None
         return encoder_outputs, input_ids, attention_mask
 
-    def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
-        batch_size, mel, seq_length = input_ids.shape
+    def _check_outputs(self, output, input_tensor, config, is_vision_model, use_cache=False, num_return_sequences=1):
+        batch_size, mel, seq_length = input_tensor.shape
         subsampled_seq_length = self.model_tester.get_subsampled_output_lengths(seq_length)
         num_sequences_in_output = batch_size * num_return_sequences
         gen_len = (
@@ -851,7 +853,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         )
 
         # scores
-        self._check_scores(num_sequences_in_output, output.scores, length=gen_len, config=config)
+        self._check_scores(num_sequences_in_output, output.scores, length=gen_len, vocab_size=config.vocab_size)
 
         # Attentions
         # encoder

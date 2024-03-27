@@ -29,6 +29,7 @@ from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2TextConfig,
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -197,6 +198,7 @@ class Kosmos2ModelTester:
         self.text_model_tester = Kosmos2TextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Kosmos2VisionModelTester(parent, **vision_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.seq_length = self.text_model_tester.seq_length
         self.latent_query_num = latent_query_num
         self.is_training = is_training
 
@@ -217,6 +219,7 @@ class Kosmos2ModelTester:
             self.text_model_tester.get_config().to_dict(),
             self.vision_model_tester.get_config().to_dict(),
             latent_query_num=self.latent_query_num,
+            vocab_size=self.text_model_tester.vocab_size,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, image_embeds_position_mask, pixel_values):
@@ -243,9 +246,13 @@ class Kosmos2ModelTester:
         }
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_generation(self, inputs_dict):
+        inputs_dict["input_name"] = "pixel_values"
+        return inputs_dict
+
 
 @require_torch
-class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Kosmos2Model, Kosmos2ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Kosmos2ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
@@ -507,6 +514,10 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
+
+    @unittest.skip("assume that it works if the LM backbone is working")
+    def test_left_padding_compatibility(self):
+        pass
 
 
 # We will verify our results on an image of cute cats

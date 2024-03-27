@@ -30,6 +30,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import cached_property
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -574,8 +575,9 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
 @unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
-class IdeficsForVisionText2TextTest(IdeficsModelTest, unittest.TestCase):
+class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsForVisionText2Text,) if is_torch_available() else ()
+    all_generative_model_classes = (IdeficsForVisionText2Text,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = IdeficsModelTester(
@@ -583,6 +585,42 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, unittest.TestCase):
             modality_type_vocab_size=3,
         )
         self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
+
+    # used by generation mixin
+    def _get_input_ids_and_config(self, model_class, batch_size=2):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=False)
+        for k, v in inputs_dict.items():
+            if isinstance(v, torch.Tensor):
+                # increase batch_size to 2
+                inputs_dict[k] = v.repeat_interleave(batch_size, dim=0)
+            else:
+                inputs_dict[k] = v
+
+        input_ids = inputs_dict["input_ids"]
+        inputs_dict["use_cache"] = True
+        max_length = input_ids.shape[-1] + 3
+        if config.eos_token_id is not None and config.pad_token_id is None:
+            # hack to allow generate for models such as GPT2 as is done in `generate()`
+            if isinstance(config.eos_token_id, int):
+                config.eos_token_id = [config.eos_token_id]
+            config.pad_token_id = config.eos_token_id[0]
+        inputs_dict["input_name"] = "input_ids"
+
+        return config, inputs_dict, max_length
+
+    # idefics does not return attn because of sdpa, so override it here
+    def _check_outputs(self, output, input_tensor, config, is_vision_model, use_cache=False, num_return_sequences=1):
+        batch_size, seq_length = input_tensor.shape
+        num_sequences_in_output = batch_size * num_return_sequences
+        gen_len = (
+            output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - seq_length
+        )
+        # scores
+        self._check_scores(num_sequences_in_output, output.scores, length=gen_len, vocab_size=config.vocab_size)
+
+        # unprocessed logits
+        self._check_logits(num_sequences_in_output, output.logits, vocab_size=config.vocab_size)
 
     @unittest.skip("We only test the model that takes in multiple images")
     def test_model(self):
@@ -606,6 +644,38 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, unittest.TestCase):
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip("IDEFICS does not suppoer assisted generation")
+    def test_assisted_decoding_matches_greedy_search(self):
+        pass
+
+    @unittest.skip("IDEFICS does not suppoer assisted generation")
+    def test_assisted_decoding_sample(self):
+        pass
+
+    @unittest.skip("IDEFICS does not suppoer assisted generation")
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
+        pass
+
+    @unittest.skip("assume that it works if the LM backbone is working")
+    def test_left_padding_compatibility(self):
+        pass
+
+    @unittest.skip("IDEFICS need special treatment for image attn after pre-fill")
+    def test_contrastive_generate(self):
+        pass
+
+    @unittest.skip("IDEFICS need special treatment for image attn after pre-fill")
+    def test_contrastive_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip("IDEFICS need special treatment for image attn after pre-fill")
+    def test_contrastive_generate_low_memory(self):
+        pass
+
+    @unittest.skip("IDEFICS need special treatment for image attn after pre-fill")
+    def test_generate_without_input_ids(self):
         pass
 
 

@@ -34,6 +34,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -387,6 +388,7 @@ class BlipModelTester:
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.seq_length = self.text_model_tester.seq_length
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -424,10 +426,16 @@ class BlipModelTester:
         }
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_generation(self, inputs_dict):
+        inputs_dict["input_name"] = "pixel_values"
+        inputs_dict.pop("return_loss")
+        return inputs_dict
+
 
 @require_torch
-class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BlipModel,) if is_torch_available() else ()
+    all_generative_model_classes = (BlipForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": BlipModel,
@@ -465,6 +473,17 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="BlipModel does not have input/output embeddings")
     def test_model_common_attributes(self):
         pass
+
+    @unittest.skip("assume that it works if the LM backbone is working")
+    def test_left_padding_compatibility(self):
+        pass
+
+    # override because blip removed last token when generating
+    def _check_scores(self, batch_size, scores, length, vocab_size):
+        expected_shape = (batch_size, vocab_size)
+        self.assertIsInstance(scores, tuple)
+        self.assertEqual(len(scores) - 1, length)
+        self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
 
     # override as the `logit_scale` parameter initilization is different for Blip
     def test_initialization(self):
@@ -645,6 +664,7 @@ class BlipTextImageModelsModelTester:
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.seq_length = self.text_model_tester.seq_length
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -694,6 +714,7 @@ class BlipVQAModelTester:
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.seq_length = self.text_model_tester.seq_length
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
