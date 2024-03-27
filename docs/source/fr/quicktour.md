@@ -23,7 +23,7 @@ Soyez opérationnel avec 🤗 Transformers ! Que vous soyez un développeur ou u
 Avant de commencer, assurez-vous que vous avez installé toutes les bibliothèques nécessaires :
 
 ```bash
-!pip install transformers datasets evaluate accelerate
+!pip install transformers datasets
 ```
 
 Vous aurez aussi besoin d'installer votre bibliothèque d'apprentissage profond favorite :
