@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Classes to support Encoder-Decoder architectures"""
-
+"""Classes to support Encoder-Decoder architectures"""
 
 import gc
 import inspect
@@ -266,8 +265,16 @@ class EncoderDecoderModel(PreTrainedModel):
                 self.encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
             )
         tied_weight_keys = []
-        tied_weight_keys.extend([] if self.decoder._tied_weights_keys is None else [f"decoder.{k}" for k in self.decoder._tied_weights_keys])
-        tied_weight_keys.extend([] if self.encoder._tied_weights_keys is None else [f"encoder.{k}" for k in self.encoder._tied_weights_keys])
+        tied_weight_keys.extend(
+            []
+            if self.decoder._tied_weights_keys is None
+            else [f"decoder.{k}" for k in self.decoder._tied_weights_keys]
+        )
+        tied_weight_keys.extend(
+            []
+            if self.encoder._tied_weights_keys is None
+            else [f"encoder.{k}" for k in self.encoder._tied_weights_keys]
+        )
         if tied_weight_keys:
             if self._tied_weights_keys is None:
                 self._tied_weights_keys = tied_weight_keys
