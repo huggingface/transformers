@@ -2485,7 +2485,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # These are all the pointers of shared tensors.
             shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
-            error_names = list()
+            error_names = []
             to_delete_names = set()
             # Recursively descend to find tied weight keys
             _tied_weights_keys = _get_tied_weight_keys(self)
