@@ -37,6 +37,7 @@ from transformers import (
     OwlViTForObjectDetection,
     PretrainedConfig,
     is_torch_available,
+    is_torch_xla_available,
     logging,
 )
 from transformers.testing_utils import (
