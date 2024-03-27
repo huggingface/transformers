@@ -32,9 +32,11 @@ from ..utils import (
     extract_commit_hash,
     is_remote_url,
     logging,
+    is_torch_available,
 )
-from .watermarking import WatermarkingConfig
 
+if is_torch_available():
+    from .watermarking import WatermarkingConfig
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
