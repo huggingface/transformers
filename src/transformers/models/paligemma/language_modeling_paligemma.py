@@ -267,7 +267,7 @@ class PaLIGemmaLanguageAttention(nn.Module):
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
         if attention_mask is not None:  # no matter the length, we just slice it
             if cache_position is not None:
-                causal_mask = attention_mask[:, :, cache_position, : key_states.shape[-2]]
+                causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             else:
                 causal_mask = attention_mask
             attn_weights = attn_weights + causal_mask
@@ -550,7 +550,7 @@ class PaLIGemmaLanguageSdpaAttention(PaLIGemmaLanguageAttention):
 
         causal_mask = attention_mask
         if attention_mask is not None and cache_position is not None:
-            causal_mask = causal_mask[:, :, cache_position, : key_states.shape[-2]]
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -880,15 +880,16 @@ class PaLIGemmaLanguageModel(PaLIGemmaLanguagePreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         # causal_mask = attention_mask
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, past_key_values)
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+        
+        if len(past_key_values.key_cache) == 0:
+            # set initial attention mask for later
+            self.initial_attention_mask = attention_mask 
 
+        # change causal mask to full block for initial inputs
+        causal_mask = self._modify_causal_mask_to_full_block(causal_mask, inputs_embeds)
         # embed positions
         hidden_states = inputs_embeds
-
-        # normalized
-        # Commented out because image hidden states should not be scaled in paligemma. Scaling is done in modeling_paligemma.
-        # hidden_states = hidden_states * (self.config.hidden_size**0.5)
-
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -947,86 +948,76 @@ class PaLIGemmaLanguageModel(PaLIGemmaLanguagePreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
+            
+    def _modify_causal_mask_to_full_block(self, causal_mask, input_tensor):
+        if self.initial_attention_mask is None:
+            raise ValueError("Initial attention mask is not set.")
 
-    # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
-    # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
-    # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
-    # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
-    def _update_causal_mask(self, attention_mask, input_tensor, past_key_values):
+        dtype, device = input_tensor.dtype, input_tensor.device
+        batch_size, _, sequence_length, target_length = causal_mask.shape
+
+        for i in range(batch_size):
+            num_total_informative_tokens = torch.sum(self.initial_attention_mask[i] == 1).item()
+
+            if self.initial_attention_mask[i, 0] == 0:  # FIXME need better padding detection
+                padding_length = sequence_length - num_total_informative_tokens
+                causal_mask[i, :, padding_length:padding_length + num_total_informative_tokens, padding_length:padding_length + num_total_informative_tokens] = 0.0
+
+            else:  # right padding
+                causal_mask[i, :, :num_total_informative_tokens, :num_total_informative_tokens] = 0.0
+
+        return causal_mask
+
+    def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
 
-        batch_size, seq_length = input_tensor.shape[:2]
-        dtype = input_tensor.dtype
-        device = input_tensor.device
-
-        # support going beyond cached `max_position_embedding`
-        if seq_length > self.causal_mask.shape[-1]:
-            causal_mask = torch.full((2 * self.causal_mask.shape[-1], 2 * self.causal_mask.shape[-1]), fill_value=1)
-            self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
-
-        # We use the current dtype to avoid any overflows
+        dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
-        causal_mask = self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1).to(dtype) * min_dtype
-
-        causal_mask = causal_mask.to(dtype=dtype, device=device)
-
-        if attention_mask is not None and attention_mask.dim() == 2:
-            mask_length = attention_mask.shape[-1]
-            padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
-            causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
-        if past_key_values is not None:
-            # If we are at first generation, we need to do full block attention for the whole prefix.
-            # However, if past_key_values is not None, it means
-            # we already generated one pass of tokens.
-            # Then, don't change attention mask, keep it causal for new tokens.
-
-            block_sizes = attention_mask.sum(dim=1)
-
-            # block attention on prefix tokens, triangular after.
-            """
-            causal_mask.fill_(-3.4028e38)
-
-            for b in range(batch_size):
-                block_size = block_sizes[b].item()
-
-                causal_mask[b, :, :, :block_size] = 0
-
-                for i in range(block_size, seq_length):
-                    causal_mask[b, :, i, :block_size] = 0
-                    causal_mask[b, :, i, block_size:i+1] = 0
-            """
-            causal_mask = torch.full(
-                (batch_size, 1, self.causal_mask.shape[-1], self.causal_mask.shape[-1]),
-                fill_value=-3.4028e38,
-                dtype=torch.float32,
+        sequence_length = input_tensor.shape[1]
+        if hasattr(self.layers[0].self_attn, "past_key_value"):  # static cache
+            target_length = self.config.max_position_embeddings
+        else:  # dynamic cache
+            target_length = (
+                attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else cache_position[-1] + 1
             )
 
-            for b in range(batch_size):
-                non_padding_length = block_sizes[b].item()
-                causal_mask[b, :, :, :non_padding_length] = 0
-
-                for i in range(non_padding_length, self.causal_mask.shape[-1]):
-                    causal_mask[b, :, i, : i + 1] = 0
+        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
+        if sequence_length != 1:
+            causal_mask = torch.triu(causal_mask, diagonal=1)
+        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+        causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
+        if attention_mask is not None:
+            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+            if attention_mask.dim() == 2:
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
+                causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
+            elif attention_mask.dim() == 4:
+                # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
+                # cache. In that case, the 4D attention mask attends to the newest tokens only.
+                if attention_mask.shape[-2] < cache_position[0] + sequence_length:
+                    offset = cache_position[0]
+                else:
+                    offset = 0
+                mask_shape = attention_mask.shape
+                mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
+                causal_mask[
+                    : mask_shape[0], : mask_shape[1], offset : mask_shape[2] + offset, : mask_shape[3]
+                ] = mask_slice
 
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
             and attention_mask.device.type == "cuda"
         ):
-            # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
-            is_tracing = (
-                torch.jit.is_tracing()
-                or isinstance(input_tensor, torch.fx.Proxy)
-                or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
-            )
-            if not is_tracing and torch.any(attention_mask != 1):
-                # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-                # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-                # Details: https://github.com/pytorch/pytorch/issues/110213
-                causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+            # Details: https://github.com/pytorch/pytorch/issues/110213
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+
         return causal_mask
 
 
