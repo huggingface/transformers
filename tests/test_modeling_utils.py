@@ -53,6 +53,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_xla,
     require_torch_multi_accelerator,
     require_usr_bin_time,
     slow,
@@ -71,7 +72,7 @@ from transformers.utils.import_utils import (
     is_torch_sdpa_available,
     is_torchdynamo_available,
 )
-
+from transformers.modeling_utils import unwrap_model
 
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
 
@@ -197,6 +198,12 @@ if is_flax_available():
 if is_tf_available():
     from transformers import TFBertModel
 
+if is_torch_xla_available():
+    import torch_xla.distributed.spmd as xs
+    import torch_xla.runtime as xr
+    import numpy as np
+    from torch_xla.experimental.spmd_fully_sharded_data_parallel import SpmdFullyShardedDataParallel as FSDPv2
+
 
 TINY_T5 = "patrickvonplaten/t5-tiny-random"
 TINY_BERT_FOR_TOKEN_CLASSIFICATION = "hf-internal-testing/tiny-bert-for-token-classification"
@@ -211,6 +218,18 @@ def check_models_equal(model1, model2):
 
     return models_are_equal
 
+def check_state_dict_keys_equal(state_dict_keys_model1, state_dict_keys_model2):
+    for key1, key2 in zip(state_dict_keys_model1, state_dict_keys_model2):
+        if key1 != key2:
+            return False
+    return True
+
+def unwrap_model_old(model: nn.Module) -> nn.Module:
+    """Old unwrap implementation"""
+    if hasattr(model, "module"):
+        return unwrap_model_old(model.module)
+    else:
+        return model
 
 @require_torch
 class ModelUtilsTest(TestCasePlus):
@@ -2176,3 +2195,40 @@ class Mask4DTestHard(unittest.TestCase):
         ]
 
         self.assertEqual(decoded_0, decoded_1b)
+
+@slow
+@require_torch_xla
+class UnwrapModelTest(unittest.TestCase):
+    def test_compatibility_with_original_behavior(self):
+        model_id = "mistralai/Mistral-7B-v0.1"
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16)
+        num_devices = xr.global_runtime_device_count()
+        xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
+        
+        wrapped_model = FSDPv2(model)
+        unwrapped_model_old = unwrap_model_old(wrapped_model)
+        state_dict_keys_model1 = list(unwrapped_model_old.state_dict().keys())
+        unwrapped_model_new = unwrap_model(wrapped_model)
+        state_dict_keys_model2 = list(unwrapped_model_new.state_dict().keys())
+        self.assertEqual(check_state_dict_keys_equal(state_dict_keys_model1, state_dict_keys_model2), True)
+    
+    def test_nested_unwrap_modules(self):
+        model_id = "mistralai/Mistral-7B-v0.1"
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16)
+        orig_state_dict_keys = list(model.state_dict().keys())
+        num_devices = xr.global_runtime_device_count()
+        xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
+        
+        def nested_wrap(model):
+            layer = getattr(getattr(model, "model"), "embed_tokens")
+            wrapped_layer = FSDPv2(layer)
+            setattr(getattr(model, "model"), "embed_tokens", wrapped_layer)
+            return FSDPv2(model)
+        
+        wrapped_model = nested_wrap(model)
+        unwrapped_model_old = unwrap_model_old(wrapped_model)
+        old_state_dict_keys = list(unwrapped_model_old.state_dict().keys())
+        unwrapped_model_new = unwrap_model(wrapped_model)
+        new_state_dict_keys = list(unwrapped_model_new.state_dict().keys())
+        self.assertEqual(check_state_dict_keys_equal(old_state_dict_keys, orig_state_dict_keys), False)
+        self.assertEqual(check_state_dict_keys_equal(new_state_dict_keys, orig_state_dict_keys), True)
