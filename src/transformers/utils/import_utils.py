@@ -94,6 +94,7 @@ FSDP_MIN_VERSION = "1.12.0"
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
 _aqlm_available = _is_package_available("aqlm")
+_av_available = importlib.util.find_spec("av") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _galore_torch_available = _is_package_available("galore_torch")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
@@ -656,6 +657,10 @@ def is_aqlm_available():
     return _aqlm_available
 
 
+def is_av_available():
+    return _av_available
+
+
 def is_ninja_available():
     r"""
     Code comes from *torch.utils.cpp_extension.is_ninja_available()*. Returns `True` if the
@@ -1013,6 +1018,16 @@ def is_mlx_available():
 
 
 # docstyle-ignore
+AV_IMPORT_ERROR = """
+{0} requires the PyAv library but it was not found in your environment. You can install it with:
+```
+pip install av
+```
+Please note that you may need to restart your runtime after installation.
+"""
+
+
+# docstyle-ignore
 CV2_IMPORT_ERROR = """
 {0} requires the OpenCV library but it was not found in your environment. You can install it with:
 ```
@@ -1336,6 +1351,7 @@ jinja2`. Please note that you may need to restart your runtime after installatio
 
 BACKENDS_MAPPING = OrderedDict(
     [
+        ("av", (is_av_available, AV_IMPORT_ERROR)),
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
         ("cv2", (is_cv2_available, CV2_IMPORT_ERROR)),
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
