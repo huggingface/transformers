@@ -54,8 +54,8 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
-    require_torch_xla,
     require_torch_multi_accelerator,
+    require_torch_xla,
     require_usr_bin_time,
     slow,
     torch_device,
@@ -73,7 +73,7 @@ from transformers.utils.import_utils import (
     is_torch_sdpa_available,
     is_torchdynamo_available,
 )
-from transformers.modeling_utils import unwrap_model
+
 
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
 
@@ -200,10 +200,12 @@ if is_tf_available():
     from transformers import TFBertModel
 
 if is_torch_xla_available():
+    import numpy as np
     import torch_xla.distributed.spmd as xs
     import torch_xla.runtime as xr
-    import numpy as np
     from torch_xla.experimental.spmd_fully_sharded_data_parallel import SpmdFullyShardedDataParallel as FSDPv2
+
+    from transformers.modeling_utils import unwrap_model
 
 
 TINY_T5 = "patrickvonplaten/t5-tiny-random"
