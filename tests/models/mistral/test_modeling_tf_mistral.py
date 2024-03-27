@@ -301,7 +301,7 @@ class TFMistralModelTest(TFModelTesterMixin, TFGenerationIntegrationTests, Pipel
         print(config)
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1)
+        attention_mask = tf.not_equal(input_ids, 1)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
         model = TFMistralForSequenceClassification(config)
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
