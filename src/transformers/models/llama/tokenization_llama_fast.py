@@ -120,6 +120,9 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
                 "You set `add_prefix_space`. The tokenizer needs to be converted from the slow tokenizers"
             )
             kwargs["from_slow"] = True
+        else:
+            # Set default value for `add_prefix_space` if not provided (to pass typechecks)
+            add_prefix_space = True
 
         super().__init__(
             vocab_file=vocab_file,
@@ -131,6 +134,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
             use_default_system_prompt=use_default_system_prompt,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
         self._add_bos_token = add_bos_token
