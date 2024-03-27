@@ -413,6 +413,7 @@ class _BaseAutoModelClass:
     @classmethod
     def from_config(cls, config, **kwargs):
         trust_remote_code = kwargs.pop("trust_remote_code", None)
+        name_or_path = kwargs.pop("name_or_path", None)
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping.keys()
         trust_remote_code = resolve_trust_remote_code(
@@ -425,6 +426,9 @@ class _BaseAutoModelClass:
                 repo_id, class_ref = class_ref.split("--")
             else:
                 repo_id = config.name_or_path
+            # if this is set, override location from config
+            if name_or_path is not None:
+                repo_id = name_or_path
             model_class = get_class_from_dynamic_module(class_ref, repo_id, **kwargs)
             if os.path.isdir(config._name_or_path):
                 model_class.register_for_auto_class(cls.__name__)
