@@ -70,6 +70,7 @@ from .models.auto.modeling_auto import (
 from .optimization import Adafactor, get_scheduler
 from .pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
 from .tokenization_utils_base import PreTrainedTokenizerBase
+from .image_processing_utils import BaseImageProcessor
 from .trainer_callback import (
     CallbackHandler,
     DefaultFlowCallback,
@@ -302,6 +303,9 @@ class Trainer:
             The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs to the
             maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
             interrupted training or reuse the fine-tuned model.
+        image_processor ([`BaseImageProcessor`], *optional*):
+            The image processor used to preprocess the data. If provided, it will be saved along the model to make it easier
+            to rerun an interrupted training or reuse the fine-tuned model.
         model_init (`Callable[[], PreTrainedModel]`, *optional*):
             A function that instantiates the model to be used. If provided, each call to [`~Trainer.train`] will start
             from a new instance of the model as given by this function.
@@ -356,6 +360,7 @@ class Trainer:
         train_dataset: Optional[Union[Dataset, IterableDataset]] = None,
         eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
+        image_processor: Optional["BaseImageProcessor"] = None,
         model_init: Optional[Callable[[], PreTrainedModel]] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         callbacks: Optional[List[TrainerCallback]] = None,
@@ -484,11 +489,12 @@ class Trainer:
         ):
             self.place_model_on_device = False
 
-        default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
+        default_collator = DataCollatorWithPadding(tokenizer) if tokenizer is not None else default_data_collator
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
+        self.image_processor = image_processor
 
         # Bnb Quantized models doesn't support `.to` operation.
         if (
