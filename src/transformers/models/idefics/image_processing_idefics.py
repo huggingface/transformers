@@ -92,8 +92,9 @@ class IdeficsImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         transform: Callable = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
-    ) -> TensorType.PYTORCH:
+    ) -> TensorType:
         """
         Preprocess a batch of images.
 
@@ -146,6 +147,7 @@ class IdeficsImageProcessor(BaseImageProcessor):
         #     transforms.ToTensor(),
         #     transforms.Normalize(mean=image_mean, std=image_std),
         # ])
+        # TODO: Alazar figure out tf version for below
         if transform is not None:
             if not is_torch_available():
                 raise ImportError("To pass in `transform` torch must be installed")
@@ -163,6 +165,6 @@ class IdeficsImageProcessor(BaseImageProcessor):
         images = [self.normalize(x, mean=image_mean, std=image_std) for x in images]
         images = [to_channel_dimension_format(x, ChannelDimension.FIRST) for x in images]
         # TODO: this converts to torch tensors - switch to convert_to_tensors once it becomes available
-        images = BatchFeature(data={"pixel_values": images}, tensor_type=TensorType.PYTORCH)["pixel_values"]
+        images = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)["pixel_values"]
 
         return images
