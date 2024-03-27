@@ -603,13 +603,13 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 class LlamaIntegrationTest(unittest.TestCase):
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
-    cuda_major_version = None
+    cuda_compute_capability_major_version = None
 
     @classmethod
     def setUpClass(cls):
         if is_torch_available() and torch.cuda.is_available():
             # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_major_version = torch.cuda.get_device_capability()[0]
+            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
     @slow
@@ -739,7 +739,7 @@ class LlamaIntegrationTest(unittest.TestCase):
                 cache_position += 1
 
         text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_major_version], text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], text)
 
 
 @require_torch

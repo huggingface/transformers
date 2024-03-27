@@ -474,13 +474,13 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 class MistralIntegrationTest(unittest.TestCase):
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
-    cuda_major_version = None
+    cuda_compute_capability_major_version = None
 
     @classmethod
     def setUpClass(cls):
         if is_torch_available() and torch.cuda.is_available():
             # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_major_version = torch.cuda.get_device_capability()[0]
+            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     def tearDown(self):
         torch.cuda.empty_cache()
@@ -571,7 +571,7 @@ class MistralIntegrationTest(unittest.TestCase):
         }
 
         print(out[0, 0, :30])
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE[self.cuda_major_version], atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE[self.cuda_compute_capability_major_version], atol=1e-4, rtol=1e-4)
 
         del model
         backend_empty_cache(torch_device)
@@ -595,7 +595,7 @@ class MistralIntegrationTest(unittest.TestCase):
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_major_version], text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], text)
 
         del model
         backend_empty_cache(torch_device)
@@ -685,7 +685,7 @@ class MistralIntegrationTest(unittest.TestCase):
             input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=model
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_major_version], text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], text)
 
         del model
         backend_empty_cache(torch_device)
