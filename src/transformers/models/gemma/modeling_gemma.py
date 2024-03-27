@@ -875,14 +875,19 @@ class GemmaModel(GemmaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         past_seen_tokens = 0
-        if use_cache:  # kept for BC (cache positions)
-            if not isinstance(past_key_values, StaticCache):
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_seen_tokens = past_key_values.get_seq_length()
+        if use_cache:
+            static_cache = getattr(self.layers[0].self_attn, "past_key_value", None)
+            if static_cache is not None:
+                past_seen_tokens = static_cache.get_seq_length()
+            else:
+                if not isinstance(past_key_values, Cache):
+                    past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                past_seen_tokens = past_key_values.get_seq_length()
 
         if cache_position is None:
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            # `torch.compile`-friendly `torch.arange` from a shape
+            cache_position = (
+                torch.ones_like(inputs_embeds[0, :, 0], dtype=torch.int64).cumsum(0) + past_seen_tokens - 1
             )
 
         if position_ids is None:
@@ -1197,12 +1202,6 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
             # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
             # TODO: use `next_tokens` directly instead.
             model_inputs = {"input_ids": input_ids.contiguous()}
-
-        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
-        if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
-        else:
-            cache_position = cache_position[-input_length:]
 
         if has_static_cache:
             past_key_values = None

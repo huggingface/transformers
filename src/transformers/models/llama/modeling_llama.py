@@ -972,16 +972,19 @@ class LlamaModel(LlamaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         past_seen_tokens = 0
-        if use_cache:  # kept for BC (cache positions)
-            if not isinstance(past_key_values, StaticCache):
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+        if use_cache:
+            static_cache = getattr(self.layers[0].self_attn, "past_key_value", None)
+            if static_cache is not None:
+                past_seen_tokens = static_cache.get_seq_length()
+            else:
+                if not isinstance(past_key_values, Cache):
+                    past_key_values = DynamicCache.from_legacy_cache(past_key_values)
                 past_seen_tokens = past_key_values.get_seq_length()
 
         if cache_position is None:
-            if isinstance(past_key_values, StaticCache):
-                raise ValueError("cache_position is a required argument when using StaticCache.")
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            # `torch.compile`-friendly `torch.arange` from a shape
+            cache_position = (
+                torch.ones_like(inputs_embeds[0, :, 0], dtype=torch.int64).cumsum(0) + past_seen_tokens - 1
             )
 
         if position_ids is None:
@@ -1258,25 +1261,35 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
                 cache_length = past_length = past_key_values[0][0].shape[2]
                 max_cache_length = None
 
-            # Keep only the unprocessed tokens:
-            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
-            # input)
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-            # input_ids based on the past_length.
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
-            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+            attention_based_slicing = attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]
+            past_based_slicing = past_length < input_ids.shape[1]
+            # no_slicing = not attention_based_slicing and not past_based_slicing
+            input_ids_slice_index = (-(attention_mask.shape[1] - past_length) * attention_based_slicing) + (
+                past_length * past_based_slicing
+            )
+            # input_ids_slice_index = (-(attention_mask.shape[1] - past_length) * attention_based_slicing) + (past_length * past_based_slicing) + (0 * no_slicing)
+            # input_ids = input_ids[:, input_ids_slice_index:]
+            input_ids = input_ids[:, cache_position]
 
-            # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
-            if (
-                max_cache_length is not None
-                and attention_mask is not None
-                and cache_length + input_ids.shape[1] > max_cache_length
-            ):
-                attention_mask = attention_mask[:, -max_cache_length:]
+            # # Keep only the unprocessed tokens:
+            # # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
+            # # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
+            # # input)
+            # if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
+            #     input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
+            # # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
+            # # input_ids based on the past_length.
+            # elif past_length < input_ids.shape[1]:
+            #     input_ids = input_ids[:, past_length:]
+            # # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+
+            # # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
+            # if (
+            #     max_cache_length is not None
+            #     and attention_mask is not None
+            #     and cache_length + input_ids.shape[1] > max_cache_length
+            # ):
+            #     attention_mask = attention_mask[:, -max_cache_length:]
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
@@ -1294,12 +1307,6 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
             # TODO: use `next_tokens` directly instead.
             model_inputs = {"input_ids": input_ids.contiguous()}
-
-        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
-        if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
-        else:
-            cache_position = cache_position[-input_length:]
 
         if has_static_cache:
             past_key_values = None
