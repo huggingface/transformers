@@ -539,8 +539,12 @@ class MixtralIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             logits = model(dummy_input).logits
 
-        torch.testing.assert_close(logits[0, :3, :3], EXPECTED_LOGITS[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3)
-        torch.testing.assert_close(logits[1, :3, :3], EXPECTED_LOGITS[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(
+            logits[0, :3, :3], EXPECTED_LOGITS[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3
+        )
+        torch.testing.assert_close(
+            logits[1, :3, :3], EXPECTED_LOGITS[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3
+        )
 
     @slow
     @require_torch_gpu
@@ -588,8 +592,14 @@ class MixtralIntegrationTest(unittest.TestCase):
             logits[0, :3, :3], EXPECTED_LOGITS_LEFT[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3
         )
         torch.testing.assert_close(
-            logits[0, -3:, -3:], EXPECTED_LOGITS_LEFT_UNPADDED[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3
+            logits[0, -3:, -3:],
+            EXPECTED_LOGITS_LEFT_UNPADDED[self.cuda_compute_capability_major_version],
+            atol=1e-3,
+            rtol=1e-3,
         )
         torch.testing.assert_close(
-            logits[1, -3:, -3:], EXPECTED_LOGITS_RIGHT_UNPADDED[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3
+            logits[1, -3:, -3:],
+            EXPECTED_LOGITS_RIGHT_UNPADDED[self.cuda_compute_capability_major_version],
+            atol=1e-3,
+            rtol=1e-3,
         )
