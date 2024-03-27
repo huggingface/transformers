@@ -3682,6 +3682,7 @@ class ModelTesterMixin:
                                         "decoder_attention_mask": dummy_attention_mask,
                                         "output_hidden_states": True,
                                     }
+
                                 else:
                                     other_inputs = {
                                         "output_hidden_states": True,
@@ -3690,6 +3691,22 @@ class ModelTesterMixin:
                                     # Otherwise fails for e.g. WhisperEncoderModel
                                     if "attention_mask" in inspect.signature(model_eager.forward).parameters:
                                         other_inputs["attention_mask"] = dummy_attention_mask
+
+                                if "bool_masked_pos" in inspect.signature(model_eager.forward).parameters:
+                                    dummy_mask = torch.ones((self.model_tester.num_masks,))
+                                    dummy_mask = torch.cat(
+                                        [dummy_mask, torch.zeros(self.model_tester.seq_length - dummy_mask.size(0))]
+                                    )
+                                    dummy_bool_masked_pos = dummy_mask.expand(batch_size, -1).bool()
+                                    other_inputs["bool_masked_pos"] = dummy_bool_masked_pos.to(torch_device)
+
+                                if "noise" in inspect.signature(model_eager.forward).parameters:
+                                    np.random.seed(2)
+                                    num_patches = int(
+                                        (self.model_tester.image_size // self.model_tester.patch_size) ** 2
+                                    )
+                                    noise = np.random.uniform(size=(batch_size, num_patches))
+                                    other_inputs["noise"] = torch.from_numpy(noise)
 
                                 # TODO: test gradients as well (& for FA2 as well!)
                                 with torch.no_grad():
