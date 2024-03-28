@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Any, List, Dict
+from typing import Any, Dict, List
+
 from ..base import Tool
+
 
 class BaseAgent(ABC):
 
@@ -11,8 +13,8 @@ class BaseAgent(ABC):
     @abstractmethod
     @classmethod
     def from_hub(
-        cls, 
-        *args: Any, 
+        cls,
+        *args: Any,
         **kwds: Any
     ): # TODO define args
         "Creates agent with an endpoint from HF hub"
@@ -20,7 +22,7 @@ class BaseAgent(ABC):
 
     @abstractmethod
     def run(
-        self, 
+        self,
         task: Dict[str, str], # TODO create Message class?
         **kwds: Any
     ) -> Any:
@@ -31,6 +33,5 @@ class BaseAgent(ABC):
         self,
         **kwds: Any
     ) -> Any:
-        """Main method responsible for interacting with the LLM and updating 
+        """Main method responsible for interacting with the LLM and updating
         the agent's state from the memory."""
-

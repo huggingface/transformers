@@ -17,8 +17,8 @@ import tempfile
 import unittest
 import uuid
 
-from transformers.tools.agents import ReactAgent, CodeAgent
-from transformers.tools.base import CalculatorTool
+from transformers.tools.agents import CodeAgent, ReactAgent
+from transformers.tools.default_tools import CalculatorTool
 
 
 def get_new_path(suffix="") -> str:

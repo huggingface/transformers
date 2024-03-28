@@ -14,10 +14,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from PIL import Image
+
 from ..models.auto import AutoModelForVision2Seq
 from ..utils import requires_backends
 from .base import PipelineTool
-from PIL import Image
 
 
 class ImageCaptioningTool(PipelineTool):
@@ -43,4 +44,6 @@ class ImageCaptioningTool(PipelineTool):
         return self.model.generate(**inputs)
 
     def decode(self, outputs):
-        return self.pre_processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
+        return self.pre_processor.batch_decode(outputs, skip_special_tokens=True)[
+            0
+        ].strip()

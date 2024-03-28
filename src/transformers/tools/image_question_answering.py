@@ -16,8 +16,8 @@
 # limitations under the License.
 from typing import Union
 
-from PIL import Image
 import torch
+from PIL import Image
 
 from ..models.auto import AutoModelForVisualQuestionAnswering, AutoProcessor
 from ..utils import requires_backends
@@ -35,8 +35,11 @@ class ImageQuestionAnsweringTool(PipelineTool):
     model_class = AutoModelForVisualQuestionAnswering
 
     inputs = {
-        "image": {"type": Union[Image.Image, str],"description": "The image containing the information"},
-        "question": {"type": str, "description": "The question in English"}
+        "image": {
+            "type": Union[Image.Image, str],
+            "description": "The image containing the information",
+        },
+        "question": {"type": str, "description": "The question in English"},
     }
     output_type = str
 
