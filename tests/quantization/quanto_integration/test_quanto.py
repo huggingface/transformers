@@ -436,6 +436,6 @@ class PytorchBasic(unittest.TestCase):
         mask = torch.full((50, 50), torch.finfo(dtype).min, device=device)
 
     def test_create_torch_full(self):
-        for dtype in [torch.float32,torch.float16]:
+        for dtype in [torch.float32, torch.float16]:
             for device in [torch.device("cpu"), torch.device('cuda')]:
-                self.create_torch_full(dtype,device)
+                self.create_torch_full(dtype=dtype, device=device)
