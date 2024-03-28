@@ -33,12 +33,6 @@ For more details refer to the [release blog post](https://qwenlm.github.io/blog/
 
 `Qwen1.5-MoE-A2.7B` and `Qwen1.5-MoE-A2.7B-Chat` can be found on the [Huggingface Hub](https://huggingface.co/Qwen)
 
-To use our models, users need to run the following command to build the transformers library from source.
-
-```
-pip install git+https://github.com/huggingface/transformers
-```
-
 In the following, we demonstrate how to use `Qwen1.5-MoE-A2.7B-Chat` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
 
 ```python
