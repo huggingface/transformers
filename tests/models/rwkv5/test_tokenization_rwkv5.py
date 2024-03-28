@@ -16,6 +16,7 @@
 import os
 import unittest
 
+from transformers import AutoTokenizer
 from transformers.models.rwkv5.tokenization_rwkv5 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers, require_torch
 from transformers.utils import is_torch_available
@@ -54,4 +55,22 @@ class RWKV5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         pass
 
 
+class Rwkv5IntegrationTest(unittest.TestCase):
+
+    def test_sample_prompt(self):
+        tokenizer = AutoTokenizer.from_pretrained("ArthurZ/rwkv5", padding_side='left')
+        prompt = "Hey how are you? 男：听说你们公司要派你去南方工作"
+        ids = tokenizer.encode(prompt)
+        print(ids)
+        print(tokenizer.tokenize(prompt))
+        print(tokenizer.convert_ids_to_tokens(tokenizer.encode(prompt)))
+        print(tokenizer.convert_tokens_to_string(tokenizer.convert_ids_to_tokens(tokenizer.encode(prompt))))
+        print(tokenizer.decode(tokenizer.encode(prompt)))
+
+    def test_left_padding(self):
+        tokenizer = AutoTokenizer.from_pretrained("ArthurZ/rwkv5", padding_side='left')
+        prompt = ['Chinese: 他补充道：“我们现在有 4 个月大没有糖尿病的老鼠，但它们曾经得过该病。”\n\nEnglish:', 'Chinese: 埃胡德·乌尔博士（新斯科舍省哈利法克斯市达尔豪西大学医学教授，加拿大糖尿病协会临床与科学部门教授）提醒，这项研究仍处在早期阶段。\n\nEnglish:', 'Chinese: 和其他一些专家一样，他对糖尿病能否治愈持怀疑态度。他指出，这些发现与已患有 1 型糖尿病的人无关。\n\nEnglish:', 'Chinese: 周一，瑞典学院诺贝尔文学委员会常务秘书萨拉·丹尼尔斯在瑞典广播电台的一档节目中向公众宣布，委员会因无法直接联系到鲍勃·迪伦，通知他获得了 2016 年诺贝尔文学奖，已经放弃了与他联系的尝试。\n\nEnglish:'] # fmt: skip
+        inputs_ = tokenizer(prompt)
+        EXPECTED_INPUTS = {'input_ids': [[0, 48407, 59, 33, 10390, 16416, 10655, 17222, 43899, 12605, 10402, 14446, 11454, 13191, 287, 33, 10283, 13190, 11638, 13734, 13191, 15294, 12004, 14662, 14734, 15640, 18459, 19137, 10444, 11885, 10402, 13186, 15486, 12348, 17141, 16721, 14662, 10080, 9823, 261, 48487, 59], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 48407, 59, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 48407, 59, 0, 284, 33, 11496, 15294, 12004, 14662, 14734, 10370, 13051, 10684, 28329, 11, 48487, 59], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 48407, 59, 0, 3493, 636, 33, 12201, 16741, 16873, 11979, 13012, 11871, 11665, 19137, 12145, 15486, 12983, 12269, 10333, 10261, 10390, 15671, 15304, 14734, 11986, 16707, 28329, 11, 48487, 59]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]} # fmt: skip
+        self.assertDictEqual(inputs_, EXPECTED_INPUTS)
 # TODO add integration tests slow. Maybe also work on fast?
