@@ -462,10 +462,10 @@ class ModelTesterMixin:
             ([0.2975, 0.2131, -0.1379, -0.0796, -0.3012, -0.0057, -0.2381, -0.2439, -0.0174, 0.0475])
         )
         init_instance = MyClass()
-        torch.testing.assert_allclose(init_instance.linear.bias, expected_bias, rtol=1e-3, atol=1e-4)
+        torch.testing.assert_close(init_instance.linear.bias, expected_bias, rtol=1e-3, atol=1e-4)
 
         set_seed(0)
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             init_instance.linear.weight, nn.init.kaiming_uniform_(no_init_instance.linear.weight, np.sqrt(5))
         )
 

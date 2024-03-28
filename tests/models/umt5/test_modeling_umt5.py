@@ -763,7 +763,7 @@ class Umt5IntegrationTest(unittest.TestCase):
             ]
         )
         # fmt: on
-        torch.testing.assert_allclose(input_ids, EXPECTED_IDS)
+        torch.testing.assert_close(input_ids, EXPECTED_IDS)
 
         generated_ids = model.generate(input_ids.to(torch_device))
         EXPECTED_FILLING = [
