@@ -464,6 +464,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        concat_images: Optional[bool] = True,
     ):
         """
         Args:
@@ -516,6 +517,8 @@ class LlavaNextImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            concat_images (`bool`, default to True):
+                instead of stacking, concatenate images
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -603,6 +606,10 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             pixel_values = np.array(pixel_values)
             new_images.append(pixel_values)
 
-        data = {"pixel_values": new_images, "image_sizes": image_sizes}
+        if concat_images:
+            pixel_values = np.concatenate(new_images, axis=0)
+            data = {"pixel_values": pixel_values, "image_sizes": image_sizes}
+        else:
+            data = {"pixel_values": new_images, "image_sizes": image_sizes}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
