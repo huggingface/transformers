@@ -642,7 +642,6 @@ MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         ("mobilevitv2", "MobileViTV2ForSemanticSegmentation"),
         ("segformer", "SegformerForSemanticSegmentation"),
         ("upernet", "UperNetForSemanticSegmentation"),
-        ("zoedepth", "ZoeDepthForSemanticSegmentation"),
     ]
 )
 

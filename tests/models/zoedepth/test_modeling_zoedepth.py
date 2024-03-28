@@ -31,7 +31,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import MODEL_MAPPING, ZoeDepthForDepthEstimation, ZoeDepthForSemanticSegmentation, ZoeDepthModel
+    from transformers import MODEL_MAPPING, ZoeDepthForDepthEstimation, ZoeDepthModel
     from transformers.models.zoedepth.modeling_zoedepth import ZOEDEPTH_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -135,16 +135,6 @@ class ZoeDepthModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(result.predicted_depth.shape, (self.batch_size, self.image_size, self.image_size))
 
-    def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels):
-        config.num_labels = self.num_labels
-        model = ZoeDepthForSemanticSegmentation(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size, self.image_size)
-        )
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels = config_and_inputs
@@ -160,7 +150,12 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     """
 
     all_model_classes = (
-        (ZoeDepthModel, ZoeDepthForDepthEstimation, ZoeDepthForSemanticSegmentation) if is_torch_available() else ()
+        (
+            ZoeDepthModel,
+            ZoeDepthForDepthEstimation,
+        )
+        if is_torch_available()
+        else ()
     )
 
     test_pruning = False
@@ -309,45 +304,3 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
-
-    def test_inference_semantic_segmentation(self):
-        image_processor = DPTImageProcessor.from_pretrained("Intel/zoedepth-base-ade")
-        model = ZoeDepthForSemanticSegmentation.from_pretrained("Intel/zoedepth-base-ade").to(torch_device)
-
-        image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        # verify the logits
-        expected_shape = torch.Size((1, 150, 480, 480))
-        self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [[4.0480, 4.2420, 4.4360], [4.3124, 4.5693, 4.8261], [4.5768, 4.8965, 5.2163]]
-        ).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4))
-
-    def test_post_processing_semantic_segmentation(self):
-        image_processor = DPTImageProcessor.from_pretrained("Intel/zoedepth-base-ade")
-        model = ZoeDepthForSemanticSegmentation.from_pretrained("Intel/zoedepth-base-ade").to(torch_device)
-
-        image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        outputs.logits = outputs.logits.detach().cpu()
-
-        segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs, target_sizes=[(500, 300)])
-        expected_shape = torch.Size((500, 300))
-        self.assertEqual(segmentation[0].shape, expected_shape)
-
-        segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs)
-        expected_shape = torch.Size((480, 480))
-        self.assertEqual(segmentation[0].shape, expected_shape)

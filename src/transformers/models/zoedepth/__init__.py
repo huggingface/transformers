@@ -28,7 +28,6 @@ else:
     _import_structure["modeling_zoedepth"] = [
         "ZOEDEPTH_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ZoeDepthForDepthEstimation",
-        "ZoeDepthForSemanticSegmentation",
         "ZoeDepthModel",
         "ZoeDepthPreTrainedModel",
     ]
@@ -46,7 +45,6 @@ if TYPE_CHECKING:
         from .modeling_zoedepth import (
             ZOEDEPTH_PRETRAINED_MODEL_ARCHIVE_LIST,
             ZoeDepthForDepthEstimation,
-            ZoeDepthForSemanticSegmentation,
             ZoeDepthModel,
             ZoeDepthPreTrainedModel,
         )

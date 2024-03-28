@@ -95,14 +95,6 @@ class ZoeDepthConfig(PretrainedConfig):
             Whether to use bias in the pre-activate residual units of the fusion blocks.
         add_projection (`bool`, *optional*, defaults to `False`):
             Whether to add a projection layer before the depth estimation head.
-        use_auxiliary_head (`bool`, *optional*, defaults to `True`):
-            Whether to use an auxiliary head during training.
-        auxiliary_loss_weight (`float`, *optional*, defaults to 0.4):
-            Weight of the cross-entropy loss of the auxiliary head.
-        semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
-            The index that is ignored by the loss function of the semantic segmentation model.
-        semantic_classifier_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the semantic classification head.
         backbone_featmap_shape (`List[int]`, *optional*, defaults to `[1, 1024, 24, 24]`):
             Used only for the `hybrid` embedding type. The shape of the feature maps of the backbone.
         neck_ignore_stages (`List[int]`, *optional*, defaults to `[0, 1]`):
@@ -116,6 +108,19 @@ class ZoeDepthConfig(PretrainedConfig):
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
         use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
             Whether to use pretrained weights for the backbone.
+        btlnck_features (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
+        n_bins (`<fill_type>`, *optional*, defaults to 64): <fill_docstring>
+        min_depth (`<fill_type>`, *optional*, defaults to 0.001): <fill_docstring>
+        max_depth (`<fill_type>`, *optional*, defaults to 10): <fill_docstring>
+        num_attractors (`<fill_type>`, *optional*, defaults to `[16, 8, 4, 1]`): <fill_docstring>
+        bin_embedding_dim (`<fill_type>`, *optional*, defaults to 128): <fill_docstring>
+        num_out_features (`<fill_type>`, *optional*, defaults to `[256, 256, 256, 256]`): <fill_docstring>
+        attractor_alpha (`<fill_type>`, *optional*, defaults to 1000): <fill_docstring>
+        attractor_gamma (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+        attractor_kind (`<fill_type>`, *optional*, defaults to `"mean"`): <fill_docstring>
+        attractor_type (`<fill_type>`, *optional*, defaults to `"inv"`): <fill_docstring>
+        min_temp (`<fill_type>`, *optional*, defaults to 0.0212): <fill_docstring>
+        max_temp (`<fill_type>`, *optional*, defaults to 50.0): <fill_docstring>
 
     Example:
 

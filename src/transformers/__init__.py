@@ -3831,7 +3831,6 @@ else:
         [
             "ZOEDEPTH_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ZoeDepthForDepthEstimation",
-            "ZoeDepthForSemanticSegmentation",
             "ZoeDepthModel",
             "ZoeDepthPreTrainedModel",
         ]
@@ -8274,7 +8273,6 @@ if TYPE_CHECKING:
         from .models.zoedepth import (
             ZOEDEPTH_PRETRAINED_MODEL_ARCHIVE_LIST,
             ZoeDepthForDepthEstimation,
-            ZoeDepthForSemanticSegmentation,
             ZoeDepthModel,
             ZoeDepthPreTrainedModel,
         )
