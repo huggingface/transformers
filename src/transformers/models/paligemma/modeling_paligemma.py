@@ -21,9 +21,6 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...cache_utils import Cache
-from ...modeling_outputs import (
-    BaseModelOutput,
-)
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -33,7 +30,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-#from ..siglip.configuration_siglip import SiglipVisionConfig
 from .configuration_paligemma import PaLIGemmaConfig
 from ...activations import ACT2FN
 
@@ -41,7 +37,7 @@ from ...activations import ACT2FN
 if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
-from .language_modeling_paligemma import PaLIGemmaLanguageForCausalLM
+from ..auto import AutoModel, AutoModelForCausalLM
 
 
 logger = logging.get_logger(__name__)
@@ -52,336 +48,6 @@ PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Molbap/model7",
     # See all PaLIGemmamodels at https://huggingface.co/models?filter=paligemma
 ]
-
-PALIGEMMA_SIGLIP_VISION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-class SiglipAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-    # Copied from transformers.models.clip.modeling_clip.CLIPAttention.__init__
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
-        self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
-
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        """Input shape: Batch x Time x Channel"""
-
-        batch_size, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-
-        k_v_seq_len = key_states.shape[-2]
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scale
-
-        if attn_weights.size() != (batch_size, self.num_heads, q_len, k_v_seq_len):
-            raise ValueError(
-                f"Attention weights should be of size {(batch_size, self.num_heads, q_len, k_v_seq_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            if attention_mask.size() != (batch_size, 1, q_len, k_v_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, q_len, k_v_seq_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights + attention_mask
-
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        if attn_output.size() != (batch_size, self.num_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim)
-
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights
-
-
-# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Siglip
-class SiglipMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
-
-
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->Siglip
-class SiglipEncoderLayer(nn.Module):
-    def __init__(self, config: PaLIGemmaConfig):
-        super().__init__()
-        self.embed_dim = config.hidden_size
-        self.self_attn = SiglipAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = SiglipMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-
-    # Ignore copy
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(batch, seq_len, embed_dim)`.
-            attention_mask (`torch.FloatTensor`):
-                Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
-            output_attentions (`bool`, *optional*, defaults to `False`):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
-        residual = hidden_states
-
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-        )
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
-
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->Siglip
-class SiglipEncoder(nn.Module):
-    """
-    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`SiglipEncoderLayer`].
-
-    Args:
-        config: PaLIGemmaConfig
-    """
-
-    def __init__(self, config: PaLIGemmaConfig):
-        super().__init__()
-        self.config = config
-        self.layers = nn.ModuleList([SiglipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    # Ignore copy
-    def forward(
-        self,
-        inputs_embeds,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
-        r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        hidden_states = inputs_embeds
-        for encoder_layer in self.layers:
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    output_attentions=output_attentions,
-                )
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
-
-# Copied from transformers.models.siglip.modeling_siglip.SiglipVisionEmbeddings with Siglip->Siglip
-class SiglipVisionEmbeddings(nn.Module):
-    def __init__(self, config: PaLIGemmaConfig):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.image_size = config.image_size
-        self.patch_size = config.patch_size
-
-        self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=self.embed_dim,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
-            padding="valid",
-        )
-
-        self.num_patches = (self.image_size // self.patch_size) ** 2
-        self.num_positions = self.num_patches
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
-
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
-        embeddings = patch_embeds.flatten(2).transpose(1, 2)
-
-        embeddings = embeddings + self.position_embedding(self.position_ids)
-        return embeddings
-
-
-
-class PaLIGemmaSiglipVisionTransformer(nn.Module):
-    """
-    Modified version of Siglip with a linear head and no pooling, used specifically in PaLIGemma.
-    """
-
-    def __init__(self, config: PaLIGemmaConfig):
-        super().__init__()
-        self.config = config
-        embed_dim = config.hidden_size
-
-        self.embeddings = SiglipVisionEmbeddings(config)
-        self.encoder = SiglipEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-
-    @add_start_docstrings_to_model_forward(PALIGEMMA_SIGLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=PaLIGemmaConfig)
-    def forward(
-        self,
-        pixel_values,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
-        r"""
-        Returns:
-
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        hidden_states = self.embeddings(pixel_values)
-
-        encoder_outputs = self.encoder(
-            inputs_embeds=hidden_states,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        last_hidden_state = encoder_outputs[0]
-        last_hidden_state = self.post_layernorm(last_hidden_state)
-
-        if not return_dict:
-            return (last_hidden_state,) + encoder_outputs[1:]
-
-        return BaseModelOutput(
-            last_hidden_state=last_hidden_state,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
-
 
 @dataclass
 class PaLIGemmaCausalLMOutputWithPast(ModelOutput):
@@ -569,10 +235,10 @@ PALIGEMMA_INPUTS_DOCSTRING = r"""
 class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
     def __init__(self, config: PaLIGemmaConfig):
         super().__init__(config)
-        self.vision_model = PaLIGemmaSiglipVisionTransformer(config=config.vision_config)
+        self.vision_tower = AutoModel.from_config(config=config.vision_config) #PaLIGemmaSiglipVisionTransformer(config=config.vision_config)
         self.multi_modal_projector = PaLIGemmaMultiModalProjector(config)
         self.vocab_size = config.vocab_size
-        self.language_model = PaLIGemmaLanguageForCausalLM(config=config.text_config)
+        self.language_model = AutoModelForCausalLM.from_config(config=config.text_config) #PaLIGemmaLanguageForCausalLM(config=config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
@@ -606,6 +272,10 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
         return model_embeds
 
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
+
+        # TODO add scaling division for image tokens to use gemma modelin
+        # TODO output 4D attention mask here directly
+
         _, num_image_tokens, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
 
@@ -629,8 +299,8 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
                 start_text_idx = full_sequence_length - num_text_tokens
                 start_image_idx = start_text_idx - num_image_tokens
 
-                final_embedding[i, start_image_idx:start_text_idx] = image_features[i]
-                final_embedding[i, start_text_idx:start_text_idx + num_text_tokens] = (self.config.hidden_size ** 0.5) * text_embeds
+                final_embedding[i, start_image_idx:start_text_idx] = image_features[i] / (self.config.hidden_size ** 0.5)
+                final_embedding[i, start_text_idx:start_text_idx + num_text_tokens] =  text_embeds
                 final_attention_mask[i, start_image_idx:start_text_idx + num_text_tokens] = 1
         else:
             for i in range(batch_size):
@@ -638,8 +308,8 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
                 num_text_tokens = text_tokens_mask.sum().item()
                 text_embeds = inputs_embeds[i][text_tokens_mask]
 
-                final_embedding[i, :num_image_tokens] = image_features[i]
-                final_embedding[i, num_image_tokens:num_image_tokens + num_text_tokens] = (self.config.hidden_size ** 0.5) * text_embeds
+                final_embedding[i, :num_image_tokens] = image_features[i] / (self.config.hidden_size ** 0.5)
+                final_embedding[i, num_image_tokens:num_image_tokens + num_text_tokens] = text_embeds
                 final_attention_mask[i, :num_image_tokens + num_text_tokens] = 1
         position_ids = torch.arange(full_sequence_length, device=inputs_embeds.device).expand(batch_size, -1)
         return final_embedding, final_attention_mask, final_labels, position_ids
@@ -702,7 +372,7 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
 
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
-                image_outputs = self.vision_model(pixel_values)
+                image_outputs = self.vision_tower(pixel_values)
                 selected_image_feature = image_outputs.last_hidden_state
                 image_features = self.multi_modal_projector(selected_image_feature)
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
@@ -742,6 +412,7 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
 
                     attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -752,6 +423,7 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        # we do not pass labels so output[0] correspond to logits
         logits = outputs[0]
         loss = None
         if labels is not None:
@@ -784,6 +456,7 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, inputs_embeds=None, pixel_values=None, attention_mask=None, **kwargs
     ):
+        # FIXME slicing is going wrong here, input_ids transmitted after 2nd forward are not of size 1
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
                 cache_length = past_key_values.get_seq_length()
@@ -832,6 +505,7 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
                 "pixel_values": pixel_values,
             }
         )
+        breakpoint()
         return model_inputs
 
     def _reorder_cache(self, *args, **kwargs):
