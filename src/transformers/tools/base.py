@@ -20,14 +20,18 @@ import io
 import json
 import os
 import tempfile
-from typing import Any, Dict, List, Optional, Union
 from functools import lru_cache
-from packaging import version
+from typing import Any, Dict, List, Optional, Union
 
 from huggingface_hub import create_repo, hf_hub_download, metadata_update, upload_folder
 from huggingface_hub.utils import RepositoryNotFoundError, build_hf_headers, get_session
+from packaging import version
 
-from ..dynamic_module_utils import custom_object_save, get_class_from_dynamic_module, get_imports
+from ..dynamic_module_utils import (
+    custom_object_save,
+    get_class_from_dynamic_module,
+    get_imports,
+)
 from ..image_utils import is_pil_image
 from ..models.auto import AutoProcessor
 from ..utils import (
@@ -70,7 +74,9 @@ def get_repo_type(repo_id, repo_type=None, **hub_kwargs):
             hf_hub_download(repo_id, TOOL_CONFIG_FILE, repo_type="model", **hub_kwargs)
             return "model"
         except RepositoryNotFoundError:
-            raise EnvironmentError(f"`{repo_id}` does not seem to be a valid repo identifier on the Hub.")
+            raise EnvironmentError(
+                f"`{repo_id}` does not seem to be a valid repo identifier on the Hub."
+            )
         except Exception:
             return "model"
     except Exception:
@@ -84,7 +90,8 @@ from {module_name} import {class_name}
 launch_gradio_demo({class_name})
 """
 
-class Tool():
+
+class Tool:
     """
     A base class for the functions used by the agent. Subclass this and implement the `__call__` method as well as the
     following class attributes:
@@ -114,17 +121,19 @@ class Tool():
         self.is_initialized = False
 
     def validate_attributes(self):
-        print('ok')
+        print("ok")
         required_attributes = {
-            'description': str,
-            'name': str,
-            'inputs': Dict,
-            'output_type': type,
+            "description": str,
+            "name": str,
+            "inputs": Dict,
+            "output_type": type,
         }
         for attr, expected_type in required_attributes.items():
             attr_value = getattr(self, attr, None)
             if not isinstance(attr_value, expected_type):
-                raise TypeError(f"Instance attribute {attr} must exist and be of type {expected_type.__name__}")
+                raise TypeError(
+                    f"Instance attribute {attr} must exist and be of type {expected_type.__name__}"
+                )
 
     def __call__(self, *args, **kwargs):
         return NotImplemented("Write this method in your subclass of `Tool`.")
@@ -172,14 +181,22 @@ class Tool():
         else:
             tool_config = {}
 
-        tool_config = {"tool_class": full_name, "description": self.description, "name": self.name}
+        tool_config = {
+            "tool_class": full_name,
+            "description": self.description,
+            "name": self.name,
+        }
         with open(config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tool_config, indent=2, sort_keys=True) + "\n")
 
         # Save app file
         app_file = os.path.join(output_dir, "app.py")
         with open(app_file, "w", encoding="utf-8") as f:
-            f.write(APP_FILE_TEMPLATE.format(module_name=last_module, class_name=self.__class__.__name__))
+            f.write(
+                APP_FILE_TEMPLATE.format(
+                    module_name=last_module, class_name=self.__class__.__name__
+                )
+            )
 
         # Save requirements file
         requirements_file = os.path.join(output_dir, "requirements.txt")
@@ -286,7 +303,9 @@ class Tool():
             custom_tool = config
 
         tool_class = custom_tool["tool_class"]
-        tool_class = get_class_from_dynamic_module(tool_class, repo_id, token=token, **hub_kwargs)
+        tool_class = get_class_from_dynamic_module(
+            tool_class, repo_id, token=token, **hub_kwargs
+        )
 
         if len(tool_class.name) == 0:
             tool_class.name = custom_tool["name"]
@@ -306,10 +325,10 @@ class Tool():
             )
             tool_class.description = custom_tool["description"]
 
-        if tool_class.inputs != custom_tool['inputs']:
-            tool_class.inputs = custom_tool['inputs']
-        if tool_class.output_type != custom_tool['output_type']:
-            tool_class.output_type = custom_tool['output_type']
+        if tool_class.inputs != custom_tool["inputs"]:
+            tool_class.inputs = custom_tool["inputs"]
+        if tool_class.output_type != custom_tool["output_type"]:
+            tool_class.output_type = custom_tool["output_type"]
 
         if remote:
             return RemoteTool(model_repo_id, token=token, tool_class=tool_class)
@@ -349,7 +368,12 @@ class Tool():
                 Whether or not to create a PR with the uploaded files or directly commit.
         """
         repo_url = create_repo(
-            repo_id=repo_id, token=token, private=private, exist_ok=True, repo_type="space", space_sdk="gradio"
+            repo_id=repo_id,
+            token=token,
+            private=private,
+            exist_ok=True,
+            repo_type="space",
+            space_sdk="gradio",
         )
         repo_id = repo_url.repo_id
         metadata_update(repo_id, {"tags": ["tool"]}, repo_type="space")
@@ -357,7 +381,9 @@ class Tool():
         with tempfile.TemporaryDirectory() as work_dir:
             # Save all files.
             self.save(work_dir)
-            logger.info(f"Uploading the following files to {repo_id}: {','.join(os.listdir(work_dir))}")
+            logger.info(
+                f"Uploading the following files to {repo_id}: {','.join(os.listdir(work_dir))}"
+            )
             return upload_folder(
                 repo_id=repo_id,
                 commit_message=commit_message,
@@ -366,7 +392,6 @@ class Tool():
                 create_pr=create_pr,
                 repo_type="space",
             )
-            
 
     @staticmethod
     def from_gradio(gradio_tool):
@@ -382,13 +407,13 @@ class Tool():
 
         GradioToolWrapper.__call__ = gradio_tool.run
         return GradioToolWrapper(gradio_tool)
-    
 
     @staticmethod
     def from_langchain(langchain_tool):
         """
         Creates a [`Tool`] from a langchain tool.
         """
+
         class LangChainToolWrapper(Tool):
             def __init__(self, _langchain_tool):
                 super().__init__()
@@ -400,11 +425,11 @@ class Tool():
 
             def __call__(self, *args, **kwargs):
                 # This lets the user type args either as kwargs or positional arguments
-                for index,argument in enumerate(args):
-                    if index<len(self.inputs):
+                for index, argument in enumerate(args):
+                    if index < len(self.inputs):
                         input_key = next(iter(self.inputs))
                         kwargs[input_key] = argument
-                
+
                 tool_input = {}
                 for key, value in kwargs.items():
                     tool_input[key] = value
@@ -444,10 +469,13 @@ OPENAI_TOOL_DESCRIPTION_TEMPLATE = """
 }
 """
 
-def get_tool_description_with_args(tool: Tool, description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE) -> str:
+
+def get_tool_description_with_args(
+    tool: Tool, description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE
+) -> str:
     compiled_template = compile_jinja_template(description_template)
     rendered = compiled_template.render(
-        tool=tool, #**self.special_tokens_map
+        tool=tool,  # **self.special_tokens_map
     )
     return rendered
 
@@ -463,7 +491,8 @@ def compile_jinja_template(template):
 
     if version.parse(jinja2.__version__) <= version.parse("3.0.0"):
         raise ImportError(
-            "template requires jinja2>=3.0.0 to be installed. Your version is " f"{jinja2.__version__}."
+            "template requires jinja2>=3.0.0 to be installed. Your version is "
+            f"{jinja2.__version__}."
         )
 
     def raise_exception(message):
@@ -488,19 +517,21 @@ class RemoteTool(Tool):
             The corresponding `tool_class` if this is a remote version of an existing tool. Will help determine when
             the output should be converted to another type (like images).
     """
+
     name = "remote tool"
     description = "a remote tool"
     inputs = {"default": Any}
     output_type = str
 
-    def __init__(self, endpoint_url, name, description, inputs, output_type, token=None):
+    def __init__(
+        self, endpoint_url, name, description, inputs, output_type, token=None
+    ):
         self.endpoint_url = endpoint_url
         self.client = EndpointClient(endpoint_url, token=token)
         self.name = name
         self.description = description
         self.inputs = inputs
         self.output_type = output_type
-
 
     def prepare_inputs(self, *args, **kwargs):
         """
@@ -525,13 +556,17 @@ class RemoteTool(Tool):
     def __call__(self, *args, **kwargs):
         output_image = False
         if is_vision_available():
-            output_image = (self.output_type == PIL.Image.Image)
+            output_image = self.output_type == PIL.Image.Image
         inputs = self.prepare_inputs(*args, **kwargs)
         if isinstance(inputs, dict):
             outputs = self.client(**inputs, output_image=output_image)
         else:
             outputs = self.client(inputs, output_image=output_image)
-        if isinstance(outputs, list) and len(outputs) == 1 and isinstance(outputs[0], list):
+        if (
+            isinstance(outputs, list)
+            and len(outputs) == 1
+            and isinstance(outputs[0], list)
+        ):
             outputs = outputs[0]
         return self.extract_outputs(outputs)
 
@@ -602,7 +637,9 @@ class PipelineTool(Tool):
 
         if model is None:
             if self.default_checkpoint is None:
-                raise ValueError("This tool does not implement a default checkpoint, you need to pass one.")
+                raise ValueError(
+                    "This tool does not implement a default checkpoint, you need to pass one."
+                )
             model = self.default_checkpoint
         if pre_processor is None:
             pre_processor = model
@@ -625,15 +662,21 @@ class PipelineTool(Tool):
         Instantiates the `pre_processor`, `model` and `post_processor` if necessary.
         """
         if isinstance(self.pre_processor, str):
-            self.pre_processor = self.pre_processor_class.from_pretrained(self.pre_processor, **self.hub_kwargs)
+            self.pre_processor = self.pre_processor_class.from_pretrained(
+                self.pre_processor, **self.hub_kwargs
+            )
 
         if isinstance(self.model, str):
-            self.model = self.model_class.from_pretrained(self.model, **self.model_kwargs, **self.hub_kwargs)
+            self.model = self.model_class.from_pretrained(
+                self.model, **self.model_kwargs, **self.hub_kwargs
+            )
 
         if self.post_processor is None:
             self.post_processor = self.pre_processor
         elif isinstance(self.post_processor, str):
-            self.post_processor = self.post_processor_class.from_pretrained(self.post_processor, **self.hub_kwargs)
+            self.post_processor = self.post_processor_class.from_pretrained(
+                self.post_processor, **self.hub_kwargs
+            )
 
         if self.device is None:
             if self.device_map is not None:
@@ -691,7 +734,9 @@ def launch_gradio_demo(tool_class: Tool):
     try:
         import gradio as gr
     except ImportError:
-        raise ImportError("Gradio should be installed in order to launch a gradio demo.")
+        raise ImportError(
+            "Gradio should be installed in order to launch a gradio demo."
+        )
 
     tool = tool_class()
 
@@ -713,9 +758,6 @@ def launch_gradio_demo(tool_class: Tool):
         gradio_output = "image"
     else:
         gradio_output = "audio"
-
-    def fn(*args, **kwargs):
-        return tool(*args, **kwargs)
 
     gr.Interface(
         fn=fn,
@@ -741,7 +783,11 @@ TASK_MAPPING = {
 
 
 def get_default_endpoints():
-    endpoints_file = cached_file("huggingface-tools/default-endpoints", "default_endpoints.json", repo_type="dataset")
+    endpoints_file = cached_file(
+        "huggingface-tools/default-endpoints",
+        "default_endpoints.json",
+        repo_type="dataset",
+    )
     with open(endpoints_file, "r", encoding="utf-8") as f:
         endpoints = json.load(f)
     return endpoints
@@ -836,7 +882,10 @@ def add_description(description):
 ## Will move to the Hub
 class EndpointClient:
     def __init__(self, endpoint_url: str, token: Optional[str] = None):
-        self.headers = {**build_hf_headers(token=token), "Content-Type": "application/json"}
+        self.headers = {
+            **build_hf_headers(token=token),
+            "Content-Type": "application/json",
+        }
         self.endpoint_url = endpoint_url
 
     @staticmethod
@@ -874,7 +923,9 @@ class EndpointClient:
             payload["parameters"] = params
 
         # Make API call
-        response = get_session().post(self.endpoint_url, headers=self.headers, json=payload, data=data)
+        response = get_session().post(
+            self.endpoint_url, headers=self.headers, json=payload, data=data
+        )
 
         # By default, parse the response for the user.
         if output_image:
@@ -887,6 +938,6 @@ def parse_langchain_args(args: Dict[str, str]) -> Dict[str, str]:
     """Parse the args attribute of a LangChain tool to create a matching inputs dictionary."""
     inputs = args.copy()
     for arg_details in inputs.values():
-        if 'title' in arg_details:
+        if "title" in arg_details:
             arg_details.pop("title")
     return inputs

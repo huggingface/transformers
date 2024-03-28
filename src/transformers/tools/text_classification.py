@@ -14,8 +14,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import List, Union
+
 import torch
-from typing import Union, List
 
 from ..models.auto import AutoModelForSequenceClassification, AutoTokenizer
 from .base import PipelineTool
@@ -44,9 +45,12 @@ class TextClassificationTool(PipelineTool):
 
     inputs = {
         "text": {"type": Union[str, List[str]], "description": "The text to classify"},
-        "labels": {"type": List[str], "description": "The list of labels to use for classification"}
+        "labels": {
+            "type": List[str],
+            "description": "The list of labels to use for classification",
+        },
     }
-    output_type= str
+    output_type = str
 
     def setup(self):
         super().setup()
@@ -56,7 +60,9 @@ class TextClassificationTool(PipelineTool):
             if label.lower().startswith("entail"):
                 self.entailment_id = int(idx)
         if self.entailment_id == -1:
-            raise ValueError("Could not determine the entailment ID from the model config, please pass it at init.")
+            raise ValueError(
+                "Could not determine the entailment ID from the model config, please pass it at init."
+            )
 
     def encode(self, text, labels):
         self._labels = labels

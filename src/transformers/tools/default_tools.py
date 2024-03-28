@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
+
 from .base import Tool
 
 
@@ -22,11 +23,17 @@ class CalculatorTool(Tool):
     name = "calculator"
     description = "This is a tool that calculates. It can be used to perform simple arithmetic operations."
 
-    inputs = {"expression": {"type": str, "description": "The expression to be evaluated.The variables used CANNOT be placeholders like 'x' or 'mike's age', they must be numbers"}}
+    inputs = {
+        "expression": {
+            "type": str,
+            "description": "The expression to be evaluated.The variables used CANNOT be placeholders like 'x' or 'mike's age', they must be numbers",
+        }
+    }
     output_type = str
 
     def __init__(self):
         import numexpr
+
         self.numexpr = numexpr
 
     def __call__(self, expression):
