@@ -3,7 +3,8 @@ name: Build docker images (scheduled)
 on:
   push:
     branches:
-      - fix-quantization-tests
+      - pass
+      # - fix-quantization-tests
   repository_dispatch:
   workflow_call:
     inputs:
