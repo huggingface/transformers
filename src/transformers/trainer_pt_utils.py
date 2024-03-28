@@ -48,7 +48,6 @@ from .utils import (
 )
 
 
-
 if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))
 
@@ -57,6 +56,7 @@ if is_torch_xla_available():
 
 if is_torch_available():
     from .pytorch_utils import is_torch_greater_or_equal_than_2_0
+
     if is_torch_greater_or_equal_than_2_0:
         from torch.optim.lr_scheduler import LRScheduler
     else:
