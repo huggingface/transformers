@@ -20,6 +20,7 @@
 
 __version__ = "4.40.0.dev0"
 
+
 from typing import TYPE_CHECKING
 
 # Check the dependencies satisfy the minimal versions required.
@@ -514,6 +515,7 @@ _import_structure = {
         "InstructBlipQFormerConfig",
         "InstructBlipVisionConfig",
     ],
+    "models.jamba": ["JAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP", "JambaConfig"],
     "models.jukebox": [
         "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "JukeboxConfig",
@@ -1466,6 +1468,7 @@ else:
             "AlignVisionModel",
         ]
     )
+
     _import_structure["models.altclip"].extend(
         [
             "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2454,6 +2457,15 @@ else:
             "InstructBlipPreTrainedModel",
             "InstructBlipQFormerModel",
             "InstructBlipVisionModel",
+        ]
+    )
+    _import_structure["models.jamba"].extend(
+        [
+            "JAMBA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "JambaForCausalLM",
+            "JambaForSequenceClassification",
+            "JambaModel",
+            "JambaPreTrainedModel",
         ]
     )
     _import_structure["models.jukebox"].extend(
@@ -5398,6 +5410,7 @@ if TYPE_CHECKING:
         InstructBlipQFormerConfig,
         InstructBlipVisionConfig,
     )
+    from .models.jamba import JAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP, JambaConfig
     from .models.jukebox import (
         JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP,
         JukeboxConfig,
@@ -7155,6 +7168,15 @@ if TYPE_CHECKING:
             InstructBlipQFormerModel,
             InstructBlipVisionModel,
         )
+
+        # PyTorch model imports
+        from .models.jamba import (
+            JAMBA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            JambaForCausalLM,
+            JambaForSequenceClassification,
+            JambaModel,
+            JambaPreTrainedModel,
+        )
         from .models.jukebox import (
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
             JukeboxModel,
@@ -7784,8 +7806,6 @@ if TYPE_CHECKING:
             SamModel,
             SamPreTrainedModel,
         )
-
-        # PyTorch model imports
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeamlessM4TCodeHifiGan,
