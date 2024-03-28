@@ -51,13 +51,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "flaubert/flaubert_base_cased"
 _CONFIG_FOR_DOC = "FlaubertConfig"
 
-FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "flaubert/flaubert_small_cased",
-    "flaubert/flaubert_base_uncased",
-    "flaubert/flaubert_base_cased",
-    "flaubert/flaubert_large_cased",
-    # See all Flaubert models at https://huggingface.co/models?filter=flaubert
-]
+
+from ..deprecated._archive_maps import FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.xlm.modeling_xlm.create_sinusoidal_embeddings
@@ -1143,8 +1138,8 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
         >>> from transformers import XLMTokenizer, XLMForQuestionAnswering
         >>> import torch
 
-        >>> tokenizer = XLMTokenizer.from_pretrained("xlm-mlm-en-2048")
-        >>> model = XLMForQuestionAnswering.from_pretrained("xlm-mlm-en-2048")
+        >>> tokenizer = XLMTokenizer.from_pretrained("FacebookAI/xlm-mlm-en-2048")
+        >>> model = XLMForQuestionAnswering.from_pretrained("FacebookAI/xlm-mlm-en-2048")
 
         >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(
         ...     0

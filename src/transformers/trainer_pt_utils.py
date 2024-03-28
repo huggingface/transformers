@@ -16,7 +16,9 @@
 Torch utilities for the Trainer class.
 """
 
+import copy
 import datetime
+import io
 import json
 import math
 import os
@@ -24,7 +26,7 @@ import sys
 import warnings
 from collections.abc import Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from logging import StreamHandler
 from typing import Any, Dict, Iterator, List, Optional, Union
 
@@ -32,18 +34,19 @@ import numpy as np
 import torch
 import torch.distributed as dist
 from torch import nn
+from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
 from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .tokenization_utils_base import BatchEncoding
-from .utils import is_sagemaker_mp_enabled, is_torch_tpu_available, is_training_run_on_sagemaker, logging
+from .utils import is_sagemaker_mp_enabled, is_torch_xla_available, is_training_run_on_sagemaker, logging
 
 
 if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))
 
-if is_torch_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 # this is used to suppress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
@@ -177,7 +180,7 @@ def nested_detach(tensors):
 
 
 def nested_xla_mesh_reduce(tensors, name):
-    if is_torch_tpu_available():
+    if is_torch_xla_available():
         import torch_xla.core.xla_model as xm
 
         if isinstance(tensors, (list, tuple)):
@@ -1140,3 +1143,131 @@ if is_sagemaker_mp_enabled():
         # It doesn't seem possible to check here if `tensor` is a StepOutput because StepOutput lives in `smp.step`
         # which is also the name of the decorator so Python is confused.
         return tensor.concat().detach().cpu()
+
+
+@dataclass
+class AcceleratorConfig:
+    """
+    A subset of arguments relating to the underlying [`accelerate.Accelerator`]
+    implementation utilized in the `Trainer` that can be customized.
+    Mostly relating to data.
+
+    Parameters:
+        split_batches (`bool`, *optional*, defaults to `False`):
+            Whether or not the accelerator should split the batches yielded by the dataloaders across the devices. If
+            `True` the actual batch size used will be the same on any kind of distributed processes, but it must be a
+            round multiple of the `num_processes` you are using. If `False`, actual batch size used will be the one set
+            in your script multiplied by the number of processes.
+        dispatch_batches (`bool`, *optional*):
+            If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
+            and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
+            underlying dataset is an `IterableDataset`, `False` otherwise.
+        even_batches (`bool`, *optional*, defaults to `True`):
+            If set to `True`, in cases where the total batch size across all processes does not exactly divide the
+            dataset, samples at the start of the dataset will be duplicated so the batch can be divided equally among
+            all workers.
+        use_seedable_sampler (`bool`, *optional*, defaults to `True`):
+            Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`]). Ensures
+            training results are fully reproducable using a different sampling technique. While seed-to-seed results
+            may differ, on average the differences are neglible when using multiple different seeds to compare. Should
+            also be ran with [`~utils.set_seed`] for the best results.
+
+    """
+
+    # Data related arguments
+    split_batches: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether or not the accelerator should split the batches yielded by the dataloaders across the devices. If"
+            " `True` the actual batch size used will be the same on any kind of distributed processes, but it must be a"
+            " round multiple of the `num_processes` you are using. If `False`, actual batch size used will be the one set"
+            " in your script multiplied by the number of processes."
+        },
+    )
+    dispatch_batches: bool = field(
+        default=None,
+        metadata={
+            "help": "If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process"
+            " and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose"
+            " underlying dataset is an `IterableDataslet`, `False` otherwise."
+        },
+    )
+    even_batches: bool = field(
+        default=True,
+        metadata={
+            "help": "If set to `True`, in cases where the total batch size across all processes does not exactly divide the"
+            " dataset, samples at the start of the dataset will be duplicated so the batch can be divided equally among"
+            " all workers."
+        },
+    )
+    use_seedable_sampler: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`])."
+            "Ensures training results are fully reproducable using a different sampling technique. "
+            "While seed-to-seed results may differ, on average the differences are neglible when using"
+            "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
+        },
+    )
+
+    @classmethod
+    def from_json_file(cls, json_file):
+        # Check if exists
+        open_file = io.open if os.path.exists(json_file) else open
+        with open_file(json_file, "r", encoding="utf-8") as f:
+            config_dict = json.load(f)
+        # Check for keys and load sensible defaults
+        extra_keys = sorted(key for key in config_dict.keys() if key not in cls.__dataclass_fields__.keys())
+        if len(extra_keys) > 0:
+            raise ValueError(
+                f"The config file at {json_file} had unknown keys ({extra_keys}), please try upgrading your `transformers`"
+                " version or fix (and potentially remove these keys) from your config file."
+            )
+        return cls(**config_dict)
+
+    def to_dict(self):
+        return copy.deepcopy(self.__dict__)
+
+
+class LayerWiseDummyOptimizer(torch.optim.Optimizer):
+    """
+    For Layer-wise optimizers such as GaLoRE optimizer, the optimization
+    step is already done through the post gradient hooks. Therefore
+    the trick is to create a dummy optimizer that can take arbitrary
+    args and kwargs and return a no-op during training.
+
+    Initial idea from @hiyouga in LLaMA-Factory:
+    https://github.com/hiyouga/LLaMA-Factory/commit/8664262cde3919e10eaecbd66e8c5d356856362e#diff-ebe08ab14496dfb9e06075f0fdd36799ef6d1535cc4dd4715b74c4e3e06fe3ba
+    """
+
+    def __init__(self, optimizer_dict=None, *args, **kwargs):
+        dummy_tensor = torch.randn(1, 1)
+        self.optimizer_dict = optimizer_dict
+        super().__init__([dummy_tensor], {"lr": 1e-03})
+
+    def zero_grad(self, set_to_none: bool = True) -> None:
+        pass
+
+    def step(self, closure=None) -> Optional[float]:
+        pass
+
+
+class LayerWiseDummyScheduler(LRScheduler):
+    """
+    For Layer-wise optimizers such as GaLoRE optimizer, the optimization and scheduling step
+    are already done through the post gradient hooks. Therefore
+    the trick is to create a dummy scheduler that can take arbitrary
+    args and kwargs and return a no-op during training.
+    """
+
+    def __init__(self, *args, **kwargs):
+        optimizer = LayerWiseDummyOptimizer()
+        last_epoch = -1
+        verbose = False
+        super().__init__(optimizer, last_epoch, verbose)
+
+    def get_lr(self):
+        return [group["lr"] for group in self.optimizer.param_groups]
+
+    def _get_closed_form_lr(self):
+        return self.base_lrs

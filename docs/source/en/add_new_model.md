@@ -89,8 +89,8 @@ model.config  # model has access to its config
 Similar to the model, the configuration inherits basic serialization and deserialization functionalities from
 [`PretrainedConfig`]. Note that the configuration and the model are always serialized into two
 different formats - the model to a *pytorch_model.bin* file and the configuration to a *config.json* file. Calling
-[`~PreTrainedModel.save_pretrained`] will automatically call
-[`~PretrainedConfig.save_pretrained`], so that both model and configuration are saved.
+the model's [`~PreTrainedModel.save_pretrained`] will automatically call
+the config's [`~PretrainedConfig.save_pretrained`], so that both model and configuration are saved.
 
 
 ### Code style
@@ -192,46 +192,46 @@ its attention layer, etc. We will be more than happy to help you.
 
 2. Clone your `transformers` fork to your local disk, and add the base repository as a remote:
 
-```bash
-git clone https://github.com/[your Github handle]/transformers.git
-cd transformers
-git remote add upstream https://github.com/huggingface/transformers.git
-```
+   ```bash
+   git clone https://github.com/[your Github handle]/transformers.git
+   cd transformers
+   git remote add upstream https://github.com/huggingface/transformers.git
+   ```
 
 3. Set up a development environment, for instance by running the following command:
 
-```bash
-python -m venv .env
-source .env/bin/activate
-pip install -e ".[dev]"
-```
+   ```bash
+   python -m venv .env
+   source .env/bin/activate
+   pip install -e ".[dev]"
+   ```
 
-Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
-failure with this command. If that's the case make sure to install the Deep Learning framework you are working with
-(PyTorch, TensorFlow and/or Flax) then do:
+   Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
+   failure with this command. If that's the case make sure to install the Deep Learning framework you are working with
+   (PyTorch, TensorFlow and/or Flax) then do:
 
-```bash
-pip install -e ".[quality]"
-```
+   ```bash
+   pip install -e ".[quality]"
+   ```
 
-which should be enough for most use cases. You can then return to the parent directory
+   which should be enough for most use cases. You can then return to the parent directory
 
-```bash
-cd ..
-```
+   ```bash
+   cd ..
+   ```
 
 4. We recommend adding the PyTorch version of *brand_new_bert* to Transformers. To install PyTorch, please follow the
    instructions on https://pytorch.org/get-started/locally/.
 
-**Note:** You don't need to have CUDA installed. Making the new model work on CPU is sufficient.
+   **Note:** You don't need to have CUDA installed. Making the new model work on CPU is sufficient.
 
 5. To port *brand_new_bert*, you will also need access to its original repository:
 
-```bash
-git clone https://github.com/org_that_created_brand_new_bert_org/brand_new_bert.git
-cd brand_new_bert
-pip install -e .
-```
+   ```bash
+   git clone https://github.com/org_that_created_brand_new_bert_org/brand_new_bert.git
+   cd brand_new_bert
+   pip install -e .
+   ```
 
 Now you have set up a development environment to port *brand_new_bert* to 🤗 Transformers.
 
@@ -421,29 +421,29 @@ You should do the following:
 
 1. Create a branch with a descriptive name from your main branch
 
-```bash
-git checkout -b add_brand_new_bert
-```
+   ```bash
+   git checkout -b add_brand_new_bert
+   ```
 
 2. Commit the automatically generated code:
 
-```bash
-git add .
-git commit
-```
+   ```bash
+   git add .
+   git commit
+   ```
 
 3. Fetch and rebase to current main
 
-```bash
-git fetch upstream
-git rebase upstream/main
-```
+   ```bash
+   git fetch upstream
+   git rebase upstream/main
+   ```
 
 4. Push the changes to your account using:
 
-```bash
-git push -u origin a-descriptive-name-for-my-changes
-```
+   ```bash
+   git push -u origin a-descriptive-name-for-my-changes
+   ```
 
 5. Once you are satisfied, go to the webpage of your fork on GitHub. Click on “Pull request”. Make sure to add the
    GitHub handle of some members of the Hugging Face team as reviewers, so that the Hugging Face team gets notified for
@@ -531,7 +531,7 @@ but all the other ones should use an initialization as above. This is coded like
 ```py
 def _init_weights(self, module):
     """Initialize the weights"""
-    if isinstnace(module, Wav2Vec2ForPreTraining):
+    if isinstance(module, Wav2Vec2ForPreTraining):
         module.project_hid.reset_parameters()
         module.project_q.reset_parameters()
         module.project_hid._is_hf_initialized = True
@@ -682,7 +682,7 @@ model.save_pretrained("/path/to/converted/checkpoint/folder")
 **7. Implement the forward pass**
 
 Having managed to correctly load the pretrained weights into the 🤗 Transformers implementation, you should now make
-sure that the forward pass is correctly implemented. In [Get familiar with the original repository](#34-run-a-pretrained-checkpoint-using-the-original-repository), you have already created a script that runs a forward
+sure that the forward pass is correctly implemented. In [Get familiar with the original repository](#3-4-run-a-pretrained-checkpoint-using-the-original-repository), you have already created a script that runs a forward
 pass of the model using the original repository. Now you should write an analogous script using the 🤗 Transformers
 implementation instead of the original one. It should look as follows:
 
@@ -759,7 +759,7 @@ In case you are using Windows, you should replace `RUN_SLOW=1` with `SET RUN_SLO
 </Tip>
 
 Second, all features that are special to *brand_new_bert* should be tested additionally in a separate test under
-`BrandNewBertModelTester`/``BrandNewBertModelTest`. This part is often forgotten but is extremely useful in two
+`BrandNewBertModelTester`/`BrandNewBertModelTest`. This part is often forgotten but is extremely useful in two
 ways:
 
 - It helps to transfer the knowledge you have acquired during the model addition to the community by showing how the
@@ -776,7 +776,7 @@ It is very important to find/extract the original tokenizer file and to manage t
 Transformers' implementation of the tokenizer.
 
 To ensure that the tokenizer works correctly, it is recommended to first create a script in the original repository
-that inputs a string and returns the `input_ids``. It could look similar to this (in pseudo-code):
+that inputs a string and returns the `input_ids`. It could look similar to this (in pseudo-code):
 
 ```python
 input_str = "This is a long example input string containing special characters .$?-, numbers 2872 234 12 and words."
@@ -827,7 +827,7 @@ the community to add some *Tips* to show how the model should be used. Don't hes
 regarding the docstrings.
 
 Next, make sure that the docstring added to `src/transformers/models/brand_new_bert/modeling_brand_new_bert.py` is
-correct and included all necessary inputs and outputs. We have a detailed guide about writing documentation and our docstring format [here](writing-documentation). It is always to good to remind oneself that documentation should
+correct and included all necessary inputs and outputs. We have a detailed guide about writing documentation and our docstring format [here](writing-documentation). It is always good to remind oneself that documentation should
 be treated at least as carefully as the code in 🤗 Transformers since the documentation is usually the first contact
 point of the community with the model.
 

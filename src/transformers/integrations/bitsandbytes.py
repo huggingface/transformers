@@ -1,6 +1,7 @@
 import importlib.metadata
 import warnings
 from copy import deepcopy
+from inspect import signature
 
 from packaging import version
 
@@ -76,7 +77,7 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
             else:
                 new_value = torch.tensor(value, device="cpu")
 
-            # Support models using `Conv1D` in place of `nn.Linear` (e.g. gpt2) by transposing the weight matrix prior to quantization.
+            # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
             # Since weights are saved in the correct "orientation", we skip transposing when loading.
             if issubclass(module.source_cls, Conv1D) and not prequantized_loading:
                 new_value = new_value.T
@@ -179,6 +180,11 @@ def _replace_with_bnb_linear(
                         ):
                             pass
                         else:
+                            extra_kwargs = (
+                                {"quant_storage": quantization_config.bnb_4bit_quant_storage}
+                                if "quant_storage" in list(signature(bnb.nn.Linear4bit).parameters)
+                                else {}
+                            )
                             model._modules[name] = bnb.nn.Linear4bit(
                                 in_features,
                                 out_features,
@@ -186,6 +192,7 @@ def _replace_with_bnb_linear(
                                 quantization_config.bnb_4bit_compute_dtype,
                                 compress_statistics=quantization_config.bnb_4bit_use_double_quant,
                                 quant_type=quantization_config.bnb_4bit_quant_type,
+                                **extra_kwargs,
                             )
                             has_been_replaced = True
                     # Store the module class in case we need to transpose the weight later

@@ -85,10 +85,6 @@ if is_torch_available():
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_MAPPING,
     )
-    from transformers.models.bert.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.models.gpt2.modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.models.t5.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.models.tapas.modeling_tapas import TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
@@ -98,138 +94,134 @@ class AutoModelTest(unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, BertConfig)
+        model_name = "google-bert/bert-base-uncased"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, BertConfig)
 
-            model = AutoModel.from_pretrained(model_name)
-            model, loading_info = AutoModel.from_pretrained(model_name, output_loading_info=True)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, BertModel)
+        model = AutoModel.from_pretrained(model_name)
+        model, loading_info = AutoModel.from_pretrained(model_name, output_loading_info=True)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, BertModel)
 
-            self.assertEqual(len(loading_info["missing_keys"]), 0)
-            # When using PyTorch checkpoint, the expected value is `8`. With `safetensors` checkpoint (if it is
-            # installed), the expected value becomes `7`.
-            EXPECTED_NUM_OF_UNEXPECTED_KEYS = 7 if is_safetensors_available() else 8
-            self.assertEqual(len(loading_info["unexpected_keys"]), EXPECTED_NUM_OF_UNEXPECTED_KEYS)
-            self.assertEqual(len(loading_info["mismatched_keys"]), 0)
-            self.assertEqual(len(loading_info["error_msgs"]), 0)
+        self.assertEqual(len(loading_info["missing_keys"]), 0)
+        # When using PyTorch checkpoint, the expected value is `8`. With `safetensors` checkpoint (if it is
+        # installed), the expected value becomes `7`.
+        EXPECTED_NUM_OF_UNEXPECTED_KEYS = 7 if is_safetensors_available() else 8
+        self.assertEqual(len(loading_info["unexpected_keys"]), EXPECTED_NUM_OF_UNEXPECTED_KEYS)
+        self.assertEqual(len(loading_info["mismatched_keys"]), 0)
+        self.assertEqual(len(loading_info["error_msgs"]), 0)
 
     @slow
     def test_model_for_pretraining_from_pretrained(self):
-        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, BertConfig)
+        model_name = "google-bert/bert-base-uncased"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, BertConfig)
 
-            model = AutoModelForPreTraining.from_pretrained(model_name)
-            model, loading_info = AutoModelForPreTraining.from_pretrained(model_name, output_loading_info=True)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, BertForPreTraining)
-            # Only one value should not be initialized and in the missing keys.
-            for key, value in loading_info.items():
-                self.assertEqual(len(value), 0)
+        model = AutoModelForPreTraining.from_pretrained(model_name)
+        model, loading_info = AutoModelForPreTraining.from_pretrained(model_name, output_loading_info=True)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, BertForPreTraining)
+        # Only one value should not be initialized and in the missing keys.
+        for key, value in loading_info.items():
+            self.assertEqual(len(value), 0)
 
     @slow
     def test_lmhead_model_from_pretrained(self):
-        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, BertConfig)
+        model_name = "google-bert/bert-base-uncased"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, BertConfig)
 
-            model = AutoModelWithLMHead.from_pretrained(model_name)
-            model, loading_info = AutoModelWithLMHead.from_pretrained(model_name, output_loading_info=True)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, BertForMaskedLM)
+        model = AutoModelWithLMHead.from_pretrained(model_name)
+        model, loading_info = AutoModelWithLMHead.from_pretrained(model_name, output_loading_info=True)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, BertForMaskedLM)
 
     @slow
     def test_model_for_causal_lm(self):
-        for model_name in GPT2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, GPT2Config)
+        model_name = "google-bert/bert-base-uncased"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, GPT2Config)
 
-            model = AutoModelForCausalLM.from_pretrained(model_name)
-            model, loading_info = AutoModelForCausalLM.from_pretrained(model_name, output_loading_info=True)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, GPT2LMHeadModel)
+        model = AutoModelForCausalLM.from_pretrained(model_name)
+        model, loading_info = AutoModelForCausalLM.from_pretrained(model_name, output_loading_info=True)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, GPT2LMHeadModel)
 
     @slow
     def test_model_for_masked_lm(self):
-        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, BertConfig)
+        model_name = "google-bert/bert-base-uncased"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, BertConfig)
 
-            model = AutoModelForMaskedLM.from_pretrained(model_name)
-            model, loading_info = AutoModelForMaskedLM.from_pretrained(model_name, output_loading_info=True)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, BertForMaskedLM)
+        model = AutoModelForMaskedLM.from_pretrained(model_name)
+        model, loading_info = AutoModelForMaskedLM.from_pretrained(model_name, output_loading_info=True)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, BertForMaskedLM)
 
     @slow
     def test_model_for_encoder_decoder_lm(self):
-        for model_name in T5_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, T5Config)
+        model_name = "google-bert/bert-base-uncased"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, T5Config)
 
-            model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-            model, loading_info = AutoModelForSeq2SeqLM.from_pretrained(model_name, output_loading_info=True)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, T5ForConditionalGeneration)
+        model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+        model, loading_info = AutoModelForSeq2SeqLM.from_pretrained(model_name, output_loading_info=True)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, T5ForConditionalGeneration)
 
     @slow
     def test_sequence_classification_model_from_pretrained(self):
-        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, BertConfig)
+        model_name = "google-bert/bert-base-uncased"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, BertConfig)
 
-            model = AutoModelForSequenceClassification.from_pretrained(model_name)
-            model, loading_info = AutoModelForSequenceClassification.from_pretrained(
-                model_name, output_loading_info=True
-            )
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, BertForSequenceClassification)
+        model = AutoModelForSequenceClassification.from_pretrained(model_name)
+        model, loading_info = AutoModelForSequenceClassification.from_pretrained(model_name, output_loading_info=True)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, BertForSequenceClassification)
 
     @slow
     def test_question_answering_model_from_pretrained(self):
-        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, BertConfig)
+        model_name = "google-bert/bert-base-uncased"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, BertConfig)
 
-            model = AutoModelForQuestionAnswering.from_pretrained(model_name)
-            model, loading_info = AutoModelForQuestionAnswering.from_pretrained(model_name, output_loading_info=True)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, BertForQuestionAnswering)
+        model = AutoModelForQuestionAnswering.from_pretrained(model_name)
+        model, loading_info = AutoModelForQuestionAnswering.from_pretrained(model_name, output_loading_info=True)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, BertForQuestionAnswering)
 
     @slow
     def test_table_question_answering_model_from_pretrained(self):
-        for model_name in TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST[5:6]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, TapasConfig)
+        model_name = "google/tapas-base"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, TapasConfig)
 
-            model = AutoModelForTableQuestionAnswering.from_pretrained(model_name)
-            model, loading_info = AutoModelForTableQuestionAnswering.from_pretrained(
-                model_name, output_loading_info=True
-            )
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, TapasForQuestionAnswering)
+        model = AutoModelForTableQuestionAnswering.from_pretrained(model_name)
+        model, loading_info = AutoModelForTableQuestionAnswering.from_pretrained(model_name, output_loading_info=True)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, TapasForQuestionAnswering)
 
     @slow
     def test_token_classification_model_from_pretrained(self):
-        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, BertConfig)
+        model_name = "google-bert/bert-base-uncased"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, BertConfig)
 
-            model = AutoModelForTokenClassification.from_pretrained(model_name)
-            model, loading_info = AutoModelForTokenClassification.from_pretrained(model_name, output_loading_info=True)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, BertForTokenClassification)
+        model = AutoModelForTokenClassification.from_pretrained(model_name)
+        model, loading_info = AutoModelForTokenClassification.from_pretrained(model_name, output_loading_info=True)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, BertForTokenClassification)
 
     @slow
     def test_auto_backbone_timm_model_from_pretrained(self):
@@ -375,6 +367,27 @@ class AutoModelTest(unittest.TestCase):
         self.assertEqual(reloaded_model.__class__.__name__, "NewModel")
         for p1, p2 in zip(model.parameters(), reloaded_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
+
+    def test_from_pretrained_dynamic_model_with_period(self):
+        # We used to have issues where repos with "." in the name would cause issues because the Python
+        # import machinery would treat that as a directory separator, so we test that case
+
+        # If remote code is not set, we will time out when asking whether to load the model.
+        with self.assertRaises(ValueError):
+            model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model_v1.0")
+        # If remote code is disabled, we can't load this config.
+        with self.assertRaises(ValueError):
+            model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model_v1.0", trust_remote_code=False)
+
+        model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model_v1.0", trust_remote_code=True)
+        self.assertEqual(model.__class__.__name__, "NewModel")
+
+        # Test that it works with a custom cache dir too
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = AutoModel.from_pretrained(
+                "hf-internal-testing/test_dynamic_model_v1.0", trust_remote_code=True, cache_dir=tmp_dir
+            )
+            self.assertEqual(model.__class__.__name__, "NewModel")
 
     def test_new_model_registration(self):
         AutoConfig.register("custom", CustomConfig)

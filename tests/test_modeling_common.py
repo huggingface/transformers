@@ -64,6 +64,7 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    is_flaky,
     is_pt_flax_cross_test,
     is_pt_tf_cross_test,
     require_accelerate,
@@ -98,6 +99,7 @@ if is_accelerate_available():
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
     from safetensors.torch import load_file as safe_load_file
     from safetensors.torch import save_file as safe_save_file
     from torch import nn
@@ -381,6 +383,7 @@ class ModelTesterMixin:
                         m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
                     )
 
+    @is_flaky(description="low likelihood of failure, reason not yet discovered")
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if config.__class__ not in MODEL_MAPPING:
@@ -482,6 +485,40 @@ class ModelTesterMixin:
             for key in model_fast_init.state_dict().keys():
                 max_diff = torch.max(torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]))
                 self.assertLessEqual(max_diff.item(), 1e-3, msg=f"{key} not identical")
+
+    def test_fast_init_tied_embeddings(self):
+        class MyClass(PreTrainedModel):
+            config_class = PretrainedConfig
+            _tied_weights_keys = ["output_embeddings.weight"]
+
+            def __init__(self, config=None):
+                super().__init__(config if config is not None else PretrainedConfig())
+                self.input_embeddings = nn.Embedding(10, 10)
+                self.output_embeddings = nn.Linear(10, 10, bias=False)
+                self.tie_weights()
+
+            def get_output_embeddings(self):
+                return self.output_embeddings
+
+            def set_output_embeddings(self, output_embeddings):
+                self.output_embeddings = output_embeddings
+
+            def get_input_embeddings(self):
+                return self.input_embeddings
+
+            def set_input_embeddings(self, input_embeddings):
+                self.input_embeddings = input_embeddings
+
+            def _init_weights(self, module):
+                if module is self.output_embeddings:
+                    raise ValueError("unnecessarily initialized tied output embedding!")
+
+        model = MyClass()
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            # throws if it initializes the tied output_embeddings
+            MyClass.from_pretrained(tmpdirname)
 
     def test_save_load_fast_init_to_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -657,6 +694,99 @@ class ModelTesterMixin:
                 expected_arg_names = [model.main_input_name]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    def test_batching_equivalence(self):
+        """
+        Tests that the model supports batching and that the output is the nearly the same for the same input in
+        different batch sizes.
+        (Why "nearly the same" not "exactly the same"? Batching uses different matmul shapes, which often leads to
+        different results: https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535)
+        """
+
+        def get_tensor_equivalence_function(batched_input):
+            # models operating on continuous spaces have higher abs difference than LMs
+            # instead, we can rely on cos distance for image/speech models, similar to `diffusers`
+            if "input_ids" not in batched_input:
+                return lambda tensor1, tensor2: (
+                    1.0 - F.cosine_similarity(tensor1.float().flatten(), tensor2.float().flatten(), dim=0, eps=1e-38)
+                )
+            return lambda tensor1, tensor2: torch.max(torch.abs(tensor1 - tensor2))
+
+        def recursive_check(batched_object, single_row_object, model_name, key):
+            if isinstance(batched_object, (list, tuple)):
+                for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
+                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
+            elif isinstance(batched_object, dict):
+                for batched_object_value, single_row_object_value in zip(
+                    batched_object.values(), single_row_object.values()
+                ):
+                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
+            # do not compare returned loss (0-dim tensor) / codebook ids (int) / caching objects
+            elif batched_object is None or not isinstance(batched_object, torch.Tensor):
+                return
+            elif batched_object.dim() == 0:
+                return
+            else:
+                # indexing the first element does not always work
+                # e.g. models that output similarity scores of size (N, M) would need to index [0, 0]
+                slice_ids = [slice(0, index) for index in single_row_object.shape]
+                batched_row = batched_object[slice_ids]
+                self.assertFalse(
+                    torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
+                )
+                self.assertFalse(
+                    torch.isinf(batched_row).any(), f"Batched output has `inf` in {model_name} for key={key}"
+                )
+                self.assertFalse(
+                    torch.isnan(single_row_object).any(), f"Single row output has `nan` in {model_name} for key={key}"
+                )
+                self.assertFalse(
+                    torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
+                )
+                self.assertTrue(
+                    (equivalence(batched_row, single_row_object)) <= 1e-03,
+                    msg=(
+                        f"Batched and Single row outputs are not equal in {model_name} for key={key}. "
+                        f"Difference={equivalence(batched_row, single_row_object)}."
+                    ),
+                )
+
+        config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
+        equivalence = get_tensor_equivalence_function(batched_input)
+
+        for model_class in self.all_model_classes:
+            config.output_hidden_states = True
+
+            model_name = model_class.__name__
+            if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
+                config, batched_input = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+            batched_input_prepared = self._prepare_for_class(batched_input, model_class)
+            model = model_class(config).to(torch_device).eval()
+
+            batch_size = self.model_tester.batch_size
+            single_row_input = {}
+            for key, value in batched_input_prepared.items():
+                if isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
+                    # e.g. musicgen has inputs of size (bs*codebooks). in most cases value.shape[0] == batch_size
+                    single_batch_shape = value.shape[0] // batch_size
+                    single_row_input[key] = value[:single_batch_shape]
+                else:
+                    single_row_input[key] = value
+
+            with torch.no_grad():
+                model_batched_output = model(**batched_input_prepared)
+                model_row_output = model(**single_row_input)
+
+            if isinstance(model_batched_output, torch.Tensor):
+                model_batched_output = {"model_output": model_batched_output}
+                model_row_output = {"model_output": model_row_output}
+
+            for key in model_batched_output:
+                # DETR starts from zero-init queries to decoder, leading to cos_similarity = `nan`
+                if hasattr(self, "zero_init_hidden_state") and "decoder_hidden_states" in key:
+                    model_batched_output[key] = model_batched_output[key][1:]
+                    model_row_output[key] = model_row_output[key][1:]
+                recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
+
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:
             return
@@ -664,7 +794,10 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             if (
                 model_class.__name__
-                in [*get_values(MODEL_MAPPING_NAMES), *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)]
+                in [
+                    *get_values(MODEL_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
+                ]
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
@@ -919,6 +1052,16 @@ class ModelTesterMixin:
                         traced_model = torch.jit.trace(
                             model, (input_ids, bbox), check_trace=False
                         )  # when traced model is checked, an error is produced due to name mangling
+                    elif (
+                        "pixel_values" in inputs and "prompt_pixel_values" in inputs and "prompt_masks" in inputs
+                    ):  # SegGpt requires additional inputs
+                        pixel_values = inputs["pixel_values"]
+                        prompt_pixel_values = inputs["prompt_pixel_values"]
+                        prompt_masks = inputs["prompt_masks"]
+                        model(pixel_values, prompt_pixel_values, prompt_masks)
+                        traced_model = torch.jit.trace(
+                            model, (pixel_values, prompt_pixel_values, prompt_masks), check_trace=False
+                        )  # when traced model is checked, an error is produced due to name mangling
                     else:
                         main_input = inputs[main_input_name]
 
@@ -1019,132 +1162,144 @@ class ModelTesterMixin:
             model.eval()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=output_loss)
 
-            try:
-                if model.config.is_encoder_decoder:
-                    model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
-                    labels = inputs.get("labels", None)
-                    input_names = [
-                        "attention_mask",
-                        "decoder_attention_mask",
-                        "decoder_input_ids",
-                        "input_features",
-                        "input_ids",
-                        "input_values",
-                    ]
-                    if labels is not None:
-                        input_names.append("labels")
+            # We may want to test several inputs (various shapes, etc.).
+            inputs_to_test = [inputs]
 
-                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
-                    input_names = list(filtered_inputs.keys())
+            if model.config.is_encoder_decoder:
+                model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
+                labels = inputs.get("labels", None)
+                input_names = [
+                    "attention_mask",
+                    "decoder_attention_mask",
+                    "decoder_input_ids",
+                    "input_features",
+                    "input_ids",
+                    "input_values",
+                ]
+                if labels is not None:
+                    input_names.append("labels")
+            else:
+                input_names = [
+                    "attention_mask",
+                    "bbox",
+                    "input_features",
+                    "input_ids",
+                    "input_values",
+                    "pixel_values",
+                    "token_type_ids",
+                    "visual_feats",
+                    "visual_pos",
+                ]
 
+                labels = inputs.get("labels", None)
+                start_positions = inputs.get("start_positions", None)
+                end_positions = inputs.get("end_positions", None)
+                if labels is not None:
+                    input_names.append("labels")
+                if start_positions is not None:
+                    input_names.append("start_positions")
+                if end_positions is not None:
+                    input_names.append("end_positions")
+
+                if model.config.model_type in _FX_SUPPORTED_MODELS_WITH_KV_CACHE:
+                    input_names.append("past_key_values")
+
+                    # Generally model_tester.prepare_config_and_inputs_for_common seem not to generate past key values inputs.
+                    if "past_key_values" not in inputs:
+                        batch_size = inputs[next(iter(inputs))].shape[0]
+                        num_heads = model.config.num_attention_heads
+                        head_dim = model.config.hidden_size // model.config.num_attention_heads
+
+                        cache_shape = (batch_size, num_heads, 0, head_dim)
+                        empty_pkv = tuple(
+                            (
+                                torch.rand(cache_shape, dtype=torch.float, device=torch_device),
+                                torch.rand(cache_shape, dtype=torch.float, device=torch_device),
+                            )
+                            for i in range(model.config.num_hidden_layers)
+                        )
+
+                        cache_length = 9
+                        cache_shape = (batch_size, num_heads, cache_length, head_dim)
+                        non_empty_pkv = tuple(
+                            (
+                                torch.rand(cache_shape, dtype=torch.float, device=torch_device),
+                                torch.rand(cache_shape, dtype=torch.float, device=torch_device),
+                            )
+                            for i in range(model.config.num_hidden_layers)
+                        )
+
+                        inps = copy.deepcopy(inputs_to_test[0])
+
+                        inputs_to_test[0]["past_key_values"] = empty_pkv
+
+                        inps["past_key_values"] = non_empty_pkv
+                        inputs_to_test.append(inps)
+
+                        past_mask = torch.ones(batch_size, cache_length, device=torch_device, dtype=torch.float)
+                        inputs_to_test[1]["attention_mask"] = torch.cat(
+                            (past_mask, inputs_to_test[1]["attention_mask"]), dim=1
+                        )
+
+            for inps in inputs_to_test:
+                filtered_inputs = {k: v for (k, v) in inps.items() if k in input_names}
+                input_names = list(filtered_inputs.keys())
+
+                if model.__class__.__name__ in set(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values()) and (
+                    not hasattr(model.config, "problem_type") or model.config.problem_type is None
+                ):
+                    model.config.problem_type = "single_label_classification"
+
+                traced_model = symbolic_trace(model, input_names)
+
+                with torch.no_grad():
+                    traced_output = traced_model(**filtered_inputs)
                     model_output = model(**filtered_inputs)
 
-                    traced_model = symbolic_trace(model, input_names)
-                    traced_output = traced_model(**filtered_inputs)
-                else:
-                    input_names = [
-                        "attention_mask",
-                        "bbox",
-                        "input_features",
-                        "input_ids",
-                        "input_values",
-                        "pixel_values",
-                        "token_type_ids",
-                        "visual_feats",
-                        "visual_pos",
-                    ]
+                def flatten_output(output):
+                    flatten = []
+                    for x in output:
+                        if isinstance(x, (tuple, list)):
+                            flatten += flatten_output(x)
+                        elif not isinstance(x, torch.Tensor):
+                            continue
+                        else:
+                            flatten.append(x)
+                    return flatten
 
-                    labels = inputs.get("labels", None)
-                    start_positions = inputs.get("start_positions", None)
-                    end_positions = inputs.get("end_positions", None)
-                    if labels is not None:
-                        input_names.append("labels")
-                    if start_positions is not None:
-                        input_names.append("start_positions")
-                    if end_positions is not None:
-                        input_names.append("end_positions")
-
-                    if model.config.model_type in _FX_SUPPORTED_MODELS_WITH_KV_CACHE:
-                        input_names.append("past_key_values")
-
-                        # Generally model_tester.prepare_config_and_inputs_for_common seem not to generate past key values inputs.
-                        if "past_key_values" not in inputs:
-                            batch_size = inputs[next(iter(inputs))].shape[0]
-                            num_heads = model.config.num_attention_heads
-                            head_dim = model.config.hidden_size // model.config.num_attention_heads
-
-                            cache_shape = (batch_size, num_heads, 0, head_dim)
-                            pkv = tuple(
-                                (
-                                    torch.rand(cache_shape, dtype=torch.float, device=torch_device),
-                                    torch.rand(cache_shape, dtype=torch.float, device=torch_device),
-                                )
-                                for i in range(model.config.num_hidden_layers)
-                            )
-
-                            inputs["past_key_values"] = pkv
-
-                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
-                    input_names = list(filtered_inputs.keys())
-
-                    if model.__class__.__name__ in set(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values()) and (
-                        not hasattr(model.config, "problem_type") or model.config.problem_type is None
-                    ):
-                        model.config.problem_type = "single_label_classification"
-
-                    traced_model = symbolic_trace(model, input_names)
-
-                    with torch.no_grad():
-                        traced_output = traced_model(**filtered_inputs)
-                        model_output = model(**filtered_inputs)
-
-            except Exception as e:
-                self.fail(f"Couldn't trace module: {e}")
-
-            def flatten_output(output):
-                flatten = []
-                for x in output:
-                    if isinstance(x, (tuple, list)):
-                        flatten += flatten_output(x)
-                    elif not isinstance(x, torch.Tensor):
-                        continue
-                    else:
-                        flatten.append(x)
-                return flatten
-
-            model_output = flatten_output(model_output)
-            traced_output = flatten_output(traced_output)
-            num_outputs = len(model_output)
-
-            for i in range(num_outputs):
-                self.assertTrue(
-                    torch.allclose(model_output[i], traced_output[i]),
-                    f"traced {i}th output doesn't match model {i}th output for {model_class}",
-                )
-
-            # Test that the model can be serialized and restored properly
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pkl_file_name = os.path.join(tmp_dir_name, "model.pkl")
-                try:
-                    with open(pkl_file_name, "wb") as f:
-                        pickle.dump(traced_model, f)
-                    with open(pkl_file_name, "rb") as f:
-                        loaded = pickle.load(f)
-                except Exception as e:
-                    self.fail(f"Couldn't serialize / deserialize the traced model: {e}")
-
-                loaded_output = loaded(**filtered_inputs)
-                loaded_output = flatten_output(loaded_output)
+                model_output = flatten_output(model_output)
+                traced_output = flatten_output(traced_output)
+                num_outputs = len(model_output)
 
                 for i in range(num_outputs):
                     self.assertTrue(
-                        torch.allclose(model_output[i], loaded_output[i]),
-                        f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
+                        torch.allclose(model_output[i], traced_output[i]),
+                        f"traced {i}th output doesn't match model {i}th output for {model_class}",
                     )
 
-            # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
-            # (Even with this call, there are still memory leak by ~0.04MB)
-            self.clear_torch_jit_class_registry()
+                # Test that the model can be serialized and restored properly
+                with tempfile.TemporaryDirectory() as tmp_dir_name:
+                    pkl_file_name = os.path.join(tmp_dir_name, "model.pkl")
+                    try:
+                        with open(pkl_file_name, "wb") as f:
+                            pickle.dump(traced_model, f)
+                        with open(pkl_file_name, "rb") as f:
+                            loaded = pickle.load(f)
+                    except Exception as e:
+                        self.fail(f"Couldn't serialize / deserialize the traced model: {e}")
+
+                    loaded_output = loaded(**filtered_inputs)
+                    loaded_output = flatten_output(loaded_output)
+
+                    for i in range(num_outputs):
+                        self.assertTrue(
+                            torch.allclose(model_output[i], loaded_output[i]),
+                            f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
+                        )
+
+                # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
+                # (Even with this call, there are still memory leak by ~0.04MB)
+                self.clear_torch_jit_class_registry()
 
     def test_headmasking(self):
         if not self.test_head_masking:
@@ -1791,27 +1946,10 @@ class ModelTesterMixin:
             # Check that the embedding layer and decoding layer are the same in size and in value
             # self.assertTrue(check_same_values(embeddings, decoding))
 
-            # # Check that after modification, they remain the same.
-            # embeddings.weight.data.div_(2)
-            # # Check that the embedding layer and decoding layer are the same in size and in value
-            # self.assertTrue(embeddings.weight.shape, decoding.weight.shape)
-            # self.assertTrue(check_same_values(embeddings, decoding))
-
-            # # Check that after modification, they remain the same.
-            # decoding.weight.data.div_(4)
-            # # Check that the embedding layer and decoding layer are the same in size and in value
-            # self.assertTrue(embeddings.weight.shape, decoding.weight.shape)
-            # self.assertTrue(check_same_values(embeddings, decoding))
-
             # Check that after resize they remain tied.
             model_tied.resize_token_embeddings(config.vocab_size + 10)
             params_tied_2 = list(model_tied.parameters())
             self.assertEqual(len(params_tied_2), len(params_tied))
-
-            # decoding.weight.data.mul_(20)
-            # # Check that the embedding layer and decoding layer are the same in size and in value
-            # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
-            # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
 
     @require_safetensors
     def test_can_use_safetensors(self):

@@ -28,6 +28,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "Salesforce/codegen-350M-mono"
     tokenizer_class = CodeGenTokenizer
     rust_tokenizer_class = CodeGenTokenizerFast
     test_rust_tokenizer = True

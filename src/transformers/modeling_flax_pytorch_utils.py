@@ -255,7 +255,10 @@ def convert_pytorch_sharded_state_dict_to_flax(shard_filenames, flax_model):
         # load using msgpack utils
         weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
         pt_state_dict = torch.load(shard_file, **weights_only_kwarg)
-        pt_state_dict = {k: v.numpy() for k, v in pt_state_dict.items()}
+        weight_dtypes = {k: v.dtype for k, v in pt_state_dict.items()}
+        pt_state_dict = {
+            k: v.numpy() if v.dtype != torch.bfloat16 else v.float().numpy() for k, v in pt_state_dict.items()
+        }
 
         model_prefix = flax_model.base_model_prefix
 
@@ -278,6 +281,7 @@ def convert_pytorch_sharded_state_dict_to_flax(shard_filenames, flax_model):
         # Need to change some parameters name to match Flax names
         for pt_key, pt_tensor in pt_state_dict.items():
             pt_tuple_key = tuple(pt_key.split("."))
+            is_bfloat_16 = weight_dtypes[pt_key] == torch.bfloat16
 
             # remove base model prefix if necessary
             has_base_model_prefix = pt_tuple_key[0] == model_prefix
@@ -314,11 +318,15 @@ def convert_pytorch_sharded_state_dict_to_flax(shard_filenames, flax_model):
                     continue
 
                 # also add unexpected weight so that warning is thrown
-                flax_state_dict[("params",) + flax_key] = jnp.asarray(flax_tensor)
+                flax_state_dict[("params",) + flax_key] = (
+                    jnp.asarray(flax_tensor) if not is_bfloat_16 else jnp.asarray(flax_tensor, dtype=jnp.bfloat16)
+                )
 
             else:
                 # also add unexpected weight so that warning is thrown
-                flax_state_dict[flax_key] = jnp.asarray(flax_tensor)
+                flax_state_dict[flax_key] = (
+                    jnp.asarray(flax_tensor) if not is_bfloat_16 else jnp.asarray(flax_tensor, dtype=jnp.bfloat16)
+                )
     return unflatten_dict(flax_state_dict)
 
 

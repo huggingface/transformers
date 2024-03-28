@@ -49,18 +49,9 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "FunnelConfig"
 _CHECKPOINT_FOR_DOC = "funnel-transformer/small"
 
-FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "funnel-transformer/small",  # B4-4-4H768
-    "funnel-transformer/small-base",  # B4-4-4H768, no decoder
-    "funnel-transformer/medium",  # B6-3x2-3x2H768
-    "funnel-transformer/medium-base",  # B6-3x2-3x2H768, no decoder
-    "funnel-transformer/intermediate",  # B6-6-6H768
-    "funnel-transformer/intermediate-base",  # B6-6-6H768, no decoder
-    "funnel-transformer/large",  # B8-8-8H1024
-    "funnel-transformer/large-base",  # B8-8-8H1024, no decoder
-    "funnel-transformer/xlarge-base",  # B10-10-10H1024
-    "funnel-transformer/xlarge",  # B10-10-10H1024, no decoder
-]
+
+from ..deprecated._archive_maps import FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
 
 INF = 1e6
 
@@ -235,8 +226,8 @@ class FunnelAttentionStructure(nn.Module):
         if self.config.attention_type == "factorized":
             # Notations from the paper, appending A.2.2, final formula.
             # We need to create and return the matrices phi, psi, pi and omega.
-            pos_seq = torch.arange(0, seq_len, 1.0, dtype=dtype, device=device)
-            freq_seq = torch.arange(0, d_model // 2, 1.0, dtype=dtype, device=device)
+            pos_seq = torch.arange(0, seq_len, 1.0, dtype=torch.int64, device=device).to(dtype)
+            freq_seq = torch.arange(0, d_model // 2, 1.0, dtype=torch.int64, device=device).to(dtype)
             inv_freq = 1 / (10000 ** (freq_seq / (d_model // 2)))
             sinusoid = pos_seq[:, None] * inv_freq[None]
             sin_embed = torch.sin(sinusoid)
@@ -252,17 +243,17 @@ class FunnelAttentionStructure(nn.Module):
         else:
             # Notations from the paper, appending A.2.1, final formula.
             # We need to create and return all the possible vectors R for all blocks and shifts.
-            freq_seq = torch.arange(0, d_model // 2, 1.0, dtype=dtype, device=device)
+            freq_seq = torch.arange(0, d_model // 2, 1.0, dtype=torch.int64, device=device).to(dtype)
             inv_freq = 1 / (10000 ** (freq_seq / (d_model // 2)))
             # Maximum relative positions for the first input
-            rel_pos_id = torch.arange(-seq_len * 2, seq_len * 2, 1.0, dtype=dtype, device=device)
+            rel_pos_id = torch.arange(-seq_len * 2, seq_len * 2, 1.0, dtype=torch.int64, device=device).to(dtype)
             zero_offset = seq_len * 2
             sinusoid = rel_pos_id[:, None] * inv_freq[None]
             sin_embed = self.sin_dropout(torch.sin(sinusoid))
             cos_embed = self.cos_dropout(torch.cos(sinusoid))
             pos_embed = torch.cat([sin_embed, cos_embed], dim=-1)
 
-            pos = torch.arange(0, seq_len, dtype=dtype, device=device)
+            pos = torch.arange(0, seq_len, dtype=torch.int64, device=device).to(dtype)
             pooled_pos = pos
             position_embeds_list = []
             for block_index in range(0, self.config.num_blocks):
@@ -776,7 +767,7 @@ class FunnelDiscriminatorPredictions(nn.Module):
     def forward(self, discriminator_hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(discriminator_hidden_states)
         hidden_states = ACT2FN[self.config.hidden_act](hidden_states)
-        logits = self.dense_prediction(hidden_states).squeeze()
+        logits = self.dense_prediction(hidden_states).squeeze(-1)
         return logits
 
 

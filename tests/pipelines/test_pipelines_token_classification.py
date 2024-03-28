@@ -468,7 +468,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     @slow
     def test_aggregation_strategy_byte_level_tokenizer(self):
         sentence = "Groenlinks praat over Schiphol."
-        ner = pipeline("ner", model="xlm-roberta-large-finetuned-conll02-dutch", aggregation_strategy="max")
+        ner = pipeline("ner", model="FacebookAI/xlm-roberta-large-finetuned-conll02-dutch", aggregation_strategy="max")
         self.assertEqual(
             nested_simplify(ner(sentence)),
             [

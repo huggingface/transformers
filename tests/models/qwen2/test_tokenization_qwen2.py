@@ -27,6 +27,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "qwen/qwen-tokenizer"
     tokenizer_class = Qwen2Tokenizer
     rust_tokenizer_class = Qwen2TokenizerFast
     test_slow_tokenizer = True
@@ -158,7 +159,7 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertEqual(tokenizer_output_string, output_string)
 
     def test_slow_tokenizer_decode_spaces_between_special_tokens_default(self):
-        # Qwen2Tokenzier changes the default `spaces_between_special_tokens` in `decode` to False
+        # Qwen2Tokenizer changes the default `spaces_between_special_tokens` in `decode` to False
         if not self.test_slow_tokenizer:
             return
 

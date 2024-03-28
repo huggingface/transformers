@@ -145,7 +145,7 @@ _deps = [
     "psutil",
     "pyyaml>=5.1",
     "pydantic",
-    "pytest>=7.2.0",
+    "pytest>=7.2.0,<8.0.0",
     "pytest-timeout",
     "pytest-xdist",
     "python>=3.8.0",
@@ -175,7 +175,7 @@ _deps = [
     "timeout-decorator",
     "timm",
     "tokenizers>=0.14,<0.19",
-    "torch>=1.11,!=1.12.0",
+    "torch",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
@@ -321,6 +321,7 @@ extras["testing"] = (
         "beautifulsoup4",
         "tensorboard",
         "pydantic",
+        "sentencepiece",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
@@ -428,7 +429,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.38.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.40.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",

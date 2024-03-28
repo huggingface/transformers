@@ -28,6 +28,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "nielsr/canine-s"
     tokenizer_class = CanineTokenizer
     test_rust_tokenizer = False
 
@@ -82,7 +83,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
         self.assertEqual(32, targets["input_ids"].shape[1])
 
-    # cannot use default save_and_load_tokenzier test method because tokenzier has no vocab
+    # cannot use default save_and_load_tokenizer test method because tokenizer has no vocab
     def test_save_and_load_tokenizer(self):
         # safety check on max_len default value so we are sure the test works
         tokenizers = self.get_tokenizers()
@@ -317,10 +318,6 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # CanineModel does not support the get_input_embeddings nor the get_vocab method
     def test_torch_encode_plus_sent_to_model(self):
-        pass
-
-    # tokenizer can be instantiated without any pretrained files, so no need for pretrained tokenizer list
-    def test_pretrained_model_lists(self):
         pass
 
     # tokenizer does not have vocabulary

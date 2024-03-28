@@ -55,13 +55,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "sijunhe/nezha-cn-base"
 _CONFIG_FOR_DOC = "NezhaConfig"
 
-NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "sijunhe/nezha-cn-base",
-    "sijunhe/nezha-cn-large",
-    "sijunhe/nezha-base-wwm",
-    "sijunhe/nezha-large-wwm",
-    # See all Nezha models at https://huggingface.co/models?filter=nezha
-]
+
+from ..deprecated._archive_maps import NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def load_tf_weights_in_nezha(model, config, tf_checkpoint_path):
@@ -150,7 +145,7 @@ class NezhaRelativePositionsEncoding(nn.Module):
         final_mat = distance_mat_clipped + max_relative_position
 
         embeddings_table = torch.zeros(vocab_size, depth)
-        position = torch.arange(0, vocab_size, dtype=torch.float).unsqueeze(1)
+        position = torch.arange(0, vocab_size, dtype=torch.int64).float().unsqueeze(1)
         div_term = torch.exp(torch.arange(0, depth, 2).float() * (-math.log(10000.0) / depth))
         embeddings_table[:, 0::2] = torch.sin(position * div_term)
         embeddings_table[:, 1::2] = torch.cos(position * div_term)

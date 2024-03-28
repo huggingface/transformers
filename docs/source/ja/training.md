@@ -55,7 +55,7 @@ rendered properly in your Markdown viewer.
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 
 >>> def tokenize_function(examples):
 ...     return tokenizer(examples["text"], padding="max_length", truncation=True)
@@ -91,7 +91,7 @@ rendered properly in your Markdown viewer.
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
+>>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
 ```
 
 <Tip>
@@ -194,7 +194,7 @@ dataset = dataset["train"]  # 今のところトレーニング分割のみを�
 ```python
 from transformers import AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 tokenized_data = tokenizer(dataset["sentence"], return_tensors="np", padding=True)
 # トークナイザはBatchEncodingを返しますが、それをKeras用に辞書に変換します
 tokenized_data = dict(tokenized_data)
@@ -210,7 +210,7 @@ from transformers import TFAutoModelForSequenceClassification
 from tensorflow.keras.optimizers import Adam
 
 # モデルをロードしてコンパイルする
-model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased")
+model = TFAutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased")
 # ファインチューニングには通常、学習率を下げると良いです
 model.compile(optimizer=Adam(3e-5))  # 損失関数の指定は不要です！
 
@@ -332,7 +332,7 @@ torch.cuda.empty_cache()
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
+>>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
 ```
 
 ### Optimizer and learning rate scheduler

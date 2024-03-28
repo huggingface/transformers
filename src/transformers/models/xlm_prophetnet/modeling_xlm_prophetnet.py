@@ -44,10 +44,9 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "XLMProphetNetConfig"
 
-XLM_PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/xprophetnet-large-wiki100-cased",
-    # See all XLMProphetNet models at https://huggingface.co/models?filter=xprophetnet
-]
+
+from ..deprecated._archive_maps import XLM_PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
 
 # Copied from src.transformers.models.prophetnet.modeling_prophetnet.PROPHETNET_START_DOCSTRING with ProphetNetConfig->XLMProphetNetConfig
 XLM_PROPHETNET_START_DOCSTRING = r"""
@@ -2216,10 +2215,10 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
         >>> from transformers import BertTokenizer, EncoderDecoderModel, AutoTokenizer
         >>> import torch
 
-        >>> tokenizer_enc = BertTokenizer.from_pretrained("bert-large-uncased")
+        >>> tokenizer_enc = BertTokenizer.from_pretrained("google-bert/bert-large-uncased")
         >>> tokenizer_dec = AutoTokenizer.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
         >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained(
-        ...     "bert-large-uncased", "patrickvonplaten/xprophetnet-large-uncased-standalone"
+        ...     "google-bert/bert-large-uncased", "patrickvonplaten/xprophetnet-large-uncased-standalone"
         ... )
 
         >>> ARTICLE = (

@@ -48,18 +48,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "VisualBertConfig"
 _CHECKPOINT_FOR_DOC = "uclanlp/visualbert-vqa-coco-pre"
 
-VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "uclanlp/visualbert-vqa",
-    "uclanlp/visualbert-vqa-pre",
-    "uclanlp/visualbert-vqa-coco-pre",
-    "uclanlp/visualbert-vcr",
-    "uclanlp/visualbert-vcr-pre",
-    "uclanlp/visualbert-vcr-coco-pre",
-    "uclanlp/visualbert-nlvr2",
-    "uclanlp/visualbert-nlvr2-pre",
-    "uclanlp/visualbert-nlvr2-coco-pre",
-    # See all VisualBERT models at https://huggingface.co/models?filter=visual_bert
-]
+
+from ..deprecated._archive_maps import VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class VisualBertEmbeddings(nn.Module):
@@ -733,7 +723,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
         from transformers import AutoTokenizer, VisualBertModel
         import torch
 
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
         model = VisualBertModel.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
 
         inputs = tokenizer("The capital of France is Paris.", return_tensors="pt")
@@ -920,7 +910,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         # Assumption: *get_visual_embeddings(image)* gets the visual embeddings of the image in the batch.
         from transformers import AutoTokenizer, VisualBertForPreTraining
 
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
         model = VisualBertForPreTraining.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
 
         inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt")
@@ -1060,7 +1050,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         from transformers import AutoTokenizer, VisualBertForMultipleChoice
         import torch
 
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
         model = VisualBertForMultipleChoice.from_pretrained("uclanlp/visualbert-vcr")
 
         prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
@@ -1211,7 +1201,7 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         from transformers import AutoTokenizer, VisualBertForQuestionAnswering
         import torch
 
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
         model = VisualBertForQuestionAnswering.from_pretrained("uclanlp/visualbert-vqa")
 
         text = "Who is eating the apple?"
@@ -1337,7 +1327,7 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
         from transformers import AutoTokenizer, VisualBertForVisualReasoning
         import torch
 
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
         model = VisualBertForVisualReasoning.from_pretrained("uclanlp/visualbert-nlvr2")
 
         text = "Who is eating the apple?"
@@ -1503,7 +1493,7 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         from transformers import AutoTokenizer, VisualBertForRegionToPhraseAlignment
         import torch
 
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
         model = VisualBertForRegionToPhraseAlignment.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
 
         text = "Who is eating the apple?"

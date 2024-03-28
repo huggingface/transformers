@@ -30,7 +30,7 @@ transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Regex pattern used to find the checkpoint mentioned in the docstring of `config_class`.
-# For example, `[bert-base-uncased](https://huggingface.co/bert-base-uncased)`
+# For example, `[google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased)`
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
 
 
@@ -55,7 +55,7 @@ def get_checkpoint_from_config_class(config_class):
     checkpoints = _re_checkpoint.findall(config_source)
 
     # Each `checkpoint` is a tuple of a checkpoint name and a checkpoint link.
-    # For example, `('bert-base-uncased', 'https://huggingface.co/bert-base-uncased')`
+    # For example, `('google-bert/bert-base-uncased', 'https://huggingface.co/google-bert/bert-base-uncased')`
     for ckpt_name, ckpt_link in checkpoints:
         # allow the link to end with `/`
         if ckpt_link.endswith("/"):

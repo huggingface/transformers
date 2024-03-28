@@ -25,7 +25,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+
+from ..deprecated._archive_maps import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class LlamaConfig(PretrainedConfig):
@@ -78,7 +79,7 @@ class LlamaConfig(PretrainedConfig):
             End of stream token id.
         pretraining_tp (`int`, *optional*, defaults to 1):
             Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
+            document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism) to understand more about it. This value is
             necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
             issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):

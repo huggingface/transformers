@@ -26,16 +26,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "tokenizer_file": {
-        "EleutherAI/gpt-neox-20b": "https://huggingface.co/EleutherAI/gpt-neox-20b/resolve/main/tokenizer.json",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "gpt-neox-20b": 2048,
-}
-
 
 class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
     """
@@ -48,7 +38,7 @@ class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
     ```python
     >>> from transformers import GPTNeoXTokenizerFast
 
-    >>> tokenizer = GPTNeoXTokenizerFast.from_pretrained("gpt2")
+    >>> tokenizer = GPTNeoXTokenizerFast.from_pretrained("openai-community/gpt2")
     >>> tokenizer("Hello world")["input_ids"]
     [15496, 995]
 
@@ -91,8 +81,6 @@ class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(

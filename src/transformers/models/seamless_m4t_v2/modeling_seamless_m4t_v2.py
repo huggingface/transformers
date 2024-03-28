@@ -50,10 +50,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = ""
 _CONFIG_FOR_DOC = "SeamlessM4Tv2Config"
 
-SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/seamless-m4t-v2-large",
-    # See all SeamlessM4T-v2 models at https://huggingface.co/models?filter=seamless_m4t_v2
-]
+
+from ..deprecated._archive_maps import SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP = {
@@ -977,8 +975,8 @@ class SeamlessM4Tv2SinusoidalPositionalEmbedding(nn.Module):
         """
         half_dim = embedding_dim // 2
         emb = math.log(10000) / (half_dim - 1)
-        emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
-        emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
+        emb = torch.exp(torch.arange(half_dim, dtype=torch.int64).float() * -emb)
+        emb = torch.arange(num_embeddings, dtype=torch.int64).float().unsqueeze(1) * emb.unsqueeze(0)
         emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1)
         if embedding_dim % 2 == 1:
             # zero pad

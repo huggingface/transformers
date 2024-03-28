@@ -50,11 +50,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "facebook/xlm-roberta-xl"
 _CONFIG_FOR_DOC = "XLMRobertaXLConfig"
 
-XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/xlm-roberta-xl",
-    "facebook/xlm-roberta-xxl",
-    # See all RoBERTa models at https://huggingface.co/models?filter=xlm-roberta-xl
-]
+
+from ..deprecated._archive_maps import XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class XLMRobertaXLEmbeddings(nn.Module):
@@ -906,10 +903,10 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel):
         >>> from transformers import AutoTokenizer, RobertaForCausalLM, RobertaConfig
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("roberta-base")
-        >>> config = RobertaConfig.from_pretrained("roberta-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base")
+        >>> config = RobertaConfig.from_pretrained("FacebookAI/roberta-base")
         >>> config.is_decoder = True
-        >>> model = RobertaForCausalLM.from_pretrained("roberta-base", config=config)
+        >>> model = RobertaForCausalLM.from_pretrained("FacebookAI/roberta-base", config=config)
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> prediction_logits = outputs.logits

@@ -20,7 +20,6 @@ from typing import Optional, Tuple
 import torch
 from torch import nn
 
-from ... import AutoBackbone
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -28,13 +27,9 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
+from ...utils.backbone_utils import load_backbone
+from ..deprecated._archive_maps import VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 from .configuration_vitmatte import VitMatteConfig
-
-
-VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "hustvl/vitmatte-small-composition-1k",
-    # See all VitMatte models at https://huggingface.co/models?filter=vitmatte
-]
 
 
 # General docstring
@@ -259,7 +254,7 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.backbone = AutoBackbone.from_config(config.backbone_config)
+        self.backbone = load_backbone(config)
         self.decoder = VitMatteDetailCaptureModule(config)
 
         # Initialize weights and apply final processing

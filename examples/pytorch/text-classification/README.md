@@ -31,7 +31,7 @@ GLUE is made up of a total of 9 different tasks. Here is how to run the script o
 export TASK_NAME=mrpc
 
 python run_glue.py \
-  --model_name_or_path bert-base-cased \
+  --model_name_or_path google-bert/bert-base-cased \
   --task_name $TASK_NAME \
   --do_train \
   --do_eval \
@@ -68,7 +68,7 @@ The following example fine-tunes BERT on the `imdb` dataset hosted on our [hub](
 
 ```bash
 python run_glue.py \
-  --model_name_or_path bert-base-cased \
+  --model_name_or_path google-bert/bert-base-cased \
   --dataset_name imdb  \
   --do_train \
   --do_predict \
@@ -90,7 +90,7 @@ We can specify the metric, the label column and aso choose which text columns to
 dataset="amazon_reviews_multi"
 subset="en"
 python run_classification.py \
-    --model_name_or_path  bert-base-uncased \
+    --model_name_or_path  google-bert/bert-base-uncased \
     --dataset_name ${dataset} \
     --dataset_config_name ${subset} \
     --shuffle_train_dataset \
@@ -113,7 +113,7 @@ The following is a multi-label classification example. It fine-tunes BERT on the
 dataset="reuters21578"
 subset="ModApte"
 python run_classification.py \
-    --model_name_or_path bert-base-uncased \
+    --model_name_or_path google-bert/bert-base-uncased \
     --dataset_name ${dataset} \
     --dataset_config_name ${subset} \
     --shuffle_train_dataset \
@@ -129,7 +129,7 @@ python run_classification.py \
     --num_train_epochs 15 \
     --output_dir /tmp/${dataset}_${subset}/ 
 ```
- It results in a Micro F1 score of around 0.82 without any text and label filtering. Note that you have to explictly remove the "unused" split from the dataset, since it is not used for classification.
+ It results in a Micro F1 score of around 0.82 without any text and label filtering. Note that you have to explicitly remove the "unused" split from the dataset, since it is not used for classification.
 
 ### Mixed precision training
 
@@ -175,7 +175,7 @@ then
 export TASK_NAME=mrpc
 
 python run_glue_no_trainer.py \
-  --model_name_or_path bert-base-cased \
+  --model_name_or_path google-bert/bert-base-cased \
   --task_name $TASK_NAME \
   --max_length 128 \
   --per_device_train_batch_size 32 \
@@ -202,7 +202,7 @@ that will check everything is ready for training. Finally, you can launch traini
 export TASK_NAME=mrpc
 
 accelerate launch run_glue_no_trainer.py \
-  --model_name_or_path bert-base-cased \
+  --model_name_or_path google-bert/bert-base-cased \
   --task_name $TASK_NAME \
   --max_length 128 \
   --per_device_train_batch_size 32 \
@@ -232,7 +232,7 @@ This example code fine-tunes mBERT (multi-lingual BERT) on the XNLI dataset. It 
 
 ```bash
 python run_xnli.py \
-  --model_name_or_path bert-base-multilingual-cased \
+  --model_name_or_path google-bert/bert-base-multilingual-cased \
   --language de \
   --train_language en \
   --do_train \

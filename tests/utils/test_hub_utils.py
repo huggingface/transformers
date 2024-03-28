@@ -105,7 +105,7 @@ class GetFromCacheTests(unittest.TestCase):
 
     def test_get_file_from_repo_distant(self):
         # `get_file_from_repo` returns None if the file does not exist
-        self.assertIsNone(get_file_from_repo("bert-base-cased", "ahah.txt"))
+        self.assertIsNone(get_file_from_repo("google-bert/bert-base-cased", "ahah.txt"))
 
         # The function raises if the repository does not exist.
         with self.assertRaisesRegex(EnvironmentError, "is not a valid model identifier"):
@@ -113,9 +113,9 @@ class GetFromCacheTests(unittest.TestCase):
 
         # The function raises if the revision does not exist.
         with self.assertRaisesRegex(EnvironmentError, "is not a valid git identifier"):
-            get_file_from_repo("bert-base-cased", CONFIG_NAME, revision="ahaha")
+            get_file_from_repo("google-bert/bert-base-cased", CONFIG_NAME, revision="ahaha")
 
-        resolved_file = get_file_from_repo("bert-base-cased", CONFIG_NAME)
+        resolved_file = get_file_from_repo("google-bert/bert-base-cased", CONFIG_NAME)
         # The name is the cached name which is not very easy to test, so instead we load the content.
         config = json.loads(open(resolved_file, "r").read())
         self.assertEqual(config["hidden_size"], 768)

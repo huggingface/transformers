@@ -41,6 +41,7 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFSharedEmbeddings,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -53,11 +54,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "EleutherAI/gpt-j-6B"
 _CONFIG_FOR_DOC = "GPTJConfig"
-
-GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "EleutherAI/gpt-j-6B",
-    # See all GPT-J models at https://huggingface.co/models?filter=gptj
-]
 
 
 def create_sinusoidal_positions(num_pos: int, dim: int) -> tf.Tensor:
@@ -82,7 +78,7 @@ def apply_rotary_pos_emb(tensor: tf.Tensor, sincos: tf.Tensor) -> tf.Tensor:
     return (tensor * cos_pos) + (rotate_every_two(tensor) * sin_pos)
 
 
-class TFGPTJAttention(tf.keras.layers.Layer):
+class TFGPTJAttention(keras.layers.Layer):
     def __init__(self, config: GPTJConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -97,28 +93,28 @@ class TFGPTJAttention(tf.keras.layers.Layer):
         self.scale_attn = self.head_dim**0.5
         self.rotary_dim = config.rotary_dim
 
-        self.attn_dropout = tf.keras.layers.Dropout(config.attn_pdrop)
-        self.resid_dropout = tf.keras.layers.Dropout(config.resid_pdrop)
+        self.attn_dropout = keras.layers.Dropout(config.attn_pdrop)
+        self.resid_dropout = keras.layers.Dropout(config.resid_pdrop)
 
-        self.q_proj = tf.keras.layers.Dense(
+        self.q_proj = keras.layers.Dense(
             self.embed_dim,
             use_bias=False,
             kernel_initializer=get_initializer(config.initializer_range),
             name="q_proj",
         )
-        self.k_proj = tf.keras.layers.Dense(
+        self.k_proj = keras.layers.Dense(
             self.embed_dim,
             use_bias=False,
             kernel_initializer=get_initializer(config.initializer_range),
             name="k_proj",
         )
-        self.v_proj = tf.keras.layers.Dense(
+        self.v_proj = keras.layers.Dense(
             self.embed_dim,
             use_bias=False,
             kernel_initializer=get_initializer(config.initializer_range),
             name="v_proj",
         )
-        self.out_proj = tf.keras.layers.Dense(
+        self.out_proj = keras.layers.Dense(
             self.embed_dim,
             use_bias=False,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -285,20 +281,20 @@ class TFGPTJAttention(tf.keras.layers.Layer):
                 self.out_proj.build([None, None, self.embed_dim])
 
 
-class TFGPTJMLP(tf.keras.layers.Layer):
+class TFGPTJMLP(keras.layers.Layer):
     def __init__(self, intermediate_size: int, config: GPTJConfig, **kwargs):
         super().__init__(**kwargs)
         embed_dim = config.n_embd
 
-        self.fc_in = tf.keras.layers.Dense(
+        self.fc_in = keras.layers.Dense(
             intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="fc_in"
         )
-        self.fc_out = tf.keras.layers.Dense(
+        self.fc_out = keras.layers.Dense(
             embed_dim, kernel_initializer=get_initializer(config.initializer_range), name="fc_out"
         )
 
         self.act = get_tf_activation(config.activation_function)
-        self.dropout = tf.keras.layers.Dropout(config.embd_pdrop)
+        self.dropout = keras.layers.Dropout(config.embd_pdrop)
         self.embed_dim = config.n_embd
         self.intermediate_size = intermediate_size
 
@@ -321,11 +317,11 @@ class TFGPTJMLP(tf.keras.layers.Layer):
                 self.fc_out.build([None, None, self.intermediate_size])
 
 
-class TFGPTJBlock(tf.keras.layers.Layer):
+class TFGPTJBlock(keras.layers.Layer):
     def __init__(self, config: GPTJConfig, **kwargs):
         super().__init__(**kwargs)
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
-        self.ln_1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_1")
+        self.ln_1 = keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_1")
         self.attn = TFGPTJAttention(config, name="attn")
         self.mlp = TFGPTJMLP(inner_dim, config, name="mlp")
         self.config = config
@@ -379,7 +375,7 @@ class TFGPTJBlock(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFGPTJMainLayer(tf.keras.layers.Layer):
+class TFGPTJMainLayer(keras.layers.Layer):
     config_class = GPTJConfig
 
     def __init__(self, config: GPTJConfig, *inputs, **kwargs):
@@ -399,9 +395,9 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
         self.wte = TFSharedEmbeddings(
             config.vocab_size, config.hidden_size, initializer_range=config.initializer_range, name="wte"
         )
-        self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
+        self.drop = keras.layers.Dropout(config.embd_pdrop)
         self.h = [TFGPTJBlock(config, name=f"h_._{i}") for i in range(config.n_layer)]
-        self.ln_f = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f")
+        self.ln_f = keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f")
         self.embed_dim = config.n_embd
 
     def get_input_embeddings(self):
@@ -580,7 +576,7 @@ GPTJ_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -752,7 +748,7 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFGPTJMainLayer(config, name="transformer")
-        self.lm_head = tf.keras.layers.Dense(
+        self.lm_head = keras.layers.Dense(
             config.vocab_size, kernel_initializer=get_initializer(config.initializer_range), name="lm_head"
         )
         self.config = config
@@ -888,7 +884,7 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
         self.transformer = TFGPTJMainLayer(config, name="transformer")
-        self.score = tf.keras.layers.Dense(
+        self.score = keras.layers.Dense(
             self.num_labels,
             use_bias=False,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -1014,7 +1010,7 @@ class TFGPTJForQuestionAnswering(TFGPTJPreTrainedModel, TFQuestionAnsweringLoss)
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
         self.transformer = TFGPTJMainLayer(config, name="transformer")
-        self.qa_outputs = tf.keras.layers.Dense(
+        self.qa_outputs = keras.layers.Dense(
             self.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
         self.config = config

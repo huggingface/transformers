@@ -29,7 +29,7 @@ rendered properly in your Markdown viewer.
 
 이 가이드에서 소개할 내용은 아래와 같습니다:
 
-1. 생성 요약을 위한 [BillSum](https://huggingface.co/datasets/billsum) 데이터셋 중 캘리포니아 주 법안 하위 집합으로 [T5](https://huggingface.co/t5-small)를 파인튜닝합니다.
+1. 생성 요약을 위한 [BillSum](https://huggingface.co/datasets/billsum) 데이터셋 중 캘리포니아 주 법안 하위 집합으로 [T5](https://huggingface.co/google-t5/t5-small)를 파인튜닝합니다.
 2. 파인튜닝된 모델을 사용하여 추론합니다.
 
 <Tip>
@@ -95,7 +95,7 @@ Hugging Face 계정에 로그인하면 모델을 업로드하고 커뮤니티에
 ```py
 >>> from transformers import AutoTokenizer
 
->>> checkpoint = "t5-small"
+>>> checkpoint = "google-t5/t5-small"
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 ```
 

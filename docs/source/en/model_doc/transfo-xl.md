@@ -22,7 +22,7 @@ This model is in maintenance mode only, so we won't accept any new PRs changing 
 
 We recommend switching to more recent models for improved security.
 
-In case you would still like to use `TransfoXL` in your experiments, we recommend using the [Hub checkpoint](https://huggingface.co/transfo-xl-wt103) with a specific revision to ensure you are downloading safe files from the Hub.
+In case you would still like to use `TransfoXL` in your experiments, we recommend using the [Hub checkpoint](https://huggingface.co/transfo-xl/transfo-xl-wt103) with a specific revision to ensure you are downloading safe files from the Hub.
 
 You will need to set the environment variable `TRUST_REMOTE_CODE` to `True` in order to allow the
 usage of `pickle.load()`:
@@ -33,7 +33,7 @@ from transformers import TransfoXLTokenizer, TransfoXLLMHeadModel
 
 os.environ["TRUST_REMOTE_CODE"] = "True"
 
-checkpoint = 'transfo-xl-wt103'
+checkpoint = 'transfo-xl/transfo-xl-wt103'
 revision = '40a186da79458c9f9de846edfaea79c412137f97'
 
 tokenizer = TransfoXLTokenizer.from_pretrained(checkpoint, revision=revision)

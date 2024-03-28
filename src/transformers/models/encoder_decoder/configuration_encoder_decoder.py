@@ -45,13 +45,13 @@ class EncoderDecoderConfig(PretrainedConfig):
     ```python
     >>> from transformers import BertConfig, EncoderDecoderConfig, EncoderDecoderModel
 
-    >>> # Initializing a BERT bert-base-uncased style configuration
+    >>> # Initializing a BERT google-bert/bert-base-uncased style configuration
     >>> config_encoder = BertConfig()
     >>> config_decoder = BertConfig()
 
     >>> config = EncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
 
-    >>> # Initializing a Bert2Bert model (with random weights) from the bert-base-uncased style configurations
+    >>> # Initializing a Bert2Bert model (with random weights) from the google-bert/bert-base-uncased style configurations
     >>> model = EncoderDecoderModel(config=config)
 
     >>> # Accessing the model configuration

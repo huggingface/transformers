@@ -22,9 +22,8 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-DETA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ut/deta": "https://huggingface.co/ut/deta/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class DetaConfig(PretrainedConfig):
@@ -46,6 +45,12 @@ class DetaConfig(PretrainedConfig):
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
         use_pretrained_backbone (`bool`, *optional*, `False`):
             Whether to use pretrained weights for the backbone.
+        use_timm_backbone (`bool`, *optional*, `False`):
+            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
+            library.
+        backbone_kwargs (`dict`, *optional*):
+            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
+            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         num_queries (`int`, *optional*, defaults to 900):
             Number of object queries, i.e. detection slots. This is the maximal number of objects [`DetaModel`] can
             detect in a single image. In case `two_stage` is set to `True`, we use `two_stage_num_proposals` instead.
@@ -119,6 +124,9 @@ class DetaConfig(PretrainedConfig):
             Whether to assign each prediction i to the highest overlapping ground truth object if the overlap is larger than a threshold 0.7.
         assign_second_stage (`bool`, *optional*, defaults to `True`):
             Whether to assign second assignment procedure in the second stage closely follows the first stage assignment procedure.
+        disable_custom_kernels (`bool`, *optional*, defaults to `True`):
+            Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
+            kernels are not supported by PyTorch ONNX export.
 
     Examples:
 
@@ -146,6 +154,8 @@ class DetaConfig(PretrainedConfig):
         backbone_config=None,
         backbone=None,
         use_pretrained_backbone=False,
+        use_timm_backbone=False,
+        backbone_kwargs=None,
         num_queries=900,
         max_position_embeddings=2048,
         encoder_layers=6,
@@ -183,6 +193,7 @@ class DetaConfig(PretrainedConfig):
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
         focal_alpha=0.25,
+        disable_custom_kernels=True,
         **kwargs,
     ):
         if use_pretrained_backbone:
@@ -200,9 +211,14 @@ class DetaConfig(PretrainedConfig):
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
 
+        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
+            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
+
         self.backbone_config = backbone_config
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
+        self.use_timm_backbone = use_timm_backbone
+        self.backbone_kwargs = backbone_kwargs
         self.num_queries = num_queries
         self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
@@ -243,6 +259,7 @@ class DetaConfig(PretrainedConfig):
         self.giou_loss_coefficient = giou_loss_coefficient
         self.eos_coefficient = eos_coefficient
         self.focal_alpha = focal_alpha
+        self.disable_custom_kernels = disable_custom_kernels
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property

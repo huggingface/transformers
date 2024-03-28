@@ -332,7 +332,7 @@ def cached_file(
 
     ```python
     # Download a model weight from the Hub and cache it.
-    model_weights_file = cached_file("bert-base-uncased", "pytorch_model.bin")
+    model_weights_file = cached_file("google-bert/bert-base-uncased", "pytorch_model.bin")
     ```
     """
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
@@ -368,7 +368,7 @@ def cached_file(
             if _raise_exceptions_for_missing_entries:
                 raise EnvironmentError(
                     f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
-                    f"'https://huggingface.co/{path_or_repo_id}/{revision}' for available files."
+                    f"'https://huggingface.co/{path_or_repo_id}/tree/{revision}' for available files."
                 )
             else:
                 return None
@@ -414,9 +414,8 @@ def cached_file(
         if resolved_file is not None or not _raise_exceptions_for_gated_repo:
             return resolved_file
         raise EnvironmentError(
-            "You are trying to access a gated repo.\nMake sure to request access at "
-            f"https://huggingface.co/{path_or_repo_id} and pass a token having permission to this repo either "
-            "by logging in with `huggingface-cli login` or by passing `token=<your_token>`."
+            "You are trying to access a gated repo.\nMake sure to have access to it at "
+            f"https://huggingface.co/{path_or_repo_id}.\n{str(e)}"
         ) from e
     except RepositoryNotFoundError as e:
         raise EnvironmentError(
@@ -532,9 +531,9 @@ def get_file_from_repo(
 
     ```python
     # Download a tokenizer configuration from huggingface.co and cache.
-    tokenizer_config = get_file_from_repo("bert-base-uncased", "tokenizer_config.json")
+    tokenizer_config = get_file_from_repo("google-bert/bert-base-uncased", "tokenizer_config.json")
     # This model does not have a tokenizer config so the result will be None.
-    tokenizer_config = get_file_from_repo("xlm-roberta-base", "tokenizer_config.json")
+    tokenizer_config = get_file_from_repo("FacebookAI/xlm-roberta-base", "tokenizer_config.json")
     ```
     """
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
@@ -820,7 +819,7 @@ class PushToHubMixin:
         ```python
         from transformers import {object_class}
 
-        {object} = {object_class}.from_pretrained("bert-base-cased")
+        {object} = {object_class}.from_pretrained("google-bert/bert-base-cased")
 
         # Push the {object} to your namespace with the name "my-finetuned-bert".
         {object}.push_to_hub("my-finetuned-bert")

@@ -22,7 +22,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFCvtForImageClassification, TFCvtModel
-    from transformers.models.cvt.modeling_tf_cvt import TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.modeling_tf_utils import keras
 
 
 if is_vision_available():
@@ -191,10 +191,10 @@ class TFCvtModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @unittest.skip(reason="Get `Failed to determine best cudnn convolution algo.` error after using TF 2.12+cuda 11.8")
     def test_keras_fit_mixed_precision(self):
-        policy = tf.keras.mixed_precision.Policy("mixed_float16")
-        tf.keras.mixed_precision.set_global_policy(policy)
+        policy = keras.mixed_precision.Policy("mixed_float16")
+        keras.mixed_precision.set_global_policy(policy)
         super().test_keras_fit()
-        tf.keras.mixed_precision.set_global_policy("float32")
+        keras.mixed_precision.set_global_policy("float32")
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -250,9 +250,9 @@ class TFCvtModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFCvtModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/cvt-13"
+        model = TFCvtModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -266,11 +266,11 @@ def prepare_img():
 class TFCvtModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained(TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        return AutoImageProcessor.from_pretrained("microsoft/cvt-13")
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFCvtForImageClassification.from_pretrained(TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        model = TFCvtForImageClassification.from_pretrained("microsoft/cvt-13")
 
         image_processor = self.default_image_processor
         image = prepare_img()

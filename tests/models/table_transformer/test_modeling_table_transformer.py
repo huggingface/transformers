@@ -200,7 +200,7 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": TableTransformerModel, "object-detection": TableTransformerForObjectDetection}
+        {"image-feature-extraction": TableTransformerModel, "object-detection": TableTransformerForObjectDetection}
         if is_torch_available()
         else {}
     )
@@ -209,6 +209,7 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    zero_init_hidden_state = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
