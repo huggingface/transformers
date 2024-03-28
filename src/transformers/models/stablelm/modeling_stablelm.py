@@ -765,6 +765,7 @@ class StableLmDecoderLayer(nn.Module):
             use_cache=use_cache,
         )
 
+        # copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXLayer.forward
         if self.use_parallel_residual:
             # x = x + attn(ln1(x)) + mlp(ln1(x))
             # Fully Connected
