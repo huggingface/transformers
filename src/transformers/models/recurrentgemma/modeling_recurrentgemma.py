@@ -1554,8 +1554,7 @@ class RecurrentBlockCache:
 
 
 class GriffinCache:
-    def __init__(self, config: RecurrentGemmaConfig, batch_size,
-        dtype=torch.float16, device=None):
+    def __init__(self, config: RecurrentGemmaConfig, batch_size, dtype=torch.float16, device=None):
         self.states = []
         for block_type in config.block_types:
             self.states.append(ResidualBlock.init_cache(
@@ -1656,15 +1655,14 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     config_class = RecurrentGemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _keep_in_fp32_modules = ["inv_freq", "rotary_emb", "cos_cached",
-                             "sin_cached"]
+    _keep_in_fp32_modules = ["inv_freq", "rotary_emb", "cos_cached", "sin_cached"]
     _no_split_modules = ["RecurrentGemmaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     # TODO(lberrada, botev): decide whether we want to support the various implementations of attention
     # in first version.
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_cache_class = True
+    _supports_flash_attn_2 = False
+    _supports_sdpa = False
+    _supports_cache_class = False
 
     def _init_weights(self, module):
         module.reset_params()
@@ -1789,15 +1787,9 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
         # TODO(lberrada, botev): the structure of layers has changed. Check that this does not break
         # checkpoint loading.
-        self.embedder = Embedder(
-            vocab_size=self.config.vocab_size,
-            embed_dim=self.config.width,
-            scale_by_sqrt_dim=self.config.embeddings_scale_by_sqrt_dim,
-            device=device,
-            dtype=dtype,
-        )
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
 
-        self.layers = nn.ModuleList([
+        self.blocks = nn.ModuleList([
             ResidualBlock(
                 width=self.config.width,
                 mlp_expanded_width=self.config.mlp_expanded_width,
@@ -1820,7 +1812,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embed_tokens
+        return self.embedder
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
@@ -1872,33 +1864,26 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds,
-                                               cache_position)
-
         # embed positions
         hidden_states = inputs_embeds
 
         # normalized
-        # RecurrentGemma downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
-        # See https://github.com/huggingface/transformers/pull/29402
-        normalizer = torch.tensor(self.config.hidden_size ** 0.5,
-                                  dtype=hidden_states.dtype)
-        hidden_states = hidden_states * normalizer
+        if self.config.embeddings_scale_by_sqrt_dim:
+            normalizer = torch.tensor(self.config.hidden_size ** 0.5, dtype=torch.bfloat16)
+            hidden_states = hidden_states * normalizer
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
         next_decoder_cache = None
 
-        for decoder_layer in self.layers:
+        for residual_block in self.blocks:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-
+            # TODO(botev): What about `use_cache`?
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+                    residual_block.__call__,
                     hidden_states,
-                    causal_mask,
                     position_ids,
                     cache,
                     output_attentions,
@@ -1906,25 +1891,16 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
                     cache_position,
                 )
             else:
-                layer_outputs = decoder_layer(
+                layer_outputs = residual_block(
                     hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
+                    segment_pos=position_ids,
                     cache=cache,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
                 )
 
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache = layer_outputs[
-                    2 if output_attentions else 1]
-
-            # TODO(lberrada, botev): adapt this to handle recurrent layers.
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
+                next_decoder_cache = layer_outputs[1]
 
         hidden_states = self.norm(hidden_states)
 
@@ -1934,90 +1910,85 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
         next_cache = None
         if use_cache:
-            next_cache = (
-                next_decoder_cache.to_legacy_cache() if isinstance(
-                    next_decoder_cache, Cache) else next_decoder_cache
-            )
+            next_cache = next_decoder_cache
         if not return_dict:
-            return tuple(v for v in
-                         [hidden_states, next_cache, all_hidden_states,
-                          all_self_attns] if v is not None)
+            return tuple(v for v in [hidden_states, next_cache, all_hidden_states] if v is not None)
         return GriffinOutput(
             last_hidden_state=hidden_states,
             cache=next_cache,
             hidden_states=all_hidden_states,
-            attentions=all_self_attns,
         )
 
+    # TODO(botev): We don't need this as we generate it on the fly.
     # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
     # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
     # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
     # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
-    def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
-        if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
-                return attention_mask
-            return None
-
-        dtype, device = input_tensor.dtype, input_tensor.device
-        min_dtype = torch.finfo(dtype).min
-        sequence_length = input_tensor.shape[1]
-        if hasattr(self.layers[0].self_attn, "past_key_value"):  # static cache
-            target_length = self.config.max_position_embeddings
-        else:  # dynamic cache
-            target_length = (
-                attention_mask.shape[-1] if isinstance(attention_mask,
-                                                       torch.Tensor) else
-                cache_position[-1] + 1
-            )
-
-        causal_mask = torch.full((sequence_length, target_length),
-                                 fill_value=min_dtype, dtype=dtype,
-                                 device=device)
-        if sequence_length != 1:
-            causal_mask = torch.triu(causal_mask, diagonal=1)
-        causal_mask *= torch.arange(target_length,
-                                    device=device) > cache_position.reshape(-1,
-                                                                            1)
-        causal_mask = causal_mask[None, None, :, :].expand(
-            input_tensor.shape[0], 1, -1, -1)
-        if attention_mask is not None:
-            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-            if attention_mask.dim() == 2:
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[..., :mask_length].eq(
-                    0.0) * attention_mask[:, None, None, :].eq(0.0)
-                causal_mask[..., :mask_length] = causal_mask[...,
-                                                 :mask_length].masked_fill(
-                    padding_mask, min_dtype)
-            elif attention_mask.dim() == 4:
-                # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
-                # cache. In that case, the 4D attention mask attends to the newest tokens only.
-                if attention_mask.shape[-2] < cache_position[
-                    0] + sequence_length:
-                    offset = cache_position[0]
-                else:
-                    offset = 0
-                mask_shape = attention_mask.shape
-                mask_slice = (attention_mask.eq(0.0)).to(
-                    dtype=dtype) * min_dtype
-                causal_mask[
-                : mask_shape[0], : mask_shape[1],
-                offset: mask_shape[2] + offset, : mask_shape[3]
-                ] = mask_slice
-
-        if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type == "cuda"
-        ):
-            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-            # Details: https://github.com/pytorch/pytorch/issues/110213
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask,
-                                                                    min_dtype)
-
-        return causal_mask
+    # def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
+    #     if self.config._attn_implementation == "flash_attention_2":
+    #         if attention_mask is not None and 0.0 in attention_mask:
+    #             return attention_mask
+    #         return None
+    #
+    #     dtype, device = input_tensor.dtype, input_tensor.device
+    #     min_dtype = torch.finfo(dtype).min
+    #     sequence_length = input_tensor.shape[1]
+    #     if hasattr(self.layers[0].self_attn, "past_key_value"):  # static cache
+    #         target_length = self.config.max_position_embeddings
+    #     else:  # dynamic cache
+    #         target_length = (
+    #             attention_mask.shape[-1] if isinstance(attention_mask,
+    #                                                    torch.Tensor) else
+    #             cache_position[-1] + 1
+    #         )
+    #
+    #     causal_mask = torch.full((sequence_length, target_length),
+    #                              fill_value=min_dtype, dtype=dtype,
+    #                              device=device)
+    #     if sequence_length != 1:
+    #         causal_mask = torch.triu(causal_mask, diagonal=1)
+    #     causal_mask *= torch.arange(target_length,
+    #                                 device=device) > cache_position.reshape(-1,
+    #                                                                         1)
+    #     causal_mask = causal_mask[None, None, :, :].expand(
+    #         input_tensor.shape[0], 1, -1, -1)
+    #     if attention_mask is not None:
+    #         causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+    #         if attention_mask.dim() == 2:
+    #             mask_length = attention_mask.shape[-1]
+    #             padding_mask = causal_mask[..., :mask_length].eq(
+    #                 0.0) * attention_mask[:, None, None, :].eq(0.0)
+    #             causal_mask[..., :mask_length] = causal_mask[...,
+    #                                              :mask_length].masked_fill(
+    #                 padding_mask, min_dtype)
+    #         elif attention_mask.dim() == 4:
+    #             # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
+    #             # cache. In that case, the 4D attention mask attends to the newest tokens only.
+    #             if attention_mask.shape[-2] < cache_position[
+    #                 0] + sequence_length:
+    #                 offset = cache_position[0]
+    #             else:
+    #                 offset = 0
+    #             mask_shape = attention_mask.shape
+    #             mask_slice = (attention_mask.eq(0.0)).to(
+    #                 dtype=dtype) * min_dtype
+    #             causal_mask[
+    #             : mask_shape[0], : mask_shape[1],
+    #             offset: mask_shape[2] + offset, : mask_shape[3]
+    #             ] = mask_slice
+    #
+    #     if (
+    #         self.config._attn_implementation == "sdpa"
+    #         and attention_mask is not None
+    #         and attention_mask.device.type == "cuda"
+    #     ):
+    #         # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+    #         # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+    #         # Details: https://github.com/pytorch/pytorch/issues/110213
+    #         causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask,
+    #                                                                 min_dtype)
+    #
+    #     return causal_mask
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->RECURRENTGEMMA,Llama->RecurrentGemma,llama->gemma
@@ -2154,7 +2125,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         # TODO joao: standardize interface for the different Cache classes and remove of this if
         has_static_cache = False
         if past_key_values is None:
-            past_key_values = getattr(self.model.layers[0].self_attn,
+            past_key_values = getattr(self.model.blocks[0].self_attn,
                                       "past_key_value", None)
             has_static_cache = past_key_values is not None
 
