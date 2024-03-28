@@ -429,13 +429,3 @@ class QuantoQuantizationActivationTest(unittest.TestCase):
         with self.assertRaises(ValueError) as e:
             AutoModelForCausalLM.from_pretrained("bigscience/bloom-560m", quantization_config=quantization_config)
         self.assertIn("We don't support quantizing the activations with transformers library", str(e.exception))
-
-class PytorchBasic(unittest.TestCase):
-
-    def create_torch_full(dtype,device):
-        mask = torch.full((50, 50), torch.finfo(dtype).min, device=device)
-
-    def test_create_torch_full(self):
-        for dtype in [torch.float32, torch.float16]:
-            for device in [torch.device("cpu"), torch.device('cuda')]:
-                self.create_torch_full(dtype=dtype, device=device)
