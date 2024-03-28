@@ -24,6 +24,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from functools import partial
 from itertools import product
 from pathlib import Path
 from typing import Dict, List
@@ -92,6 +93,7 @@ from transformers.utils import (
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
     is_safetensors_available,
@@ -127,6 +129,9 @@ if is_torch_available():
     if is_safetensors_available():
         import safetensors.torch
 
+# for version specific tests in TrainerIntegrationTest
+require_accelerate_version_min_0_28 = partial(require_accelerate, min_version="0.28")
+GRAD_ACCUM_KWARGS_VERSION_AVAILABLE = is_accelerate_available("0.28")
 
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
 
@@ -2877,6 +2882,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.even_batches, True)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
 
+            if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
+                # gradient accumulation kwargs configures gradient_state
+                self.assertNotIn("sync_each_batch", trainer.accelerator.gradient_state.plugin_kwargs)
+
     def test_accelerator_config_from_dict(self):
         # Checks that accelerator kwargs can be passed through
         # and the accelerator is initialized respectively
@@ -2885,21 +2894,28 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             model = RegressionPreTrainedModel(config)
             eval_dataset = SampleIterableDataset()
 
+            accelerator_config = {
+                "split_batches": True,
+                "dispatch_batches": True,
+                "even_batches": False,
+                "use_seedable_sampler": True,
+            }
+            if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
+                accelerator_config["gradient_accumulation_kwargs"] = {"sync_each_batch": True}
+
             # Leaves all options as something *not* basic
             args = RegressionTrainingArguments(
                 output_dir=tmp_dir,
-                accelerator_config={
-                    "split_batches": True,
-                    "dispatch_batches": True,
-                    "even_batches": False,
-                    "use_seedable_sampler": True,
-                },
+                accelerator_config=accelerator_config,
             )
             trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
             self.assertEqual(trainer.accelerator.split_batches, True)
             self.assertEqual(trainer.accelerator.dispatch_batches, True)
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
+
+            if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
+                self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["sync_each_batch"], True)
 
     def test_accelerator_config_from_yaml(self):
         # Checks that accelerator kwargs can be passed through
@@ -2913,6 +2929,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     "even_batches": False,
                     "use_seedable_sampler": False,
                 }
+                if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
+                    accelerator_config["gradient_accumulation_kwargs"] = {"sync_each_batch": True}
                 json.dump(accelerator_config, f)
             config = RegressionModelConfig(a=1.5, b=2.5)
             model = RegressionPreTrainedModel(config)
@@ -2926,11 +2944,18 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
 
+            if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
+                self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["sync_each_batch"], True)
+
     def test_accelerator_config_from_dataclass(self):
         # Checks that accelerator kwargs can be passed through
         # and the accelerator is initialized respectively
+
         accelerator_config = AcceleratorConfig(
-            split_batches=True, dispatch_batches=True, even_batches=False, use_seedable_sampler=False
+            split_batches=True,
+            dispatch_batches=True,
+            even_batches=False,
+            use_seedable_sampler=False,
         )
         config = RegressionModelConfig(a=1.5, b=2.5)
         model = RegressionPreTrainedModel(config)
@@ -2942,6 +2967,35 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.dispatch_batches, True)
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
+
+    @require_accelerate_version_min_0_28
+    def test_accelerate_config_from_dataclass_grad_accum(self):
+        # Checks that accelerator kwargs can be passed through
+        # and the accelerator is initialized respectively
+
+        grad_acc_kwargs = {
+            "num_steps": 10,
+            "adjust_scheduler": False,
+            "sync_with_dataloader": False,
+            "sync_each_batch": True,
+        }
+        accelerator_config = AcceleratorConfig(
+            split_batches=True,
+            dispatch_batches=True,
+            even_batches=False,
+            use_seedable_sampler=False,
+            gradient_accumulation_kwargs=grad_acc_kwargs,
+        )
+        config = RegressionModelConfig(a=1.5, b=2.5)
+        model = RegressionPreTrainedModel(config)
+        eval_dataset = SampleIterableDataset()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = RegressionTrainingArguments(output_dir=tmp_dir, accelerator_config=accelerator_config)
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["num_steps"], 10)
+            self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["adjust_scheduler"], False)
+            self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["sync_with_dataloader"], False)
+            self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["sync_each_batch"], True)
 
     def test_accelerator_config_from_partial(self):
         # Checks that accelerator kwargs can be passed through
@@ -3013,6 +3067,44 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 eval_dataset = SampleIterableDataset()
                 trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
                 self.assertEqual(trainer.accelerator.split_batches, True)
+
+    @require_accelerate_version_min_0_28
+    def test_accelerator_config_from_dict_grad_accum_num_steps(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            model = RegressionPreTrainedModel(config)
+            eval_dataset = SampleIterableDataset()
+
+            # case - TrainingArguments.gradient_accumulation_steps == 1
+            #      - gradient_accumulation_kwargs['num_steps] == 1
+            # results in grad accum set to 1
+            args = RegressionTrainingArguments(
+                output_dir=tmp_dir,
+                gradient_accumulation_steps=1,
+                accelerator_config={
+                    "gradient_accumulation_kwargs": {
+                        "num_steps": 1,
+                    }
+                },
+            )
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["num_steps"], 1)
+
+            # case - TrainingArguments.gradient_accumulation_steps > 1
+            #      - gradient_accumulation_kwargs['num_steps] specified
+            # results in exception raised
+            args = RegressionTrainingArguments(
+                output_dir=tmp_dir,
+                gradient_accumulation_steps=2,
+                accelerator_config={
+                    "gradient_accumulation_kwargs": {
+                        "num_steps": 10,
+                    }
+                },
+            )
+            with self.assertRaises(Exception) as context:
+                trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertTrue("The `AcceleratorConfig`'s `num_steps` is set but" in str(context.exception))
 
 
 @require_torch
@@ -3832,3 +3924,41 @@ class HyperParameterSearchBackendsTest(unittest.TestCase):
             list(ALL_HYPERPARAMETER_SEARCH_BACKENDS.keys()),
             list(HPSearchBackend),
         )
+
+
+@require_torch
+class OptimizerAndModelInspectionTest(unittest.TestCase):
+    def test_get_num_trainable_parameters(self):
+        model = nn.Sequential(nn.Linear(128, 64), nn.Linear(64, 32))
+        # in_features * out_features + bias
+        layer_1 = 128 * 64 + 64
+        layer_2 = 64 * 32 + 32
+        trainer = Trainer(model=model)
+        self.assertEqual(trainer.get_num_trainable_parameters(), layer_1 + layer_2)
+        # Freeze the last layer
+        for param in model[-1].parameters():
+            param.requires_grad = False
+        self.assertEqual(trainer.get_num_trainable_parameters(), layer_1)
+
+    def test_get_learning_rates(self):
+        model = nn.Sequential(nn.Linear(128, 64))
+        trainer = Trainer(model=model)
+        with self.assertRaises(ValueError):
+            trainer.get_learning_rates()
+        trainer.create_optimizer()
+        self.assertEqual(trainer.get_learning_rates(), [5e-05, 5e-05])
+
+    def test_get_optimizer_group(self):
+        model = nn.Sequential(nn.Linear(128, 64))
+        trainer = Trainer(model=model)
+        # ValueError is raised if optimizer is None
+        with self.assertRaises(ValueError):
+            trainer.get_optimizer_group()
+        trainer.create_optimizer()
+        # Get groups
+        num_groups = len(trainer.get_optimizer_group())
+        self.assertEqual(num_groups, 2)
+        # Get group of parameter
+        param = next(model.parameters())
+        group = trainer.get_optimizer_group(param)
+        self.assertIn(param, group["params"])
