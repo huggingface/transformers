@@ -52,7 +52,7 @@ import torch.distributed as dist
 from huggingface_hub import ModelCard, create_repo, upload_folder
 from packaging import version
 from torch import nn
-from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
+from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
 
 from . import __version__
 from .configuration_utils import PretrainedConfig
@@ -151,6 +151,7 @@ from .utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_compile_available,
+    is_torch_mlu_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_xla_available,
@@ -353,7 +354,7 @@ class Trainer:
         model: Union[PreTrainedModel, nn.Module] = None,
         args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
-        train_dataset: Optional[Dataset] = None,
+        train_dataset: Optional[Union[Dataset, IterableDataset]] = None,
         eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
         model_init: Optional[Callable[[], PreTrainedModel]] = None,
@@ -1048,6 +1049,36 @@ class Trainer:
 
         return self.optimizer
 
+    def get_num_trainable_parameters(self):
+        """
+        Get the number of trainable parameters.
+        """
+        return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+
+    def get_learning_rates(self):
+        """
+        Returns the learning rate of each parameter from self.optimizer.
+        """
+        if self.optimizer is None:
+            raise ValueError("Trainer optimizer is None, please make sure you have setup the optimizer before.")
+        return [group["lr"] for group in self.optimizer.param_groups]
+
+    def get_optimizer_group(self, param: Optional[Union[str, torch.nn.parameter.Parameter]] = None):
+        """
+        Returns optimizer group for a parameter if given, else returns all optimizer groups for params.
+
+        Args:
+            param (`str` or `torch.nn.parameter.Parameter`, *optional*):
+                The parameter for which optimizer group needs to be returned.
+        """
+        if self.optimizer is None:
+            raise ValueError("Trainer optimizer is None, please make sure you have setup the optimizer before.")
+        if param is not None:
+            for group in self.optimizer.param_groups:
+                if param in group["params"]:
+                    return group
+        return [group["params"] for group in self.optimizer.param_groups]
+
     @staticmethod
     def get_optimizer_cls_and_kwargs(
         args: TrainingArguments, model: Optional[PreTrainedModel] = None
@@ -1529,6 +1560,29 @@ class Trainer:
 
         return model
 
+    def compare_trainer_and_checkpoint_args(self, training_args, trainer_state):
+        attributes_map = {
+            "logging_steps": "logging_steps",
+            "eval_steps": "eval_steps",
+            "save_steps": "save_steps",
+            "per_device_train_batch_size": "train_batch_size",
+        }
+
+        warnings_list = []
+        for arg_attr, state_attr in attributes_map.items():
+            arg_value = getattr(training_args, arg_attr, None)
+            state_value = getattr(trainer_state, state_attr, None)
+
+            if arg_value is not None and state_value is not None and arg_value != state_value:
+                warnings_list.append(
+                    f"Warning: The training argument '{arg_attr}' value ({arg_value}) does not match the trainer state '{state_attr}' value ({state_value}). "
+                    f"This argument will be overridden by the one found in trainer_state.json within the checkpoint directory."
+                )
+
+        if warnings_list:
+            for warning in warnings_list:
+                logger.warning(warning)
+
     def _wrap_model(self, model, training=True, dataloader=None):
         if self.args.use_ipex:
             dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
@@ -1991,6 +2045,7 @@ class Trainer:
             os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME)
         ):
             self.state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
+            self.compare_trainer_and_checkpoint_args(self.args, self.state)
             epochs_trained = self.state.global_step // num_update_steps_per_epoch
             if not args.ignore_data_skip:
                 steps_trained_in_current_epoch = self.state.global_step % (num_update_steps_per_epoch)
@@ -2097,7 +2152,12 @@ class Trainer:
                             "a `main_input_name` attribute to the model class you are using."
                         )
                     else:
-                        self.state.num_input_tokens_seen += self.accelerator.gather(inputs[main_input_name]).numel()
+                        input_device = inputs[main_input_name].device
+                        self.state.num_input_tokens_seen += torch.sum(
+                            self.accelerator.gather(
+                                torch.tensor(inputs[main_input_name].numel(), device=input_device, dtype=torch.int64)
+                            )
+                        ).item()
                 if rng_to_sync:
                     self._load_rng_state(resume_from_checkpoint)
                     rng_to_sync = False
@@ -2642,6 +2702,17 @@ class Trainer:
                         f"Didn't manage to set back the RNG states of the NPU because of the following error:\n {e}"
                         "\nThis won't yield the same results as if the training had not been interrupted."
                     )
+        if is_torch_mlu_available():
+            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
+                torch.mlu.random.set_rng_state_all(checkpoint_rng_state["mlu"])
+            else:
+                try:
+                    torch.mlu.random.set_rng_state(checkpoint_rng_state["mlu"])
+                except Exception as e:
+                    logger.info(
+                        f"Didn't manage to set back the RNG states of the MLU because of the following error:\n {e}"
+                        "\nThis won't yield the same results as if the training had not been interrupted."
+                    )
 
     def _save_checkpoint(self, model, trial, metrics=None):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
@@ -2715,6 +2786,12 @@ class Trainer:
                 rng_states["npu"] = torch.npu.random.get_rng_state_all()
             else:
                 rng_states["npu"] = torch.npu.random.get_rng_state()
+
+        if is_torch_mlu_available():
+            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
+                rng_states["mlu"] = torch.mlu.random.get_rng_state_all()
+            else:
+                rng_states["mlu"] = torch.mlu.random.get_rng_state()
 
         # A process can arrive here before the process 0 has a chance to save the model, in which case output_dir may
         # not yet exist.

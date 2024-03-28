@@ -57,6 +57,7 @@ from .utils import (
     is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
+    is_av_available,
     is_bitsandbytes_available,
     is_bs4_available,
     is_cv2_available,
@@ -791,13 +792,13 @@ def require_torch_xpu(test_case):
 
 def require_torch_multi_xpu(test_case):
     """
-    Decorator marking a test that requires a multi-XPU setup with IPEX and atleast one XPU device. These tests are
+    Decorator marking a test that requires a multi-XPU setup with IPEX and at least one XPU device. These tests are
     skipped on a machine without IPEX or multiple XPUs.
 
     To run *only* the multi_xpu tests, assuming all test names contain multi_xpu: $ pytest -sv ./tests -k "multi_xpu"
     """
     if not is_torch_xpu_available():
-        return unittest.skip("test requires IPEX and atleast one XPU device")(test_case)
+        return unittest.skip("test requires IPEX and at least one XPU device")(test_case)
 
     return unittest.skipUnless(torch.xpu.device_count() > 1, "test requires multiple XPUs")(test_case)
 
@@ -1008,6 +1009,13 @@ def require_aqlm(test_case):
     Decorator marking a test that requires aqlm
     """
     return unittest.skipUnless(is_aqlm_available(), "test requires aqlm")(test_case)
+
+
+def require_av(test_case):
+    """
+    Decorator marking a test that requires av
+    """
+    return unittest.skipUnless(is_av_available(), "test requires av")(test_case)
 
 
 def require_bitsandbytes(test_case):

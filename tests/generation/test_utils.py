@@ -1467,6 +1467,17 @@ class GenerationTesterMixin:
                         past_kv[i][1].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
                     )
 
+    def test_generate_from_inputs_embeds_with_bos_token_id_is_none(self):
+        article = "Today a dragon flew over Paris."
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+        inputs_embeds = model.get_input_embeddings()(input_ids)
+
+        model.generate(inputs_embeds=inputs_embeds, max_length=20, bos_token_id=None)
+        with self.assertRaises(ValueError):
+            model.generate(max_length=20, bos_token_id=None)
+
     def test_generate_from_inputs_embeds_decoder_only(self):
         # When supported, tests that the decoder model can generate from `inputs_embeds` instead of `input_ids`
         # if fails, you should probably update the `prepare_inputs_for_generation` function
@@ -1888,14 +1899,12 @@ class UtilsFunctionsTest(unittest.TestCase):
             ]
         )
         last_assistant_token_is_eos = False
-        max_matches = 5
         validated_tokens, n_matches = _speculative_sampling(
             candidate_input_ids,
             candidate_logits,
             candidate_length,
             new_logits,
             last_assistant_token_is_eos,
-            max_matches,
         )
         self.assertTrue(n_matches.item() == 2)
         self.assertTrue(validated_tokens.tolist()[0] == [1, 4, 8])

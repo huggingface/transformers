@@ -23,9 +23,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/xclip-base-patch32": "https://huggingface.co/microsoft/xclip-base-patch32/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class XCLIPTextConfig(PretrainedConfig):

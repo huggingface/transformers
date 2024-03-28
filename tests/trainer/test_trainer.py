@@ -706,6 +706,29 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(sched1.lr_lambdas[0].args, sched2.lr_lambdas[0].args)
         self.assertEqual(sched1.lr_lambdas[0].keywords, sched2.lr_lambdas[0].keywords)
 
+    def test_cosine_with_min_lr_scheduler(self):
+        train_dataset = RegressionDataset()
+        model = RegressionModel()
+        num_steps, num_warmup_steps = 10, 2
+        extra_kwargs = {"min_lr": 1e-5}  # Non-default arguments
+        args = TrainingArguments(
+            "./regression",
+            lr_scheduler_type="cosine_with_min_lr",
+            lr_scheduler_kwargs=extra_kwargs,
+            learning_rate=0.2,
+            warmup_steps=num_warmup_steps,
+        )
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
+
+        # Checking that the scheduler was created
+        self.assertIsNotNone(trainer.lr_scheduler)
+
+        # Check the last learning rate
+        for _ in range(num_steps):
+            trainer.lr_scheduler.step()
+        self.assertEqual(trainer.lr_scheduler.get_last_lr()[0], 1e-5)
+
     def test_reduce_lr_on_plateau_args(self):
         # test passed arguments for a custom ReduceLROnPlateau scheduler
         train_dataset = RegressionDataset(length=64)
@@ -2485,6 +2508,46 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.state.best_model_checkpoint = os.path.join(tmp_dir, "checkpoint-5")
             self.check_checkpoint_deletion(trainer, tmp_dir, [5, 25])
 
+    def test_compare_trainer_and_checkpoint_args_logging(self):
+        logger = logging.get_logger()
+
+        with tempfile.TemporaryDirectory() as tmpdir, CaptureLogger(logger) as cl:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                train_len=128,
+                eval_steps=5,
+                gradient_accumulation_steps=2,
+                per_device_train_batch_size=4,
+                save_steps=5,
+                learning_rate=0.1,
+            )
+            trainer.train()
+
+            checkpoint = os.path.join(tmpdir, "checkpoint-5")
+            checkpoint_trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                train_len=256,
+                eval_steps=10,
+                gradient_accumulation_steps=4,
+                per_device_train_batch_size=8,
+                save_steps=10,
+                learning_rate=0.1,
+            )
+            checkpoint_trainer.train(resume_from_checkpoint=checkpoint)
+
+        self.assertIn(
+            "Warning: The training argument 'save_steps' value (10) does not match the trainer state 'save_steps' value (5). This argument will be overridden by the one found in trainer_state.json within the checkpoint directory.",
+            cl.out,
+        )
+        self.assertIn(
+            "Warning: The training argument 'per_device_train_batch_size' value (8) does not match the trainer state 'train_batch_size' value (4). This argument will be overridden by the one found in trainer_state.json within the checkpoint directory.",
+            cl.out,
+        )
+        self.assertIn(
+            "Warning: The training argument 'eval_steps' value (10) does not match the trainer state 'eval_steps' value (5). This argument will be overridden by the one found in trainer_state.json within the checkpoint directory.",
+            cl.out,
+        )
+
     def check_mem_metrics(self, trainer, check_func):
         metrics = trainer.train().metrics
         check_func("init_mem_cpu_alloc_delta", metrics)
@@ -3769,3 +3832,41 @@ class HyperParameterSearchBackendsTest(unittest.TestCase):
             list(ALL_HYPERPARAMETER_SEARCH_BACKENDS.keys()),
             list(HPSearchBackend),
         )
+
+
+@require_torch
+class OptimizerAndModelInspectionTest(unittest.TestCase):
+    def test_get_num_trainable_parameters(self):
+        model = nn.Sequential(nn.Linear(128, 64), nn.Linear(64, 32))
+        # in_features * out_features + bias
+        layer_1 = 128 * 64 + 64
+        layer_2 = 64 * 32 + 32
+        trainer = Trainer(model=model)
+        self.assertEqual(trainer.get_num_trainable_parameters(), layer_1 + layer_2)
+        # Freeze the last layer
+        for param in model[-1].parameters():
+            param.requires_grad = False
+        self.assertEqual(trainer.get_num_trainable_parameters(), layer_1)
+
+    def test_get_learning_rates(self):
+        model = nn.Sequential(nn.Linear(128, 64))
+        trainer = Trainer(model=model)
+        with self.assertRaises(ValueError):
+            trainer.get_learning_rates()
+        trainer.create_optimizer()
+        self.assertEqual(trainer.get_learning_rates(), [5e-05, 5e-05])
+
+    def test_get_optimizer_group(self):
+        model = nn.Sequential(nn.Linear(128, 64))
+        trainer = Trainer(model=model)
+        # ValueError is raised if optimizer is None
+        with self.assertRaises(ValueError):
+            trainer.get_optimizer_group()
+        trainer.create_optimizer()
+        # Get groups
+        num_groups = len(trainer.get_optimizer_group())
+        self.assertEqual(num_groups, 2)
+        # Get group of parameter
+        param = next(model.parameters())
+        group = trainer.get_optimizer_group(param)
+        self.assertIn(param, group["params"])
