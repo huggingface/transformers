@@ -51,10 +51,9 @@ def whitespace_tokenize(text):
 class WordpieceTokenizer(object):
     """Runs WordPiece tokenization."""
 
-    def __init__(self, vocab, unk_token, max_input_chars_per_word=500):
+    def __init__(self, vocab, unk_token):
         self.vocab = vocab
         self.unk_token = unk_token
-        self.max_input_chars_per_word = max_input_chars_per_word
 
     def tokenize(self, text):
         """
@@ -74,10 +73,6 @@ class WordpieceTokenizer(object):
         output_tokens = []
         for token in whitespace_tokenize(text):
             chars = list(token)
-            if len(chars) > self.max_input_chars_per_word:
-                output_tokens.append(self.unk_token)
-                continue
-
             is_bad = False
             start = 0
             sub_tokens = []
