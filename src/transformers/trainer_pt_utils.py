@@ -56,6 +56,7 @@ if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 if is_torch_available():
+    from .pytorch_utils import is_torch_greater_or_equal_than_2_0
     if is_torch_greater_or_equal_than_2_0:
         from torch.optim.lr_scheduler import LRScheduler
     else:
