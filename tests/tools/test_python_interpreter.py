@@ -129,3 +129,9 @@ class PythonInterpreterTester(unittest.TestCase):
         result = evaluate(code, {"range": range}, state=state)
         assert result == 2
         self.assertDictEqual(state, {"x": 2, "i": 2})
+
+    def test_evaluate_binop(self):
+        code = "y + x"
+        state = {"x": 3, "y": 6}
+        result = evaluate(code, {}, state=state)
+        assert result == 9

@@ -39,22 +39,18 @@ In this guide we'll take a look at:
 
 ## Customizing the prompt
 
-As explained in [Transformers Agents](transformers_agents) agents can run in [`~Agent.run`] and [`~Agent.chat`] mode.
-Both the `run` and `chat` modes underlie the same logic. The language model powering the agent is conditioned on a long 
+As explained in [Transformers Agents], the language model powering the agent is conditioned on a long 
 prompt and completes the prompt by generating the next tokens until the stop token is reached.
-The only difference between the two modes is that during the `chat` mode the prompt is extended with 
-previous user inputs and model generations. This allows the agent to have access to past interactions,
-seemingly giving the agent some kind of memory.
 
 ### Structure of the prompt
 
 Let's take a closer look at how the prompt is structured to understand how it can be best customized.
 The prompt is structured broadly into four parts.
 
-1. Introduction: how the agent should behave, explanation of the concept of tools.
-2. Description of all the tools. This is defined by a `<<all_tools>>` token that is dynamically replaced at runtime with the tools defined/chosen by the user.
-3. A set of examples of tasks and their solution
-4. Current example, and request for solution.
+- 1. Introduction: how the agent should behave, explanation of the concept of tools.
+- 2. Description of all the tools. This is defined by a `<<tool_descriptions>>` token that is dynamically replaced at runtime with the tools defined/chosen by the user.
+- 3. A set of examples of tasks and their solution
+- 4. Current example, and request for solution.
 
 To better understand each part, let's look at a shortened version of how the `run` prompt can look like:
 
@@ -180,6 +176,25 @@ is a final and unfinished example that the agent is tasked to complete. The unfi
 is dynamically created based on the actual user input. For the above example, the user ran:
 
 ```py
+from transformers import CodeAgent
+from huggingface_hub import InferenceClient
+import json
+
+client = InferenceClient(model="bigcode/starcoder2-15b")
+
+
+def llm_callable(query: str, stop=["Task"]) -> str:
+    response = client.post(
+        json={"inputs": query, "parameters": {"stop": stop}}
+    )
+    response_text = json.loads(response.decode())[0]["generated_text"]
+    for stop_seq in stop:
+        if response_text[-len(stop_seq) :] == stop_seq:
+            response_text = response_text[: -len(stop_seq)]
+    return response_text
+
+agent = CodeAgent(llm_callable=llm_callable)
+
 agent.run("Draw me a picture of rivers and lakes")
 ```
 
@@ -188,115 +203,7 @@ prompt template: "Task: <task> \n\n I will use the following". This sentence mak
 prompt the agent is conditioned on, therefore strongly influencing the agent to finish the example 
 exactly in the same way it was previously done in the examples.
 
-Without going into too much detail, the chat template has the same prompt structure with the 
-examples having a slightly different style, *e.g.*:
-
-````text
-[...]
-
-=====
-
-Human: Answer the question in the variable `question` about the image stored in the variable `image`.
-
-Assistant: I will use the tool `image_qa` to answer the question on the input image.
-
-```py
-answer = image_qa(text=question, image=image)
-print(f"The answer is {answer}")
-```
-
-Human: I tried this code, it worked but didn't give me a good result. The question is in French
-
-Assistant: In this case, the question needs to be translated first. I will use the tool `translator` to do this.
-
-```py
-translated_question = translator(question=question, src_lang="French", tgt_lang="English")
-print(f"The translated question is {translated_question}.")
-answer = image_qa(text=translated_question, image=image)
-print(f"The answer is {answer}")
-```
-
-=====
-
-[...]
-````
-
-Contrary, to the examples of the `run` prompt, each `chat` prompt example has one or more exchanges between the 
-*Human* and the *Assistant*. Every exchange is structured similarly to the example of the `run` prompt. 
-The user's input is appended to behind *Human:* and the agent is prompted to first generate what needs to be done 
-before generating code. An exchange can be based on previous exchanges, therefore allowing the user to refer
-to past exchanges as is done *e.g.* above by the user's input of "I tried **this** code" refers to the 
-previously generated code of the agent.
-
-Upon running `.chat`, the user's input or *task* is cast into an unfinished example of the form:
-```text
-Human: <user-input>\n\nAssistant:
-```
-which the agent completes. Contrary to the `run` command, the `chat` command then appends the completed example
-to the prompt, thus giving the agent more context for the next `chat` turn.
-
 Great now that we know how the prompt is structured, let's see how we can customize it!
-
-### Writing good user inputs
-
-While large language models are getting better and better at understanding users' intentions, it helps 
-enormously to be as precise as possible to help the agent pick the correct task. What does it mean to be 
-as precise as possible?
-
-The agent sees a list of tool names and their description in its prompt. The more tools are added the 
-more difficult it becomes for the agent to choose the correct tool and it's even more difficult to choose
-the correct sequences of tools to run. Let's look at a common failure case, here we will only return 
-the code to analyze it.
-
-```py
-from transformers import HfAgent
-
-agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
-
-agent.run("Show me a tree", return_code=True)
-```
-
-gives:
-
-```text
-==Explanation from the agent==
-I will use the following tool: `image_segmenter` to create a segmentation mask for the image.
-
-
-==Code generated by the agent==
-mask = image_segmenter(image, prompt="tree")
-```
-
-which is probably not what we wanted. Instead, it is more likely that we want an image of a tree to be generated.
-To steer the agent more towards using a specific tool it can therefore be very helpful to use important keywords that 
-are present in the tool's name and description. Let's have a look.
-```py
-agent.toolbox["image_generator"].description
-```
-
-```text
-'This is a tool that creates an image according to a prompt, which is a text description. It takes an input named `prompt` which contains the image description and outputs an image.
-```
-
-The name and description make use of the keywords "image", "prompt", "create" and "generate". Using these words will most likely work better here. Let's refine our prompt a bit.
-
-```py
-agent.run("Create an image of a tree", return_code=True)
-```
-
-gives:
-```text
-==Explanation from the agent==
-I will use the following tool `image_generator` to generate an image of a tree.
-
-
-==Code generated by the agent==
-image = image_generator(prompt="tree")
-```
-
-Much better! That looks more like what we want. In short, when you notice that the agent struggles to 
-correctly map your task to the correct tools, try looking up the most pertinent keywords of the tool's name
-and description and try refining your task request with it.
 
 ### Customizing the tool descriptions
 
@@ -309,9 +216,11 @@ domain, *e.g.* image generation and transformations.
 A common problem is that the agent confuses image generation with image transformation/modification when 
 used a lot for image generation tasks, *e.g.*
 ```py
-agent.run("Make an image of a house and a car", return_code=True)
+agent.run("Show me a tree")
 ```
+
 returns
+
 ```text
 ==Explanation from the agent== 
 I will use the following tools `image_generator` to generate an image of a house and `image_transformer` to transform the image of a car into the image of a house.
@@ -423,7 +332,6 @@ In both cases, you can pass a repo ID instead of the prompt template if you woul
 To upload your custom prompt on a repo on the Hub and share it with the community just make sure:
 - to use a dataset repository
 - to put the prompt template for the `run` command in a file named `run_prompt_template.txt`
-- to put the prompt template for the `chat` command in a file named `chat_prompt_template.txt`
 
 ## Using custom tools
 
