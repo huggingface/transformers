@@ -58,6 +58,7 @@ from .base import (
     get_default_model_and_revision,
     infer_framework_load_model,
 )
+from .batched_zero_shot_classification_pipeline import BatchedZeroShotClassificationPipeline
 from .conversational import Conversation, ConversationalPipeline
 from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
@@ -303,6 +304,22 @@ SUPPORTED_TASKS = {
     },
     "zero-shot-classification": {
         "impl": ZeroShotClassificationPipeline,
+        "tf": (TFAutoModelForSequenceClassification,) if is_tf_available() else (),
+        "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
+        "default": {
+            "model": {
+                "pt": ("facebook/bart-large-mnli", "c626438"),
+                "tf": ("FacebookAI/roberta-large-mnli", "130fb28"),
+            },
+            "config": {
+                "pt": ("facebook/bart-large-mnli", "c626438"),
+                "tf": ("FacebookAI/roberta-large-mnli", "130fb28"),
+            },
+        },
+        "type": "text",
+    },
+    "batched-zero-shot-classification": {
+        "impl": BatchedZeroShotClassificationPipeline,
         "tf": (TFAutoModelForSequenceClassification,) if is_tf_available() else (),
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {
@@ -619,6 +636,7 @@ def pipeline(
             - `"video-classification"`: will return a [`VideoClassificationPipeline`].
             - `"visual-question-answering"`: will return a [`VisualQuestionAnsweringPipeline`].
             - `"zero-shot-classification"`: will return a [`ZeroShotClassificationPipeline`].
+            - `"batched-zero-shot-classification"`: will return a [`BatchedZeroShotClassificationPipeline`].
             - `"zero-shot-image-classification"`: will return a [`ZeroShotImageClassificationPipeline`].
             - `"zero-shot-audio-classification"`: will return a [`ZeroShotAudioClassificationPipeline`].
             - `"zero-shot-object-detection"`: will return a [`ZeroShotObjectDetectionPipeline`].

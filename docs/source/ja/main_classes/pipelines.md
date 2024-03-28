@@ -461,6 +461,12 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
     - __call__
     - all
 
+### BatchedZeroShotClassificationPipeline
+
+[[autodoc]] BatchedZeroShotClassificationPipeline
+    - __call__
+    - all
+
 ## Multimodal
 
 マルチモーダル タスクに使用できるパイプラインには次のものがあります。

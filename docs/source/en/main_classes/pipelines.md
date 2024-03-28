@@ -453,6 +453,12 @@ Pipelines available for natural language processing tasks include the following.
     - __call__
     - all
 
+### BatchedZeroShotClassificationPipeline
+
+[[autodoc]] BatchedZeroShotClassificationPipeline
+    - __call__
+    - all
+
 ## Multimodal
 
 Pipelines available for multimodal tasks include the following.

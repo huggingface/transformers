@@ -801,6 +801,7 @@ OBJECTS_TO_IGNORE = [
     "YosoConfig",
     "ZeroShotAudioClassificationPipeline",
     "ZeroShotClassificationPipeline",
+    "BatchedZeroShotClassificationPipeline",
     "ZeroShotImageClassificationPipeline",
     "ZeroShotObjectDetectionPipeline",
 ]
