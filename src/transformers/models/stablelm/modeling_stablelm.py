@@ -265,10 +265,12 @@ class StableLmAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.use_qkv_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
-        self.use_qk_layernorm = config.use_qk_layernorm
-        if self.use_qk_layernorm:
-            self.q_norm = StableLmLayerNormPerHead(self.head_dim, self.num_heads, eps=config.layer_norm_eps)
-            self.k_norm = StableLmLayerNormPerHead(self.head_dim, self.num_key_value_heads, eps=config.layer_norm_eps)
+        self.qk_layernorm = config.qk_layernorm
+        if self.qk_layernorm:
+            self.q_layernorm = StableLmLayerNormPerHead(self.head_dim, self.num_heads, eps=config.layer_norm_eps)
+            self.k_layernorm = StableLmLayerNormPerHead(
+                self.head_dim, self.num_key_value_heads, eps=config.layer_norm_eps
+            )
 
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self._init_rope()
@@ -320,9 +322,9 @@ class StableLmAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        if self.use_qk_layernorm:
-            query_states = self.q_norm(query_states)
-            key_states = self.k_norm(key_states)
+        if self.qk_layernorm:
+            query_states = self.q_layernorm(query_states)
+            key_states = self.k_layernorm(key_states)
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
@@ -433,9 +435,9 @@ class StableLmSdpaAttention(StableLmAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        if self.use_qk_layernorm:
-            query_states = self.q_norm(query_states)
-            key_states = self.k_norm(key_states)
+        if self.qk_layernorm:
+            query_states = self.q_layernorm(query_states)
+            key_states = self.k_layernorm(key_states)
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
@@ -541,9 +543,9 @@ class StableLmFlashAttention2(StableLmAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        if self.use_qk_layernorm:
-            query_states = self.q_norm(query_states)
-            key_states = self.k_norm(key_states)
+        if self.qk_layernorm:
+            query_states = self.q_layernorm(query_states)
+            key_states = self.k_layernorm(key_states)
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
