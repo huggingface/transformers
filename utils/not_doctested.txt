@@ -335,6 +335,9 @@ src/transformers/benchmark/benchmark_args_tf.py
 src/transformers/benchmark/benchmark_args_utils.py
 src/transformers/benchmark/benchmark_tf.py
 src/transformers/benchmark/benchmark_utils.py
+src/transformers/benchmark/benchmark_utils_generic.py
+src/transformers/benchmark/cache_benchmark.py
+src/transformers/benchmark/from_pretrained_benchmark.py
 src/transformers/commands/add_new_model.py
 src/transformers/commands/add_new_model_like.py
 src/transformers/commands/convert.py
