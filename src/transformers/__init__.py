@@ -48,7 +48,6 @@ from .utils import (
     logging,
 )
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
@@ -638,6 +637,7 @@ _import_structure = {
         "MPNetTokenizer",
     ],
     "models.mpt": ["MPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MptConfig"],
+    "models.dbrx": ["DBRX_PRETRAINED_CONFIG_ARCHIVE_MAP", "DbrxConfig"],
     "models.mra": ["MRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MraConfig"],
     "models.mt5": ["MT5Config"],
     "models.musicgen": [
@@ -1931,6 +1931,14 @@ else:
             "Data2VecVisionForSemanticSegmentation",
             "Data2VecVisionModel",
             "Data2VecVisionPreTrainedModel",
+        ]
+    )
+    _import_structure["models.dbrx"].extend(
+        [
+            "DBRX_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DbrxForCausalLM",
+            "DbrxModel",
+            "DbrxPreTrainedModel",
         ]
     )
     _import_structure["models.deberta"].extend(
@@ -4606,9 +4614,7 @@ try:
     if not is_torchaudio_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
-    from .utils import (
-        dummy_torchaudio_objects,
-    )
+    from .utils import dummy_torchaudio_objects
 
     _import_structure["utils.dummy_torchaudio_objects"] = [
         name for name in dir(dummy_torchaudio_objects) if not name.startswith("_")
@@ -5219,6 +5225,12 @@ if TYPE_CHECKING:
         Data2VecTextConfig,
         Data2VecVisionConfig,
     )
+    from .models.dbrx import (
+        DBRX_PRETRAINED_MODEL_ARCHIVE_LIST,
+        DbrxForCausalLM,
+        DbrxModel,
+        DbrxPreTrainedModel,
+    )
     from .models.deberta import (
         DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DebertaConfig,
@@ -5265,7 +5277,10 @@ if TYPE_CHECKING:
         TransfoXLTokenizer,
     )
     from .models.deprecated.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
-    from .models.depth_anything import DEPTH_ANYTHING_PRETRAINED_CONFIG_ARCHIVE_MAP, DepthAnythingConfig
+    from .models.depth_anything import (
+        DEPTH_ANYTHING_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DepthAnythingConfig,
+    )
     from .models.deta import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP, DetaConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DinatConfig
@@ -5321,7 +5336,11 @@ if TYPE_CHECKING:
         FastSpeech2ConformerTokenizer,
         FastSpeech2ConformerWithHifiGanConfig,
     )
-    from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
+    from .models.flaubert import (
+        FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FlaubertConfig,
+        FlaubertTokenizer,
+    )
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FlavaConfig,
@@ -5385,10 +5404,7 @@ if TYPE_CHECKING:
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
-    from .models.idefics import (
-        IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        IdeficsConfig,
-    )
+    from .models.idefics import IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP, IdeficsConfig
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
     from .models.informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
     from .models.instructblip import (
@@ -5617,7 +5633,11 @@ if TYPE_CHECKING:
     from .models.pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig
     from .models.pvt_v2 import PvtV2Config
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
-    from .models.qwen2 import QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2Config, Qwen2Tokenizer
+    from .models.qwen2 import (
+        QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Qwen2Config,
+        Qwen2Tokenizer,
+    )
     from .models.qwen2_moe import QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2MoeConfig
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.realm import (
@@ -5667,7 +5687,10 @@ if TYPE_CHECKING:
         SEAMLESS_M4T_V2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SeamlessM4Tv2Config,
     )
-    from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
+    from .models.segformer import (
+        SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SegformerConfig,
+    )
     from .models.seggpt import SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, SegGptConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
     from .models.sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig
@@ -5710,8 +5733,14 @@ if TYPE_CHECKING:
         SqueezeBertTokenizer,
     )
     from .models.stablelm import STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP, StableLmConfig
-    from .models.starcoder2 import STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP, Starcoder2Config
-    from .models.superpoint import SUPERPOINT_PRETRAINED_CONFIG_ARCHIVE_MAP, SuperPointConfig
+    from .models.starcoder2 import (
+        STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Starcoder2Config,
+    )
+    from .models.superpoint import (
+        SUPERPOINT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SuperPointConfig,
+    )
     from .models.swiftformer import (
         SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SwiftFormerConfig,
@@ -5753,12 +5782,12 @@ if TYPE_CHECKING:
         TvltFeatureExtractor,
         TvltProcessor,
     )
-    from .models.tvp import (
-        TVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        TvpConfig,
-        TvpProcessor,
+    from .models.tvp import TVP_PRETRAINED_CONFIG_ARCHIVE_MAP, TvpConfig, TvpProcessor
+    from .models.udop import (
+        UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        UdopConfig,
+        UdopProcessor,
     )
-    from .models.udop import UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP, UdopConfig, UdopProcessor
     from .models.umt5 import UMT5Config
     from .models.unispeech import (
         UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5782,10 +5811,7 @@ if TYPE_CHECKING:
         ViltImageProcessor,
         ViltProcessor,
     )
-    from .models.vipllava import (
-        VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        VipLlavaConfig,
-    )
+    from .models.vipllava import VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP, VipLlavaConfig
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.vision_text_dual_encoder import (
         VisionTextDualEncoderConfig,
@@ -6000,7 +6026,13 @@ if TYPE_CHECKING:
     )
 
     # bitsandbytes config
-    from .utils.quantization_config import AqlmConfig, AwqConfig, BitsAndBytesConfig, GPTQConfig, QuantoConfig
+    from .utils.quantization_config import (
+        AqlmConfig,
+        AwqConfig,
+        BitsAndBytesConfig,
+        GPTQConfig,
+        QuantoConfig,
+    )
 
     try:
         if not is_sentencepiece_available():
@@ -6645,11 +6677,7 @@ if TYPE_CHECKING:
             CodeGenModel,
             CodeGenPreTrainedModel,
         )
-        from .models.cohere import (
-            CohereForCausalLM,
-            CohereModel,
-            CoherePreTrainedModel,
-        )
+        from .models.cohere import CohereForCausalLM, CohereModel, CoherePreTrainedModel
         from .models.conditional_detr import (
             CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             ConditionalDetrForObjectDetection,
@@ -7014,10 +7042,7 @@ if TYPE_CHECKING:
             FunnelPreTrainedModel,
             load_tf_weights_in_funnel,
         )
-        from .models.fuyu import (
-            FuyuForCausalLM,
-            FuyuPreTrainedModel,
-        )
+        from .models.fuyu import FuyuForCausalLM, FuyuPreTrainedModel
         from .models.gemma import (
             GemmaForCausalLM,
             GemmaForSequenceClassification,
@@ -8921,7 +8946,10 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_torchaudio_objects import *
     else:
-        from .models.musicgen_melody import MusicgenMelodyFeatureExtractor, MusicgenMelodyProcessor
+        from .models.musicgen_melody import (
+            MusicgenMelodyFeatureExtractor,
+            MusicgenMelodyProcessor,
+        )
     try:
         if not is_flax_available():
             raise OptionalDependencyNotAvailable()
