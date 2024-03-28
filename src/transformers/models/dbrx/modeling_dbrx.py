@@ -29,7 +29,7 @@ from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import is_flash_attn_2_available, logging
-from .configuration_dbrx import DbrxAttentionConfig, DbrxConfig, DbrxFFNConfig
+from .configuration_dbrx import DbrxConfig
 
 
 if is_flash_attn_2_available():
@@ -223,19 +223,16 @@ class DbrxAttention(nn.Module):
 
     def __init__(
         self,
-        hidden_size: int,
-        num_heads: int,
-        max_position_embeddings: int,
-        attn_config: DbrxAttentionConfig,
+        config: DbrxConfig,
         block_idx: Optional[int] = None,
     ):
         super().__init__()
-        self.hidden_size = hidden_size
-        self.num_heads = num_heads
+        self.config = config
+        self.hidden_size = config.d_model
+        self.num_heads = config.n_heads
         self.head_dim = self.hidden_size // self.num_heads
-        self.max_position_embeddings = max_position_embeddings
+        self.max_position_embeddings = config.max_seq_len
         self.block_idx = block_idx
-        self.config = attn_config
         if block_idx is None:
             logger.warning_once(
                 f"Instantiating {self.__class__.__name__} without passing a `block_idx` is not recommended and will "
@@ -243,6 +240,7 @@ class DbrxAttention(nn.Module):
                 + "when creating this class."
             )
 
+        attn_config = config.attn_config
         self.attn_pdrop = attn_config.attn_pdrop
         self.clip_qkv = attn_config.clip_qkv
         self.num_key_value_heads = attn_config.kv_n_heads
@@ -548,26 +546,18 @@ DBRX_ATTENTION_CLASSES = {
 class DbrxNormAttentionNorm(nn.Module):
     def __init__(
         self,
-        hidden_size: int,
-        num_heads: int,
-        max_position_embeddings: int,
-        resid_pdrop: float,
-        attn_implementation: str,
-        attn_config: DbrxAttentionConfig,
+        config: DbrxConfig,
         block_idx: Optional[int] = None,
     ):
         super().__init__()
         self.block_idx = block_idx
-        self.resid_pdrop = resid_pdrop
-        self.norm_1 = nn.LayerNorm(hidden_size, bias=False)
-        self.attn = DBRX_ATTENTION_CLASSES[attn_implementation](
-            hidden_size=hidden_size,
-            num_heads=num_heads,
-            max_position_embeddings=max_position_embeddings,
-            attn_config=attn_config,
+        self.resid_pdrop = config.resid_pdrop
+        self.norm_1 = nn.LayerNorm(config.d_model, bias=False)
+        self.attn = DBRX_ATTENTION_CLASSES[config._attn_implementation](
+            config=config,
             block_idx=block_idx,
         )
-        self.norm_2 = nn.LayerNorm(hidden_size, bias=False)
+        self.norm_2 = nn.LayerNorm(config.d_model, bias=False)
 
     def forward(
         self,
@@ -715,11 +705,12 @@ class DbrxExperts(nn.Module):
 
 
 class DbrxFFN(nn.Module):
-    def __init__(self, hidden_size: int, ffn_config: DbrxFFNConfig):
+    def __init__(self, config: DbrxConfig):
         super().__init__()
 
+        ffn_config = config.ffn_config
         self.router = DbrxRouter(
-            hidden_size,
+            hidden_size=config.d_model,
             moe_num_experts=ffn_config.moe_num_experts,
             moe_top_k=ffn_config.moe_top_k,
             moe_jitter_eps=ffn_config.moe_jitter_eps,
@@ -728,7 +719,7 @@ class DbrxFFN(nn.Module):
         )
 
         self.experts = DbrxExperts(
-            hidden_size=hidden_size,
+            hidden_size=config.d_model,
             ffn_hidden_size=ffn_config.ffn_hidden_size,
             moe_num_experts=ffn_config.moe_num_experts,
             ffn_act_fn=ffn_config.ffn_act_fn,
@@ -747,15 +738,10 @@ class DbrxBlock(nn.Module):
         self.resid_pdrop = config.resid_pdrop
         self.block_idx = block_idx
         self.norm_attn_norm = DbrxNormAttentionNorm(
-            hidden_size=config.d_model,
-            num_heads=config.n_heads,
-            max_position_embeddings=config.max_seq_len,
-            resid_pdrop=config.resid_pdrop,
-            attn_implementation=config._attn_implementation,
-            attn_config=config.attn_config,
+            config=config,
             block_idx=block_idx,
         )
-        self.ffn = DbrxFFN(hidden_size=config.d_model, ffn_config=config.ffn_config)
+        self.ffn = DbrxFFN(config=config)
 
     def forward(
         self,
