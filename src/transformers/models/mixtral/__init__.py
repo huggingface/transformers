@@ -36,6 +36,7 @@ else:
         "MixtralModel",
         "MixtralPreTrainedModel",
         "MixtralForSequenceClassification",
+        "MixtralForTokenClassification",
     ]
 
 
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
         from .modeling_mixtral import (
             MixtralForCausalLM,
             MixtralForSequenceClassification,
+            MixtralForTokenClassification,
             MixtralModel,
             MixtralPreTrainedModel,
         )

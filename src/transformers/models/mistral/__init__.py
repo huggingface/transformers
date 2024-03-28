@@ -32,6 +32,7 @@ else:
         "MistralModel",
         "MistralPreTrainedModel",
         "MistralForSequenceClassification",
+        "MistralForTokenClassification",
     ]
 
 try:
@@ -59,6 +60,7 @@ if TYPE_CHECKING:
         from .modeling_mistral import (
             MistralForCausalLM,
             MistralForSequenceClassification,
+            MistralForTokenClassification,
             MistralModel,
             MistralPreTrainedModel,
         )

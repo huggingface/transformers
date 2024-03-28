@@ -2698,12 +2698,19 @@ else:
         [
             "MistralForCausalLM",
             "MistralForSequenceClassification",
+            "MistralForTokenClassification",
             "MistralModel",
             "MistralPreTrainedModel",
         ]
     )
     _import_structure["models.mixtral"].extend(
-        ["MixtralForCausalLM", "MixtralForSequenceClassification", "MixtralModel", "MixtralPreTrainedModel"]
+        [
+            "MixtralForCausalLM",
+            "MixtralForSequenceClassification",
+            "MixtralForTokenClassification",
+            "MixtralModel",
+            "MixtralPreTrainedModel",
+        ]
     )
     _import_structure["models.mobilebert"].extend(
         [
@@ -3082,6 +3089,7 @@ else:
         [
             "Qwen2ForCausalLM",
             "Qwen2ForSequenceClassification",
+            "Qwen2ForTokenClassification",
             "Qwen2Model",
             "Qwen2PreTrainedModel",
         ]
@@ -7348,12 +7356,14 @@ if TYPE_CHECKING:
         from .models.mistral import (
             MistralForCausalLM,
             MistralForSequenceClassification,
+            MistralForTokenClassification,
             MistralModel,
             MistralPreTrainedModel,
         )
         from .models.mixtral import (
             MixtralForCausalLM,
             MixtralForSequenceClassification,
+            MixtralForTokenClassification,
             MixtralModel,
             MixtralPreTrainedModel,
         )
@@ -7661,6 +7671,7 @@ if TYPE_CHECKING:
         from .models.qwen2 import (
             Qwen2ForCausalLM,
             Qwen2ForSequenceClassification,
+            Qwen2ForTokenClassification,
             Qwen2Model,
             Qwen2PreTrainedModel,
         )

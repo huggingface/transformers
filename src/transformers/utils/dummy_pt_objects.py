@@ -5409,6 +5409,13 @@ class MistralForSequenceClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MistralForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MistralModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -5431,6 +5438,13 @@ class MixtralForCausalLM(metaclass=DummyObject):
 
 
 class MixtralForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MixtralForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -6919,6 +6933,13 @@ class Qwen2ForCausalLM(metaclass=DummyObject):
 
 
 class Qwen2ForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Qwen2ForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

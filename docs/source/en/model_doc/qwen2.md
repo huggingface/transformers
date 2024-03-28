@@ -80,3 +80,8 @@ In the following, we demonstrate how to use `Qwen2-7B-Chat-beta` for the inferen
 
 [[autodoc]] Qwen2ForSequenceClassification
     - forward
+
+## Qwen2ForTokenClassification
+
+[[autodoc]] Qwen2ForTokenClassification
+    - forward
