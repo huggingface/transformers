@@ -30,9 +30,9 @@ class JambaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JambaModel`]. It is used to instantiate a
     Jamba model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the jamba-small architecture.
+    with the defaults will yield a similar configuration to that of the Jamba-v0.1 model.
 
-    [ai21labs/jamba-small](https://huggingface.co/ai21labs/Jamba-v0.1)
+    [ai21labs/Jamba-v0.1](https://huggingface.co/ai21labs/Jamba-v0.1)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
