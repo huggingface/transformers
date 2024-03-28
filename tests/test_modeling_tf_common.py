@@ -380,7 +380,9 @@ class TFModelTesterMixin:
                 main_layer = main_layer_class(config)
 
             symbolic_inputs = {
-                name: keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
+                name: keras.Input(tensor.shape[1:], dtype=tensor.dtype)
+                for name, tensor in inputs_dict.items()
+                if tf.is_tensor(tensor)
             }
 
             model = keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))

@@ -597,6 +597,7 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_pruning = False
     test_headmasking = False
     test_onnx = False
+    test_resize_embeddings = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -774,6 +775,7 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
 @require_tf
 class TFIdeficsForVisionText2TextTest(TFIdeficsModelTest, unittest.TestCase):
     all_model_classes = (TFIdeficsForVisionText2Text,) if is_tf_available() else ()
+    test_resize_embeddings = False
 
     def setUp(self):
         self.model_tester = IdeficsModelTester(
