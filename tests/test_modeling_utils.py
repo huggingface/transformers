@@ -2266,20 +2266,31 @@ class Mask4DTestHard(unittest.TestCase):
         outs_1a = self.model.forward(input_1a, attention_mask=mask_1a.bool(), position_ids=position_ids_1a)
         past_key_values_a = outs_1a["past_key_values"]
 
+        # Case 1: we pass a 4D attention mask regarding the current sequence length (i.e. [..., seq_len, full_len])
         input_1b = input_1[:, part_a:]
         position_ids_1b = position_ids_1[:, part_a:]
         mask_1b = mask_1[:, :, part_a:, :]
-
         outs_1b = self.model.forward(
             input_1b, attention_mask=mask_1b.bool(), position_ids=position_ids_1b, past_key_values=past_key_values_a
         )
-
         decoded_1b = [
             self.tokenizer.decode(t)
             for t in outs_1b.logits.argmax(-1)[0, torch.where(position_ids_1 == position_ids_1.max())[1] - part_a]
         ]
-
         self.assertEqual(decoded_0, decoded_1b)
+
+        # Case 2: we pass a 4D attention mask regarding the full sequence length (i.e. [..., full_len, full_len])
+        input_1c = input_1[:, part_a:]
+        position_ids_1c = position_ids_1[:, part_a:]
+        mask_1c = mask_1
+        outs_1c = self.model.forward(
+            input_1c, attention_mask=mask_1c.bool(), position_ids=position_ids_1c, past_key_values=past_key_values_a
+        )
+        decoded_1c = [
+            self.tokenizer.decode(t)
+            for t in outs_1c.logits.argmax(-1)[0, torch.where(position_ids_1 == position_ids_1.max())[1] - part_a]
+        ]
+        self.assertEqual(decoded_0, decoded_1c)
 
 
 @require_torch
