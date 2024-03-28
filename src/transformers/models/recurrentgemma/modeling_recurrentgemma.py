@@ -1555,6 +1555,7 @@ class RecurrentBlockCache:
 
 class GriffinCache:
     def __init__(self, config: RecurrentGemmaConfig, batch_size, dtype=torch.float16, device=None):
+        self.dtype = dtype
         self.states = []
         for block_type in config.block_types:
             self.states.append(ResidualBlock.init_cache(
@@ -1785,8 +1786,6 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         # TODO(lberrada, botev): fix device and dtype
         device = dtype = None
 
-        # TODO(lberrada, botev): the structure of layers has changed. Check that this does not break
-        # checkpoint loading.
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
 
         self.blocks = nn.ModuleList([
@@ -1822,19 +1821,13 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cache: Optional[GriffinCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, GriffinOutput]:
-        # TODO(botev): Should this argument be removed?
-        del attention_mask, output_attentions
-
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1855,17 +1848,6 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        past_seen_tokens = 0
-
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1],
-                device=inputs_embeds.device
-            )
-
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
-
         # embed positions
         hidden_states = inputs_embeds
 
@@ -1877,10 +1859,9 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
 
-        # TODO(botev): Still not clear how to use the cache?
-        next_decoder_cache = None
+        new_cache = None
 
-        for residual_block in self.blocks:
+        for i, residual_block in enumerate(self.blocks):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.gradient_checkpointing and self.training:
@@ -1888,19 +1869,26 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
                     residual_block.__call__,
                     hidden_states,
                     position_ids,
-                    cache,
+                    cache.states[i],
                 )
             else:
                 layer_outputs = residual_block(
                     hidden_states,
                     position_ids,
-                    cache,
+                    cache.states[i],
                 )
 
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache = layer_outputs[1]
+                if new_cache is None:
+                    new_cache = GriffinCache(
+                        config=self.config,
+                        batch_size=hidden_states.shape[0],
+                        dtype=hidden_states.dtype,
+                        device=hidden_states.device,
+                    )
+                new_cache.states[i] = layer_outputs[1]
 
         hidden_states = self.norm(hidden_states)
 
@@ -1908,14 +1896,12 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = None
-        if use_cache:
-            next_cache = next_decoder_cache
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states] if v is not None)
+            return tuple(v for v in [hidden_states, new_cache, all_hidden_states] if v is not None)
+
         return GriffinOutput(
             last_hidden_state=hidden_states,
-            cache=next_cache,
+            cache=new_cache,
             hidden_states=all_hidden_states,
         )
 
@@ -2028,17 +2014,15 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
                                config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        cache: Optional[GriffinCache] = None,
+        position_ids: torch.LongTensor,
+        input_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        cache: Optional[GriffinCache] = None,
         labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        **kwargs,  # for now we need this for generation
     ) -> Union[Tuple, GriffinCausalLMOutput]:
         r"""
         Args:
@@ -2065,7 +2049,6 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "What is your favorite condiment?"
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -2074,15 +2057,12 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
-            attention_mask=attention_mask,
             position_ids=position_ids,
             cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         hidden_states = outputs[0]
@@ -2119,107 +2099,22 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None,
-        inputs_embeds=None, cache_position=None, **kwargs
+        self,
+        input_ids,
+        position_ids: Optional[torch.LongTensor],
+        cache: Optional[GriffinCache] = None,
+        inputs_embeds=None,
+        **kwargs,
     ):
-        # TODO(lberrada,botev,anushanf): adapt this function (likely to be a mix between the current function and
-        # the way Mamba prepares its inputs).
+        if cache is not None:
+            input_ids = input_ids[:, -1].unsqueeze(-1)
+            position_ids = position_ids[:, -1].unsqueeze(-1)
 
-        # With static cache, the `past_key_values` is None
-        # TODO joao: standardize interface for the different Cache classes and remove of this if
-        has_static_cache = False
-        if past_key_values is None:
-            past_key_values = getattr(self.model.blocks[0].self_attn,
-                                      "past_key_value", None)
-            has_static_cache = past_key_values is not None
-
-        past_length = 0
-        if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                past_length = cache_position[
-                    0] if cache_position is not None else past_key_values.get_seq_length()
-                max_cache_length = (
-                    torch.tensor(past_key_values.get_max_length(),
-                                 device=input_ids.device)
-                    if past_key_values.get_max_length() is not None
-                    else None
-                )
-                cache_length = past_length if max_cache_length is None else torch.min(
-                    max_cache_length, past_length)
-            # TODO joao: remove this `else` after `generate` prioritizes `Cache` objects
-            else:
-                cache_length = past_length = past_key_values[0][0].shape[2]
-                max_cache_length = None
-
-            # Keep only the unprocessed tokens:
-            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
-            # input)
-            if attention_mask is not None and attention_mask.shape[1] > \
-                input_ids.shape[1]:
-                input_ids = input_ids[:,
-                            -(attention_mask.shape[1] - past_length):]
-            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-            # input_ids based on the past_length.
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
-            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
-
-            # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
-            if (
-                max_cache_length is not None
-                and attention_mask is not None
-                and cache_length + input_ids.shape[1] > max_cache_length
-            ):
-                attention_mask = attention_mask[:, -max_cache_length:]
-
-        position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1]:]
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
+        if inputs_embeds is not None and cache is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise
-            # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
-            # TODO: use `next_tokens` directly instead.
-            model_inputs = {"input_ids": input_ids.contiguous()}
+            model_inputs = {"input_ids": input_ids}
 
-        input_length = position_ids.shape[-1] if position_ids is not None else \
-        input_ids.shape[-1]
-        if cache_position is None:
-            cache_position = torch.arange(past_length,
-                                          past_length + input_length,
-                                          device=input_ids.device)
-        else:
-            cache_position = cache_position[-input_length:]
-
-        if has_static_cache:
-            past_key_values = None
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "cache_position": cache_position,
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
-                "attention_mask": attention_mask,
-            }
-        )
+        model_inputs["cache"] = cache
+        model_inputs["position_ids"] = position_ids
         return model_inputs
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        # TODO(lberrada, botev): figure out why this was needed in the first place.
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device))
-                      for past_state in layer_past),
-            )
-        return reordered_past
