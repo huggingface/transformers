@@ -458,7 +458,7 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
-    def test_flash_attn_2_inference_padding_right(self):
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest("Mistral flash attention does not support right padding")
 
 
