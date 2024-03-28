@@ -93,9 +93,12 @@ class WordpieceTokenizer(object):
                 if cur_substr is None:
                     is_bad = True
                     break
-                sub_tokens.append(cur_substr.decode())
+                try:
+                    cur_substr = cur_substr.decode()
+                except UnicodeDecodeError:
+                    cur_substr = str(cur_substr)
+                sub_tokens.append(cur_substr)
                 start = end
-
             if is_bad:
                 output_tokens.append(self.unk_token)
             else:
@@ -145,7 +148,9 @@ class Rwkv5Tokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """Converts a token (byte) to an id using the vocab."""
-        if not isinstance(token, bytes):
+        if token.startswith("b'\\"):
+            token = eval(token)
+        elif not isinstance(token, bytes):
             token = token.encode("utf-8", errors="replace")
         return self.encoder.get(token, self.unk_token_id)
 
