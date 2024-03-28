@@ -33,7 +33,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_rwkv5"] = [
-        "RWKV5_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Rwkv5ForCausalLM",
         "Rwkv5Model",
         "Rwkv5PreTrainedModel",
@@ -51,7 +50,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_rwkv5 import (
-            RWKV5_PRETRAINED_MODEL_ARCHIVE_LIST,
             Rwkv5ForCausalLM,
             Rwkv5Model,
             Rwkv5PreTrainedModel,

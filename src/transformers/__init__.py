@@ -3227,7 +3227,6 @@ else:
     )
     _import_structure["models.rwkv5"].extend(
         [
-            "RWKV5_PRETRAINED_MODEL_ARCHIVE_LIST",
             "Rwkv5ForCausalLM",
             "Rwkv5Model",
             "Rwkv5PreTrainedModel",
@@ -7789,7 +7788,6 @@ if TYPE_CHECKING:
             RwkvPreTrainedModel,
         )
         from .models.rwkv5 import (
-            RWKV5_PRETRAINED_MODEL_ARCHIVE_LIST,
             Rwkv5ForCausalLM,
             Rwkv5Model,
             Rwkv5PreTrainedModel,

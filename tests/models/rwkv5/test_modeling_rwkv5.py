@@ -30,7 +30,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import RWKV5_PRETRAINED_MODEL_ARCHIVE_LIST, Rwkv5ForCausalLM, Rwkv5Model, Rwkv5Tokenizer
+    from transformers import Rwkv5ForCausalLM, Rwkv5Model, Rwkv5Tokenizer
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
 else:
     is_torch_greater_or_equal_than_2_0 = False
@@ -501,12 +501,6 @@ class Rwkv5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 "Asking to pad the embedding matrix to a multiple of `1.3`, which is not and integer. Please make sure to pass an integer",
             ):
                 model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=1.3)
-
-    @slow
-    def test_model_from_pretrained(self):
-        for model_name in RWKV5_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Rwkv5Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
 
 
 @unittest.skipIf(

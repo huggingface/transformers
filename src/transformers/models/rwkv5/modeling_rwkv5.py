@@ -14,6 +14,7 @@
 # limitations under the License.
 """PyTorch RWKV5 World model."""
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
