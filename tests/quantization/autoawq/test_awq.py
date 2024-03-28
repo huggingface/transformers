@@ -459,7 +459,7 @@ class AwqFusedTest(unittest.TestCase):
             self.mixtral_model_name,
             quantization_config=quantization_config,
             device_map="auto",
-            revision=self.mixtral_model_revision
+            revision=self.mixtral_model_revision,
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.mixtral_model_name)
