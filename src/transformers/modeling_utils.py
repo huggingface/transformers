@@ -42,7 +42,7 @@ from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, GenerationMixin
-from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
+from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled, is_deepspeed_zero3_enabled_accelerate
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -1312,10 +1312,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             torch_dtype=torch_dtype,
         )
 
-        deepspeed_enabled, accelerate_enabled = is_deepspeed_zero3_enabled(check_accelerate=True)
-
-        if deepspeed_enabled:
-            if not accelerate_enabled:
+        if is_deepspeed_zero3_enabled():
+            if not is_deepspeed_zero3_enabled_accelerate():
                 raise ValueError(
                     "Detected that you want to use `zero-3` Init, but the environment "
                     "has not been setup yet. Please create `TrainingArguments` before "
@@ -3394,10 +3392,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Instantiate model.
         init_contexts = [no_init_weights(_enable=_fast_init)]
 
-        deepspeed_enabled, accelerate_enabled = is_deepspeed_zero3_enabled(check_accelerate=True)
-
-        if deepspeed_enabled and not is_quantized:
-            if not accelerate_enabled:
+        if is_deepspeed_zero3_enabled() and not is_quantized:
+            if not is_deepspeed_zero3_enabled_accelerate():
                 raise ValueError(
                     "Detected that you want to use `zero-3` Init, but the environment "
                     "has not been setup yet. Please create `TrainingArguments` before "

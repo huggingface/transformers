@@ -283,21 +283,19 @@ def unset_hf_deepspeed_config():
     _hf_deepspeed_config_weak_ref = None
 
 
-def is_deepspeed_zero3_enabled(check_accelerate=False):
-    """
-    If `check_accelerate`, will also check if `deepspeed_zero3` has been enabled through
-    the environment variables setup during `accelerate launch`.
-    """
-    accelerate_zero_stage = int(os.environ.get("ACCELERATE_DEEPSPEED_ZERO_STAGE", -1))
-    accelerate_zero_init = os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", "0")
+def is_deepspeed_zero3_enabled():
     if _hf_deepspeed_config_weak_ref is not None and _hf_deepspeed_config_weak_ref() is not None:
         return _hf_deepspeed_config_weak_ref().is_zero3()
-    # This only gets triggered passively if the user launches code with a configured
-    # `accelerate launch` without making `TrainingArguments`
-    elif check_accelerate and accelerate_zero_stage != -1 and accelerate_zero_init != "0":
-        return True, False
     else:
         return False
+    
+def is_deepspeed_zero3_enabled_accelerate():
+    "Same as `is_deepspeed_zero3_enabled`, but checks only for accelerate setups"
+    accelerate_zero_stage = int(os.environ.get("ACCELERATE_DEEPSPEED_ZERO_STAGE", -1))
+    accelerate_zero_init = os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", "0")
+    # This only gets triggered passively if the user launches code with a configured
+    # `accelerate launch` without making `TrainingArguments`
+    return accelerate_zero_stage != -1 and accelerate_zero_init != "0"
 
 
 def deepspeed_config():
