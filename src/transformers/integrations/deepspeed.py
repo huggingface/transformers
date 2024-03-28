@@ -288,9 +288,14 @@ def is_deepspeed_zero3_enabled():
         return _hf_deepspeed_config_weak_ref().is_zero3()
     else:
         return False
-    
+
+
 def is_deepspeed_zero3_enabled_accelerate():
-    "Same as `is_deepspeed_zero3_enabled`, but checks only for accelerate setups"
+    """
+    Will check if the user has enabled ZeRO 3 with accelerate. This is useful
+    when checking if the environment is configured for it before
+    the deepspeed config reference has been made.
+    """
     accelerate_zero_stage = int(os.environ.get("ACCELERATE_DEEPSPEED_ZERO_STAGE", -1))
     accelerate_zero_init = os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", "0")
     # This only gets triggered passively if the user launches code with a configured

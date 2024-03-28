@@ -39,6 +39,7 @@ _import_structure = {
         "deepspeed_optim_sched",
         "is_deepspeed_available",
         "is_deepspeed_zero3_enabled",
+        "is_deepspeed_zero3_enabled_accelerate",
         "set_hf_deepspeed_config",
         "unset_hf_deepspeed_config",
     ],
@@ -108,6 +109,7 @@ if TYPE_CHECKING:
         deepspeed_optim_sched,
         is_deepspeed_available,
         is_deepspeed_zero3_enabled,
+        is_deepspeed_zero3_enabled_accelerate,
         set_hf_deepspeed_config,
         unset_hf_deepspeed_config,
     )
