@@ -1081,36 +1081,34 @@ class LlamaModel(LlamaPreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        if hasattr(getattr(self.layers[0], "self_attn", {}), "past_key_value"):  # static cache
-            target_length = self.config.max_position_embeddings
-        else:  # dynamic cache
-            target_length = (
-                attention_mask.shape[-1]
-                if isinstance(attention_mask, torch.Tensor)
-                else past_seen_tokens + sequence_length + 1
-            )
 
-        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
-        if sequence_length != 1:
-            causal_mask = torch.triu(causal_mask, diagonal=1)
-        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-        causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
-        if attention_mask is not None:
-            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-            if attention_mask.dim() == 2:
+        if attention_mask is not None and attention_mask.dim() == 4:
+            # we can pass both the full 4D mask (i.e. [..., full_len, full_len]) and a 4D mask with the same shape
+            # as the causal mask (i.e. [..., seq_len, full_len])
+            mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
+            if attention_mask.shape[-2] == cache_position[0] + sequence_length:
+                offset = cache_position[0]
+                mask_slice = mask_slice[..., offset : offset + sequence_length, :]
+            causal_mask = mask_slice
+        else:
+            if hasattr(self.layers[0].self_attn, "past_key_value"):  # static cache
+                target_length = self.config.max_position_embeddings
+            else:  # dynamic cache
+                target_length = (
+                    attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else cache_position[-1] + 1
+                )
+            causal_mask = torch.full(
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+            )
+            if sequence_length != 1:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
+            if attention_mask is not None:
+                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
                 padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
                 causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
-            elif attention_mask.dim() == 4:
-                # we can pass both the full 4D mask (i.e. [..., full_len, full_len]) and a 4D mask with the same shape
-                # as the causal mask (i.e. [..., seq_len, full_len])
-                if attention_mask.shape[-2] < cache_position[0] + sequence_length:
-                    offset = 0
-                else:
-                    offset = cache_position[0]
-                mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
-                mask_slice = mask_slice[..., offset : offset + sequence_length, :]
-                causal_mask = mask_slice
 
         if (
             self.config._attn_implementation == "sdpa"
