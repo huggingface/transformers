@@ -103,14 +103,13 @@ class RecurrentGemmaConfig(PretrainedConfig):
         num_hidden_layers=26,
         vocab_size=256000,
         width=2560,
-        mlp_expansion_factor=3,
+        mlp_expanded_width=3 * 2560,
         num_heads=10,
         lru_width=None,
         embeddings_scale_by_sqrt_dim=True,
         attention_window_size=2048,
         conv1d_width=4,
         logits_soft_cap=30.0,
-        initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
         pad_token_id=0,
@@ -123,7 +122,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.vocab_size = vocab_size
         self.width = width
-        self.mlp_expansion_factor = mlp_expansion_factor
+        self.mlp_expanded_width = mlp_expanded_width
         self.num_heads = num_heads
         self.num_attention_heads = num_heads
         self.head_dim = self.width // self.num_heads
@@ -132,7 +131,6 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.attention_window_size = attention_window_size
         self.conv1d_width = conv1d_width
         self.logits_soft_cap = logits_soft_cap
-        self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta

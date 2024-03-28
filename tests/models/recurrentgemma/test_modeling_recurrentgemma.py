@@ -54,7 +54,7 @@ class RecurrentGemmaModelTester:
         use_labels=True,
         vocab_size=99,
         width=32,
-        mlp_expansion_factor=3,
+        mlp_expanded_width=128,
         num_hidden_layers=3,
         num_heads=4,
         lru_width=64,
@@ -75,7 +75,7 @@ class RecurrentGemmaModelTester:
         self.vocab_size = vocab_size
         self.width = width
         self.num_hidden_layers = num_hidden_layers
-        self.mlp_expansion_factor = mlp_expansion_factor
+        self.mlp_expanded_width = mlp_expanded_width
         self.num_heads = num_heads
         self.lru_width = lru_width
         self.attention_window_size = attention_window_size
@@ -114,7 +114,7 @@ class RecurrentGemmaModelTester:
             num_hidden_layers=self.num_hidden_layers,
             vocab_size=self.vocab_size,
             width=self.width,
-            mlp_expansion_factor=self.mlp_expansion_factor,
+            mlp_expanded_width=self.mlp_expanded_width,
             num_heads=self.num_heads,
             lru_width=self.lru_width,
             attention_window_size=self.attention_window_size,
