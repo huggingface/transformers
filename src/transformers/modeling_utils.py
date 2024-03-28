@@ -2306,7 +2306,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # Only save the model itself if we are using distributed training
-        model_to_save = unwrap_model(self) if is_accelerate_available() else Accelerator().unwrap_model(self)
+        model_to_save = unwrap_model(self) if not is_accelerate_available() else Accelerator().unwrap_model(self)
 
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
