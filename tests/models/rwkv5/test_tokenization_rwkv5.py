@@ -16,16 +16,12 @@
 import os
 import unittest
 from datasets import load_dataset
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, Rwkv5Tokenizer
 from transformers.models.rwkv5.tokenization_rwkv5 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers, require_torch
 from transformers.utils import is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
-
-if is_torch_available():
-    from transformers import Rwkv5Tokenizer
 
 
 @require_torch
