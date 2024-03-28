@@ -103,6 +103,7 @@ class GPTNeoXConfig(PretrainedConfig):
     ```"""
 
     model_type = "gpt_neox"
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
