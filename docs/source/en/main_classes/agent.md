@@ -28,30 +28,22 @@ contains the API docs for the underlying classes.
 
 ## Agents
 
-We provide three types of agents: [`HfAgent`] uses inference endpoints for opensource models, [`LocalAgent`] uses a model of your choice locally and [`OpenAiAgent`] uses OpenAI closed models.
+We provide two types of agents, based on the main [`Agent`] class:
+- [`CodeAgent`] acts in one shot, generating code to solve the task, then executes it at once.
+- [`ReactAgent`] acts step by step, each step consisting of one thought, then one function execution.
 
-### HfAgent
 
-[[autodoc]] HfAgent
+### CodeAgent
 
-### LocalAgent
+[[autodoc]] CodeAgent
 
-[[autodoc]] LocalAgent
+### ReactAgent
 
-### OpenAiAgent
-
-[[autodoc]] OpenAiAgent
-
-### AzureOpenAiAgent
-
-[[autodoc]] AzureOpenAiAgent
+[[autodoc]] ReactAgent
 
 ### Agent
 
 [[autodoc]] Agent
-    - chat
-    - run
-    - prepare_for_new_chat
 
 ## Tools
 

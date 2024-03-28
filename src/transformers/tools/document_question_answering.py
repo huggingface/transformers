@@ -20,6 +20,7 @@ from ..models.auto import AutoProcessor
 from ..models.vision_encoder_decoder import VisionEncoderDecoderModel
 from ..utils import is_vision_available
 from .base import PipelineTool
+from typing import Union
 
 
 if is_vision_available():
@@ -37,8 +38,8 @@ class DocumentQuestionAnsweringTool(PipelineTool):
     pre_processor_class = AutoProcessor
     model_class = VisionEncoderDecoderModel
 
-    inputs = ["image", "text"]
-    outputs = ["text"]
+    inputs = {"input": Union[Image.Image, str]}
+    output_type = str
 
     def __init__(self, *args, **kwargs):
         if not is_vision_available():
