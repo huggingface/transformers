@@ -322,7 +322,7 @@ At this point, only three steps remain:
 ...     data_collator=data_collator,
 ...     train_dataset=food["train"],
 ...     eval_dataset=food["test"],
-...     tokenizer=image_processor,
+...     image_processor=image_processor,
 ...     compute_metrics=compute_metrics,
 ... )
 
@@ -418,7 +418,7 @@ and use the [PushToHubCallback](../main_classes/keras_callbacks#transformers.Pus
 >>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_eval_dataset)
 >>> push_to_hub_callback = PushToHubCallback(
 ...     output_dir="food_classifier",
-...     tokenizer=image_processor,
+...     image_processor=image_processor,
 ...     save_strategy="no",
 ... )
 >>> callbacks = [metric_callback, push_to_hub_callback]

@@ -414,7 +414,7 @@ def compute_metrics(eval_pred):
 ...     args,
 ...     train_dataset=train_dataset,
 ...     eval_dataset=val_dataset,
-...     tokenizer=image_processor,
+...     image_processor=image_processor,
 ...     compute_metrics=compute_metrics,
 ...     data_collator=collate_fn,
 ... )

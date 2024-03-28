@@ -552,7 +552,7 @@ def main():
                     output_dir=training_args.output_dir,
                     hub_model_id=push_to_hub_model_id,
                     hub_token=training_args.push_to_hub_token,
-                    tokenizer=image_processor,
+                    image_processor=image_processor,
                     **model_card_kwargs,
                 )
             )

@@ -424,7 +424,7 @@ TensorFlow에서 모델을 미세 조정하려면 다음 단계를 따르세요:
 ...     metric_fn=compute_metrics, eval_dataset=tf_eval_dataset, batch_size=batch_size, label_cols=["labels"]
 ... )
 
->>> push_to_hub_callback = PushToHubCallback(output_dir="scene_segmentation", tokenizer=image_processor)
+>>> push_to_hub_callback = PushToHubCallback(output_dir="scene_segmentation", image_processor=image_processor)
 
 >>> callbacks = [metric_callback, push_to_hub_callback]
 ```
