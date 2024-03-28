@@ -107,6 +107,7 @@ from . import (
     graphormer,
     groupvit,
     herbert,
+    hiera,
     hubert,
     ibert,
     idefics,

@@ -565,6 +565,8 @@
         title: FocalNet
       - local: model_doc/glpn
         title: GLPN
+      - local: model_doc/hiera
+        title: Hiera
       - local: model_doc/imagegpt
         title: ImageGPT
       - local: model_doc/levit
