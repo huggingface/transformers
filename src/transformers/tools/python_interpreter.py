@@ -132,9 +132,47 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
     elif isinstance(expression, ast.Subscript):
         # Subscript -> return the value of the indexing
         return evaluate_subscript(expression, state, tools)
+    elif isinstance(expression, ast.BinOp):
+        # Binary operation -> execute operation
+        return evaluate_binop(expression, state, tools)
+
     else:
         # For now we refuse anything else. Let's add things as we need them.
         raise InterpretorError(f"{expression.__class__.__name__} is not supported.")
+
+
+def evaluate_binop(binop, state, tools):
+    # Recursively evaluate the left and right operands
+    left_val = evaluate_ast(binop.left, state, tools)
+    right_val = evaluate_ast(binop.right, state, tools)
+
+    # Determine the operation based on the type of the operator in the BinOp
+    if isinstance(binop.op, ast.Add):
+        return left_val + right_val
+    elif isinstance(binop.op, ast.Sub):
+        return left_val - right_val
+    elif isinstance(binop.op, ast.Mult):
+        return left_val * right_val
+    elif isinstance(binop.op, ast.Div):
+        return left_val / right_val
+    elif isinstance(binop.op, ast.Mod):
+        return left_val % right_val
+    elif isinstance(binop.op, ast.Pow):
+        return left_val ** right_val
+    elif isinstance(binop.op, ast.FloorDiv):
+        return left_val // right_val
+    elif isinstance(binop.op, ast.BitAnd):
+        return left_val & right_val
+    elif isinstance(binop.op, ast.BitOr):
+        return left_val | right_val
+    elif isinstance(binop.op, ast.BitXor):
+        return left_val ^ right_val
+    elif isinstance(binop.op, ast.LShift):
+        return left_val << right_val
+    elif isinstance(binop.op, ast.RShift):
+        return left_val >> right_val
+    else:
+        raise NotImplementedError(f"Operator {type(binop.op).__name__} is not implemented.")
 
 
 def evaluate_assign(assign, state, tools):
@@ -162,7 +200,6 @@ def evaluate_call(call, state, tools):
         raise InterpretorError(
             f"It is not permitted to evaluate other functions than the provided tools (tried to execute {call.func.id})."
         )
-
     func = tools[func_name]
     # Todo deal with args
     args = [evaluate_ast(arg, state, tools) for arg in call.args]

@@ -15,36 +15,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib.util
-import json
-import os
-import time
+import re
+from ast import literal_eval
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, List, Optional, Union
 
-import requests
-from huggingface_hub import HfFolder, hf_hub_download, list_spaces
+from huggingface_hub import hf_hub_download, list_spaces
 
-from ..models.auto import AutoTokenizer
-from ..utils import is_offline_mode, is_openai_available, is_torch_available, logging
-from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, load_tool, supports_remote
-from .prompts import CHAT_MESSAGE_PROMPT, download_prompt
-from .python_interpreter import evaluate
+from ..utils import is_offline_mode, logging
+from .base import (
+    DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+    OPENAI_TOOL_DESCRIPTION_TEMPLATE,
+    TASK_MAPPING,
+    TOOL_CONFIG_FILE,
+    Tool,
+    get_tool_description_with_args,
+    load_tool,
+    supports_remote,
+)
+from .default_tools import FinalAnswerTool
+from .prompts import DEFAULT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_SYSTEM_PROMPT
+from .python_interpreter import evaluate as evaluate_python_code
 
 
+logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
-
-if is_openai_available():
-    import openai
-
-if is_torch_available():
-    from ..generation import StoppingCriteria, StoppingCriteriaList
-    from ..models.auto import AutoModelForCausalLM
-else:
-    StoppingCriteria = object
-
 _tools_are_initialized = False
-
 
 BASE_PYTHON_TOOLS = {
     "print": print,
@@ -58,6 +55,9 @@ BASE_PYTHON_TOOLS = {
 
 @dataclass
 class PreTool:
+    name: str
+    inputs: Dict[str, type]
+    output_type: type
     task: str
     description: str
     repo_id: str
@@ -85,10 +85,16 @@ def get_remote_tools(organization="huggingface-tools"):
         repo_id = space_info.id
         resolved_config_file = hf_hub_download(repo_id, TOOL_CONFIG_FILE, repo_type="space")
         with open(resolved_config_file, encoding="utf-8") as reader:
-            config = json.load(reader)
-
+            config = literal_eval(reader.read())
         task = repo_id.split("/")[-1]
-        tools[config["name"]] = PreTool(task=task, description=config["description"], repo_id=repo_id)
+        tools[config["name"]] = PreTool(
+            task=task,
+            description=config["description"],
+            repo_id=repo_id,
+            name=task,
+            inputs=config["inputs"],
+            output_type=config["output_type"],
+        )
 
     return tools
 
@@ -106,8 +112,14 @@ def _setup_default_tools():
     remote_tools = get_remote_tools()
     for task_name, tool_class_name in TASK_MAPPING.items():
         tool_class = getattr(tools_module, tool_class_name)
-        description = tool_class.description
-        HUGGINGFACE_DEFAULT_TOOLS[tool_class.name] = PreTool(task=task_name, description=description, repo_id=None)
+        HUGGINGFACE_DEFAULT_TOOLS[tool_class.name] = PreTool(
+            name=tool_class.name,
+            inputs=tool_class.inputs,
+            output_type=tool_class.output_type,
+            task=task_name,
+            description=tool_class.description,
+            repo_id=None
+        )
 
     if not is_offline_mode():
         for task_name in HUGGINGFACE_DEFAULT_TOOLS_FROM_HUB:
@@ -121,199 +133,229 @@ def _setup_default_tools():
             if not found:
                 raise ValueError(f"{task_name} is not implemented on the Hub.")
 
+
     _tools_are_initialized = True
 
 
-def resolve_tools(code, toolbox, remote=False, cached_tools=None):
-    if cached_tools is None:
-        resolved_tools = BASE_PYTHON_TOOLS.copy()
-    else:
-        resolved_tools = cached_tools
-    for name, tool in toolbox.items():
-        if name not in code or name in resolved_tools:
-            continue
-
-        if isinstance(tool, Tool):
-            resolved_tools[name] = tool
-        else:
-            task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id
-            _remote = remote and supports_remote(task_or_repo_id)
-            resolved_tools[name] = load_tool(task_or_repo_id, remote=_remote)
-
-    return resolved_tools
-
-
-def get_tool_creation_code(code, toolbox, remote=False):
-    code_lines = ["from transformers import load_tool", ""]
-    for name, tool in toolbox.items():
-        if name not in code or isinstance(tool, Tool):
-            continue
-
-        task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id
-        line = f'{name} = load_tool("{task_or_repo_id}"'
-        if remote:
-            line += ", remote=True"
-        line += ")"
-        code_lines.append(line)
-
-    return "\n".join(code_lines) + "\n"
-
-
-def clean_code_for_chat(result):
-    lines = result.split("\n")
-    idx = 0
-    while idx < len(lines) and not lines[idx].lstrip().startswith("```"):
-        idx += 1
-    explanation = "\n".join(lines[:idx]).strip()
-    if idx == len(lines):
-        return explanation, None
-
-    idx += 1
-    start_idx = idx
-    while not lines[idx].lstrip().startswith("```"):
-        idx += 1
-    code = "\n".join(lines[start_idx:idx]).strip()
-
-    return explanation, code
-
-
-def clean_code_for_run(result):
-    result = f"I will use the following {result}"
-    explanation, code = result.split("Answer:")
-    explanation = explanation.strip()
+def clean_code_for_run(code):
     code = code.strip()
-
     code_lines = code.split("\n")
     if code_lines[0] in ["```", "```py", "```python"]:
         code_lines = code_lines[1:]
     if code_lines[-1] == "```":
         code_lines = code_lines[:-1]
     code = "\n".join(code_lines)
+    return code
 
-    return explanation, code
+
+def parse_json_tool_call(json_blob: str):
+    try:
+        first_accolade_index =  json_blob.find("{")
+        last_accolade_index = [a.start() for a in list(re.finditer('}', json_blob))][-1]
+        json_blob = json_blob[first_accolade_index:last_accolade_index+1]
+        json_blob = literal_eval(json_blob)
+    except Exception as e:
+        raise ValueError(f"The JSON blob you used is invalid: due to the following error: {e}. Try to correct its formatting.")
+    if "action" in json_blob and "action_input" in json_blob:
+        return json_blob["action"], json_blob["action_input"]
+    else:
+        raise ValueError(f"Missing keys: {[key for key in ['action', 'action_input'] if key not in json_blob]} in blob {json_blob}")
+
+
+def format_prompt(toolbox, prompt_template,tool_description_template):
+    tool_descriptions = toolbox.show_tool_descriptions(tool_description_template)
+    prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
+    if "<<tool_names>>" in prompt:
+        tool_names = [f"'{tool_name}'" for tool_name in toolbox.tools.keys()]
+        prompt = prompt.replace("<<tool_names>>", ", ".join(tool_names))
+    return prompt
+
+
+def to_text(input: Union[List[Dict[str, str]], Dict[str, str], str]) -> str:
+    if isinstance(input, list):
+        return "\n".join([m['content'] for m in input])
+    elif isinstance(input, dict):
+        return input["content"]
+    else:
+        return input
+
+
+class Toolbox():
+    def __init__(self, tools: Optional[List[Tool]] = None):
+        if tools is None:
+            _setup_default_tools()
+            self._tools = HUGGINGFACE_DEFAULT_TOOLS.copy()
+        else:
+            self._tools = {tool.name: tool for tool in tools}
+        self.load_tools_if_needed()
+
+    @property
+    def tools(self) -> Dict[str, Tool]:
+        """Get all tools currently in the toolbox"""
+        return self._tools
+
+    def show_tool_descriptions(self, tool_description_template=None):
+        """Returns the description of all tools in the toolbox"""
+        return "\n".join([
+            get_tool_description_with_args(tool, tool_description_template)
+            for tool in self._tools.values()
+        ])
+
+    def add_tool(self, tool: Tool):
+        """Adds a tool to the toolbox"""
+        if tool.name in self._tools:
+            raise KeyError(f"Error: tool {tool.name} already exists in the toolbox.")
+        self._tools[tool.name] = tool
+
+    def remove_tool(self, tool_name: str):
+        """Removes a tool from the toolbox"""
+        if tool_name not in self._tools:
+            raise KeyError(
+                f"Error: tool {tool_name} not found in toolbox for removal,"
+                f"should be instead one of {list(self._tools.keys())}."
+            )
+        del self._tools[tool_name]
+
+    def update_tool(self, tool: Tool):
+        """Updates a tool in the toolbox"""
+        if tool.name not in self._tools:
+            raise KeyError(f"Error: tool {tool.name} not found in toolbox for update, should be instead one of {list(self._tools.keys())}.")
+        self._tools[tool.name] = tool
+
+    def clear_toolbox(self):
+        """Clears the toolbox"""
+        self._tools = {}
+
+    def load_tools_if_needed(self, remote=False):
+        for name, tool in self._tools.items():
+            if not isinstance(tool, Tool):
+                task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id
+                _remote = remote and supports_remote(task_or_repo_id)
+                self._tools[name] = load_tool(task_or_repo_id, remote=_remote)
 
 
 class Agent:
-    """
-    Base class for all agents which contains the main API methods.
+    def __init__(
+            self,
+            llm_callable,
+            system_prompt=DEFAULT_REACT_SYSTEM_PROMPT, # TODO write default agent prompt
+            tool_description_template=None,
+            additional_args={},
+            max_iterations=1,
+            tool_parser=parse_json_tool_call,
+            tools: Union[List[Tool], Toolbox, None] = None,
+        ):
 
-    Args:
-        chat_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `chat` method. Can be the
-            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
-            `chat_prompt_template.txt` in this repo in this case.
-        run_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `run` method. Can be the
-            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
-            `run_prompt_template.txt` in this repo in this case.
-        additional_tools ([`Tool`], list of tools or dictionary with tool values, *optional*):
-            Any additional tools to include on top of the default ones. If you pass along a tool with the same name as
-            one of the default tools, that default tool will be overridden.
-    """
+        self.agent_name = self.__class__.__name__
+        self.llm_callable = llm_callable
+        self.prompt_template = system_prompt
+        self.tool_description_template = tool_description_template if tool_description_template else OPENAI_TOOL_DESCRIPTION_TEMPLATE
+        self.additional_args = additional_args
+        self.max_iterations = max_iterations
+        self.log = logger
+        self.tool_parser = tool_parser
 
-    def __init__(self, chat_prompt_template=None, run_prompt_template=None, additional_tools=None):
-        _setup_default_tools()
+        if isinstance(tools, Toolbox):
+            self._toolbox = tools
+        else:
+            self._toolbox = Toolbox(tools)
 
-        agent_name = self.__class__.__name__
-        self.chat_prompt_template = download_prompt(chat_prompt_template, agent_name, mode="chat")
-        self.run_prompt_template = download_prompt(run_prompt_template, agent_name, mode="run")
-        self._toolbox = HUGGINGFACE_DEFAULT_TOOLS.copy()
-        self.log = print
-        if additional_tools is not None:
-            if isinstance(additional_tools, (list, tuple)):
-                additional_tools = {t.name: t for t in additional_tools}
-            elif not isinstance(additional_tools, dict):
-                additional_tools = {additional_tools.name: additional_tools}
+        self.system_prompt = format_prompt(self._toolbox, self.prompt_template, self.tool_description_template)
+        self.memory = []
+        self.prompt = None
 
-            replacements = {name: tool for name, tool in additional_tools.items() if name in HUGGINGFACE_DEFAULT_TOOLS}
-            self._toolbox.update(additional_tools)
-            if len(replacements) > 1:
-                names = "\n".join([f"- {n}: {t}" for n, t in replacements.items()])
-                logger.warning(
-                    f"The following tools have been replaced by the ones provided in `additional_tools`:\n{names}."
-                )
-            elif len(replacements) == 1:
-                name = list(replacements.keys())[0]
-                logger.warning(f"{name} has been replaced by {replacements[name]} as provided in `additional_tools`.")
-
-        self.prepare_for_new_chat()
 
     @property
     def toolbox(self) -> Dict[str, Tool]:
-        """Get all tool currently available to the agent"""
+        """Get the toolbox currently available to the agent"""
         return self._toolbox
 
-    def format_prompt(self, task, chat_mode=False):
-        description = "\n".join([f"- {name}: {tool.description}" for name, tool in self.toolbox.items()])
-        if chat_mode:
-            if self.chat_history is None:
-                prompt = self.chat_prompt_template.replace("<<all_tools>>", description)
-            else:
-                prompt = self.chat_history
-            prompt += CHAT_MESSAGE_PROMPT.replace("<<task>>", task)
-        else:
-            prompt = self.run_prompt_template.replace("<<all_tools>>", description)
-            prompt = prompt.replace("<<prompt>>", task)
-        return prompt
+    def show_memory(self):
+        self.log.info('\n'.join(self.memory))
 
-    def set_stream(self, streamer):
+    def extract_action(self, llm_output: str, split_token: str) -> str:
         """
-        Set the function use to stream results (which is `print` by default).
+        Parse action from the LLM output
 
         Args:
-            streamer (`callable`): The function to call when streaming results from the LLM.
+            llm_output (`str`): Output of the LLM
+            split_token (`str`): Separator for the action. Should match the
+                example in the system prompt.
         """
-        self.log = streamer
+        try:
+            split = llm_output.split(split_token)
+            _, action = split[-2], split[-1] # NOTE: using indexes starting from the end solves for when you have more than one split_token in the output
+        except Exception as e:
+            self.log.error(e, exc_info=1)
+            raise RuntimeError(f"Error: No '{split_token}' token provided. Be sure to include an action, prefaced with '{split_token}'!")
+        return action
 
-    def chat(self, task, *, return_code=False, remote=False, **kwargs):
+    def execute(self, tool_name: str, arguments: Dict[str, str]) -> None:
         """
-        Sends a new request to the agent in a chat. Will use the previous ones in its history.
+        Execute tool with the provided input and append the result to the memory
 
         Args:
-            task (`str`): The task to perform
-            return_code (`bool`, *optional*, defaults to `False`):
-                Whether to just return code and not evaluate it.
-            remote (`bool`, *optional*, defaults to `False`):
-                Whether or not to use remote tools (inference endpoints) instead of local ones.
-            kwargs (additional keyword arguments, *optional*):
-                Any keyword argument to send to the agent when evaluating the code.
-
-        Example:
-
-        ```py
-        from transformers import HfAgent
-
-        agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
-        agent.chat("Draw me a picture of rivers and lakes")
-
-        agent.chat("Transform the picture so that there is a rock in there")
-        ```
+            tool_name (`str`): Name of the Tool to execute (shoulde be one from
+                self.toolbox).
+            split_token (Any): Arguments passed to the Tool.
         """
-        prompt = self.format_prompt(task, chat_mode=True)
-        result = self.generate_one(prompt, stop=["Human:", "====="])
-        self.chat_history = prompt + result.strip() + "\n"
-        explanation, code = clean_code_for_chat(result)
 
-        self.log(f"==Explanation from the agent==\n{explanation}")
+        if tool_name not in self.toolbox.tools:
+            error_msg = f"Error: unknown tool {tool_name}, should be instead one of {list(self.toolbox.tools.keys())}."
+            self.log.error(error_msg, exc_info=1)
+            raise KeyError(error_msg)
 
-        if code is not None:
-            self.log(f"\n\n==Code generated by the agent==\n{code}")
-            if not return_code:
-                self.log("\n\n==Result==")
-                self.cached_tools = resolve_tools(code, self.toolbox, remote=remote, cached_tools=self.cached_tools)
-                self.chat_state.update(kwargs)
-                return evaluate(code, self.cached_tools, self.chat_state, chat_mode=True)
+        self.log.info("\n\n==Result==")
+        try:
+            if isinstance(arguments, str):
+                observation = self.toolbox.tools[tool_name](arguments)
             else:
-                tool_code = get_tool_creation_code(code, self.toolbox, remote=remote)
-                return f"{tool_code}\n{code}"
+                observation = self.toolbox.tools[tool_name](**arguments)
+            observation_message = "Observation: " + observation.strip()
+            self.log.info(observation_message)
+            self.memory.append(observation_message)
+        except Exception as e:
+            raise RuntimeError(
+                f"Error in tool call execution: {e}. Correct the arguments if they are incorrect."
+                f"As a reminder, this tool description is {get_tool_description_with_args(self.toolbox.tools[tool_name])}."
+            )
 
-    def prepare_for_new_chat(self):
+    def run(self, **kwargs):
+        """To be implemented in the child class"""
+        pass
+
+
+class CodeAgent(Agent):
+    """
+    A class for an agent that solves the given task using a single block of code. This is a one-shot agent: it won't be able to act step-by-step.
+    """
+    def __init__(
+            self,
+            llm_callable,
+            system_prompt=DEFAULT_CODE_SYSTEM_PROMPT,
+            tool_description_template=None,
+            **kwargs
+        ):
+
+        super().__init__(
+            llm_callable,
+            system_prompt=system_prompt,
+            tool_description_template=tool_description_template if tool_description_template else self.default_tool_description_template,
+            **kwargs
+        )
+
+
+    @property
+    def default_tool_description_template(self)-> str:
         """
-        Clears the history of prior calls to [`~Agent.chat`].
+        This template is taking can desbribe a tool as it is expected by the model
         """
-        self.chat_history = None
-        self.chat_state = {}
-        self.cached_tools = None
+        logger.warning_once(
+            "\nNo tool description template is defined for this tokenizer - using a default tool description template "
+            "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
+            "your model, please set `tokenizer.tool_description_template` to an appropriate template. "
+        )
+        return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
 
     def clean_code_for_run(self, result):
         """
@@ -322,457 +364,174 @@ class Agent:
         """
         return clean_code_for_run(result)
 
-    def run(self, task, *, return_code=False, remote=False, **kwargs):
+
+    def run(self, task, return_generated_code=False, **kwargs):
         """
         Sends a request to the agent.
 
         Args:
             task (`str`): The task to perform
-            return_code (`bool`, *optional*, defaults to `False`):
-                Whether to just return code and not evaluate it.
-            remote (`bool`, *optional*, defaults to `False`):
-                Whether or not to use remote tools (inference endpoints) instead of local ones.
             kwargs (additional keyword arguments, *optional*):
                 Any keyword argument to send to the agent when evaluating the code.
 
         Example:
 
         ```py
-        from transformers import HfAgent
+        from transformers import CodeAgent
+        from transformers.tools.base import CalculatorTool
 
-        agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
-        agent.run("Draw me a picture of rivers and lakes")
+        calculator = CalculatorTool()
+        agent = CodeAgent(toolbox=[CalculatorTool()])
+        agent.run("What is the result of 2 power 3.7384?")
         ```
         """
-        prompt = self.format_prompt(task)
-        result = self.generate_one(prompt, stop=["Task:"])
-        explanation, code = self.clean_code_for_run(result)
+        # Run LLM
+        self.prompt = self.system_prompt + f"\nTask: {task}"
+        llm_output = self.llm_callable(self.prompt, stop=["Task:"])
+        self.log.info("====Executing with this prompt====")
+        self.log.info(self.prompt)
 
-        self.log(f"==Explanation from the agent==\n{explanation}")
+        if return_generated_code:
+            return llm_output
 
-        self.log(f"\n\n==Code generated by the agent==\n{code}")
-        if not return_code:
-            self.log("\n\n==Result==")
-            self.cached_tools = resolve_tools(code, self.toolbox, remote=remote, cached_tools=self.cached_tools)
-            return evaluate(code, self.cached_tools, state=kwargs.copy())
-        else:
-            tool_code = get_tool_creation_code(code, self.toolbox, remote=remote)
-            return f"{tool_code}\n{code}"
+        # Parse
+        code_action = self.extract_action(
+            llm_output=llm_output,
+            split_token="Answer:"
+        )
 
-    def generate_one(self, prompt, stop):
-        # This is the method to implement in your custom agent.
-        raise NotImplementedError
+        try:
+            code_action = self.clean_code_for_run(code_action)
+        except Exception as e:
+            error_msg = f"Error in code parsing: {e}. Be sure to provide correct code"
+            self.log.error(error_msg)
+            return error_msg
 
-    def generate_many(self, prompts, stop):
-        # Override if you have a way to do batch generation faster than one by one
-        return [self.generate_one(prompt, stop) for prompt in prompts]
+        # Execute
+        try:
+            self.log.info("\n\n==Executing the code below:==")
+            self.log.info(code_action)
+            available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
+            # NOTE: The base python tools are not added to toolbox, since they do not have the proper attributes for a description
+            return evaluate_python_code(code_action, available_tools, state=kwargs.copy())
+        except Exception as e:
+            error_msg = f"Error in execution: {e}. Be sure to provide correct code."
+            self.log.error(error_msg, exc_info=1)
+            return error_msg
 
 
-class OpenAiAgent(Agent):
+class ReactAgent(Agent):
     """
-    Agent that uses the openai API to generate code.
-
-    <Tip warning={true}>
-
-    The openAI models are used in generation mode, so even for the `chat()` API, it's better to use models like
-    `"text-davinci-003"` over the chat-GPT variant. Proper support for chat-GPT models will come in a next version.
-
-    </Tip>
-
-    Args:
-        model (`str`, *optional*, defaults to `"text-davinci-003"`):
-            The name of the OpenAI model to use.
-        api_key (`str`, *optional*):
-            The API key to use. If unset, will look for the environment variable `"OPENAI_API_KEY"`.
-        chat_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `chat` method. Can be the
-            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
-            `chat_prompt_template.txt` in this repo in this case.
-        run_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `run` method. Can be the
-            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
-            `run_prompt_template.txt` in this repo in this case.
-        additional_tools ([`Tool`], list of tools or dictionary with tool values, *optional*):
-            Any additional tools to include on top of the default ones. If you pass along a tool with the same name as
-            one of the default tools, that default tool will be overridden.
-
-    Example:
-
-    ```py
-    from transformers import OpenAiAgent
-
-    agent = OpenAiAgent(model="text-davinci-003", api_key=xxx)
-    agent.run("Is the following `text` (in Spanish) positive or negative?", text="¡Este es un API muy agradable!")
-    ```
+    A class for an agent that solves the given task step by step, using the ReAct framework.
+    While the objective is not reached, the agent will perform a cycle of thinking and acting.
+    The action will be parsed from the LLM output, it will be the call of a tool from the toolbox, with arguments provided by the LLM.
     """
-
     def __init__(
-        self,
-        model="text-davinci-003",
-        api_key=None,
-        chat_prompt_template=None,
-        run_prompt_template=None,
-        additional_tools=None,
-    ):
-        if not is_openai_available():
-            raise ImportError("Using `OpenAiAgent` requires `openai`: `pip install openai`.")
-
-        if api_key is None:
-            api_key = os.environ.get("OPENAI_API_KEY", None)
-        if api_key is None:
-            raise ValueError(
-                "You need an openai key to use `OpenAIAgent`. You can get one here: Get one here "
-                "https://openai.com/api/`. If you have one, set it in your env with `os.environ['OPENAI_API_KEY'] = "
-                "xxx."
-            )
-        else:
-            openai.api_key = api_key
-        self.model = model
-        super().__init__(
-            chat_prompt_template=chat_prompt_template,
-            run_prompt_template=run_prompt_template,
-            additional_tools=additional_tools,
-        )
-
-    def generate_many(self, prompts, stop):
-        if "gpt" in self.model:
-            return [self._chat_generate(prompt, stop) for prompt in prompts]
-        else:
-            return self._completion_generate(prompts, stop)
-
-    def generate_one(self, prompt, stop):
-        if "gpt" in self.model:
-            return self._chat_generate(prompt, stop)
-        else:
-            return self._completion_generate([prompt], stop)[0]
-
-    def _chat_generate(self, prompt, stop):
-        result = openai.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            stop=stop,
-        )
-        return result.choices[0].message.content
-
-    def _completion_generate(self, prompts, stop):
-        result = openai.Completion.create(
-            model=self.model,
-            prompt=prompts,
-            temperature=0,
-            stop=stop,
-            max_tokens=200,
-        )
-        return [answer["text"] for answer in result["choices"]]
-
-
-class AzureOpenAiAgent(Agent):
-    """
-    Agent that uses Azure OpenAI to generate code. See the [official
-    documentation](https://learn.microsoft.com/en-us/azure/cognitive-services/openai/) to learn how to deploy an openAI
-    model on Azure
-
-    <Tip warning={true}>
-
-    The openAI models are used in generation mode, so even for the `chat()` API, it's better to use models like
-    `"text-davinci-003"` over the chat-GPT variant. Proper support for chat-GPT models will come in a next version.
-
-    </Tip>
-
-    Args:
-        deployment_id (`str`):
-            The name of the deployed Azure openAI model to use.
-        api_key (`str`, *optional*):
-            The API key to use. If unset, will look for the environment variable `"AZURE_OPENAI_API_KEY"`.
-        resource_name (`str`, *optional*):
-            The name of your Azure OpenAI Resource. If unset, will look for the environment variable
-            `"AZURE_OPENAI_RESOURCE_NAME"`.
-        api_version (`str`, *optional*, default to `"2022-12-01"`):
-            The API version to use for this agent.
-        is_chat_mode (`bool`, *optional*):
-            Whether you are using a completion model or a chat model (see note above, chat models won't be as
-            efficient). Will default to `gpt` being in the `deployment_id` or not.
-        chat_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `chat` method. Can be the
-            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
-            `chat_prompt_template.txt` in this repo in this case.
-        run_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `run` method. Can be the
-            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
-            `run_prompt_template.txt` in this repo in this case.
-        additional_tools ([`Tool`], list of tools or dictionary with tool values, *optional*):
-            Any additional tools to include on top of the default ones. If you pass along a tool with the same name as
-            one of the default tools, that default tool will be overridden.
-
-    Example:
-
-    ```py
-    from transformers import AzureOpenAiAgent
-
-    agent = AzureAiAgent(deployment_id="Davinci-003", api_key=xxx, resource_name=yyy)
-    agent.run("Is the following `text` (in Spanish) positive or negative?", text="¡Este es un API muy agradable!")
-    ```
-    """
-
-    def __init__(
-        self,
-        deployment_id,
-        api_key=None,
-        resource_name=None,
-        api_version="2022-12-01",
-        is_chat_model=None,
-        chat_prompt_template=None,
-        run_prompt_template=None,
-        additional_tools=None,
-    ):
-        if not is_openai_available():
-            raise ImportError("Using `OpenAiAgent` requires `openai`: `pip install openai`.")
-
-        self.deployment_id = deployment_id
-        openai.api_type = "azure"
-        if api_key is None:
-            api_key = os.environ.get("AZURE_OPENAI_API_KEY", None)
-        if api_key is None:
-            raise ValueError(
-                "You need an Azure openAI key to use `AzureOpenAIAgent`. If you have one, set it in your env with "
-                "`os.environ['AZURE_OPENAI_API_KEY'] = xxx."
-            )
-        else:
-            openai.api_key = api_key
-        if resource_name is None:
-            resource_name = os.environ.get("AZURE_OPENAI_RESOURCE_NAME", None)
-        if resource_name is None:
-            raise ValueError(
-                "You need a resource_name to use `AzureOpenAIAgent`. If you have one, set it in your env with "
-                "`os.environ['AZURE_OPENAI_RESOURCE_NAME'] = xxx."
-            )
-        else:
-            openai.api_base = f"https://{resource_name}.openai.azure.com"
-        openai.api_version = api_version
-
-        if is_chat_model is None:
-            is_chat_model = "gpt" in deployment_id.lower()
-        self.is_chat_model = is_chat_model
+            self,
+            llm_callable,
+            system_prompt=DEFAULT_REACT_SYSTEM_PROMPT,
+            tool_description_template=None,
+            max_iterations=5,
+            **kwargs
+        ):
 
         super().__init__(
-            chat_prompt_template=chat_prompt_template,
-            run_prompt_template=run_prompt_template,
-            additional_tools=additional_tools,
+            llm_callable,
+            system_prompt=system_prompt,
+            tool_description_template=tool_description_template if tool_description_template else self.default_tool_description_template,
+            max_iterations=max_iterations,
+            **kwargs
         )
+        self._toolbox.add_tool(FinalAnswerTool())
 
-    def generate_many(self, prompts, stop):
-        if self.is_chat_model:
-            return [self._chat_generate(prompt, stop) for prompt in prompts]
-        else:
-            return self._completion_generate(prompts, stop)
-
-    def generate_one(self, prompt, stop):
-        if self.is_chat_model:
-            return self._chat_generate(prompt, stop)
-        else:
-            return self._completion_generate([prompt], stop)[0]
-
-    def _chat_generate(self, prompt, stop):
-        result = openai.ChatCompletion.create(
-            engine=self.deployment_id,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            stop=stop,
-        )
-        return result["choices"][0]["message"]["content"]
-
-    def _completion_generate(self, prompts, stop):
-        result = openai.Completion.create(
-            engine=self.deployment_id,
-            prompt=prompts,
-            temperature=0,
-            stop=stop,
-            max_tokens=200,
-        )
-        return [answer["text"] for answer in result["choices"]]
-
-
-class HfAgent(Agent):
-    """
-    Agent that uses an inference endpoint to generate code.
-
-    Args:
-        url_endpoint (`str`):
-            The name of the url endpoint to use.
-        token (`str`, *optional*):
-            The token to use as HTTP bearer authorization for remote files. If unset, will use the token generated when
-            running `huggingface-cli login` (stored in `~/.huggingface`).
-        chat_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `chat` method. Can be the
-            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
-            `chat_prompt_template.txt` in this repo in this case.
-        run_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `run` method. Can be the
-            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
-            `run_prompt_template.txt` in this repo in this case.
-        additional_tools ([`Tool`], list of tools or dictionary with tool values, *optional*):
-            Any additional tools to include on top of the default ones. If you pass along a tool with the same name as
-            one of the default tools, that default tool will be overridden.
-
-    Example:
-
-    ```py
-    from transformers import HfAgent
-
-    agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
-    agent.run("Is the following `text` (in Spanish) positive or negative?", text="¡Este es un API muy agradable!")
-    ```
-    """
-
-    def __init__(
-        self, url_endpoint, token=None, chat_prompt_template=None, run_prompt_template=None, additional_tools=None
-    ):
-        self.url_endpoint = url_endpoint
-        if token is None:
-            self.token = f"Bearer {HfFolder().get_token()}"
-        elif token.startswith("Bearer") or token.startswith("Basic"):
-            self.token = token
-        else:
-            self.token = f"Bearer {token}"
-        super().__init__(
-            chat_prompt_template=chat_prompt_template,
-            run_prompt_template=run_prompt_template,
-            additional_tools=additional_tools,
-        )
-
-    def generate_one(self, prompt, stop):
-        headers = {"Authorization": self.token}
-        inputs = {
-            "inputs": prompt,
-            "parameters": {"max_new_tokens": 200, "return_full_text": False, "stop": stop},
-        }
-
-        response = requests.post(self.url_endpoint, json=inputs, headers=headers)
-        if response.status_code == 429:
-            logger.info("Getting rate-limited, waiting a tiny bit before trying again.")
-            time.sleep(1)
-            return self._generate_one(prompt)
-        elif response.status_code != 200:
-            raise ValueError(f"Error {response.status_code}: {response.json()}")
-
-        result = response.json()[0]["generated_text"]
-        # Inference API returns the stop sequence
-        for stop_seq in stop:
-            if result.endswith(stop_seq):
-                return result[: -len(stop_seq)]
-        return result
-
-
-class LocalAgent(Agent):
-    """
-    Agent that uses a local model and tokenizer to generate code.
-
-    Args:
-        model ([`PreTrainedModel`]):
-            The model to use for the agent.
-        tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer to use for the agent.
-        chat_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `chat` method. Can be the
-            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
-            `chat_prompt_template.txt` in this repo in this case.
-        run_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `run` method. Can be the
-            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
-            `run_prompt_template.txt` in this repo in this case.
-        additional_tools ([`Tool`], list of tools or dictionary with tool values, *optional*):
-            Any additional tools to include on top of the default ones. If you pass along a tool with the same name as
-            one of the default tools, that default tool will be overridden.
-
-    Example:
-
-    ```py
-    import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer, LocalAgent
-
-    checkpoint = "bigcode/starcoder"
-    model = AutoModelForCausalLM.from_pretrained(checkpoint, device_map="auto", torch_dtype=torch.bfloat16)
-    tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-
-    agent = LocalAgent(model, tokenizer)
-    agent.run("Draw me a picture of rivers and lakes.")
-    ```
-    """
-
-    def __init__(self, model, tokenizer, chat_prompt_template=None, run_prompt_template=None, additional_tools=None):
-        self.model = model
-        self.tokenizer = tokenizer
-        super().__init__(
-            chat_prompt_template=chat_prompt_template,
-            run_prompt_template=run_prompt_template,
-            additional_tools=additional_tools,
-        )
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+    @property
+    def default_tool_description_template(self)-> str:
         """
-        Convenience method to build a `LocalAgent` from a pretrained checkpoint.
+        This template is taking can desbribe a tool as it is expected by the model
+        """
+        logger.warning_once(
+            "\nNo tool description template is defined for this tokenizer - using a default tool description template "
+            "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
+            "your model, please set `tokenizer.tool_description_template` to an appropriate template. "
+        )
+        return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
+
+
+    def run(self, task):
+        """
+        Sends a request to the agent.
 
         Args:
-            pretrained_model_name_or_path (`str` or `os.PathLike`):
-                The name of a repo on the Hub or a local path to a folder containing both model and tokenizer.
-            kwargs (`Dict[str, Any]`, *optional*):
-                Keyword arguments passed along to [`~PreTrainedModel.from_pretrained`].
+            task (`str`): The task to perform
 
         Example:
 
         ```py
-        import torch
-        from transformers import LocalAgent
+        from transformers import ReactAgent
+        from transformers.tools.base import CalculatorTool
 
-        agent = LocalAgent.from_pretrained("bigcode/starcoder", device_map="auto", torch_dtype=torch.bfloat16)
-        agent.run("Draw me a picture of rivers and lakes.")
+        calculator = CalculatorTool()
+        agent = ReactAgent(toolbox=[CalculatorTool()])
+        agent.run("What is the result of 2 power 3.7384?")
         ```
         """
-        model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        return cls(model, tokenizer)
+        self.memory = [self.system_prompt]
 
-    @property
-    def _model_device(self):
-        if hasattr(self.model, "hf_device_map"):
-            return list(self.model.hf_device_map.values())[0]
-        for param in self.model.parameters():
-            return param.device
+        self.task = task
+        task_message = f"Task: {self.task}"
+        self.memory.append(task_message)
 
-    def generate_one(self, prompt, stop):
-        encoded_inputs = self.tokenizer(prompt, return_tensors="pt").to(self._model_device)
-        src_len = encoded_inputs["input_ids"].shape[1]
-        stopping_criteria = StoppingCriteriaList([StopSequenceCriteria(stop, self.tokenizer)])
-        outputs = self.model.generate(
-            encoded_inputs["input_ids"], max_new_tokens=200, stopping_criteria=stopping_criteria
+        final_answer = None
+        iteration = 0
+
+        while final_answer is None and iteration < self.max_iterations:
+            try:
+                final_answer = self.step()
+            except Exception as e:
+                self.log.error(e)
+                error_message = str(e) + ". Now let's retry."
+                self.memory.append(error_message)
+            finally:
+                iteration += 1
+
+        if not final_answer and iteration == self.max_iterations:
+            self.log.error("Failed by reaching max iterations, returning None.")
+
+        return final_answer
+
+
+    def step(self):
+        """
+        Runs agent step with the current prompt (task + state)
+        """
+        self.log.info("=====Calling LLM with these messages:=====")
+        memory_as_text = '\n'.join(self.memory)
+        self.prompt = memory_as_text
+        self.log.info(self.prompt)
+
+        llm_output = self.llm_callable(self.prompt, stop=["Observation:"])
+        self.log.info("=====Output message of the LLM:=====")
+        self.log.info(llm_output)
+
+        self.memory.append(llm_output)
+
+        # Parse
+        action = self.extract_action(
+            llm_output=llm_output,
+            split_token="Action:"
         )
 
-        result = self.tokenizer.decode(outputs[0].tolist()[src_len:])
-        # Inference API returns the stop sequence
-        for stop_seq in stop:
-            if result.endswith(stop_seq):
-                result = result[: -len(stop_seq)]
-        return result
+        try:
+            tool_name, arguments = self.tool_parser(action)
+        except Exception as e:
+            raise RuntimeError(f"Could not parse the given action: {e}.")
 
-
-class StopSequenceCriteria(StoppingCriteria):
-    """
-    This class can be used to stop generation whenever a sequence of tokens is encountered.
-
-    Args:
-        stop_sequences (`str` or `List[str]`):
-            The sequence (or list of sequences) on which to stop execution.
-        tokenizer:
-            The tokenizer used to decode the model outputs.
-    """
-
-    def __init__(self, stop_sequences, tokenizer):
-        if isinstance(stop_sequences, str):
-            stop_sequences = [stop_sequences]
-        self.stop_sequences = stop_sequences
-        self.tokenizer = tokenizer
-
-    def __call__(self, input_ids, scores, **kwargs) -> bool:
-        decoded_output = self.tokenizer.decode(input_ids.tolist()[0])
-        return any(decoded_output.endswith(stop_sequence) for stop_sequence in self.stop_sequences)
+        # Execute
+        if tool_name == "final_answer":
+            if isinstance(arguments, dict):
+                return arguments['answer']
+            else:
+                return arguments
+        else:
+            self.execute(tool_name, arguments)
+            return None

@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
+from typing import Union
 
 from ..models.auto import AutoProcessor
 from ..models.vision_encoder_decoder import VisionEncoderDecoderModel
@@ -37,12 +38,14 @@ class DocumentQuestionAnsweringTool(PipelineTool):
     pre_processor_class = AutoProcessor
     model_class = VisionEncoderDecoderModel
 
-    inputs = ["image", "text"]
-    outputs = ["text"]
+    inputs = {"input": Union[Image.Image, str]}
+    output_type = str
 
     def __init__(self, *args, **kwargs):
         if not is_vision_available():
-            raise ValueError("Pillow must be installed to use the DocumentQuestionAnsweringTool.")
+            raise ValueError(
+                "Pillow must be installed to use the DocumentQuestionAnsweringTool."
+            )
 
         super().__init__(*args, **kwargs)
 
@@ -74,7 +77,9 @@ class DocumentQuestionAnsweringTool(PipelineTool):
         sequence = self.pre_processor.batch_decode(outputs)[0]
         sequence = sequence.replace(self.pre_processor.tokenizer.eos_token, "")
         sequence = sequence.replace(self.pre_processor.tokenizer.pad_token, "")
-        sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
+        sequence = re.sub(
+            r"<.*?>", "", sequence, count=1
+        ).strip()  # remove first task start token
         sequence = self.pre_processor.token2json(sequence)
 
         return sequence["answer"]
