@@ -16,11 +16,11 @@
 import copy
 import inspect
 import math
-import unittest
 import tempfile
-from pytest import mark
+import unittest
 
 import numpy as np
+from pytest import mark
 
 from transformers import (
     EncodecConfig,
@@ -32,9 +32,9 @@ from transformers import (
 )
 from transformers.testing_utils import (
     is_torch_available,
+    require_flash_attn,
     require_torch,
     require_torch_fp16,
-    require_flash_attn,
     require_torch_gpu,
     slow,
     torch_device,
@@ -280,7 +280,6 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
 
             self.assertNotIn(config.pad_token_id, output_generate)
-        
 
     @require_flash_attn
     @require_torch_gpu
@@ -301,9 +300,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16
-                )
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name]
@@ -331,7 +328,6 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 )
 
                 assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
-
 
                 other_inputs = {
                     "output_hidden_states": True,
@@ -378,9 +374,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16
-                )
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name]
@@ -448,7 +442,6 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 )
 
                 assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
-
 
 
 def prepare_musicgen_inputs_dict(
@@ -1113,7 +1106,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
 
             self.assertNotIn(config.pad_token_id, output_generate)
-            
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -1133,9 +1126,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16
-                )
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name]
@@ -1152,7 +1143,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
                 outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
                 outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-
 
                 logits = (
                     outputs.hidden_states[-1]
@@ -1177,7 +1167,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
                 outputs = model(dummy_input, **other_inputs)
                 outputs_fa = model_fa(dummy_input, **other_inputs)
-
 
                 logits = (
                     outputs.hidden_states[-1]
@@ -1215,9 +1204,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16
-                )
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name]

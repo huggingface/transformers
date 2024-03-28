@@ -255,4 +255,4 @@ class MusicgenConfig(PretrainedConfig):
     @_attn_implementation.setter
     def _attn_implementation(self, value):
         self._attn_implementation_internal = value
-        self.decoder._attn_implementation = value 
+        self.decoder._attn_implementation = value

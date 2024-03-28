@@ -41,14 +41,15 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
+    logging,
+    replace_return_docstrings,
 )
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from .configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig
+
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -64,6 +65,7 @@ _CHECKPOINT_FOR_DOC = "facebook/musicgen-small"
 
 
 from ..deprecated._archive_maps import MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
@@ -319,6 +321,7 @@ class MusicgenAttention(nn.Module):
 
         return attn_output, attn_weights_reshaped, past_key_value
 
+
 # Copied from transformers.models.bart.modeling_bart.BartFlashAttention2 with Bart->Musicgen
 class MusicgenFlashAttention2(MusicgenAttention):
     """
@@ -540,6 +543,7 @@ MUSICGEN_ATTENTION_CLASSES = {
     "eager": MusicgenAttention,
     "flash_attention_2": MusicgenFlashAttention2,
 }
+
 
 class MusicgenDecoderLayer(nn.Module):
     def __init__(self, config: MusicgenDecoderConfig):
