@@ -105,7 +105,6 @@ class RecurrentGemmaConfig(PretrainedConfig):
         width=2560,
         mlp_expansion_factor=3,
         num_heads=10,
-        num_key_value_heads=1,
         lru_width=None,
         embeddings_scale_by_sqrt_dim=True,
         attention_window_size=2048,
@@ -129,7 +128,6 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.num_attention_heads = num_heads
         self.head_dim = self.width // self.num_heads
         self.lru_width = lru_width if lru_width is not None else width
-        self.num_key_value_heads = num_key_value_heads
         self.embeddings_scale_by_sqrt_dim = embeddings_scale_by_sqrt_dim
         self.attention_window_size = attention_window_size
         self.conv1d_width = conv1d_width

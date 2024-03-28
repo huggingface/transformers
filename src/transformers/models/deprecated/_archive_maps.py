@@ -1692,6 +1692,8 @@ REALM_PRETRAINED_CONFIG_ARCHIVE_MAP = DeprecatedDict(
     }
 )
 
+RECURRENTGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP = DeprecatedDict({})
+
 REALM_PRETRAINED_MODEL_ARCHIVE_LIST = DeprecatedList(
     [
         "google/realm-cc-news-pretrained-embedder",

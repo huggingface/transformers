@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_recurrentgemma": ["RECURRENT_GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RecurrentGemmaConfig"],
+    "configuration_recurrentgemma": ["RECURRENTGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RecurrentGemmaConfig"],
 }
 
 try:

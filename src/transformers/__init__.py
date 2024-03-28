@@ -5619,6 +5619,7 @@ if TYPE_CHECKING:
         RealmConfig,
         RealmTokenizer,
     )
+    from .models.recurrentgemma import RECURRENTGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP, RecurrentGemmaConfig
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
     from .models.regnet import REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP, RegNetConfig
     from .models.rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
@@ -9228,4 +9229,3 @@ if not is_tf_available() and not is_torch_available() and not is_flax_available(
         "Models won't be available and only tokenizers, configuration "
         "and file/data utilities can be used."
     )
-
