@@ -285,6 +285,8 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
 
         final_embedding = torch.zeros(batch_size, full_sequence_length, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device)
         final_attention_mask = torch.zeros(batch_size, full_sequence_length, dtype=attention_mask.dtype, device=inputs_embeds.device)
+        # final_attention_mask_4d = torch.zeros(batch_size, 1, full_sequence_length, full_sequence_length, dtype=torch.float32, device=inputs_embeds.device)
+        
         if labels is not None:
             final_labels = torch.full((batch_size, full_sequence_length), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device)
         else:
@@ -295,6 +297,7 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
                 text_tokens_mask = attention_mask[i] > 0
                 num_text_tokens = text_tokens_mask.sum().item()
                 text_embeds = inputs_embeds[i][text_tokens_mask] 
+                total_initial_tokens = num_image_tokens + num_text_tokens
 
                 start_text_idx = full_sequence_length - num_text_tokens
                 start_image_idx = start_text_idx - num_image_tokens
@@ -302,6 +305,9 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
                 final_embedding[i, start_image_idx:start_text_idx] = image_features[i] / (self.config.hidden_size ** 0.5)
                 final_embedding[i, start_text_idx:start_text_idx + num_text_tokens] =  text_embeds
                 final_attention_mask[i, start_image_idx:start_text_idx + num_text_tokens] = 1
+                # convert mask to 4D here
+                #final_attention_mask_4d[i, :, start_image_idx:start_image_idx + total_initial_tokens, start_image_idx:start_image_idx + total_initial_tokens] = 1
+
         else:
             for i in range(batch_size):
                 text_tokens_mask = attention_mask[i] > 0
@@ -311,6 +317,8 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
                 final_embedding[i, :num_image_tokens] = image_features[i] / (self.config.hidden_size ** 0.5)
                 final_embedding[i, num_image_tokens:num_image_tokens + num_text_tokens] = text_embeds
                 final_attention_mask[i, :num_image_tokens + num_text_tokens] = 1
+                # convert mask to 4D here
+                #final_attention_mask_4d[i, :, :total_initial_tokens, :total_initial_tokens] = 1
         position_ids = torch.arange(full_sequence_length, device=inputs_embeds.device).expand(batch_size, -1)
         return final_embedding, final_attention_mask, final_labels, position_ids
 
@@ -428,6 +436,8 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n
+            breakpoint()
+            print(logits.shape, labels.shape, attention_mask.shape)
             if attention_mask is not None:
                 shift_attention_mask = attention_mask[..., 1:]
                 shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
@@ -482,6 +492,9 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
             # older attention values, as their corresponding values are not part of the input.
             if cache_length < past_length and attention_mask is not None:
                 attention_mask = attention_mask[:, -(cache_length + input_ids.shape[1]) :]
+        else:
+            # setup 4D attention mask here, on the first pass
+            pass
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
@@ -506,6 +519,7 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
                 "pixel_values": pixel_values,
             }
         )
+        breakpoint()
         return model_inputs
 
     def _reorder_cache(self, *args, **kwargs):
