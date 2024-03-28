@@ -1049,6 +1049,36 @@ class Trainer:
 
         return self.optimizer
 
+    def get_num_trainable_parameters(self):
+        """
+        Get the number of trainable parameters.
+        """
+        return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+
+    def get_learning_rates(self):
+        """
+        Returns the learning rate of each parameter from self.optimizer.
+        """
+        if self.optimizer is None:
+            raise ValueError("Trainer optimizer is None, please make sure you have setup the optimizer before.")
+        return [group["lr"] for group in self.optimizer.param_groups]
+
+    def get_optimizer_group(self, param: Optional[Union[str, torch.nn.parameter.Parameter]] = None):
+        """
+        Returns optimizer group for a parameter if given, else returns all optimizer groups for params.
+
+        Args:
+            param (`str` or `torch.nn.parameter.Parameter`, *optional*):
+                The parameter for which optimizer group needs to be returned.
+        """
+        if self.optimizer is None:
+            raise ValueError("Trainer optimizer is None, please make sure you have setup the optimizer before.")
+        if param is not None:
+            for group in self.optimizer.param_groups:
+                if param in group["params"]:
+                    return group
+        return [group["params"] for group in self.optimizer.param_groups]
+
     @staticmethod
     def get_optimizer_cls_and_kwargs(
         args: TrainingArguments, model: Optional[PreTrainedModel] = None
@@ -4294,8 +4324,23 @@ class Trainer:
             self.repo.git_push()
 
     def create_accelerator_and_postprocess(self):
-        grad_acc_kwargs = {"num_steps": self.args.gradient_accumulation_steps}
+        grad_acc_kwargs = {}
+        if is_accelerate_available("0.28.0") and self.args.accelerator_config.gradient_accumulation_kwargs is not None:
+            grad_acc_kwargs = self.args.accelerator_config.gradient_accumulation_kwargs
+
+        # check if num_steps is attempted to be passed in gradient_accumulation_kwargs
+        if "num_steps" in grad_acc_kwargs and self.args.gradient_accumulation_steps > 1:
+            # raise because we do not know which setting is intended.
+            raise ValueError(
+                "The `AcceleratorConfig`'s `num_steps` is set but `gradient_accumulation_steps` is greater than 1 in the passed `TrainingArguments`"
+                "If using the passed `AcceleratorConfig` is desired, do not set the `TrainingArguments` `gradient_accumulation_steps`."
+            )
+        elif "num_steps" not in grad_acc_kwargs:
+            # take the gradient_accumulation_steps setting from TrainingArguments.
+            grad_acc_kwargs["num_steps"] = self.args.gradient_accumulation_steps
+
         grad_acc_kwargs["sync_with_dataloader"] = False
+
         gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
 
         accelerator_config = self.args.accelerator_config.to_dict()
@@ -4307,6 +4352,8 @@ class Trainer:
                 even_batches=accelerator_config.pop("even_batches"),
                 use_seedable_sampler=accelerator_config.pop("use_seedable_sampler"),
             )
+            # this would have been updated above, no need for it anymore
+            accelerator_config.pop("gradient_accumulation_kwargs")
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
             "gradient_accumulation_plugin": gradient_accumulation_plugin,
