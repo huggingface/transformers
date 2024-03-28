@@ -690,7 +690,7 @@ class ResidualBlock(nn.Module):
       mlp_expanded_width: int,
       num_heads: int,
       attention_window_size: int,
-      temporal_block_type: TemporalBlockType,
+      temporal_block_type: str,
       lru_width: int | None = None,
       conv1d_temporal_width: int = 4,
       final_w_init_variance_scale: float = 1.0,
@@ -704,7 +704,7 @@ class ResidualBlock(nn.Module):
       mlp_expanded_width: The width of the expansion inside the MLP block.
       num_heads: The number of heads for the Attention or the RG-LRU.
       attention_window_size: The window size for the local attention block.
-      temporal_block_type: Either "RECURRENT" or "ATTENTION", specifying the
+      temporal_block_type: Either "recurrent" or "attention", specifying the
         type of recurrent block to use.
       lru_width: The width of the RG-LRU if different from `width`.
       conv1d_temporal_width: The width of the temporal convolution.
@@ -730,7 +730,7 @@ class ResidualBlock(nn.Module):
     )
 
     match self.temporal_block_type:
-      case TemporalBlockType.RECURRENT:
+      case "recurrent":
         self.recurrent_block = RecurrentBlock(
             width=self.width,
             num_heads=self.num_heads,
@@ -741,7 +741,7 @@ class ResidualBlock(nn.Module):
             dtype=dtype,
         )
 
-      case TemporalBlockType.ATTENTION:
+      case "attention":
         self.attention_block = LocalAttentionBlock(
             width=self.width,
             num_heads=self.num_heads,
@@ -750,6 +750,8 @@ class ResidualBlock(nn.Module):
             device=device,
             dtype=dtype,
         )
+      case _:
+        raise ValueError(f"Unrecognized {temporal_block_type=}.")
 
     self.channel_pre_norm = RMSNorm(
         width=width, device=device, dtype=dtype,
@@ -777,10 +779,12 @@ class ResidualBlock(nn.Module):
     easily identifiable by name in a state dictionary.
     """
     match self.temporal_block_type:
-      case TemporalBlockType.RECURRENT:
+      case "recurrent":
         return self.recurrent_block
-      case TemporalBlockType.ATTENTION:
+      case "attention":
         return self.attention_block
+      case _:
+        raise ValueError(f"Unrecognized {self.temporal_block_type=}.")
 
   def forward(
       self,
@@ -821,7 +825,7 @@ class ResidualBlock(nn.Module):
       width: int,
       num_heads: int,
       attention_window_size: int,
-      temporal_block_type: TemporalBlockType,
+      temporal_block_type: str,
       dtype: torch.dtype,
       lru_width: int | None = None,
       conv1d_temporal_width: int = 4,
@@ -829,7 +833,7 @@ class ResidualBlock(nn.Module):
   ) -> ResidualBlockCache:
     """Initializes an empty cache for the block."""
     match temporal_block_type:
-      case TemporalBlockType.RECURRENT:
+      case "recurrent":
         return RecurrentBlock.init_cache(
             batch_size=batch_size,
             lru_width=lru_width or width,
@@ -837,7 +841,7 @@ class ResidualBlock(nn.Module):
             conv1d_temporal_width=conv1d_temporal_width,
             device=device,
         )
-      case TemporalBlockType.ATTENTION:
+      case "attention":
         return LocalAttentionBlock.init_cache(
             batch_size=batch_size,
             window_size=attention_window_size,
@@ -845,6 +849,8 @@ class ResidualBlock(nn.Module):
             dtype=dtype,
             device=device,
         )
+      case _:
+        raise ValueError(f"Unrecognized {temporal_block_type=}.")
 
 
 class Embedder(nn.Module):
@@ -1536,32 +1542,21 @@ class RecurrentBlockCache:
     rnn_state: torch.Tensor
     conv1d_state: torch.Tensor
 
-from transformers import StaticCache
 class GriffinCache:
     def __init__(self, config: RecurrentGemmaConfig, batch_size, dtype=torch.float16, device=None):
-        self.seqlen_offset = 0  # TODO(anushanf): Check what this is needed for.
-        self.dtype = dtype
-        rnn_state_size = config.lru_width
-        conv_kernel_size = config.conv1d_width
-        self.states = {}
-        for i in range(config.num_hidden_layers):
-            if config.block_types[i % len(config.block_types)] == "attention":
-                self.states[i] = StaticCache(
-                    config,
-                    max_batch_size=batch_size,
-                    max_cache_len=config.attention_window_size,
-                    device=device,
-                )
-            else:
-                rnn_state = RGLRU.init_cache(batch_size=batch_size, width=rnn_state_size, device=device,)
-                conv1d_state = Conv1D.init_cache(
-                    batch_size=batch_size,
-                    width=rnn_state_size,
-                    dtype=dtype,
-                    conv1d_temporal_width=conv_kernel_size,
-                    device=device,
-                )
-                self.states[i] = RecurrentBlockCache(rnn_state=rnn_state, conv1d_state=conv1d_state,)
+        self.states = []
+        for block_type in config.block_types:
+          self.states.append(ResidualBlock.init_cache(
+              batch_size=batch_size,
+              width=config.width,
+              num_heads=config.num_heads,
+              attention_window_size=config.attention_window_size,
+              temporal_block_type=block_type,
+              lru_width=config.lru_width,
+              conv1d_temporal_width=config.conv1d_width,
+              dtype=dtype,
+              device=device,
+          ))
 
 
 @dataclass
@@ -1661,23 +1656,25 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         module.reset_params()
 
-    def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
-        # TODO(lberrada, botev): adapt this to handle recurrent states.
-        if self.config._attn_implementation == "flash_attention_2" and cache_cls == StaticCache:
-            raise ValueError(
-                "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
-                "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
-            )
-
-        for layer in self.model.layers:
-            weights = layer.self_attn.o_proj.weight
-            layer.self_attn.past_key_value = cache_cls(
-                self.config, max_batch_size, max_cache_len, device=weights.device, dtype=weights.dtype
-            )
-
-    def _reset_cache(self):
-        for layer in self.model.layers:
-            layer.self_attn.past_key_value = None
+    # TODO(lberrada, botev): adapt this to handle recurrent states.
+    #  PS(botev): Mamba doesn't seem to use this
+    # def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
+    #
+    #     if self.config._attn_implementation == "flash_attention_2" and cache_cls == StaticCache:
+    #         raise ValueError(
+    #             "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
+    #             "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
+    #         )
+    #
+    #     for layer in self.model.layers:
+    #         weights = layer.self_attn.o_proj.weight
+    #         layer.self_attn.past_key_value = cache_cls(
+    #             self.config, max_batch_size, max_cache_len, device=weights.device, dtype=weights.dtype
+    #         )
+    #
+    # def _reset_cache(self):
+    #     for layer in self.model.layers:
+    #         layer.self_attn.past_key_value = None
 
 
 RECURRENTGEMMA_INPUTS_DOCSTRING = r"""

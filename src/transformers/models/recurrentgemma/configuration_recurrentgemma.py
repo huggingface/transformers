@@ -24,7 +24,6 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 _PATTERN = ("recurrent", "recurrent", "attention")
-_2B_ARCHITECTURE = (_PATTERN * 9)[:26]
 
 
 class RecurrentGemmaConfig(PretrainedConfig):
@@ -73,7 +72,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values
+            Whether the model should return the last key/values
             attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
         pad_token_id (`int`, *optional*, defaults to 0):
@@ -101,8 +100,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        block_types=_2B_ARCHITECTURE,
-        num_hidden_layers=18,
+        num_hidden_layers=26,
         vocab_size=256000,
         width=2560,
         mlp_expansion_factor=3,
@@ -123,7 +121,6 @@ class RecurrentGemmaConfig(PretrainedConfig):
         rope_theta=10000.0,
         **kwargs,
     ):
-        self.block_types = block_types
         self.num_hidden_layers = num_hidden_layers
         self.vocab_size = vocab_size
         self.width = width
@@ -149,3 +146,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+    @property
+    def block_types(self) -> tuple[str, ...]:
+        return (_PATTERN * 100)[:self.num_hidden_layers]
