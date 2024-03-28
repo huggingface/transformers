@@ -824,6 +824,7 @@ end
         self.assertEqual(infilling, EXPECTED_INFILLING)
 
 
+@slow
 @require_torch_gpu
 class Mask4DTestHard(unittest.TestCase):
     def tearDown(self):
