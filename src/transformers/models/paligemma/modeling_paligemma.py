@@ -472,8 +472,9 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
                 input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
             # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
             # input_ids based on the past_length.
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
+            # here we need to recall past_length is num_image_tokens + previous input_ids.
+            elif past_length < input_ids.shape[1] + self.config.text_config.num_image_tokens:
+                input_ids = input_ids[:, past_length - self.config.text_config.num_image_tokens:]
             # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
             elif self.config.image_token_index in input_ids:
                 input_ids = input_ids[:, input_ids.shape[1] - 1 :]
@@ -505,7 +506,6 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
                 "pixel_values": pixel_values,
             }
         )
-        breakpoint()
         return model_inputs
 
     def _reorder_cache(self, *args, **kwargs):
