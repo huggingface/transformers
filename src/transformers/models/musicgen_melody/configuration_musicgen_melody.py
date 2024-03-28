@@ -254,7 +254,7 @@ class MusicgenMelodyConfig(PretrainedConfig):
     # This is a property because you might want to change the codec model on the fly
     def sampling_rate(self):
         return self.audio_encoder.sampling_rate
-    
+
     @property
     def _attn_implementation(self):
         # This property is made private for now (as it cannot be changed and a PreTrainedModel.use_attn_implementation method needs to be implemented.)

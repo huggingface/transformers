@@ -530,7 +530,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 )
 
                 self.assertTrue(torch.allclose(out, out_fa))
-                
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -574,6 +574,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                     do_sample=False,
                     use_cache=True,
                 )
+
 
 def prepare_musicgen_inputs_dict(
     config,
@@ -1415,7 +1416,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 dummy_attention_mask = inputs_dict.get("attention_mask")
                 if dummy_attention_mask is None:
                     dummy_attention_mask = torch.ones_like(dummy_input)
-                
+
                 # make sure we do left padding
                 dummy_attention_mask[:, :-1] = 0
                 dummy_attention_mask[:, -1:] = 1
@@ -1482,7 +1483,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 )
 
                 self.assertTrue(torch.allclose(out, out_fa))
-                
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -1526,6 +1527,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                     do_sample=False,
                     use_cache=True,
                 )
+
 
 def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):
     """Produces a series of 'bip bip' sounds at a given frequency."""

@@ -47,6 +47,7 @@ from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel, AutoModelForTextEncoding
 from .configuration_musicgen_melody import MusicgenMelodyConfig, MusicgenMelodyDecoderConfig
 
+
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
@@ -64,17 +65,19 @@ MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Musicgen Melody models at https://huggingface.co/models?filter=musicgen_melody
 ]
 
+
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
+    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
     return (
         indices,
         cu_seqlens,
         max_seqlen_in_batch,
     )
+
 
 @dataclass
 class MusicgenMelodyOutputWithPast(ModelOutput):
@@ -339,7 +342,8 @@ class MusicgenMelodyAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights_reshaped, past_key_value
-    
+
+
 # Copied from transformers.models.bart.modeling_bart.BartFlashAttention2 with Bart->MusicgenMelody
 class MusicgenMelodyFlashAttention2(MusicgenMelodyAttention):
     """
@@ -369,9 +373,9 @@ class MusicgenMelodyFlashAttention2(MusicgenMelodyAttention):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        # MusicgenFlashAttention2 attention does not support output_attentions
+        # MusicgenMelodyFlashAttention2 attention does not support output_attentions
         if output_attentions:
-            raise ValueError("MusicgenFlashAttention2 attention does not support output_attentions")
+            raise ValueError("MusicgenMelodyFlashAttention2 attention does not support output_attentions")
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
@@ -430,8 +434,10 @@ class MusicgenMelodyFlashAttention2(MusicgenMelodyAttention):
 
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
             # Handle the case where the model is quantized
-            if hasattr(self.config, "_pre_quantization_dtype"):
+            elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
             else:
                 target_dtype = self.q_proj.weight.dtype
@@ -475,7 +481,7 @@ class MusicgenMelodyFlashAttention2(MusicgenMelodyAttention):
             attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
+            dropout (`float`):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)

@@ -31,8 +31,8 @@ from transformers import (
 )
 from transformers.testing_utils import (
     is_torch_available,
-    require_flash_attn,
     is_torchaudio_available,
+    require_flash_attn,
     require_torch,
     require_torch_fp16,
     require_torch_gpu,
@@ -280,7 +280,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
             self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
             self.assertNotIn(config.pad_token_id, output_generate)
-            
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -442,7 +442,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                 )
 
                 assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
-                
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -530,7 +530,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                 )
 
                 self.assertTrue(torch.allclose(out, out_fa))
-                
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -574,7 +574,6 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                     do_sample=False,
                     use_cache=True,
                 )
-
 
 
 def prepare_musicgen_melody_inputs_dict(
@@ -1221,11 +1220,12 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
 
             self.assertNotIn(config.pad_token_id, output_generate)
-            
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
+    # Ignore copy
     def test_flash_attn_2_inference(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
@@ -1263,7 +1263,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 logits_fa = outputs_fa.hidden_states[-1]
 
                 assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
-            
+
                 other_inputs = {
                     "decoder_input_ids": decoder_input_ids,
                     "decoder_attention_mask": dummy_attention_mask,
@@ -1274,7 +1274,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
                 outputs = model(dummy_input, **other_inputs)
                 outputs_fa = model_fa(dummy_input, **other_inputs)
-
 
                 logits = outputs.hidden_states[-1]
                 logits_fa = outputs_fa.hidden_states[-1]
@@ -1289,6 +1288,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
+    # Ignore copy
     def test_flash_attn_2_inference_padding_right(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
@@ -1322,7 +1322,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
                 outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
 
-
                 logits = outputs.hidden_states[-1]
                 logits_fa = outputs_fa.hidden_states[-1]
                 assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
@@ -1337,7 +1336,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
                 outputs = model(dummy_input, **other_inputs)
                 outputs_fa = model_fa(dummy_input, **other_inputs)
-
 
                 logits = outputs.hidden_states[-1]
                 logits_fa = outputs_fa.hidden_states[-1]
@@ -1369,7 +1367,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 dummy_attention_mask = inputs_dict.get("attention_mask")
                 if dummy_attention_mask is None:
                     dummy_attention_mask = torch.ones_like(dummy_input)
-                
+
                 # make sure we do left padding
                 dummy_attention_mask[:, :-1] = 0
                 dummy_attention_mask[:, -1:] = 1
@@ -1436,7 +1434,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 )
 
                 self.assertTrue(torch.allclose(out, out_fa))
-                
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -1480,6 +1478,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                     do_sample=False,
                     use_cache=True,
                 )
+
 
 # Copied from tests.models.musicgen.test_modeling_musicgen.get_bip_bip
 def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):
