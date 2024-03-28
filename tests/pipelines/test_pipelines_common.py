@@ -222,6 +222,11 @@ class CommonPipelineTest(unittest.TestCase):
         pipe.model = None
         self.assertIsNone(pipe.torch_dtype)
 
+    @require_tf
+    def test_torch_dtype_property_returns_none_for_tf_model(self):
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert", framework="tf")
+        self.assertIsNone(pipe.torch_dtype)
+
 
 @is_pipeline_test
 class PipelineScikitCompatTest(unittest.TestCase):
