@@ -65,7 +65,7 @@ class Rwkv5IntegrationTest(unittest.TestCase):
 
     def test_left_padding(self):
         tokenizer = AutoTokenizer.from_pretrained("ArthurZ/rwkv-5-utf", padding_side="left", pad_token="<s>")
-        inputs_ = tokenizer('Conceptually क ् रीम एंजलिस में दो मूल आयाम हैं - उत ् पाद और भूगोल ।', padding=True)
+        inputs_ = tokenizer("Conceptually क ् रीम एंजलिस में दो मूल आयाम हैं - उत ् पाद और भूगोल ।", padding=True)
         # tokenizer.tokenize('Conceptually क ् रीम ए') for Llama:
         # ['▁Con', 'cept', 'ually', '▁', 'क', '▁', '्', '▁', 'र', 'ी', 'म', '▁', '<0xE0>', '<0xA4>', '<0x8F>']
         # tokenizers has option to fuse
@@ -99,9 +99,9 @@ class Rwkv5IntegrationTest(unittest.TestCase):
             for string in item["premise"].values():
                 try:
                     encoded1 = pyth_tokenizer.encode(string)
-                except UnicodeDecodeError as e:
+                except UnicodeDecodeError:
                     print(f"Failed on :`{string}`")
-            
+
                 encoded2 = rust_tokenizer.encode(string)
 
                 self.assertEqual(encoded1, encoded2)
