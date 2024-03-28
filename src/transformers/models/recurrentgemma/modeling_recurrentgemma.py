@@ -1874,27 +1874,25 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
+
+        # TODO(botev): Still not clear how to use the cache?
         next_decoder_cache = None
 
         for residual_block in self.blocks:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            # TODO(botev): What about `use_cache`?
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     residual_block.__call__,
                     hidden_states,
                     position_ids,
                     cache,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
                 )
             else:
                 layer_outputs = residual_block(
                     hidden_states,
-                    segment_pos=position_ids,
-                    cache=cache,
+                    position_ids,
+                    cache,
                 )
 
             hidden_states = layer_outputs[0]
@@ -1999,8 +1997,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         super().__init__(config)
         self.model = RecurrentGemmaModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size,
-                                 bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2088,6 +2085,12 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
+
+        # Soft-cap the logits
+        if self.config.logits_soft_cap is not None:
+            c = self.config.logits_soft_cap
+            logits = nn.functional.tanh(logits / c) * c
+
         logits = logits.float()
         loss = None
         if labels is not None:
@@ -2111,7 +2114,6 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
         )
 
     def prepare_inputs_for_generation(
