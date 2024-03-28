@@ -1185,6 +1185,15 @@ class AcceleratorConfig:
             training results are fully reproducable using a different sampling technique. While seed-to-seed results
             may differ, on average the differences are neglible when using multiple different seeds to compare. Should
             also be ran with [`~utils.set_seed`] for the best results.
+        gradient_accumulation_kwargs (`dict`, *optional*):
+            Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`].
+            Any of the following (optional) keys are acceptable:
+              num_steps (`int`): Will take precedence over [`~.TrainingArguments.gradient_accumulation_steps`] if
+                the latter is set to 1, otherwise an exception will be raised.
+              adjust_scheduler (`bool`): Whether to adjust the scheduler steps to account for [`~.TrainingArguments.gradient_accumulation_steps`].
+                The [`accelerate.utils.GradientAccumulationPlugin`] default is `True`.
+              sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch.
+                The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`.
 
     """
 
@@ -1221,6 +1230,19 @@ class AcceleratorConfig:
             "Ensures training results are fully reproducable using a different sampling technique. "
             "While seed-to-seed results may differ, on average the differences are neglible when using"
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
+        },
+    )
+    gradient_accumulation_kwargs: Optional[Dict] = field(
+        default=None,
+        metadata={
+            "help": "Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`]. "
+            "Any of the following (optional) keys are acceptable: "
+            "  num_steps (`int`): Will take precedence over [`~.TrainingArguments.gradient_accumulation_steps`] if "
+            "    the latter is set to 1, otherwise an exception will be raised. "
+            "  adjust_scheduler (`bool`): Whether to adjust the scheduler steps to account for [`~.TrainingArguments.gradient_accumulation_steps`]. "
+            "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `True`. "
+            "  sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch. "
+            "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`."
         },
     )
 
