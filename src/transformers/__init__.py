@@ -766,6 +766,7 @@ _import_structure = {
         "RoFormerConfig",
         "RoFormerTokenizer",
     ],
+    "models.rt_detr": ["RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "RTDetrConfig"],
     "models.rwkv": ["RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP", "RwkvConfig"],
     "models.sam": [
         "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1349,6 +1350,7 @@ else:
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
+    _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
@@ -3215,6 +3217,14 @@ else:
             "RoFormerModel",
             "RoFormerPreTrainedModel",
             "load_tf_weights_in_roformer",
+        ]
+    )
+    _import_structure["models.rt_detr"].extend(
+        [
+            "RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RTDetrForObjectDetection",
+            "RTDetrModel",
+            "RTDetrPreTrainedModel",
         ]
     )
     _import_structure["models.rwkv"].extend(
@@ -5648,6 +5658,7 @@ if TYPE_CHECKING:
         RoFormerConfig,
         RoFormerTokenizer,
     )
+    from .models.rt_detr import RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, RTDetrConfig
     from .models.rwkv import RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP, RwkvConfig
     from .models.sam import (
         SAM_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6223,6 +6234,7 @@ if TYPE_CHECKING:
             PoolFormerImageProcessor,
         )
         from .models.pvt import PvtImageProcessor
+        from .models.rt_detr import RTDetrImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
@@ -7772,6 +7784,12 @@ if TYPE_CHECKING:
             RoFormerModel,
             RoFormerPreTrainedModel,
             load_tf_weights_in_roformer,
+        )
+        from .models.rt_detr import (
+            RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RTDetrForObjectDetection,
+            RTDetrModel,
+            RTDetrPreTrainedModel,
         )
         from .models.rwkv import (
             RWKV_PRETRAINED_MODEL_ARCHIVE_LIST,
