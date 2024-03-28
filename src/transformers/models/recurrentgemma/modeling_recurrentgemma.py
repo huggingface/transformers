@@ -1832,7 +1832,9 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, GriffinOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        # TODO(botev): Should this argument be removed?
+        del attention_mask, output_attentions
+
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
