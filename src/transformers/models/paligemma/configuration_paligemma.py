@@ -86,9 +86,6 @@ class PaLIGemmaConfig(PretrainedConfig):
         vocab_size=257152,
         projection_dim=2048,
         hidden_size=2048,
-        # FIXME how do we pass vision/text specific config keys here?
-        # Why is this setup in init, attributes derived are not used, and configs
-        # are then called with other hardcoded arguments?
         **kwargs,
     ):
         self.ignore_index = ignore_index
@@ -97,6 +94,7 @@ class PaLIGemmaConfig(PretrainedConfig):
         self.projection_dim = projection_dim
         self.hidden_size = hidden_size
         self.vision_config = vision_config
+        self.is_encoder_decoder = False
 
         if isinstance(self.vision_config, dict):
             vision_config["model_type"] = (
@@ -113,6 +111,7 @@ class PaLIGemmaConfig(PretrainedConfig):
                 num_attention_heads=16,
                 vocab_size=257152,
                 projection_dim=2048,
+                vision_use_head=False,
             )
         self.vocab_size = self.vocab_size
 
@@ -129,6 +128,8 @@ class PaLIGemmaConfig(PretrainedConfig):
                 intermediate_size=16384,
                 num_attention_heads=8,
                 num_key_value_heads=1,
+                is_encoder_decoder=False,
             )
+        self.text_config.num_image_tokens = (self.vision_config.image_size // self.vision_config.patch_size) ** 2
 
         super().__init__(**kwargs)
