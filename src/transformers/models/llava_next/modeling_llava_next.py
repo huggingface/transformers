@@ -569,10 +569,11 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
 
                 # Get the target length
-                target_seqlen = first_layer_past_key_value.shape[-1] + 1
+                target_length = input_ids.shape[1]
+                past_length = first_layer_past_key_value.shape[-1]
 
                 extended_attention_mask = torch.ones(
-                    (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
+                    (attention_mask.shape[0], past_length),
                     dtype=attention_mask.dtype,
                     device=attention_mask.device,
                 )
@@ -587,7 +588,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 # Zero-out the places where we don't need to attend
                 extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
 
-                attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
+                attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                 position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
         outputs = self.language_model(

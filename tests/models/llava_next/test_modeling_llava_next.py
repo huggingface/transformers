@@ -423,7 +423,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         expected_slice = torch.tensor(
-            [[-4.7695, -4.5664, -0.2786], [-10.6172, -10.8906, -2.5234], [-6.7344, -7.2422, -0.6758]],
+            [[-4.7695, -4.5664, -0.2786], [-10.6250, -10.8906, -2.5254], [-6.7383, -7.2461, -0.6787]],
             dtype=torch.float32,
             device=torch_device,
         )
