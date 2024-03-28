@@ -21,9 +21,7 @@ from ..auto.configuration_auto import AutoConfig
 
 logger = logging.get_logger(__name__)
 
-MUSICGEN_MELODY_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/musicgen-melody": "https://huggingface.co/facebook/musicgen-melody/resolve/main/config.json",
-}
+from ..deprecated._archive_maps import MUSICGEN_MELODY_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class MusicgenMelodyDecoderConfig(PretrainedConfig):
