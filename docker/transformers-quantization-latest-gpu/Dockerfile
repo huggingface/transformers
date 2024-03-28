@@ -9,7 +9,7 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.2.0'
+ARG PYTORCH='2.2.1'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu118'
 
@@ -30,6 +30,9 @@ RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch]
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
+# needed in bnb and awq
+RUN python3 -m pip install --no-cache-dir einops
+
 # Add bitsandbytes for mixed int8 testing
 RUN python3 -m pip install --no-cache-dir bitsandbytes
 
@@ -43,7 +46,8 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/opt
 RUN python3 -m pip install --no-cache-dir aqlm[gpu]==1.0.2
 
 # Add autoawq for quantization testing
-RUN python3 -m pip install --no-cache-dir https://github.com/casper-hansen/AutoAWQ/releases/download/v0.2.0/autoawq-0.2.0+cu118-cp38-cp38-linux_x86_64.whl
+# >=v0.2.3 needed for compatibility with torch 2.2.1
+RUN python3 -m pip install --no-cache-dir https://github.com/casper-hansen/AutoAWQ/releases/download/v0.2.3/autoawq-0.2.3+cu118-cp38-cp38-linux_x86_64.whl
 
 # Add quanto for quantization testing
 RUN python3 -m pip install --no-cache-dir quanto
