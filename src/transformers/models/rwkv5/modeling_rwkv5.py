@@ -370,10 +370,11 @@ class Rwkv5Block(nn.Module):
         self.attention = Rwkv5SelfAttention(config, layer_id)
         self.feed_forward = Rwkv5FeedForward(config, layer_id)
 
-    def forward(self, hidden, state=None, use_cache=False, output_attentions=False, seq_mode=True):
+    def forward(self, hidden, state=None, use_cache=False, output_attentions=False):
         if self.layer_id == 0:
             hidden = self.pre_ln(hidden)
-        attention, state = self.attention(self.ln1(hidden), state=state, use_cache=use_cache, seq_mode=seq_mode)
+
+        attention, state = self.attention(self.ln1(hidden), state=state, use_cache=use_cache)
         hidden = hidden + attention
 
         feed_forward, state = self.feed_forward(self.ln2(hidden), state=state)
@@ -388,7 +389,7 @@ class Rwkv5Block(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.rwkv.modeling_rwkv.RwkvPreTrainedModel with Rwkv->Rwkv5
+# Copied from transformers.models.rwkv.modeling_rwkv.RwkvPreTrainedModel with Rwkv->Rwkv5,rwkv->rwkv5
 class Rwkv5PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -396,11 +397,12 @@ class Rwkv5PreTrainedModel(PreTrainedModel):
     """
 
     config_class = Rwkv5Config
-    base_model_prefix = "rwkv5"
+    base_model_prefix = "rwkv"
     _no_split_modules = ["Rwkv5Block"]
     _keep_in_fp32_modules = ["time_decay", "time_first"]
     supports_gradient_checkpointing = True
 
+    # Ignore copy
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, Rwkv5SelfAttention):
@@ -408,7 +410,6 @@ class Rwkv5PreTrainedModel(PreTrainedModel):
             num_hidden_layers = module.config.num_hidden_layers
             hidden_size = module.config.hidden_size
             attention_hidden_size = module.attention_hidden_size
-            num_attention_heads = hidden_size // module.config.num_attention_heads
 
             ratio_0_to_1 = layer_id / (num_hidden_layers - 1)  # 0 to 1
             ratio_1_to_almost0 = 1.0 - (layer_id / num_hidden_layers)  # 1 to ~0
@@ -421,28 +422,26 @@ class Rwkv5PreTrainedModel(PreTrainedModel):
             time_weight = time_weight[None, None, :]
 
             decay_speed = [
-                -6.0 + 5.0 * (h / (attention_hidden_size - 1)) ** (0.7 + 1.3 * ratio_0_to_1)
+                -5 + 8 * (h / (attention_hidden_size - 1)) ** (0.7 + 1.3 * ratio_0_to_1)
                 for h in range(attention_hidden_size)
             ]
             decay_speed = torch.tensor(decay_speed, dtype=module.time_decay.dtype, device=module.time_decay.device)
-            tmp = torch.tensor(
-                [
-                    (1.0 - (i / (attention_hidden_size - 1.0))) * ratio_0_to_1 + 0.1 * ((i + 1) % 3 - 1)
-                    for i in range(attention_hidden_size)
-                ],
-                dtype=module.time_faaaa.dtype,
-                device=module.time_faaaa.device,
+            zigzag = (
+                torch.tensor(
+                    [(i + 1) % 3 - 1 for i in range(attention_hidden_size)],
+                    dtype=module.time_first.dtype,
+                    device=module.time_first.device,
+                )
+                * 0.5
             )
 
             with torch.no_grad():
-                module.time_decay.data = decay_speed.reshape(num_attention_heads, module.config.num_attention_heads)
-                module.time_faaaa.data = tmp.reshape(num_attention_heads, module.config.num_attention_heads)
-                module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
+                module.time_decay.data = decay_speed
+                module.time_first.data = torch.ones_like(module.time_first * math.log(0.3) + zigzag)
 
+                module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
                 module.time_mix_value.data = torch.pow(time_weight, ratio_1_to_almost0) + 0.3 * ratio_0_to_1
                 module.time_mix_receptance.data = torch.pow(time_weight, 0.5 * ratio_1_to_almost0)
-                module.time_mix_gate.data = torch.pow(time_weight, 0.5 * ratio_1_to_almost0)
-
         elif isinstance(module, Rwkv5FeedForward):
             layer_id = module.layer_id
             num_hidden_layers = module.config.num_hidden_layers
@@ -462,11 +461,11 @@ class Rwkv5PreTrainedModel(PreTrainedModel):
                 module.time_mix_receptance.data = torch.pow(time_weight, ratio_1_to_almost0)
 
 
-# Copied from transformers.models.rwkv.modeling_rwkv.RwkvOutput with Rwkv->Rwkv5
 @dataclass
+# Copied from transformers.models.rwkv.modeling_rwkv.RwkvOutput with Rwkv->Rwkv5,RWKV->RWKV5
 class Rwkv5Output(ModelOutput):
     """
-    Class for the RWKV5 model outputs.
+    Class for the RWKV model outputs.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -476,22 +475,25 @@ class Rwkv5Output(ModelOutput):
             avoid providing the old `input_ids`.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
-            the model at the output of each layer plus the optional initial embedding outputs.
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
     """
 
     last_hidden_state: torch.FloatTensor = None
     state: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
-# Copied from transformers.models.rwkv.modeling_rwkv.RwkvCausalLMOutput with Rwkv->Rwkv5
 @dataclass
+# Copied from transformers.models.rwkv.modeling_rwkv.RwkvCausalLMOutput with Rwkv->Rwkv5
 class Rwkv5CausalLMOutput(ModelOutput):
     """
     Base class for causal language model (or autoregressive) outputs.
@@ -506,19 +508,22 @@ class Rwkv5CausalLMOutput(ModelOutput):
             avoid providing the old `input_ids`.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
-            the model at the output of each layer plus the optional initial embedding outputs.
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
     """
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     state: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 RWKV5_START_DOCSTRING = r"""
@@ -717,7 +722,7 @@ class Rwkv5Model(Rwkv5PreTrainedModel):
     """,
     RWKV5_START_DOCSTRING,
 )
-# Copied from transformers.models.rwkv.modeling_rwkv.RwkvForCausalLM with Rwkv->Rwkv5
+# Copied from transformers.models.rwkv.modeling_rwkv.RwkvForCausalLM with Rwkv->Rwkv5,RWKV->RWKV5
 class Rwkv5ForCausalLM(Rwkv5PreTrainedModel):
     _tied_weights_keys = ["head.weight"]
 
@@ -734,6 +739,24 @@ class Rwkv5ForCausalLM(Rwkv5PreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.head = new_embeddings
+
+    def generate(self, *args, **kwargs):
+        # Thin wrapper to raise exceptions when trying to generate with methods that manipulate `past_key_values`.
+        # RWKV5 is one of the few models that don't have it (it has `state` instead, which has different properties and
+        # usage).
+        try:
+            gen_output = super().generate(*args, **kwargs)
+        except AttributeError as exc:
+            # Expected exception: "AttributeError: '(object name)' object has no attribute 'past_key_values'"
+            if "past_key_values" in str(exc):
+                raise AttributeError(
+                    "You tried to call `generate` with a decoding strategy that manipulates `past_key_values`. RWKV5 "
+                    "doesn't have that attribute, try another generation strategy instead. For the available "
+                    "generation strategies, check this doc: https://huggingface.co/docs/transformers/en/generation_strategies#decoding-strategies"
+                )
+            else:
+                raise exc
+        return gen_output
 
     def prepare_inputs_for_generation(self, input_ids, state=None, inputs_embeds=None, **kwargs):
         # only last token for inputs_ids if the state is passed along.
@@ -758,7 +781,7 @@ class Rwkv5ForCausalLM(Rwkv5PreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,  # noqa
         inputs_embeds: Optional[torch.FloatTensor] = None,
         state: Optional[List[torch.FloatTensor]] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -775,7 +798,7 @@ class Rwkv5ForCausalLM(Rwkv5PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        RWKV5_outputs = self.rwkv(
+        rwkv_outputs = self.rwkv(
             input_ids,
             inputs_embeds=inputs_embeds,
             state=state,
@@ -784,7 +807,7 @@ class Rwkv5ForCausalLM(Rwkv5PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        hidden_states = RWKV5_outputs[0]
+        hidden_states = rwkv_outputs[0]
 
         logits = self.head(hidden_states)
 
@@ -800,13 +823,13 @@ class Rwkv5ForCausalLM(Rwkv5PreTrainedModel):
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + RWKV5_outputs[1:]
+            output = (logits,) + rwkv_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return Rwkv5CausalLMOutput(
             loss=loss,
             logits=logits,
-            state=RWKV5_outputs.state,
-            hidden_states=RWKV5_outputs.hidden_states,
-            attentions=RWKV5_outputs.attentions,
+            state=rwkv_outputs.state,
+            hidden_states=rwkv_outputs.hidden_states,
+            attentions=rwkv_outputs.attentions,
         )
