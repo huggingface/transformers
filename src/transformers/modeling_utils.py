@@ -3502,6 +3502,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 max_memory = get_max_memory(max_memory)
             if hf_quantizer is not None:
                 max_memory = hf_quantizer.adjust_max_memory(max_memory)
+            print(max_memory)
             device_map_kwargs["max_memory"] = max_memory
 
             # Make sure tied weights are tied before creating the device map.
@@ -3617,6 +3618,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if "skip_keys" in inspect.signature(dispatch_model).parameters:
                 device_map_kwargs["skip_keys"] = model._skip_keys_device_placement
             if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
+                print(device_map)
                 dispatch_model(model, **device_map_kwargs)
 
         if hf_quantizer is not None:

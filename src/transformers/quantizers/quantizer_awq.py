@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib.metadata
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Union
 
 from packaging import version
 
@@ -122,3 +122,7 @@ class AwqQuantizer(HfQuantizer):
         # AWQ supports PEFT fine-tuning from version 0.2.0
         MIN_AWQ_VERSION_FOR_PEFT = "0.2.0"
         return version.parse(importlib.metadata.version("autoawq")) >= version.parse(MIN_AWQ_VERSION_FOR_PEFT)
+
+    def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
+        max_memory = {key: val * 0.90 for key, val in max_memory.items()}
+        return max_memory
