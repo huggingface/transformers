@@ -87,21 +87,18 @@ class TFMistralRotaryEmbedding(tf.keras.layers.Layer):
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        self.inv_freq = self.add_weight(
-            "inv_freq", shape=(self.dim // 2,), dtype=tf.float32, initializer=get_initializer(1.0), trainable=False
-        )
-        self.inv_freq.assign(
-            1.0 / (self.base ** (tf.range(start=0, limit=self.dim, delta=2, dtype=tf.float32) / self.dim))
-        )
+        self.inv_freq = 1.0 / (self.base ** (tf.range(start=0, limit=self.dim, delta=2, dtype=tf.float32) / self.dim))
         self._set_cos_sin_cache(seq_len=max_position_embeddings, dtype=tf.float32)
 
     def _set_cos_sin_cache(self, seq_len, dtype):
         self.max_seq_len_cached = seq_len
         t = tf.cast(tf.range(self.max_seq_len_cached, dtype=tf.int64), self.inv_freq.dtype)
 
-        freqs = tf.tensordot(t, self.inv_freq, axes=0)
+        # freqs = tf.tensordot(t, self.inv_freq, axes=0)
+        freqs = tf.einsum("i,j->ij", t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = tf.concat((freqs, freqs), axis=-1)
+        emb = tf.concat([freqs, freqs], axis=-1)
+
         self.cos_cached = tf.cast(tf.cos(emb), dtype)
         self.sin_cached = tf.cast(tf.sin(emb), dtype)
 
@@ -110,17 +107,22 @@ class TFMistralRotaryEmbedding(tf.keras.layers.Layer):
         if seq_len > self.max_seq_len_cached:
             self._set_cos_sin_cache(seq_len=seq_len, dtype=x.dtype)
 
-        return (
-            tf.cast(tf.gather(self.cos_cached, seq_len), x.dtype),
-            tf.cast(tf.gather(self.sin_cached, seq_len), x.dtype),
-        )
+        cos_values = tf.gather(self.cos_cached, tf.range(seq_len))
+        cos_values = tf.cast(cos_values, dtype=x.dtype)
+        sin_values = tf.gather(self.sin_cached, tf.range(seq_len))
+        sin_values = tf.cast(sin_values, dtype=x.dtype)
+        return (cos_values, sin_values)
 
 
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
-    x1 = tf.gather(x, shape_list(x)[-1] // 2)
-    x2 = tf.gather(x, shape_list(x)[-1] // 2)
-    return tf.concat((-x2, x1), axis=-1)
+    end_index = shape_list(x)[-1]
+    mid_index = end_index // 2
+    indices1 = tf.range(mid_index)  # Indices for the first half
+    indices2 = tf.range(mid_index, end_index)  # Indices for the second half
+    x1 = tf.gather(x, indices1, axis=-1)
+    x2 = tf.gather(x, indices2, axis=-1)
+    return tf.concat([-x2, x1], axis=-1)
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
@@ -235,6 +237,8 @@ class TFMistralAttention(tf.keras.layers.Layer):
             base=self.rope_theta,
             name="rotary_emb",
         )
+        self.softmax = tf.keras.layers.Softmax(axis=-1)
+        self.dropout = tf.keras.layers.Dropout(rate=self.attention_dropout)
 
     def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
         tensor = tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim))
@@ -249,6 +253,7 @@ class TFMistralAttention(tf.keras.layers.Layer):
         past_key_value=None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        training=None,
         **kwargs,
     ) -> Tuple[tf.Tensor, Optional[tf.Tensor], Optional[Tuple[tf.Tensor]]]:
         if "padding_mask" in kwargs:
@@ -280,8 +285,17 @@ class TFMistralAttention(tf.keras.layers.Layer):
                     "with a layer index."
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        cos, sin = self.rotary_emb(
+            x=value_states,
+            seq_len=kv_seq_len,
+        )
+        query_states, key_states = apply_rotary_pos_emb(
+            q=query_states,
+            k=key_states,
+            cos=cos,
+            sin=sin,
+            position_ids=position_ids,
+        )
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
@@ -293,14 +307,14 @@ class TFMistralAttention(tf.keras.layers.Layer):
 
         attn_weights = tf.matmul(query_states, key_states, transpose_b=True) / math.sqrt(self.head_dim)
 
-        if shape_list(attn_weights) != (bsz, self.num_heads, q_len, kv_seq_len):
+        if shape_list(attn_weights) != [bsz, self.num_heads, q_len, kv_seq_len]:
             raise ValueError(
                 f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
                 f" {shape_list(attn_weights)}"
             )
 
         if attention_mask is not None:
-            if shape_list(attention_mask) != (bsz, 1, q_len, kv_seq_len):
+            if shape_list(attention_mask) != [bsz, 1, 1, kv_seq_len]:
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {shape_list(attention_mask)}"
                 )
@@ -308,11 +322,14 @@ class TFMistralAttention(tf.keras.layers.Layer):
             attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
-        attn_weights = tf.cast(tf.nn.softmax(attn_weights, axis=-1, dtype=tf.float32), query_states.dtype)
-        attn_weights = tf.nn.dropout(attn_weights, rate=self.attention_dropout, training=self.training)
+        attn_weights = tf.cast(self.softmax(attn_weights), query_states.dtype)
+        attn_weights = self.dropout(
+            attn_weights,
+            training=training,
+        )
         attn_output = tf.matmul(attn_weights, value_states)
 
-        if shape_list(attn_output) != (bsz, self.num_heads, q_len, self.head_dim):
+        if shape_list(attn_output) != [bsz, self.num_heads, q_len, self.head_dim]:
             raise ValueError(
                 f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
                 f" {shape_list(attn_output)}"
@@ -368,10 +385,6 @@ class TFMistralDecoderLayer(tf.keras.layers.Layer):
         use_cache: Optional[bool] = False,
         **kwargs,
     ) -> Tuple[tf.Tensor, Optional[Tuple[tf.Tensor, tf.Tensor]]]:
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -385,6 +398,10 @@ class TFMistralDecoderLayer(tf.keras.layers.Layer):
                 (see `past_key_values`).
             past_key_value (`Tuple(tf.Tensor)`, *optional*): cached past key and value projection states
         """
+        if "padding_mask" in kwargs:
+            warnings.warn(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
 
         residual = hidden_states
 
@@ -452,8 +469,12 @@ class TFMistralMainLayer(tf.keras.layers.Layer):
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
 
+        # TF and PT Embedding check: https://colab.research.google.com/gist/ariG23498/2b9826818875c9c4968c79cb19f55f2c/scratchpad.ipynb
         self.embed_tokens = tf.keras.layers.Embedding(
-            input_dim=config.vocab_size, output_dim=config.hidden_size, mask_zero=True, name="embed_tokens"
+            input_dim=config.vocab_size,
+            output_dim=config.hidden_size,
+            mask_zero=True,
+            name="embed_tokens",
         )
         self.layers = [
             TFMistralDecoderLayer(config, layer_idx, name=f"layers.{layer_idx}")
@@ -494,8 +515,11 @@ class TFMistralMainLayer(tf.keras.layers.Layer):
         past_key_values_length = 0
 
         if position_ids is None:
-            position_ids = tf.range(past_key_values_length, seq_length + past_key_values_length, dtype=tf.int64)
+            position_ids = tf.range(
+                start=past_key_values_length, limit=seq_length + past_key_values_length, dtype=tf.int64
+            )
             position_ids = tf.reshape(tf.expand_dims(position_ids, 0), (-1, seq_length))
+
         else:
             position_ids = tf.cast(tf.reshape(position_ids, (-1, seq_length)), tf.int64)
 
