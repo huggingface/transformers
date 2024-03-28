@@ -34,7 +34,8 @@ from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask,
 )
 from ...modeling_utils import ModelOutput, PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS, \
+    is_torch_greater_or_equal_than_1_13
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -47,11 +48,10 @@ from ...utils.import_utils import is_torch_fx_available
 from .configuration_recurrentgemma import RecurrentGemmaConfig
 from .common import TemporalBlockType
 
-
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
+    from flash_attn.bert_padding import index_first_axis, pad_input, \
+        unpad_input  # noqa
 
 # This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
 # It means that the function will not be traced through and simply appear as a node in the graph.
@@ -59,8 +59,8 @@ if is_torch_fx_available():
     if not is_torch_greater_or_equal_than_1_13:
         import torch.fx
 
-    _prepare_4d_causal_attention_mask = torch.fx.wrap(_prepare_4d_causal_attention_mask)
-
+    _prepare_4d_causal_attention_mask = torch.fx.wrap(
+        _prepare_4d_causal_attention_mask)
 
 logger = logging.get_logger(__name__)
 
@@ -72,18 +72,18 @@ _MAX_WAVELENGTH = 10_000
 
 
 class RecurrentBlockCache(NamedTuple):
-  """The cache for a recurrent block."""
+    """The cache for a recurrent block."""
 
-  rg_lru_state: torch.Tensor
-  conv1d_state: torch.Tensor
+    rg_lru_state: torch.Tensor
+    conv1d_state: torch.Tensor
 
 
 class AttentionBlockCache(NamedTuple):
-  """The cache for an attention block."""
+    """The cache for an attention block."""
 
-  keys: torch.Tensor
-  values: torch.Tensor
-  num_tokens: torch.Tensor
+    keys: torch.Tensor
+    values: torch.Tensor
+    num_tokens: torch.Tensor
 
 
 ResidualBlockCache = RecurrentBlockCache | AttentionBlockCache
@@ -94,34 +94,34 @@ def _apply_rope(
     positions: torch.Tensor,
     max_wavelength: int = _MAX_WAVELENGTH,
 ) -> torch.Tensor:
-  """Applies RoPE to the first half of inputs.
+    """Applies RoPE to the first half of inputs.
 
-  Args:
-    inputs: Queries or keys..
-    positions: Positions of each token in the sequence.
-    max_wavelength: The maximum wavelength used for the sin and cos.
+    Args:
+      inputs: Queries or keys..
+      positions: Positions of each token in the sequence.
+      max_wavelength: The maximum wavelength used for the sin and cos.
 
-  Returns:
-    Rotated keys or queries in first half (along with original in second half).
-  """
-  batch_size, sequence_length = positions.shape
-  x_rope, x = torch.chunk(inputs, 2, dim=-1)
-  positions = positions.reshape(batch_size, sequence_length, 1, 1)
+    Returns:
+      Rotated keys or queries in first half (along with original in second half).
+    """
+    batch_size, sequence_length = positions.shape
+    x_rope, x = torch.chunk(inputs, 2, dim=-1)
+    positions = positions.reshape(batch_size, sequence_length, 1, 1)
 
-  freq = torch.arange(x_rope.shape[-1] // 2, device=x.device)
-  freq_exponents = 2 * freq / x_rope.shape[-1]
-  timescale = max_wavelength**freq_exponents
-  inv_frequencies = 1.0 / timescale
+    freq = torch.arange(x_rope.shape[-1] // 2, device=x.device)
+    freq_exponents = 2 * freq / x_rope.shape[-1]
+    timescale = max_wavelength ** freq_exponents
+    inv_frequencies = 1.0 / timescale
 
-  sinusoid_imp = positions * inv_frequencies
-  sin = torch.sin(sinusoid_imp).type_as(inputs)
-  cos = torch.cos(sinusoid_imp).type_as(inputs)
+    sinusoid_imp = positions * inv_frequencies
+    sin = torch.sin(sinusoid_imp).type_as(inputs)
+    cos = torch.cos(sinusoid_imp).type_as(inputs)
 
-  first_half, second_half = torch.chunk(x_rope, 2, dim=-1)
-  first_part = first_half * cos - second_half * sin
-  second_part = second_half * cos + first_half * sin
+    first_half, second_half = torch.chunk(x_rope, 2, dim=-1)
+    first_part = first_half * cos - second_half * sin
+    second_part = second_half * cos + first_half * sin
 
-  return torch.concatenate([first_part, second_part, x], dim=-1)
+    return torch.concatenate([first_part, second_part, x], dim=-1)
 
 
 def _compute_causal_mask(
@@ -131,84 +131,86 @@ def _compute_causal_mask(
     q_segment_ids: torch.Tensor | None,
     k_segment_ids: torch.Tensor | None,
 ) -> torch.Tensor:
-  """Computes the causal mask for local attention.
+    """Computes the causal mask for local attention.
 
-  Args:
-    q_positions: Position of each query token in the sequence.
-    k_positions: Position of each key token in the sequence.
-    window_size: The local attention window size.
-    q_segment_ids: Optional segment id for each query token.
-    k_segment_ids: Optional segment id for each key token.
+    Args:
+      q_positions: Position of each query token in the sequence.
+      k_positions: Position of each key token in the sequence.
+      window_size: The local attention window size.
+      q_segment_ids: Optional segment id for each query token.
+      k_segment_ids: Optional segment id for each key token.
 
-  Returns:
-    The mask that needs to be applied to the logits of the local attention.
-  """
-  # Mask for attending only to the same segment.
-  if q_segment_ids is not None or k_segment_ids is not None:
-    assert q_segment_ids is not None and k_segment_ids is not None
-    same_segment_mask = q_segment_ids[..., None] == k_segment_ids[..., None, :]
-  else:
-    same_segment_mask = (k_positions >= 0)[..., None, :]
+    Returns:
+      The mask that needs to be applied to the logits of the local attention.
+    """
+    # Mask for attending only to the same segment.
+    if q_segment_ids is not None or k_segment_ids is not None:
+        assert q_segment_ids is not None and k_segment_ids is not None
+        same_segment_mask = q_segment_ids[..., None] == k_segment_ids[..., None,
+                                                        :]
+    else:
+        same_segment_mask = (k_positions >= 0)[..., None, :]
 
-  # Mask for attending only to previous tokens.
-  causal_mask = q_positions[..., None] >= k_positions[..., None, :]
+    # Mask for attending only to previous tokens.
+    causal_mask = q_positions[..., None] >= k_positions[..., None, :]
 
-  # Mask for attending only to things within the window size.
-  window_cond = q_positions[..., None] <= (
-      k_positions[..., None, :] + window_size
-  )
+    # Mask for attending only to things within the window size.
+    window_cond = q_positions[..., None] <= (
+        k_positions[..., None, :] + window_size
+    )
 
-  mask = torch.logical_and(causal_mask, window_cond)
-  mask = torch.logical_and(same_segment_mask, mask)
-  return mask
+    mask = torch.logical_and(causal_mask, window_cond)
+    mask = torch.logical_and(same_segment_mask, mask)
+    return mask
 
 
 def _compute_forward_pass_mask(
     segment_pos: torch.Tensor,
     window_size: int,
 ) -> torch.Tensor:
-  """Compute the forward pass mask.
+    """Compute the forward pass mask.
 
-  Args:
-    segment_pos: Position of each token in the sequence.
-    window_size: The local attention window size.
+    Args:
+      segment_pos: Position of each token in the sequence.
+      window_size: The local attention window size.
 
-  Returns:
-    The mask that needs to be applied to the logits when performing a forward
-    pass (e.g. prompt processing) of the local attention.
-  """
-  segment_ids = torch.cumsum(segment_pos == 0, dim=-1)
-  positions = torch.arange(segment_pos.shape[-1], device=segment_pos.device)
-  positions = torch.repeat_interleave(
-      positions[None], segment_pos.shape[0], dim=0
-  )
-  return _compute_causal_mask(
-      positions, positions, window_size, segment_ids, segment_ids
-  )
+    Returns:
+      The mask that needs to be applied to the logits when performing a forward
+      pass (e.g. prompt processing) of the local attention.
+    """
+    segment_ids = torch.cumsum(segment_pos == 0, dim=-1)
+    positions = torch.arange(segment_pos.shape[-1], device=segment_pos.device)
+    positions = torch.repeat_interleave(
+        positions[None], segment_pos.shape[0], dim=0
+    )
+    return _compute_causal_mask(
+        positions, positions, window_size, segment_ids, segment_ids
+    )
 
 
 def _compute_cache_mask(
     num_tokens: torch.Tensor,
     window_size: int,
 ) -> torch.Tensor:
-  """Computes the mask when there a KV-cache is present.
+    """Computes the mask when there a KV-cache is present.
 
-  Args:
-    num_tokens: The number of active tokens currently stored in the KV-cache.
-    window_size: The local attention window size.
+    Args:
+      num_tokens: The number of active tokens currently stored in the KV-cache.
+      window_size: The local attention window size.
 
-  Returns:
-    The mask that needs to be applied to the logits when performing a single
-    inference step with a KV-cache of the local attention.
-  """
-  device = num_tokens.device
-  q_positions = num_tokens[:, None]
-  k_positions = torch.arange(window_size + 1, device=device) - window_size
-  k_positions = torch.repeat_interleave(
-      k_positions[None], q_positions.shape[0], dim=0
-  )
-  k_positions = k_positions + num_tokens[:, None]
-  return _compute_causal_mask(q_positions, k_positions, window_size, None, None)
+    Returns:
+      The mask that needs to be applied to the logits when performing a single
+      inference step with a KV-cache of the local attention.
+    """
+    device = num_tokens.device
+    q_positions = num_tokens[:, None]
+    k_positions = torch.arange(window_size + 1, device=device) - window_size
+    k_positions = torch.repeat_interleave(
+        k_positions[None], q_positions.shape[0], dim=0
+    )
+    k_positions = k_positions + num_tokens[:, None]
+    return _compute_causal_mask(q_positions, k_positions, window_size, None,
+                                None)
 
 
 def _update_attention_cache(
@@ -216,27 +218,27 @@ def _update_attention_cache(
     values: torch.Tensor,
     cache: AttentionBlockCache,
 ) -> AttentionBlockCache:
-  """Updates the cache with the new keys and values.
+    """Updates the cache with the new keys and values.
 
-  Args:
-    keys: The new keys to be added to the cache.
-    values: The new values to be added to the cache.
-    cache: The dictionary with the cache to be updated.
+    Args:
+      keys: The new keys to be added to the cache.
+      values: The new values to be added to the cache.
+      cache: The dictionary with the cache to be updated.
 
-  Returns:
-    The updated cache dictionary.
-  """
-  l = keys.shape[-3]
-  window_size = cache.keys.shape[-3]
-  n_fill = min(window_size, l)
+    Returns:
+      The updated cache dictionary.
+    """
+    l = keys.shape[-3]
+    window_size = cache.keys.shape[-3]
+    n_fill = min(window_size, l)
 
-  new_keys = [cache.keys[:, n_fill:], keys[:, -n_fill:]]
-  new_values = [cache.values[:, n_fill:], values[:, -n_fill:]]
-  return AttentionBlockCache(
-      keys=torch.concatenate(new_keys, axis=-3),
-      values=torch.concatenate(new_values, axis=-3),
-      num_tokens=cache.num_tokens + keys.shape[-3],
-  )
+    new_keys = [cache.keys[:, n_fill:], keys[:, -n_fill:]]
+    new_values = [cache.values[:, n_fill:], values[:, -n_fill:]]
+    return AttentionBlockCache(
+        keys=torch.concatenate(new_keys, axis=-3),
+        values=torch.concatenate(new_values, axis=-3),
+        num_tokens=cache.num_tokens + keys.shape[-3],
+    )
 
 
 def _attention_cache_from_prompt(
@@ -245,778 +247,780 @@ def _attention_cache_from_prompt(
     segment_pos: torch.Tensor,
     window_size: int,
 ) -> AttentionBlockCache:
-  """Creates a new cache from a prompt.
+    """Creates a new cache from a prompt.
 
-  Args:
-    keys: The new keys to be added to an empty cache.
-    values: The new values to be added to an empty cache.
-    segment_pos: Positions of each token in the sequence.
-    window_size: The local attention window size.
+    Args:
+      keys: The new keys to be added to an empty cache.
+      values: The new values to be added to an empty cache.
+      segment_pos: Positions of each token in the sequence.
+      window_size: The local attention window size.
 
-  Returns:
-    An empty initialized KV-cache updated with the given keys and values.
-  """
-  w = min(window_size, keys.shape[1])
-  k_padding = torch.zeros(
-      (keys.shape[0], window_size - w, keys.shape[2], keys.shape[3]),
-      dtype=keys.dtype,
-      device=keys.device,
-  )
-  v_padding = torch.zeros(
-      (values.shape[0], window_size - w, values.shape[2], values.shape[3]),
-      dtype=values.dtype,
-      device=values.device,
-  )
-  return AttentionBlockCache(
-      keys=torch.concatenate([k_padding, keys[:, -w:]], dim=1),
-      values=torch.concatenate([v_padding, values[:, -w:]], dim=1),
-      num_tokens=segment_pos[:, -1] + 1,
-  )
+    Returns:
+      An empty initialized KV-cache updated with the given keys and values.
+    """
+    w = min(window_size, keys.shape[1])
+    k_padding = torch.zeros(
+        (keys.shape[0], window_size - w, keys.shape[2], keys.shape[3]),
+        dtype=keys.dtype,
+        device=keys.device,
+    )
+    v_padding = torch.zeros(
+        (values.shape[0], window_size - w, values.shape[2], values.shape[3]),
+        dtype=values.dtype,
+        device=values.device,
+    )
+    return AttentionBlockCache(
+        keys=torch.concatenate([k_padding, keys[:, -w:]], dim=1),
+        values=torch.concatenate([v_padding, values[:, -w:]], dim=1),
+        num_tokens=segment_pos[:, -1] + 1,
+    )
 
 
 def gelu(x: torch.Tensor) -> torch.Tensor:
-  """Returns the GELU activation function with the same approximation as JAX."""
-  return nn.functional.gelu(x, approximate="tanh")
+    """Returns the GELU activation function with the same approximation as JAX."""
+    return nn.functional.gelu(x, approximate="tanh")
 
 
 class LocalAttentionBlock(nn.Module):
-  """Local Multi-Head Attention (MHA) block."""
+    """Local Multi-Head Attention (MHA) block."""
 
-  def __init__(
-      self,
-      width: int,
-      num_heads: int,
-      window_size: int,
-      final_w_init_variance_scale: float = 1.0,
-      device: str | torch.device | None = None,
-      dtype: torch.dtype | None = None,
-  ):
-    """Initializes the local attention block.
+    def __init__(
+        self,
+        width: int,
+        num_heads: int,
+        window_size: int,
+        final_w_init_variance_scale: float = 1.0,
+        device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ):
+        """Initializes the local attention block.
 
-    Args:
-      width: The width of the block.
-      num_heads: The number of heads for the attention mechanism.
-      window_size: The local attention window size.
-      final_w_init_variance_scale: The scale for the initialization of the last
-        layer of the block.
-      device: On what device to initialize parameters. Needed to allow for
-        initializing the module without parameter initialization.
-      dtype: What dtype to use for initialziation.
-    """
-    super().__init__()
-    self.width = width
-    self.num_heads = num_heads
-    self.window_size = window_size
-    self.final_w_init_variance_scale = final_w_init_variance_scale
+        Args:
+          width: The width of the block.
+          num_heads: The number of heads for the attention mechanism.
+          window_size: The local attention window size.
+          final_w_init_variance_scale: The scale for the initialization of the last
+            layer of the block.
+          device: On what device to initialize parameters. Needed to allow for
+            initializing the module without parameter initialization.
+          dtype: What dtype to use for initialization.
+        """
+        super().__init__()
+        self.width = width
+        self.num_heads = num_heads
+        self.window_size = window_size
+        self.final_w_init_variance_scale = final_w_init_variance_scale
 
-    # Layers.
-    self.proj_q = nn.Linear(
-        in_features=self.width,
-        out_features=self.width,
-        bias=False,
-        device=device,
-        dtype=dtype,
-    )
-    self.proj_k = nn.Linear(
-        in_features=self.width,
-        out_features=self.head_dim,
-        bias=False,
-        device=device,
-        dtype=dtype,
-    )
-    self.proj_v = nn.Linear(
-        in_features=self.width,
-        out_features=self.head_dim,
-        bias=False,
-        device=device,
-        dtype=dtype,
-    )
-    self.proj_final = nn.Linear(
-        in_features=self.width,
-        out_features=self.width,
-        bias=True,
-        device=device,
-        dtype=dtype,
-    )
+        # Layers.
+        self.proj_q = nn.Linear(
+            in_features=self.width,
+            out_features=self.width,
+            bias=False,
+            device=device,
+            dtype=dtype,
+        )
+        self.proj_k = nn.Linear(
+            in_features=self.width,
+            out_features=self.head_dim,
+            bias=False,
+            device=device,
+            dtype=dtype,
+        )
+        self.proj_v = nn.Linear(
+            in_features=self.width,
+            out_features=self.head_dim,
+            bias=False,
+            device=device,
+            dtype=dtype,
+        )
+        self.proj_final = nn.Linear(
+            in_features=self.width,
+            out_features=self.width,
+            bias=True,
+            device=device,
+            dtype=dtype,
+        )
 
-    # Initialization.
-    self.reset_parameters()
+        # Initialization.
+        self.reset_parameters()
 
-  def reset_parameters(self) -> None:
-    """Resets the parameters of the module."""
-    self.w_init_(self.proj_q.weight)
-    self.w_init_(self.proj_k.weight)
-    self.w_init_(self.proj_v.weight)
-    self.out_w_init_(self.proj_final.weight)
-    torch.nn.init.zeros_(self.proj_final.bias)
+    def reset_parameters(self) -> None:
+        """Resets the parameters of the module."""
+        self.w_init_(self.proj_q.weight)
+        self.w_init_(self.proj_k.weight)
+        self.w_init_(self.proj_v.weight)
+        self.out_w_init_(self.proj_final.weight)
+        torch.nn.init.zeros_(self.proj_final.bias)
 
-  @property
-  def head_dim(self) -> int:
-    return self.width // self.num_heads
+    @property
+    def head_dim(self) -> int:
+        return self.width // self.num_heads
 
-  def w_init_(self, w: torch.Tensor) -> None:
-    """Initializes the weights of the queries, keys and values projections."""
-    torch.nn.init.normal_(w, mean=0.0, std=math.sqrt(1.0 / self.width))
+    def w_init_(self, w: torch.Tensor) -> None:
+        """Initializes the weights of the queries, keys and values projections."""
+        torch.nn.init.normal_(w, mean=0.0, std=math.sqrt(1.0 / self.width))
 
-  def out_w_init_(self, w: torch.Tensor) -> None:
-    """Initializes the weights of the final projection."""
-    std = math.sqrt(self.final_w_init_variance_scale / self.width)
-    torch.nn.init.normal_(w, mean=0.0, std=std)
+    def out_w_init_(self, w: torch.Tensor) -> None:
+        """Initializes the weights of the final projection."""
+        std = math.sqrt(self.final_w_init_variance_scale / self.width)
+        torch.nn.init.normal_(w, mean=0.0, std=std)
 
-  def forward(
-      self,
-      x: torch.Tensor,
-      segment_pos: torch.Tensor,
-      cache: AttentionBlockCache | None = None,
-  ) -> tuple[torch.Tensor, AttentionBlockCache]:
-    """Calls the local attention block.
+    def forward(
+        self,
+        x: torch.Tensor,
+        segment_pos: torch.Tensor,
+        cache: AttentionBlockCache | None = None,
+    ) -> tuple[torch.Tensor, AttentionBlockCache]:
+        """Calls the local attention block.
 
-    Args:
-      x: Sequence of input activations.
-      segment_pos: Positions of each token in the sequence.
-      cache: Optiona KV-cache for the block, of previous keys and values.
+        Args:
+          x: Sequence of input activations.
+          segment_pos: Positions of each token in the sequence.
+          cache: Optional KV-cache for the block, of previous keys and values.
 
-    Returns:
-      Output of the block together with the updated cache. If `cache` is None
-      than the returned updated cache is empty initialized and filled in from
-      the input sequence.
-    """
-    b, t, _ = x.shape
-    assert segment_pos.shape == (b, t), segment_pos.shape
+        Returns:
+          Output of the block together with the updated cache. If `cache` is None
+          than the returned updated cache is empty initialized and filled in from
+          the input sequence.
+        """
+        b, t, _ = x.shape
+        assert segment_pos.shape == (b, t), segment_pos.shape
 
-    # Generate keys, values and queries.
-    queries = self.proj_q(x)
-    keys = self.proj_k(x)
-    values = self.proj_v(x)
-    queries = einops.rearrange(
-        queries, "... (n h) -> ... n h", n=self.num_heads
-    )
-    keys = einops.rearrange(keys, "... (n h) -> ... n h", n=1)
-    values = einops.rearrange(values, "... (n h) -> ... n h", n=1)
+        # Generate keys, values and queries.
+        queries = self.proj_q(x)
+        keys = self.proj_k(x)
+        values = self.proj_v(x)
+        queries = einops.rearrange(
+            queries, "... (n h) -> ... n h", n=self.num_heads
+        )
+        keys = einops.rearrange(keys, "... (n h) -> ... n h", n=1)
+        values = einops.rearrange(values, "... (n h) -> ... n h", n=1)
 
-    # Apply rotary embeddings.
-    queries = _apply_rope(queries, segment_pos)
-    keys = _apply_rope(keys, segment_pos)
+        # Apply rotary embeddings.
+        queries = _apply_rope(queries, segment_pos)
+        keys = _apply_rope(keys, segment_pos)
 
-    if cache is not None:
-      assert t == 1, f"When cache is provided only `t=1` is supported, not {t=}"
+        if cache is not None:
+            assert t == 1, f"When cache is provided only `t=1` is supported, not {t=}"
 
-      new_cache = _update_attention_cache(keys, values, cache)
+            new_cache = _update_attention_cache(keys, values, cache)
 
-      attn_mask = _compute_cache_mask(cache.num_tokens, self.window_size)
+            attn_mask = _compute_cache_mask(cache.num_tokens, self.window_size)
 
-      keys = torch.concatenate([cache.keys, keys], dim=-3)
-      values = torch.concatenate([cache.values, values], dim=-3)
+            keys = torch.concatenate([cache.keys, keys], dim=-3)
+            values = torch.concatenate([cache.values, values], dim=-3)
 
-    else:
-      new_cache = _attention_cache_from_prompt(
-          keys, values, segment_pos, self.window_size
-      )
+        else:
+            new_cache = _attention_cache_from_prompt(
+                keys, values, segment_pos, self.window_size
+            )
 
-      attn_mask = _compute_forward_pass_mask(segment_pos, self.window_size)
+            attn_mask = _compute_forward_pass_mask(segment_pos,
+                                                   self.window_size)
 
-    # Compute attention.
-    logits = einops.einsum(queries, keys, "b t n h, b s n h -> b n t s")
-    logits = logits * (self.head_dim**-0.5)
-    # Expand for heads axis.
-    attn_mask = torch.unsqueeze(attn_mask, dim=1)
+        # Compute attention.
+        logits = einops.einsum(queries, keys, "b t n h, b s n h -> b n t s")
+        logits = logits * (self.head_dim ** -0.5)
+        # Expand for heads axis.
+        attn_mask = torch.unsqueeze(attn_mask, dim=1)
 
-    masked_logits = torch.where(attn_mask, logits, _MIN_LOGITS_VALUE)
-    masked_logits = masked_logits.type(torch.float32)
+        masked_logits = torch.where(attn_mask, logits, _MIN_LOGITS_VALUE)
+        masked_logits = masked_logits.type(torch.float32)
 
-    probs = nn.functional.softmax(masked_logits, dim=-1).type_as(x)
-    encoded = einops.einsum(probs, values, "b n t s, b s n h -> b t n h")
-    encoded = einops.rearrange(
-        encoded, "... n h -> ... (n h)", n=self.num_heads
-    )
-    attn_output = self.proj_final(encoded)
+        probs = nn.functional.softmax(masked_logits, dim=-1).type_as(x)
+        encoded = einops.einsum(probs, values, "b n t s, b s n h -> b t n h")
+        encoded = einops.rearrange(
+            encoded, "... n h -> ... (n h)", n=self.num_heads
+        )
+        attn_output = self.proj_final(encoded)
 
-    return attn_output, new_cache
+        return attn_output, new_cache
 
-  @classmethod
-  def init_cache(
-      cls,
-      batch_size: int,
-      window_size: int,
-      heads_dim: int,
-      dtype: torch.dtype,
-      device: str | torch.device | None = None,
-  ) -> AttentionBlockCache:
-    """Initializes an empty KV-cache for the block."""
-    shape = (batch_size, window_size, 1, heads_dim)
-    return AttentionBlockCache(
-        keys=torch.zeros(shape, device=device, dtype=dtype),
-        values=torch.zeros(shape, device=device, dtype=dtype),
-        num_tokens=torch.zeros([batch_size], dtype=torch.int32, device=device),
-    )
+    @classmethod
+    def init_cache(
+        cls,
+        batch_size: int,
+        window_size: int,
+        heads_dim: int,
+        dtype: torch.dtype,
+        device: str | torch.device | None = None,
+    ) -> AttentionBlockCache:
+        """Initializes an empty KV-cache for the block."""
+        shape = (batch_size, window_size, 1, heads_dim)
+        return AttentionBlockCache(
+            keys=torch.zeros(shape, device=device, dtype=dtype),
+            values=torch.zeros(shape, device=device, dtype=dtype),
+            num_tokens=torch.zeros([batch_size], dtype=torch.int32,
+                                   device=device),
+        )
 
 
 class RecurrentBlock(nn.Module):
-  """Griffin and Hawk's recurrent block."""
+    """Griffin and Hawk's recurrent block."""
 
-  def __init__(
-      self,
-      width: int,
-      num_heads: int,
-      lru_width: int | None = None,
-      conv1d_temporal_width: int = 4,
-      final_w_init_variance_scale: float = 1.0,
-      device: str | torch.device | None = None,
-      dtype: torch.dtype | None = None,
-  ):
-    """Initializes the recurrent block.
+    def __init__(
+        self,
+        width: int,
+        num_heads: int,
+        lru_width: int | None = None,
+        conv1d_temporal_width: int = 4,
+        final_w_init_variance_scale: float = 1.0,
+        device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ):
+        """Initializes the recurrent block.
 
-    Args:
-      width: The width of the block.
-      num_heads: The number of RG-LRU heads/blocks to use.
-      lru_width: Internal dimension to be projected into for RG-LRU to operate
-        on.
-      conv1d_temporal_width: The temporal width of the 1d convolution.
-      final_w_init_variance_scale: The scale for the initialization of the last
-        layer of the block.
-      device: On what device to initialize parameters. Needed to allow for
-        initializing the module without parameter initialization.
-      dtype: What dtype to use for initialziation.
-    """
-    super().__init__()
-    self.width = width
-    self.num_heads = num_heads
-    self.lru_width = lru_width or width
-    self.conv1d_temporal_width = conv1d_temporal_width
-    self.final_w_init_variance_scale = final_w_init_variance_scale
+        Args:
+          width: The width of the block.
+          num_heads: The number of RG-LRU heads/blocks to use.
+          lru_width: Internal dimension to be projected into for RG-LRU to operate
+            on.
+          conv1d_temporal_width: The temporal width of the 1d convolution.
+          final_w_init_variance_scale: The scale for the initialization of the last
+            layer of the block.
+          device: On what device to initialize parameters. Needed to allow for
+            initializing the module without parameter initialization.
+          dtype: What dtype to use for initialization.
+        """
+        super().__init__()
+        self.width = width
+        self.num_heads = num_heads
+        self.lru_width = lru_width or width
+        self.conv1d_temporal_width = conv1d_temporal_width
+        self.final_w_init_variance_scale = final_w_init_variance_scale
 
-    # Layers.
-    self.linear_y = nn.Linear(
-        in_features=self.width,
-        out_features=self.lru_width,
-        device=device,
-        dtype=dtype,
-    )
-    self.linear_x = nn.Linear(
-        in_features=self.width,
-        out_features=self.lru_width,
-        device=device,
-        dtype=dtype,
-    )
-    self.linear_out = nn.Linear(
-        in_features=self.lru_width,
-        out_features=self.width,
-        device=device,
-        dtype=dtype,
-    )
-    self.conv_1d = Conv1D(
-        width=self.lru_width,
-        temporal_width=self.conv1d_temporal_width,
-        device=device,
-        dtype=dtype,
-    )
-    self.rg_lru = RGLRU(
-        width=self.lru_width,
-        num_heads=self.num_heads,
-        device=device,
-        dtype=dtype,
-    )
-
-    # Initialization.
-    self.reset_parameters()
-
-  def reset_parameters(self) -> None:
-    """Resets the parameters of the module."""
-    self.w_init_(self.linear_x.weight)
-    torch.nn.init.zeros_(self.linear_x.bias)
-    self.w_init_(self.linear_y.weight)
-    torch.nn.init.zeros_(self.linear_y.bias)
-    self.out_w_init_(self.linear_out.weight)
-    torch.nn.init.zeros_(self.linear_out.bias)
-    self.conv_1d.reset_parameters()
-    self.rg_lru.reset_parameters()
-
-  def w_init_(self, w: torch.Tensor) -> None:
-    """Initializes the weights of the linear x and y layers of the block."""
-    torch.nn.init.normal_(w, mean=0.0, std=math.sqrt(1.0 / self.width))
-
-  def out_w_init_(self, w: torch.Tensor) -> None:
-    """Initializes the weights of the last layer of the block."""
-    std = math.sqrt(self.final_w_init_variance_scale / self.lru_width)
-    torch.nn.init.normal_(w, mean=0.0, std=std)
-
-  def forward(
-      self,
-      x: torch.Tensor,
-      segment_pos: torch.Tensor,
-      cache: RecurrentBlockCache | None = None,
-  ) -> tuple[torch.Tensor, RecurrentBlockCache]:
-    """Calls the recurrent block.
-
-    Args:
-      x: Sequence of input activations.
-      segment_pos: Position of each token in the sequence.
-      cache: Optional cache with the previous state of the RG-LRU and Conv1D.
-
-    Returns:
-      Output of the block together with the updated cache. If `cache` is None
-      than the returned updated cache is empty initialized and filled in from
-      the input sequence.
-    """
-    # y branch.
-    y = self.linear_y(x)
-    y = gelu(y)
-
-    # x branch.
-    x = self.linear_x(x)
-    x, conv1d_state = self.conv_1d(
-        x=x,
-        segment_pos=segment_pos,
-        state=None if cache is None else cache.conv1d_state,
-    )
-    x, rg_lru_state = self.rg_lru(
-        x=x,
-        segment_pos=segment_pos,
-        prev_h=None if cache is None else cache.rg_lru_state,
-    )
-
-    # Join branches.
-    x = x * y
-    x = self.linear_out(x)
-
-    return x, RecurrentBlockCache(
-        conv1d_state=conv1d_state,
-        rg_lru_state=rg_lru_state,
-    )
-
-  @classmethod
-  def init_cache(
-      cls,
-      batch_size: int,
-      lru_width: int,
-      dtype: torch.dtype,
-      conv1d_temporal_width: int = 4,
-      device: str | torch.device | None = None,
-  ) -> RecurrentBlockCache:
-    """Initializes an empty RG-LRU and Conv1D cache for the block."""
-    return RecurrentBlockCache(
-        rg_lru_state=RGLRU.init_cache(
-            batch_size=batch_size,
-            width=lru_width,
+        # Layers.
+        self.linear_y = nn.Linear(
+            in_features=self.width,
+            out_features=self.lru_width,
             device=device,
-        ),
-        conv1d_state=Conv1D.init_cache(
-            batch_size=batch_size,
-            width=lru_width,
             dtype=dtype,
-            conv1d_temporal_width=conv1d_temporal_width,
+        )
+        self.linear_x = nn.Linear(
+            in_features=self.width,
+            out_features=self.lru_width,
             device=device,
-        ),
-    )
+            dtype=dtype,
+        )
+        self.linear_out = nn.Linear(
+            in_features=self.lru_width,
+            out_features=self.width,
+            device=device,
+            dtype=dtype,
+        )
+        self.conv_1d = Conv1D(
+            width=self.lru_width,
+            temporal_width=self.conv1d_temporal_width,
+            device=device,
+            dtype=dtype,
+        )
+        self.rg_lru = RGLRU(
+            width=self.lru_width,
+            num_heads=self.num_heads,
+            device=device,
+            dtype=dtype,
+        )
+
+        # Initialization.
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        """Resets the parameters of the module."""
+        self.w_init_(self.linear_x.weight)
+        torch.nn.init.zeros_(self.linear_x.bias)
+        self.w_init_(self.linear_y.weight)
+        torch.nn.init.zeros_(self.linear_y.bias)
+        self.out_w_init_(self.linear_out.weight)
+        torch.nn.init.zeros_(self.linear_out.bias)
+        self.conv_1d.reset_parameters()
+        self.rg_lru.reset_parameters()
+
+    def w_init_(self, w: torch.Tensor) -> None:
+        """Initializes the weights of the linear x and y layers of the block."""
+        torch.nn.init.normal_(w, mean=0.0, std=math.sqrt(1.0 / self.width))
+
+    def out_w_init_(self, w: torch.Tensor) -> None:
+        """Initializes the weights of the last layer of the block."""
+        std = math.sqrt(self.final_w_init_variance_scale / self.lru_width)
+        torch.nn.init.normal_(w, mean=0.0, std=std)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        segment_pos: torch.Tensor,
+        cache: RecurrentBlockCache | None = None,
+    ) -> tuple[torch.Tensor, RecurrentBlockCache]:
+        """Calls the recurrent block.
+
+        Args:
+          x: Sequence of input activations.
+          segment_pos: Position of each token in the sequence.
+          cache: Optional cache with the previous state of the RG-LRU and Conv1D.
+
+        Returns:
+          Output of the block together with the updated cache. If `cache` is None
+          than the returned updated cache is empty initialized and filled in from
+          the input sequence.
+        """
+        # y branch.
+        y = self.linear_y(x)
+        y = gelu(y)
+
+        # x branch.
+        x = self.linear_x(x)
+        x, conv1d_state = self.conv_1d(
+            x=x,
+            segment_pos=segment_pos,
+            state=None if cache is None else cache.conv1d_state,
+        )
+        x, rg_lru_state = self.rg_lru(
+            x=x,
+            segment_pos=segment_pos,
+            prev_h=None if cache is None else cache.rg_lru_state,
+        )
+
+        # Join branches.
+        x = x * y
+        x = self.linear_out(x)
+
+        return x, RecurrentBlockCache(
+            conv1d_state=conv1d_state,
+            rg_lru_state=rg_lru_state,
+        )
+
+    @classmethod
+    def init_cache(
+        cls,
+        batch_size: int,
+        lru_width: int,
+        dtype: torch.dtype,
+        conv1d_temporal_width: int = 4,
+        device: str | torch.device | None = None,
+    ) -> RecurrentBlockCache:
+        """Initializes an empty RG-LRU and Conv1D cache for the block."""
+        return RecurrentBlockCache(
+            rg_lru_state=RGLRU.init_cache(
+                batch_size=batch_size,
+                width=lru_width,
+                device=device,
+            ),
+            conv1d_state=Conv1D.init_cache(
+                batch_size=batch_size,
+                width=lru_width,
+                dtype=dtype,
+                conv1d_temporal_width=conv1d_temporal_width,
+                device=device,
+            ),
+        )
 
 
 class MLPBlock(nn.Module):
-  """MLP block."""
+    """MLP block."""
 
-  def __init__(
-      self,
-      width: int,
-      expanded_width: int,
-      final_w_init_variance_scale: float = 1.0,
-      device: str | torch.device | None = None,
-      dtype: torch.dtype | None = None,
-  ):
-    """Initializes the MLP block.
+    def __init__(
+        self,
+        width: int,
+        expanded_width: int,
+        final_w_init_variance_scale: float = 1.0,
+        device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ):
+        """Initializes the MLP block.
 
-    Args:
-      width: The width of the block.
-      expanded_width: The width of the expansion inside the MLP block.
-      final_w_init_variance_scale: The scale for the initialization of the last
-        layer of the block.
-      device: On what device to initialize parameters. Needed to allow for
-        initializing the module without parameter initialization.
-      dtype: What dtype to use for initialziation.
-    """
-    super().__init__()
-    self.width = width
-    self.expanded_width = expanded_width
-    self.final_w_init_variance_scale = final_w_init_variance_scale
+        Args:
+          width: The width of the block.
+          expanded_width: The width of the expansion inside the MLP block.
+          final_w_init_variance_scale: The scale for the initialization of the last
+            layer of the block.
+          device: On what device to initialize parameters. Needed to allow for
+            initializing the module without parameter initialization.
+          dtype: What dtype to use for initialization.
+        """
+        super().__init__()
+        self.width = width
+        self.expanded_width = expanded_width
+        self.final_w_init_variance_scale = final_w_init_variance_scale
 
-    # Layers.
-    self.ffw_up = Einsum(
-        w_shape=(2, self.width, self.expanded_width),
-        b_shape=(2, 1, 1, self.expanded_width),
-        eqn="...td,cdD->c...tD",
-        device=device,
-        dtype=dtype,
-    )
-    self.ffw_down = nn.Linear(
-        in_features=self.expanded_width,
-        out_features=self.width,
-        device=device,
-        dtype=dtype,
-    )
+        # Layers.
+        self.ffw_up = Einsum(
+            w_shape=(2, self.width, self.expanded_width),
+            b_shape=(2, 1, 1, self.expanded_width),
+            eqn="...td,cdD->c...tD",
+            device=device,
+            dtype=dtype,
+        )
+        self.ffw_down = nn.Linear(
+            in_features=self.expanded_width,
+            out_features=self.width,
+            device=device,
+            dtype=dtype,
+        )
 
-    # Initialization.
-    self.reset_parameters()
+        # Initialization.
+        self.reset_parameters()
 
-  def reset_parameters(self) -> None:
-    """Resets the parameters of the module."""
-    self.ffw_up.reset_parameters()
-    self.out_w_init_(self.ffw_down.weight)
-    torch.nn.init.zeros_(self.ffw_down.bias)
+    def reset_parameters(self) -> None:
+        """Resets the parameters of the module."""
+        self.ffw_up.reset_parameters()
+        self.out_w_init_(self.ffw_down.weight)
+        torch.nn.init.zeros_(self.ffw_down.bias)
 
-  def out_w_init_(self, w: torch.Tensor) -> None:
-    """Initializes the weights of the last layer of the block."""
-    std = math.sqrt(self.final_w_init_variance_scale / self.expanded_width)
-    torch.nn.init.normal_(w, mean=0.0, std=std)
+    def out_w_init_(self, w: torch.Tensor) -> None:
+        """Initializes the weights of the last layer of the block."""
+        std = math.sqrt(self.final_w_init_variance_scale / self.expanded_width)
+        torch.nn.init.normal_(w, mean=0.0, std=std)
 
-  def forward(self, x: torch.Tensor) -> torch.Tensor:
-    """Calls the MLP block.
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Calls the MLP block.
 
-    Args:
-      x: Sequence of input activations.
+        Args:
+          x: Sequence of input activations.
 
-    Returns:
-      Output of the block.
-    """
-    out = self.ffw_up(x)
-    gate_value = gelu(out[0])
-    activations = gate_value * out[1]
-    return self.ffw_down(activations)
+        Returns:
+          Output of the block.
+        """
+        out = self.ffw_up(x)
+        gate_value = gelu(out[0])
+        activations = gate_value * out[1]
+        return self.ffw_down(activations)
 
 
 class ResidualBlock(nn.Module):
-  """Griffin and Hawk's residual block."""
+    """Griffin and Hawk's residual block."""
 
-  def __init__(
-      self,
-      width: int,
-      mlp_expanded_width: int,
-      num_heads: int,
-      attention_window_size: int,
-      temporal_block_type: str,
-      lru_width: int | None = None,
-      conv1d_temporal_width: int = 4,
-      final_w_init_variance_scale: float = 1.0,
-      device: str | torch.device | None = None,
-      dtype: torch.dtype | None = None,
-  ):
-    """Initializes the residual block.
+    def __init__(
+        self,
+        width: int,
+        mlp_expanded_width: int,
+        num_heads: int,
+        attention_window_size: int,
+        temporal_block_type: str,
+        lru_width: int | None = None,
+        conv1d_temporal_width: int = 4,
+        final_w_init_variance_scale: float = 1.0,
+        device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ):
+        """Initializes the residual block.
 
-    Args:
-      width: The width of the block.
-      mlp_expanded_width: The width of the expansion inside the MLP block.
-      num_heads: The number of heads for the Attention or the RG-LRU.
-      attention_window_size: The window size for the local attention block.
-      temporal_block_type: Either "recurrent" or "attention", specifying the
-        type of recurrent block to use.
-      lru_width: The width of the RG-LRU if different from `width`.
-      conv1d_temporal_width: The width of the temporal convolution.
-      final_w_init_variance_scale: The scale for the variance of the
-        initializations of the sub blocks.
-      device: On what device to initialize parameters. Needed to allow for
-        initializing the module without parameter initialization.
-      dtype: What dtype to use for initialziation.
-    """
-    super().__init__()
-    self.width = width
-    self.mlp_expanded_width = mlp_expanded_width
-    self.num_heads = num_heads
-    self.attention_window_size = attention_window_size
-    self.temporal_block_type = temporal_block_type
-    self.lru_width = lru_width
-    self.conv1d_temporal_width = conv1d_temporal_width
-    self.final_w_init_variance_scale = final_w_init_variance_scale
+        Args:
+          width: The width of the block.
+          mlp_expanded_width: The width of the expansion inside the MLP block.
+          num_heads: The number of heads for the Attention or the RG-LRU.
+          attention_window_size: The window size for the local attention block.
+          temporal_block_type: Either "recurrent" or "attention", specifying the
+            type of recurrent block to use.
+          lru_width: The width of the RG-LRU if different from `width`.
+          conv1d_temporal_width: The width of the temporal convolution.
+          final_w_init_variance_scale: The scale for the variance of the
+            initializations of the sub blocks.
+          device: On what device to initialize parameters. Needed to allow for
+            initializing the module without parameter initialization.
+          dtype: What dtype to use for initialization.
+        """
+        super().__init__()
+        self.width = width
+        self.mlp_expanded_width = mlp_expanded_width
+        self.num_heads = num_heads
+        self.attention_window_size = attention_window_size
+        self.temporal_block_type = temporal_block_type
+        self.lru_width = lru_width
+        self.conv1d_temporal_width = conv1d_temporal_width
+        self.final_w_init_variance_scale = final_w_init_variance_scale
 
-    # Sub-blocks and layers.
-    self.temporal_pre_norm = RMSNorm(
-        width=self.width, device=device, dtype=dtype
-    )
+        # Sub-blocks and layers.
+        self.temporal_pre_norm = RMSNorm(
+            width=self.width, device=device, dtype=dtype
+        )
 
-    match self.temporal_block_type:
-      case "recurrent":
-        self.recurrent_block = RecurrentBlock(
+        match self.temporal_block_type:
+            case "recurrent":
+                self.recurrent_block = RecurrentBlock(
+                    width=self.width,
+                    num_heads=self.num_heads,
+                    lru_width=self.lru_width,
+                    conv1d_temporal_width=self.conv1d_temporal_width,
+                    final_w_init_variance_scale=self.final_w_init_variance_scale,
+                    device=device,
+                    dtype=dtype,
+                )
+
+            case "attention":
+                self.attention_block = LocalAttentionBlock(
+                    width=self.width,
+                    num_heads=self.num_heads,
+                    window_size=self.attention_window_size,
+                    final_w_init_variance_scale=self.final_w_init_variance_scale,
+                    device=device,
+                    dtype=dtype,
+                )
+            case _:
+                raise ValueError(f"Unrecognized {temporal_block_type=}.")
+
+        self.channel_pre_norm = RMSNorm(
+            width=width, device=device, dtype=dtype,
+        )
+        self.mlp_block = MLPBlock(
             width=self.width,
-            num_heads=self.num_heads,
-            lru_width=self.lru_width,
-            conv1d_temporal_width=self.conv1d_temporal_width,
+            expanded_width=self.mlp_expanded_width,
             final_w_init_variance_scale=self.final_w_init_variance_scale,
             device=device,
             dtype=dtype,
         )
 
-      case "attention":
-        self.attention_block = LocalAttentionBlock(
-            width=self.width,
-            num_heads=self.num_heads,
-            window_size=self.attention_window_size,
-            final_w_init_variance_scale=self.final_w_init_variance_scale,
-            device=device,
-            dtype=dtype,
-        )
-      case _:
-        raise ValueError(f"Unrecognized {temporal_block_type=}.")
+    def reset_parameters(self) -> None:
+        """Resets the parameters of the module."""
+        self.temporal_pre_norm.reset_parameters()
+        self.temporal_block.reset_parameters()
+        self.channel_pre_norm.reset_parameters()
+        self.mlp_block.reset_parameters()
 
-    self.channel_pre_norm = RMSNorm(
-        width=width, device=device, dtype=dtype,
-    )
-    self.mlp_block = MLPBlock(
-        width=self.width,
-        expanded_width=self.mlp_expanded_width,
-        final_w_init_variance_scale=self.final_w_init_variance_scale,
-        device=device,
-        dtype=dtype,
-    )
+    @property
+    def temporal_block(self) -> nn.Module:
+        """Alias for the temporal block.
 
-  def reset_parameters(self) -> None:
-    """Resets the parameters of the module."""
-    self.temporal_pre_norm.reset_parameters()
-    self.temporal_block.reset_parameters()
-    self.channel_pre_norm.reset_parameters()
-    self.mlp_block.reset_parameters()
+        This creates a common interface while making the layer / parameter types
+        easily identifiable by name in a state dictionary.
+        """
+        match self.temporal_block_type:
+            case "recurrent":
+                return self.recurrent_block
+            case "attention":
+                return self.attention_block
+            case _:
+                raise ValueError(f"Unrecognized {self.temporal_block_type=}.")
 
-  @property
-  def temporal_block(self) -> nn.Module:
-    """Alias for the temporal block.
+    def forward(
+        self,
+        x: torch.Tensor,
+        segment_pos: torch.Tensor,
+        cache: ResidualBlockCache | None = None,
+    ) -> tuple[torch.Tensor, ResidualBlockCache]:
+        """Calls the residual block.
 
-    This creates a common interface while making the layer / parameter types
-    easily identifiable by name in a state dictionary.
-    """
-    match self.temporal_block_type:
-      case "recurrent":
-        return self.recurrent_block
-      case "attention":
-        return self.attention_block
-      case _:
-        raise ValueError(f"Unrecognized {self.temporal_block_type=}.")
+        Args:
+          x: Sequence of input activations.
+          segment_pos: Positions of each token in the sequence.
+          cache: Optional cache for the block.
 
-  def forward(
-      self,
-      x: torch.Tensor,
-      segment_pos: torch.Tensor,
-      cache: ResidualBlockCache | None = None,
-  ) -> tuple[torch.Tensor, ResidualBlockCache]:
-    """Calls the residual block.
+        Returns:
+          Output of the block together with the updated cache. If `cache` is None
+          than the returned updated cache is empty initialized and filled in from
+          the input sequence.
+        """
+        raw_x = x
 
-    Args:
-      x: Sequence of input activations.
-      segment_pos: Positions of each token in the sequence.
-      cache: Optional cache for the block.
+        inputs_normalized = self.temporal_pre_norm(raw_x)
+        x, cache = self.temporal_block(inputs_normalized, segment_pos, cache)
 
-    Returns:
-      Output of the block together with the updated cache. If `cache` is None
-      than the returned updated cache is empty initialized and filled in from
-      the input sequence.
-    """
-    raw_x = x
+        residual = x + raw_x
 
-    inputs_normalized = self.temporal_pre_norm(raw_x)
-    x, cache = self.temporal_block(inputs_normalized, segment_pos, cache)
+        x = self.channel_pre_norm(residual)
+        x = self.mlp_block(x)
 
-    residual = x + raw_x
+        x = x + residual
 
-    x = self.channel_pre_norm(residual)
-    x = self.mlp_block(x)
+        return x, cache
 
-    x = x + residual
-
-    return x, cache
-
-  @classmethod
-  def init_cache(
-      cls,
-      batch_size: int,
-      width: int,
-      num_heads: int,
-      attention_window_size: int,
-      temporal_block_type: str,
-      dtype: torch.dtype,
-      lru_width: int | None = None,
-      conv1d_temporal_width: int = 4,
-      device: str | torch.device | None = None,
-  ) -> ResidualBlockCache:
-    """Initializes an empty cache for the block."""
-    match temporal_block_type:
-      case "recurrent":
-        return RecurrentBlock.init_cache(
-            batch_size=batch_size,
-            lru_width=lru_width or width,
-            dtype=dtype,
-            conv1d_temporal_width=conv1d_temporal_width,
-            device=device,
-        )
-      case "attention":
-        return LocalAttentionBlock.init_cache(
-            batch_size=batch_size,
-            window_size=attention_window_size,
-            heads_dim=width // num_heads,
-            dtype=dtype,
-            device=device,
-        )
-      case _:
-        raise ValueError(f"Unrecognized {temporal_block_type=}.")
+    @classmethod
+    def init_cache(
+        cls,
+        batch_size: int,
+        width: int,
+        num_heads: int,
+        attention_window_size: int,
+        temporal_block_type: str,
+        dtype: torch.dtype,
+        lru_width: int | None = None,
+        conv1d_temporal_width: int = 4,
+        device: str | torch.device | None = None,
+    ) -> ResidualBlockCache:
+        """Initializes an empty cache for the block."""
+        match temporal_block_type:
+            case "recurrent":
+                return RecurrentBlock.init_cache(
+                    batch_size=batch_size,
+                    lru_width=lru_width or width,
+                    dtype=dtype,
+                    conv1d_temporal_width=conv1d_temporal_width,
+                    device=device,
+                )
+            case "attention":
+                return LocalAttentionBlock.init_cache(
+                    batch_size=batch_size,
+                    window_size=attention_window_size,
+                    heads_dim=width // num_heads,
+                    dtype=dtype,
+                    device=device,
+                )
+            case _:
+                raise ValueError(f"Unrecognized {temporal_block_type=}.")
 
 
 class Embedder(nn.Module):
-  """Embedder module."""
+    """Embedder module."""
 
-  def __init__(
-      self,
-      vocab_size: int,
-      embed_dim: int,
-      scale_by_sqrt_dim: bool,
-      device: str | torch.device | None = None,
-      dtype: torch.dtype | None = None,
-  ):
-    """Initializes the embedder.
+    def __init__(
+        self,
+        vocab_size: int,
+        embed_dim: int,
+        scale_by_sqrt_dim: bool,
+        device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ):
+        """Initializes the embedder.
 
-    Args:
-      vocab_size: The size of the token vocabulary.
-      embed_dim: The dimensionality of each token embedding.
-      scale_by_sqrt_dim: Whether to scale the output of the block by
-        `sqrt(self.embed_dim)`
-      device: On what device to initialize parameters. Needed to allow for
-        initializing the module without parameter initialization.
-      dtype: What dtype to use for initialziation.
-    """
-    super().__init__()
-    self.vocab_size = vocab_size
-    self.embed_dim = embed_dim
-    self.scale_by_sqrt_dim = scale_by_sqrt_dim
+        Args:
+          vocab_size: The size of the token vocabulary.
+          embed_dim: The dimensionality of each token embedding.
+          scale_by_sqrt_dim: Whether to scale the output of the block by
+            `sqrt(self.embed_dim)`
+          device: On what device to initialize parameters. Needed to allow for
+            initializing the module without parameter initialization.
+          dtype: What dtype to use for initialization.
+        """
+        super().__init__()
+        self.vocab_size = vocab_size
+        self.embed_dim = embed_dim
+        self.scale_by_sqrt_dim = scale_by_sqrt_dim
 
-    # Parameters.
-    self.input_embedding = nn.Parameter(
-        torch.empty(
-            [self.vocab_size, self.embed_dim], device=device, dtype=dtype
+        # Parameters.
+        self.input_embedding = nn.Parameter(
+            torch.empty(
+                [self.vocab_size, self.embed_dim], device=device, dtype=dtype
+            )
         )
-    )
 
-    # Initialization
-    self.reset_parameters()
+        # Initialization
+        self.reset_parameters()
 
-  def reset_parameters(self) -> None:
-    """Resets the parameters of the module."""
-    torch.nn.init.normal_(
-        self.input_embedding,
-        mean=0.0,
-        std=math.sqrt(1.0 / self.embed_dim),
-    )
+    def reset_parameters(self) -> None:
+        """Resets the parameters of the module."""
+        torch.nn.init.normal_(
+            self.input_embedding,
+            mean=0.0,
+            std=math.sqrt(1.0 / self.embed_dim),
+        )
 
-  def encode(self, x: torch.Tensor) -> torch.Tensor:
-    """Encodes an input sequence of tokens."""
-    x = self.input_embedding[(x,)]
-    if self.scale_by_sqrt_dim:
-      # Cast to bfloat16 to match training.
-      x = x * torch.tensor(math.sqrt(self.embed_dim)).type(torch.bfloat16)
-    return x
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
+        """Encodes an input sequence of tokens."""
+        x = self.input_embedding[(x,)]
+        if self.scale_by_sqrt_dim:
+            # Cast to bfloat16 to match training.
+            x = x * torch.tensor(math.sqrt(self.embed_dim)).type(torch.bfloat16)
+        return x
 
-  def decode(self, x: torch.Tensor) -> torch.Tensor:
-    """Decodes an input sequence of activations."""
-    return x @ self.input_embedding.T
+    def decode(self, x: torch.Tensor) -> torch.Tensor:
+        """Decodes an input sequence of activations."""
+        return x @ self.input_embedding.T
 
 
 class RMSNorm(nn.Module):
-  """RMS Norm."""
+    """RMS Norm."""
 
-  def __init__(
-      self,
-      width: int,
-      eps: float = 1e-6,
-      device: str | torch.device | None = None,
-      dtype: torch.dtype | None = None,
-  ):
-    """Initializes the RMSNorm.
+    def __init__(
+        self,
+        width: int,
+        eps: float = 1e-6,
+        device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ):
+        """Initializes the RMSNorm.
 
-    Args:
-      width: The number of dimensions of the input and output.
-      eps: Small constant added to the square root when normalizing.
-      device: On what device to initialize parameters. Needed to allow for
-        initializing the module without parameter initialzation.
-      dtype: What dtype to use for initialziation.
-    """
-    super().__init__()
-    self.width = width
-    self.eps = eps
+        Args:
+          width: The number of dimensions of the input and output.
+          eps: Small constant added to the square root when normalizing.
+          device: On what device to initialize parameters. Needed to allow for
+            initializing the module without parameter initialization.
+          dtype: What dtype to use for initialization.
+        """
+        super().__init__()
+        self.width = width
+        self.eps = eps
 
-    # Parameters.
-    self.scale = nn.Parameter(torch.empty(
-        [self.width], device=device, dtype=dtype
-    ))
+        # Parameters.
+        self.scale = nn.Parameter(torch.empty(
+            [self.width], device=device, dtype=dtype
+        ))
 
-    # Initialization
-    self.reset_parameters()
+        # Initialization
+        self.reset_parameters()
 
-  def reset_parameters(self) -> None:
-    """Resets the parameters of the module."""
-    torch.nn.init.zeros_(self.scale)
+    def reset_parameters(self) -> None:
+        """Resets the parameters of the module."""
+        torch.nn.init.zeros_(self.scale)
 
-  def forward(self, x: torch.Tensor) -> torch.Tensor:
-    """Calls the RMSNorm."""
-    var = torch.mean(torch.square(x), axis=-1, keepdims=True)
-    normed_x = x * torch.rsqrt(var + self.eps)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Calls the RMSNorm."""
+        var = torch.mean(torch.square(x), axis=-1, keepdims=True)
+        normed_x = x * torch.rsqrt(var + self.eps)
 
-    scale = torch.reshape(self.scale, [1 for _ in range(x.ndim - 1)] + [-1])
+        scale = torch.reshape(self.scale, [1 for _ in range(x.ndim - 1)] + [-1])
 
-    return normed_x * (scale + 1)
+        return normed_x * (scale + 1)
 
 
 class BlockDiagonalLinear(nn.Module):
-  """Block-diagonal linear layer."""
+    """Block-diagonal linear layer."""
 
-  def __init__(
-      self,
-      width: int,
-      num_blocks: int,
-      w_init_variance_scale: float = 1.0,
-      device: str | torch.device | None = None,
-      dtype: torch.dtype | None = None,
-  ):
-    """Initializes the BlockDiagonalLinear.
+    def __init__(
+        self,
+        width: int,
+        num_blocks: int,
+        w_init_variance_scale: float = 1.0,
+        device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ):
+        """Initializes the BlockDiagonalLinear.
 
-    Args:
-      width: The number of dimensions of the input and output.
-      num_blocks: The number of diagonal blocks in the layer.
-      w_init_variance_scale: A parameters that scales the variance of the
-        initialization of the weights.
-      device: On what device to initialize parameters. Needed to allow for
-        initializing the module without parameter initialzation.
-      dtype: What dtype to use for initialziation.
-    """
-    super().__init__()
-    self.width = width
-    self.num_blocks = num_blocks
-    self.w_init_variance_scale = w_init_variance_scale
-    self.block_width = self.width // self.num_blocks
+        Args:
+          width: The number of dimensions of the input and output.
+          num_blocks: The number of diagonal blocks in the layer.
+          w_init_variance_scale: A parameters that scales the variance of the
+            initialization of the weights.
+          device: On what device to initialize parameters. Needed to allow for
+            initializing the module without parameter initialization.
+          dtype: What dtype to use for initialization.
+        """
+        super().__init__()
+        self.width = width
+        self.num_blocks = num_blocks
+        self.w_init_variance_scale = w_init_variance_scale
+        self.block_width = self.width // self.num_blocks
 
-    # Parameters.
-    self.w = nn.Parameter(torch.empty(
-        [self.num_blocks, self.block_width, self.block_width],
-        device=device,
-        dtype=dtype
-    ))
-    self.b = nn.Parameter(torch.empty(
-        [self.num_blocks, self.block_width], device=device, dtype=dtype
-    ))
+        # Parameters.
+        self.w = nn.Parameter(torch.empty(
+            [self.num_blocks, self.block_width, self.block_width],
+            device=device,
+            dtype=dtype
+        ))
+        self.b = nn.Parameter(torch.empty(
+            [self.num_blocks, self.block_width], device=device, dtype=dtype
+        ))
 
-    # Initialization.
-    self.reset_parameters()
+        # Initialization.
+        self.reset_parameters()
 
-  def reset_parameters(self) -> None:
-    """Resets the parameters of the module."""
-    self.w_init_(self.w)
-    torch.nn.init.zeros_(self.b)
+    def reset_parameters(self) -> None:
+        """Resets the parameters of the module."""
+        self.w_init_(self.w)
+        torch.nn.init.zeros_(self.b)
 
-  def w_init_(self, w: torch.Tensor) -> None:
-    """Initializes the weight `w` of the layer."""
-    std = math.sqrt(self.w_init_variance_scale / self.block_width)
-    torch.nn.init.normal_(w, mean=0.0, std=std)
+    def w_init_(self, w: torch.Tensor) -> None:
+        """Initializes the weight `w` of the layer."""
+        std = math.sqrt(self.w_init_variance_scale / self.block_width)
+        torch.nn.init.normal_(w, mean=0.0, std=std)
 
-  def forward(self, x: torch.Tensor) -> torch.Tensor:
-    """Calls the BlockDiagonalLinear."""
-    # Split x to blocks.
-    x = einops.rearrange(x, "... (h i) -> ... h i", h=self.num_blocks)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Calls the BlockDiagonalLinear."""
+        # Split x to blocks.
+        x = einops.rearrange(x, "... (h i) -> ... h i", h=self.num_blocks)
 
-    # Linear layer over each block + bias.
-    y = torch.einsum("... h i, h i j -> ... h j", x, self.w) + self.b
+        # Linear layer over each block + bias.
+        y = torch.einsum("... h i, h i j -> ... h j", x, self.w) + self.b
 
-    # Flatten the output.
-    return einops.rearrange(y, "... h j -> ... (h j)", h=self.num_blocks)
+        # Flatten the output.
+        return einops.rearrange(y, "... h j -> ... (h j)", h=self.num_blocks)
 
 
 def rnn_scan(
@@ -1026,50 +1030,50 @@ def rnn_scan(
     h0: torch.Tensor | None,
     acc_dtype: torch.dtype = torch.float32,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-  """Runs the recurrence of a linear RNN.
+    """Runs the recurrence of a linear RNN.
 
-  Args:
-    x: The input sequence.
-    a: The diagonal of the recurrence matrix `A`.
-    reset: Indicator of document boundaries, e.g. when to reset the hidden state
-      of the RNN.
-    h0: The initial hidden state.
-    acc_dtype: The data type for the accumulation.
+    Args:
+      x: The input sequence.
+      a: The diagonal of the recurrence matrix `A`.
+      reset: Indicator of document boundaries, e.g. when to reset the hidden state
+        of the RNN.
+      h0: The initial hidden state.
+      acc_dtype: The data type for the accumulation.
 
-  Returns:
-    The output of the linear recurrence.
-  """
-  assert x.ndim == 3
-  assert a.shape == x.shape[-a.ndim :]
-  assert a.dtype == x.dtype
-  assert type(a) is type(x)
-  assert h0 is None or h0.dtype == acc_dtype
+    Returns:
+      The output of the linear recurrence.
+    """
+    assert x.ndim == 3
+    assert a.shape == x.shape[-a.ndim:]
+    assert a.dtype == x.dtype
+    assert type(a) is type(x)
+    assert h0 is None or h0.dtype == acc_dtype
 
-  # Multiply `a` by the reset.
-  a = a * ~reset[..., None]
+    # Multiply `a` by the reset.
+    a = a * ~reset[..., None]
 
-  if x.shape[1] == 1:
-    # Using scan in sampling mode.
-    if h0 is None:
-      return x, x[:, 0].type(acc_dtype)
+    if x.shape[1] == 1:
+        # Using scan in sampling mode.
+        if h0 is None:
+            return x, x[:, 0].type(acc_dtype)
+
+        else:
+            y = a.type(acc_dtype) * h0[:, None] + x.type(acc_dtype)
+            return y.type(x.dtype), y[:, -1]
 
     else:
-      y = a.type(acc_dtype) * h0[:, None] + x.type(acc_dtype)
-      return y.type(x.dtype), y[:, -1]
+        # Using scan in linear mode.
+        if h0 is not None:
+            h_t = h0
+        else:
+            h_t = torch.zeros(x[:, 0].shape, dtype=acc_dtype, device=x.device)
 
-  else:
-    # Using scan in linear mode.
-    if h0 is not None:
-      h_t = h0
-    else:
-      h_t = torch.zeros(x[:, 0].shape, dtype=acc_dtype, device=x.device)
+        y = torch.zeros_like(x)
+        for t in range(x.shape[1]):
+            h_t = a[:, t].type(acc_dtype) * h_t + x[:, t].type(acc_dtype)
+            y[:, t] = h_t.type(x.dtype)
 
-    y = torch.zeros_like(x)
-    for t in range(x.shape[1]):
-      h_t = a[:, t].type(acc_dtype) * h_t + x[:, t].type(acc_dtype)
-      y[:, t] = h_t.type(x.dtype)
-
-  return y, h_t
+    return y, h_t
 
 
 def rnn_param_init(
@@ -1079,456 +1083,462 @@ def rnn_param_init(
     transform: str = "softplus",
     eps: float = 1e-8,
 ) -> torch.Tensor:
-  """Initializes the `A` parameter of the RG-LRU uniformly on a ring."""
-  with torch.no_grad():
-    # Proportional to area in a ring.
-    # 0.5 * jnp.log(unif * (max_rad**2 - min_rad**2) + min_rad**2 + 1e-8)
-    tensor.uniform_(min_rad ** 2 + eps, max_rad ** 2 + eps)
-    tensor.log_().mul_(0.5)
+    """Initializes the `A` parameter of the RG-LRU uniformly on a ring."""
+    with torch.no_grad():
+        # Proportional to area in a ring.
+        # 0.5 * jnp.log(unif * (max_rad**2 - min_rad**2) + min_rad**2 + 1e-8)
+        tensor.uniform_(min_rad ** 2 + eps, max_rad ** 2 + eps)
+        tensor.log_().mul_(0.5)
 
-    if transform == "softplus":
-      # Inverse transform.
-      # jnp.log(jnp.exp(-a_real) - 1.0).astype(dtype)
-      return tensor.neg_().exp_().sub_(1.0).log_()
-    else:
-      raise NotImplementedError()
+        if transform == "softplus":
+            # Inverse transform.
+            # jnp.log(jnp.exp(-a_real) - 1.0).astype(dtype)
+            return tensor.neg_().exp_().sub_(1.0).log_()
+        else:
+            raise NotImplementedError()
 
 
 class SqrtBoundDerivative(torch.autograd.Function):
-  """Computes a square root with a gradient clipped at `_MAX_SQRT_GRADIENT`."""
+    """Computes a square root with a gradient clipped at `_MAX_SQRT_GRADIENT`."""
 
-  @staticmethod
-  def forward(ctx, x: torch.Tensor) -> torch.Tensor:
-    """The forward pass, which is a normal `sqrt`."""
-    ctx.save_for_backward(x)
-    return torch.sqrt(x)
+    @staticmethod
+    def forward(ctx, x: torch.Tensor) -> torch.Tensor:
+        """The forward pass, which is a normal `sqrt`."""
+        ctx.save_for_backward(x)
+        return torch.sqrt(x)
 
-  @staticmethod
-  def backward(ctx, grad_output: torch.Tensor) -> torch.Tensor:
-    """The backward pass, which clips the `sqrt` gradient."""
-    (x,) = ctx.saved_tensors
-    clipped_x_times_4 = torch.clip(4.0 * x, min=1 / (_MAX_SQRT_GRADIENT**2))
-    return grad_output / torch.sqrt(clipped_x_times_4)
+    @staticmethod
+    def backward(ctx, grad_output: torch.Tensor) -> torch.Tensor:
+        """The backward pass, which clips the `sqrt` gradient."""
+        (x,) = ctx.saved_tensors
+        clipped_x_times_4 = torch.clip(4.0 * x,
+                                       min=1 / (_MAX_SQRT_GRADIENT ** 2))
+        return grad_output / torch.sqrt(clipped_x_times_4)
 
 
 class RGLRU(nn.Module):
-  """A Real-Gated Linear Recurrent Unit (RG-LRU) layer."""
+    """A Real-Gated Linear Recurrent Unit (RG-LRU) layer."""
 
-  def __init__(
-      self,
-      width: int,
-      num_heads: int,
-      w_init_variance_scale: float = 1.0,
-      device: str | torch.device | None = None,
-      dtype: torch.dtype | None = None,
-  ):
-    """Initializes the RG-LRU.
+    def __init__(
+        self,
+        width: int,
+        num_heads: int,
+        w_init_variance_scale: float = 1.0,
+        device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ):
+        """Initializes the RG-LRU.
 
-    Args:
-      width: The number of dimensions of the input and output.
-      num_heads: The number of diagonal blocks in the input and A gate layers.
-      w_init_variance_scale: Initialization parameter for the
-        BlockDiagonalLinear layers of the gates. See the `BlockDiagonalLinear`
-        layer for details.
-      device: On what device to initialize parameters. Needed to allow for
-        initializing the module without parameter initialzation.
-      dtype: What dtype to use for initialziation.
-    """
-    super().__init__()
-    self.width = width
-    self.num_heads = num_heads
-    self.w_init_variance_scale = w_init_variance_scale
+        Args:
+          width: The number of dimensions of the input and output.
+          num_heads: The number of diagonal blocks in the input and A gate layers.
+          w_init_variance_scale: Initialization parameter for the
+            BlockDiagonalLinear layers of the gates. See the `BlockDiagonalLinear`
+            layer for details.
+          device: On what device to initialize parameters. Needed to allow for
+            initializing the module without parameter initialization.
+          dtype: What dtype to use for initialization.
+        """
+        super().__init__()
+        self.width = width
+        self.num_heads = num_heads
+        self.w_init_variance_scale = w_init_variance_scale
 
-    # Parameters and layers.
-    self.a_param = nn.Parameter(torch.empty(
-        [self.width], device=device, dtype=dtype
-    ))
-    self.input_gate = BlockDiagonalLinear(
-        width=self.width,
-        num_blocks=self.num_heads,
-        w_init_variance_scale=w_init_variance_scale,
-        device=device,
-        dtype=dtype,
-    )
-    self.a_gate = BlockDiagonalLinear(
-        width=self.width,
-        num_blocks=self.num_heads,
-        w_init_variance_scale=self.w_init_variance_scale,
-        device=device,
-        dtype=dtype,
-    )
+        # Parameters and layers.
+        self.a_param = nn.Parameter(torch.empty(
+            [self.width], device=device, dtype=dtype
+        ))
+        self.input_gate = BlockDiagonalLinear(
+            width=self.width,
+            num_blocks=self.num_heads,
+            w_init_variance_scale=w_init_variance_scale,
+            device=device,
+            dtype=dtype,
+        )
+        self.a_gate = BlockDiagonalLinear(
+            width=self.width,
+            num_blocks=self.num_heads,
+            w_init_variance_scale=self.w_init_variance_scale,
+            device=device,
+            dtype=dtype,
+        )
 
-    # Initialization
-    self.reset_parameters()
+        # Initialization
+        self.reset_parameters()
 
-  def reset_parameters(self) -> None:
-    """Resets the parameters of the module."""
-    self.input_gate.reset_parameters()
-    self.a_gate.reset_parameters()
-    self.a_param_init(self.a_param)
+    def reset_parameters(self) -> None:
+        """Resets the parameters of the module."""
+        self.input_gate.reset_parameters()
+        self.a_gate.reset_parameters()
+        self.a_param_init(self.a_param)
 
-  def a_param_init(self, w: torch.Tensor) -> torch.Tensor:
-    """Initializes the `A` parameter of the RG-LRU."""
-    return rnn_param_init(w, min_rad=0.9, max_rad=0.999)
+    def a_param_init(self, w: torch.Tensor) -> torch.Tensor:
+        """Initializes the `A` parameter of the RG-LRU."""
+        return rnn_param_init(w, min_rad=0.9, max_rad=0.999)
 
-  def __call__(
-      self,
-      x: torch.Tensor,
-      segment_pos: torch.Tensor,
-      prev_h: torch.Tensor | None = None,
-  ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Calls the RG-LRU.
+    def __call__(
+        self,
+        x: torch.Tensor,
+        segment_pos: torch.Tensor,
+        prev_h: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Calls the RG-LRU.
 
-    Args:
-      x: Sequence of input activations.
-      segment_pos: Position of each token in the sequence.
-      prev_h: The previous hidden state of the RG-LRU.
+        Args:
+          x: Sequence of input activations.
+          segment_pos: Position of each token in the sequence.
+          prev_h: The previous hidden state of the RG-LRU.
 
-    Returns:
-      Output of the block together with the updated hidden state.
-    """
+        Returns:
+          Output of the block together with the updated hidden state.
+        """
 
-    bs, l, _ = x.shape
-    assert segment_pos.shape == (bs, l)
-    reset = segment_pos == 0
+        bs, l, _ = x.shape
+        assert segment_pos.shape == (bs, l)
+        reset = segment_pos == 0
 
-    # Gates for x and a.
-    gate_x = torch.sigmoid(self.input_gate(x))
-    gate_a = torch.sigmoid(self.a_gate(x))
+        # Gates for x and a.
+        gate_x = torch.sigmoid(self.input_gate(x))
+        gate_a = torch.sigmoid(self.a_gate(x))
 
-    # Compute the parameter `A` of the recurrence.
-    log_a = -8.0 * gate_a * nn.functional.softplus(self.a_param)
-    a = torch.exp(log_a)
-    a_square = torch.exp(2 * log_a)
+        # Compute the parameter `A` of the recurrence.
+        log_a = -8.0 * gate_a * nn.functional.softplus(self.a_param)
+        a = torch.exp(log_a)
+        a_square = torch.exp(2 * log_a)
 
-    # Gate the input.
-    gated_x = x * gate_x
+        # Gate the input.
+        gated_x = x * gate_x
 
-    # Apply gamma normalization to the input. We need to clip the derivatives of
-    # `sqrt` in order to prevent NaNs during training in bfloat16.
-    multiplier = SqrtBoundDerivative.apply(1 - a_square)
-    multiplier = reset[..., None] + ~reset[..., None] * multiplier
-    normalized_x = gated_x * multiplier.type(x.dtype)
+        # Apply gamma normalization to the input. We need to clip the derivatives of
+        # `sqrt` in order to prevent NaNs during training in bfloat16.
+        multiplier = SqrtBoundDerivative.apply(1 - a_square)
+        multiplier = reset[..., None] + ~reset[..., None] * multiplier
+        normalized_x = gated_x * multiplier.type(x.dtype)
 
-    y, last_h = rnn_scan(
-        x=normalized_x,
-        a=a,
-        reset=reset,
-        h0=prev_h,
-    )
-    return y, last_h
+        y, last_h = rnn_scan(
+            x=normalized_x,
+            a=a,
+            reset=reset,
+            h0=prev_h,
+        )
+        return y, last_h
 
-  @classmethod
-  def init_cache(
-      cls,
-      batch_size: int,
-      width: int,
-      device: str | torch.device | None = None,
-  ) -> torch.Tensor:
-    """Returns an empty initialized cache for the RG-LRU."""
-    # RG-LRU cache always in float32.
-    return torch.zeros((batch_size, width), dtype=torch.float32, device=device)
+    @classmethod
+    def init_cache(
+        cls,
+        batch_size: int,
+        width: int,
+        device: str | torch.device | None = None,
+    ) -> torch.Tensor:
+        """Returns an empty initialized cache for the RG-LRU."""
+        # RG-LRU cache always in float32.
+        return torch.zeros((batch_size, width), dtype=torch.float32,
+                           device=device)
 
 
 class Conv1D(nn.Module):
-  """A 1D temporal convolution layer."""
+    """A 1D temporal convolution layer."""
 
-  def __init__(
-      self,
-      width: int,
-      temporal_width: int,
-      w_init_variance_scale: float = 0.01,
-      device: str | torch.device | None = None,
-      dtype: torch.dtype | None = None,
-  ):
-    """Initializes the Conv1D.
+    def __init__(
+        self,
+        width: int,
+        temporal_width: int,
+        w_init_variance_scale: float = 0.01,
+        device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ):
+        """Initializes the Conv1D.
 
-    Args:
-      width: The number of features for both inputs and outputs.
-      temporal_width: The size of the temporal receptive field of the
-        convolution. In other words, how much back in time the convolution can
-        look to produce an output.
-      w_init_variance_scale: A parameter that scales the variance of the
-        initialization of the weights.
-      device: On what device to initialize parameters. Needed to allow for
-        initializing the module without parameter initialzation.
-      dtype: What dtype to use for initialziation.
-    """
-    super().__init__()
-    self.width = width
-    self.temporal_width = temporal_width
-    self.w_init_variance_scale = w_init_variance_scale
+        Args:
+          width: The number of features for both inputs and outputs.
+          temporal_width: The size of the temporal receptive field of the
+            convolution. In other words, how much back in time the convolution can
+            look to produce an output.
+          w_init_variance_scale: A parameter that scales the variance of the
+            initialization of the weights.
+          device: On what device to initialize parameters. Needed to allow for
+            initializing the module without parameter initialzation.
+          dtype: What dtype to use for initialziation.
+        """
+        super().__init__()
+        self.width = width
+        self.temporal_width = temporal_width
+        self.w_init_variance_scale = w_init_variance_scale
 
-    # Parameters.
-    self.w = nn.Parameter(torch.empty(
-        [self.temporal_width, self.width], device=device, dtype=dtype
-    ))
-    self.b = nn.Parameter(torch.empty([width], device=device, dtype=dtype))
+        # Parameters.
+        self.w = nn.Parameter(torch.empty(
+            [self.temporal_width, self.width], device=device, dtype=dtype
+        ))
+        self.b = nn.Parameter(torch.empty([width], device=device, dtype=dtype))
 
-    # Initialization.
-    self.reset_parameters()
+        # Initialization.
+        self.reset_parameters()
 
-  def reset_parameters(self) -> None:
-    """Resets the parameters of the module."""
-    self.w_init_(self.w)
-    torch.nn.init.zeros_(self.b)
+    def reset_parameters(self) -> None:
+        """Resets the parameters of the module."""
+        self.w_init_(self.w)
+        torch.nn.init.zeros_(self.b)
 
-  def w_init_(self, w: torch.Tensor) -> None:
-    """Initializes the weight matrix `w` of the Conv1D."""
-    std = math.sqrt(self.w_init_variance_scale / self.temporal_width)
-    torch.nn.init.normal_(w, mean=0.0, std=std)
+    def w_init_(self, w: torch.Tensor) -> None:
+        """Initializes the weight matrix `w` of the Conv1D."""
+        std = math.sqrt(self.w_init_variance_scale / self.temporal_width)
+        torch.nn.init.normal_(w, mean=0.0, std=std)
 
-  def forward(
-      self,
-      x: torch.Tensor,
-      segment_pos: torch.Tensor,
-      state: torch.Tensor | None = None,
-  ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Calls the Conv1D.
+    def forward(
+        self,
+        x: torch.Tensor,
+        segment_pos: torch.Tensor,
+        state: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Calls the Conv1D.
 
-    Args:
-      x: Sequence of input activations.
-      segment_pos: Position of each token in the sequence.
-      state: The state containing the previous `self.temporal_width-1` inputs
-        This is set to `None` in training mode.
+        Args:
+          x: Sequence of input activations.
+          segment_pos: Position of each token in the sequence.
+          state: The state containing the previous `self.temporal_width-1` inputs
+            This is set to `None` in training mode.
 
-    Returns:
-      The output of the convolution and the updated state.
-    """
-    if state is not None:
-      # 1. Decoding mode:
-      # - We have access to the previous `self.temporal_width - 1` inputs.
-      # - Only a single token needs to be output.
-      x = self._concatenate_with_state(x, state)
-      prompt_len = self.temporal_width - 1
-      output_len = 1
-      state_dtype = state.dtype
-    else:
-      # 1. Training mode:
-      # - The full sequence length need to be output.
-      prompt_len = 0
-      output_len = x.shape[1]
-      state_dtype = x.dtype
+        Returns:
+          The output of the convolution and the updated state.
+        """
+        if state is not None:
+            # 1. Decoding mode:
+            # - We have access to the previous `self.temporal_width - 1` inputs.
+            # - Only a single token needs to be output.
+            x = self._concatenate_with_state(x, state)
+            prompt_len = self.temporal_width - 1
+            output_len = 1
+            state_dtype = state.dtype
+        else:
+            # 1. Training mode:
+            # - The full sequence length need to be output.
+            prompt_len = 0
+            output_len = x.shape[1]
+            state_dtype = x.dtype
 
-    # 3. Perform the convolution:
-    # - Initialize an accumulator for the convolution output.
-    convolution_output = 0.0
+        # 3. Perform the convolution:
+        # - Initialize an accumulator for the convolution output.
+        convolution_output = 0.0
 
-    # - We cannot look back by more than the total sequence length
-    #   ("valid" convolution).
-    temporal_width = min(self.temporal_width, prompt_len + output_len)
+        # - We cannot look back by more than the total sequence length
+        #   ("valid" convolution).
+        temporal_width = min(self.temporal_width, prompt_len + output_len)
 
-    # - The convolution is implemented as a manual loop so that we can
-    #   incorporate the window masking further below.
-    for temporal_shift in range(temporal_width):
-      start_idx, end_idx = self._convolution_window_indices(
-          prompt_len=prompt_len,
-          shift_back=temporal_shift,
-          output_len=output_len,
-      )
-      x_window = x[:, start_idx:end_idx]
+        # - The convolution is implemented as a manual loop so that we can
+        #   incorporate the window masking further below.
+        for temporal_shift in range(temporal_width):
+            start_idx, end_idx = self._convolution_window_indices(
+                prompt_len=prompt_len,
+                shift_back=temporal_shift,
+                output_len=output_len,
+            )
+            x_window = x[:, start_idx:end_idx]
 
-      if state is None:
-        # - Ensure that the mask prevents accessing tokens from a different
-        #   document in training mode.
-        window_mask = self._compute_document_mask(
-            segment_pos=segment_pos,
-            start_idx=start_idx,
-            end_idx=end_idx,
-            max_look_ahead=temporal_shift,
+            if state is None:
+                # - Ensure that the mask prevents accessing tokens from a different
+                #   document in training mode.
+                window_mask = self._compute_document_mask(
+                    segment_pos=segment_pos,
+                    start_idx=start_idx,
+                    end_idx=end_idx,
+                    max_look_ahead=temporal_shift,
+                )
+                x_window *= window_mask[:, :, None].type(x.dtype).to(
+                    device=x.device)
+
+            x_window = self._pad_window(x_window, output_len)
+
+            # - Select w for this temporal shift, and expand on the batch and time
+            #   dimensions.
+            w = self.w[self.temporal_width - temporal_shift - 1][None, None, :]
+
+            # - Accumulate the convolution result.
+            convolution_output += x_window * w
+
+        # - Add the bias of the convolution.
+        convolution_output += self.b[None, None]
+
+        # 4. Store the new (potentially padded) state for future decoding.
+        new_state = x[:, 1 - self.temporal_width:].type(state_dtype)
+        new_state = self._pad_state(new_state)
+
+        return convolution_output, new_state
+
+    def _concatenate_with_state(
+        self,
+        x: torch.Tensor,
+        state: torch.Tensor,
+    ) -> torch.Tensor:
+        """Concatenates the current input `x` with the previous state for decoding.
+
+        Args:
+          x: The current input activations (shape: [batch_size, 1, width]).
+          state: State tensor storing previous inputs (shape: [batch_size,
+            temporal_width - 1, width]).
+
+        Returns:
+          The concatenated input sequence
+          (shape: [batch_size, temporal_width, width]).
+        """
+        b, num_tokens, d = x.shape
+        assert state.shape == (b, self.temporal_width - 1, d)
+        assert num_tokens == 1
+        return torch.concatenate([state.type(x.dtype), x], dim=1)
+
+    def _convolution_window_indices(
+        self,
+        *,
+        prompt_len: int,
+        shift_back: int,
+        output_len: int,
+    ) -> tuple[int, int]:
+        """Calculates the start and end indices for the convolution window.
+
+        Args:
+          prompt_len: Length of the prompt (zero in training mode).
+          shift_back: By how much the window should be shifted backwards.
+          output_len: Sequence length of the output (sequence length in training
+            mode, one in decoding mode).
+
+        Returns:
+          start_idx: The starting index for the convolution window.
+          end_idx: The ending index for the convolution window.
+        """
+        start_idx = max(prompt_len - shift_back, 0)
+        end_idx = prompt_len + output_len - shift_back
+        return start_idx, end_idx
+
+    def _compute_document_mask(
+        self,
+        *,
+        segment_pos: torch.Tensor,
+        start_idx: int,
+        end_idx: int,
+        max_look_ahead: int,
+    ) -> torch.Tensor:
+        """Creates a mask to prevent mixing of information between documents.
+
+        Args:
+            segment_pos: Position of each token in the sequence. In particular, a
+              zero indicates the start of a new document.
+            start_idx: The starting index of the convolution window.
+            end_idx: The ending index of the convolution window.
+            max_look_ahead: How much to look ahead at most to detect a document
+              boundary (depends on the convolution).
+
+        Returns:
+            An integer mask where `1` indicates a position that should be
+            included in the convolution, and `0` a position that should be excluded.
+        """
+        batch_size = segment_pos.shape[0]
+        not_a_document_boundary = (segment_pos != 0).type(torch.int32)
+        mask = torch.ones(
+            (batch_size, end_idx - start_idx),
+            device=segment_pos.device,
         )
-        x_window *= window_mask[:, :, None].type(x.dtype).to(device=x.device)
+        for shift in range(1, max_look_ahead + 1):
+            # At each position, look ahead by `shift` tokens to see if a
+            # document boundary is present there.
+            mask *= not_a_document_boundary[:,
+                    start_idx + shift: end_idx + shift]
+        return mask
 
-      x_window = self._pad_window(x_window, output_len)
+    def _pad_window(
+        self,
+        window: torch.Tensor,
+        output_len: int,
+    ) -> torch.Tensor:
+        """Left-pads the window if it is shorter than the output sequence length."""
+        batch_size, window_len, width = window.shape
+        padding_len = output_len - window_len
+        padding = torch.zeros(
+            (batch_size, padding_len, width),
+            dtype=window.dtype,
+            device=window.device,
+        )
+        return torch.concatenate([padding, window], dim=1)
 
-      # - Select w for this temporal shift, and expand on the batch and time
-      #   dimensions.
-      w = self.w[self.temporal_width - temporal_shift - 1][None, None, :]
+    def _pad_state(
+        self,
+        state: torch.Tensor,
+    ) -> torch.Tensor:
+        """Left-pads the state if it is shorter than the temporal width."""
+        b, state_seq_len, d = state.shape
+        padding_len = self.temporal_width - state_seq_len - 1
+        padding = torch.zeros(
+            (b, padding_len, d),
+            dtype=state.dtype,
+            device=state.device,
+        )
+        return torch.concatenate([padding, state], dim=1)
 
-      # - Accumulate the convolution result.
-      convolution_output += x_window * w
-
-    # - Add the bias of the convolution.
-    convolution_output += self.b[None, None]
-
-    # 4. Store the new (potentially padded) state for future decoding.
-    new_state = x[:, 1 - self.temporal_width :].type(state_dtype)
-    new_state = self._pad_state(new_state)
-
-    return convolution_output, new_state
-
-  def _concatenate_with_state(
-      self,
-      x: torch.Tensor,
-      state: torch.Tensor,
-  ) -> torch.Tensor:
-    """Concatenates the current input `x` with the previous state for decoding.
-
-    Args:
-      x: The current input activations (shape: [batch_size, 1, width]).
-      state: State tensor storing previous inputs (shape: [batch_size,
-        temporal_width - 1, width]).
-
-    Returns:
-      The concatenated input sequence
-      (shape: [batch_size, temporal_width, width]).
-    """
-    b, num_tokens, d = x.shape
-    assert state.shape == (b, self.temporal_width - 1, d)
-    assert num_tokens == 1
-    return torch.concatenate([state.type(x.dtype), x], dim=1)
-
-  def _convolution_window_indices(
-      self,
-      *,
-      prompt_len: int,
-      shift_back: int,
-      output_len: int,
-  ) -> tuple[int, int]:
-    """Calculates the start and end indices for the convolution window.
-
-    Args:
-      prompt_len: Length of the prompt (zero in training mode).
-      shift_back: By how much the window should be shifted backwards.
-      output_len: Sequence length of the output (sequence length in training
-        mode, one in decoding mode).
-
-    Returns:
-      start_idx: The starting index for the convolution window.
-      end_idx: The ending index for the convolution window.
-    """
-    start_idx = max(prompt_len - shift_back, 0)
-    end_idx = prompt_len + output_len - shift_back
-    return start_idx, end_idx
-
-  def _compute_document_mask(
-      self,
-      *,
-      segment_pos: torch.Tensor,
-      start_idx: int,
-      end_idx: int,
-      max_look_ahead: int,
-  ) -> torch.Tensor:
-    """Creates a mask to prevent mixing of information between documents.
-
-    Args:
-        segment_pos: Position of each token in the sequence. In particular, a
-          zero indicates the start of a new document.
-        start_idx: The starting index of the convolution window.
-        end_idx: The ending index of the convolution window.
-        max_look_ahead: How much to look ahead at most to detect a document
-          boundary (depends on the convolution).
-
-    Returns:
-        An integer mask where `1` indicates a position that should be
-        included in the convolution, and `0` a position that should be excluded.
-    """
-    batch_size = segment_pos.shape[0]
-    not_a_document_boundary = (segment_pos != 0).type(torch.int32)
-    mask = torch.ones(
-        (batch_size, end_idx - start_idx),
-        device=segment_pos.device,
-    )
-    for shift in range(1, max_look_ahead + 1):
-      # At each position, look ahead by `shift` tokens to see if a
-      # document boundary is present there.
-      mask *= not_a_document_boundary[:, start_idx + shift : end_idx + shift]
-    return mask
-
-  def _pad_window(
-      self,
-      window: torch.Tensor,
-      output_len: int,
-  ) -> torch.Tensor:
-    """Left-pads the window if it is shorter than the output sequence length."""
-    batch_size, window_len, width = window.shape
-    padding_len = output_len - window_len
-    padding = torch.zeros(
-        (batch_size, padding_len, width),
-        dtype=window.dtype,
-        device=window.device,
-    )
-    return torch.concatenate([padding, window], dim=1)
-
-  def _pad_state(
-      self,
-      state: torch.Tensor,
-  ) -> torch.Tensor:
-    """Left-pads the state if it is shorter than the temporal width."""
-    b, state_seq_len, d = state.shape
-    padding_len = self.temporal_width - state_seq_len - 1
-    padding = torch.zeros(
-        (b, padding_len, d),
-        dtype=state.dtype,
-        device=state.device,
-    )
-    return torch.concatenate([padding, state], dim=1)
-
-  @classmethod
-  def init_cache(
-      cls,
-      *,
-      batch_size: int,
-      width: int,
-      dtype: torch.dtype,
-      conv1d_temporal_width: int = 4,
-      device: str | torch.device | None = None,
-  ) -> torch.Tensor:
-    """Returns an empty initialized cache for the Conv1D."""
-    shape = (batch_size, conv1d_temporal_width - 1, width)
-    return torch.zeros(shape, dtype=dtype, device=device)
+    @classmethod
+    def init_cache(
+        cls,
+        *,
+        batch_size: int,
+        width: int,
+        dtype: torch.dtype,
+        conv1d_temporal_width: int = 4,
+        device: str | torch.device | None = None,
+    ) -> torch.Tensor:
+        """Returns an empty initialized cache for the Conv1D."""
+        shape = (batch_size, conv1d_temporal_width - 1, width)
+        return torch.zeros(shape, dtype=dtype, device=device)
 
 
 class Einsum(nn.Module):
-  """Einsum is a convenience module for parameterized tensor multiplication."""
+    """Einsum is a convenience module for parameterized tensor multiplication."""
 
-  def __init__(
-      self,
-      w_shape: Sequence[int],
-      b_shape: Sequence[int],
-      eqn: str,
-      w_init_variance_scale: float = 1.0,
-      device: str | torch.device | None = None,
-      dtype: torch.dtype | None = None,
-  ):
-    """Initializes the Einsum.
+    def __init__(
+        self,
+        w_shape: Sequence[int],
+        b_shape: Sequence[int],
+        eqn: str,
+        w_init_variance_scale: float = 1.0,
+        device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ):
+        """Initializes the Einsum.
 
-    Args:
-      w_shape: The shape of the weight matrix w.
-      b_shape: The shape of the bias.
-      eqn: The einsum string.
-      w_init_variance_scale: A parameters that scales the variance of the
-        initialization of the weights.
-      device: On what device to initialize parameters. Needed to allow for
-        initializing the module without parameter initialzation.
-      dtype: What dtype to use for initialziation.
-    """
-    super().__init__()
-    self.w_shape = tuple(w_shape)
-    self.b_shape = tuple(b_shape)
-    self.eqn = eqn
-    self.w_init_variance_scale = w_init_variance_scale
+        Args:
+          w_shape: The shape of the weight matrix w.
+          b_shape: The shape of the bias.
+          eqn: The einsum string.
+          w_init_variance_scale: A parameters that scales the variance of the
+            initialization of the weights.
+          device: On what device to initialize parameters. Needed to allow for
+            initializing the module without parameter initialization.
+          dtype: What dtype to use for initialization.
+        """
+        super().__init__()
+        self.w_shape = tuple(w_shape)
+        self.b_shape = tuple(b_shape)
+        self.eqn = eqn
+        self.w_init_variance_scale = w_init_variance_scale
 
-    # Parameters.
-    self.w = nn.Parameter(torch.empty(self.w_shape, device=device, dtype=dtype))
-    self.b = nn.Parameter(torch.empty(self.b_shape, device=device, dtype=dtype))
+        # Parameters.
+        self.w = nn.Parameter(
+            torch.empty(self.w_shape, device=device, dtype=dtype))
+        self.b = nn.Parameter(
+            torch.empty(self.b_shape, device=device, dtype=dtype))
 
-    # Initialization.
-    self.reset_parameters()
+        # Initialization.
+        self.reset_parameters()
 
-  def reset_parameters(self) -> None:
-    """Resets the parameters of the module."""
-    self.w_init_(self.w)
-    torch.nn.init.zeros_(self.b)
+    def reset_parameters(self) -> None:
+        """Resets the parameters of the module."""
+        self.w_init_(self.w)
+        torch.nn.init.zeros_(self.b)
 
-  def w_init_(self, w: torch.Tensor) -> None:
-    """Initializes the weight matrix `w` of the Einsum."""
-    std = math.sqrt(self.w_init_variance_scale / self.w_shape[1])
-    torch.nn.init.normal_(w, mean=0.0, std=std)
+    def w_init_(self, w: torch.Tensor) -> None:
+        """Initializes the weight matrix `w` of the Einsum."""
+        std = math.sqrt(self.w_init_variance_scale / self.w_shape[1])
+        torch.nn.init.normal_(w, mean=0.0, std=std)
 
-  def __call__(self, x: torch.Tensor) -> torch.Tensor:
-    """Calls the Einsum."""
-    return torch.einsum(self.eqn, x, self.w) + self.b
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        """Calls the Einsum."""
+        return torch.einsum(self.eqn, x, self.w) + self.b
 
 
 # ======================================== TRANSITION ========================================
@@ -1542,21 +1552,23 @@ class RecurrentBlockCache:
     rnn_state: torch.Tensor
     conv1d_state: torch.Tensor
 
+
 class GriffinCache:
-    def __init__(self, config: RecurrentGemmaConfig, batch_size, dtype=torch.float16, device=None):
+    def __init__(self, config: RecurrentGemmaConfig, batch_size,
+        dtype=torch.float16, device=None):
         self.states = []
         for block_type in config.block_types:
-          self.states.append(ResidualBlock.init_cache(
-              batch_size=batch_size,
-              width=config.width,
-              num_heads=config.num_heads,
-              attention_window_size=config.attention_window_size,
-              temporal_block_type=block_type,
-              lru_width=config.lru_width,
-              conv1d_temporal_width=config.conv1d_width,
-              dtype=dtype,
-              device=device,
-          ))
+            self.states.append(ResidualBlock.init_cache(
+                batch_size=batch_size,
+                width=config.width,
+                num_heads=config.num_heads,
+                attention_window_size=config.attention_window_size,
+                temporal_block_type=block_type,
+                lru_width=config.lru_width,
+                conv1d_temporal_width=config.conv1d_width,
+                dtype=dtype,
+                device=device,
+            ))
 
 
 @dataclass
@@ -1644,7 +1656,8 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     config_class = RecurrentGemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _keep_in_fp32_modules = ["inv_freq", "rotary_emb", "cos_cached", "sin_cached"]
+    _keep_in_fp32_modules = ["inv_freq", "rotary_emb", "cos_cached",
+                             "sin_cached"]
     _no_split_modules = ["RecurrentGemmaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     # TODO(lberrada, botev): decide whether we want to support the various implementations of attention
@@ -1852,13 +1865,15 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
         if cache_position is None:
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device
             )
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds,
+                                               cache_position)
 
         # embed positions
         hidden_states = inputs_embeds
@@ -1866,7 +1881,8 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         # normalized
         # RecurrentGemma downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
         # See https://github.com/huggingface/transformers/pull/29402
-        normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
+        normalizer = torch.tensor(self.config.hidden_size ** 0.5,
+                                  dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
 
         # decoder layers
@@ -1903,7 +1919,8 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
+                next_decoder_cache = layer_outputs[
+                    2 if output_attentions else 1]
 
             # TODO(lberrada, botev): adapt this to handle recurrent layers.
             if output_attentions:
@@ -1918,10 +1935,13 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         next_cache = None
         if use_cache:
             next_cache = (
-                next_decoder_cache.to_legacy_cache() if isinstance(next_decoder_cache, Cache) else next_decoder_cache
+                next_decoder_cache.to_legacy_cache() if isinstance(
+                    next_decoder_cache, Cache) else next_decoder_cache
             )
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+            return tuple(v for v in
+                         [hidden_states, next_cache, all_hidden_states,
+                          all_self_attns] if v is not None)
         return GriffinOutput(
             last_hidden_state=hidden_states,
             cache=next_cache,
@@ -1946,31 +1966,44 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             target_length = self.config.max_position_embeddings
         else:  # dynamic cache
             target_length = (
-                attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else cache_position[-1] + 1
+                attention_mask.shape[-1] if isinstance(attention_mask,
+                                                       torch.Tensor) else
+                cache_position[-1] + 1
             )
 
-        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
+        causal_mask = torch.full((sequence_length, target_length),
+                                 fill_value=min_dtype, dtype=dtype,
+                                 device=device)
         if sequence_length != 1:
             causal_mask = torch.triu(causal_mask, diagonal=1)
-        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-        causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
+        causal_mask *= torch.arange(target_length,
+                                    device=device) > cache_position.reshape(-1,
+                                                                            1)
+        causal_mask = causal_mask[None, None, :, :].expand(
+            input_tensor.shape[0], 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
             if attention_mask.dim() == 2:
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
-                causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
+                padding_mask = causal_mask[..., :mask_length].eq(
+                    0.0) * attention_mask[:, None, None, :].eq(0.0)
+                causal_mask[..., :mask_length] = causal_mask[...,
+                                                 :mask_length].masked_fill(
+                    padding_mask, min_dtype)
             elif attention_mask.dim() == 4:
                 # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
                 # cache. In that case, the 4D attention mask attends to the newest tokens only.
-                if attention_mask.shape[-2] < cache_position[0] + sequence_length:
+                if attention_mask.shape[-2] < cache_position[
+                    0] + sequence_length:
                     offset = cache_position[0]
                 else:
                     offset = 0
                 mask_shape = attention_mask.shape
-                mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
+                mask_slice = (attention_mask.eq(0.0)).to(
+                    dtype=dtype) * min_dtype
                 causal_mask[
-                    : mask_shape[0], : mask_shape[1], offset : mask_shape[2] + offset, : mask_shape[3]
+                : mask_shape[0], : mask_shape[1],
+                offset: mask_shape[2] + offset, : mask_shape[3]
                 ] = mask_slice
 
         if (
@@ -1981,7 +2014,8 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask,
+                                                                    min_dtype)
 
         return causal_mask
 
@@ -1994,7 +2028,8 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         super().__init__(config)
         self.model = RecurrentGemmaModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size,
+                                 bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2019,7 +2054,8 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
 
     # Ignore copy
     @add_start_docstrings_to_model_forward(RECURRENTGEMMA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=GriffinCausalLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=GriffinCausalLMOutput,
+                               config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -2108,7 +2144,8 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, cache_position=None, **kwargs
+        self, input_ids, past_key_values=None, attention_mask=None,
+        inputs_embeds=None, cache_position=None, **kwargs
     ):
         # TODO(lberrada,botev,anushanf): adapt this function (likely to be a mix between the current function and
         # the way Mamba prepares its inputs).
@@ -2117,19 +2154,23 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         # TODO joao: standardize interface for the different Cache classes and remove of this if
         has_static_cache = False
         if past_key_values is None:
-            past_key_values = getattr(self.model.layers[0].self_attn, "past_key_value", None)
+            past_key_values = getattr(self.model.layers[0].self_attn,
+                                      "past_key_value", None)
             has_static_cache = past_key_values is not None
 
         past_length = 0
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
-                past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
+                past_length = cache_position[
+                    0] if cache_position is not None else past_key_values.get_seq_length()
                 max_cache_length = (
-                    torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
+                    torch.tensor(past_key_values.get_max_length(),
+                                 device=input_ids.device)
                     if past_key_values.get_max_length() is not None
                     else None
                 )
-                cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
+                cache_length = past_length if max_cache_length is None else torch.min(
+                    max_cache_length, past_length)
             # TODO joao: remove this `else` after `generate` prioritizes `Cache` objects
             else:
                 cache_length = past_length = past_key_values[0][0].shape[2]
@@ -2139,8 +2180,10 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
             # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
             # input)
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
+            if attention_mask is not None and attention_mask.shape[1] > \
+                input_ids.shape[1]:
+                input_ids = input_ids[:,
+                            -(attention_mask.shape[1] - past_length):]
             # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
             # input_ids based on the past_length.
             elif past_length < input_ids.shape[1]:
@@ -2161,7 +2204,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
+                position_ids = position_ids[:, -input_ids.shape[1]:]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -2172,9 +2215,12 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
             # TODO: use `next_tokens` directly instead.
             model_inputs = {"input_ids": input_ids.contiguous()}
 
-        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
+        input_length = position_ids.shape[-1] if position_ids is not None else \
+        input_ids.shape[-1]
         if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
+            cache_position = torch.arange(past_length,
+                                          past_length + input_length,
+                                          device=input_ids.device)
         else:
             cache_position = cache_position[-input_length:]
 
@@ -2198,6 +2244,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         reordered_past = ()
         for layer_past in past_key_values:
             reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device))
+                      for past_state in layer_past),
             )
         return reordered_past
