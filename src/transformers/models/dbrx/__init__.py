@@ -20,7 +20,7 @@ from ...utils import is_torch_available
 
 
 _import_structure = {
-    "configuration_dbrx": ["DBRX_PRETRAINED_CONFIG_ARCHIVE_MAP", "DbrxConfig"],
+    "configuration_dbrx": ["DbrxConfig"],
 }
 
 try:
@@ -30,7 +30,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_dbrx"] = [
-        "DBRX_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DbrxForCausalLM",
         "DbrxBlock",
         "DbrxModel",
@@ -41,7 +40,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_dbrx import DBRX_PRETRAINED_CONFIG_ARCHIVE_MAP, DbrxConfig
+    from .configuration_dbrx import DbrxConfig
 
     try:
         if not is_torch_available():
@@ -50,7 +49,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_dbrx import (
-            DBRX_PRETRAINED_MODEL_ARCHIVE_LIST,
             DbrxForCausalLM,
             DbrxBlock,
             DbrxModel,

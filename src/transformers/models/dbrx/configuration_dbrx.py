@@ -16,12 +16,10 @@
 
 from typing import Any, Optional
 
-from transformers.configuration_utils import PretrainedConfig
-from transformers.utils import logging
+from ...configuration_utils import PretrainedConfig
+from ...utils import logging
 
 logger = logging.get_logger(__name__)
-
-DBRX_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
 class DbrxAttentionConfig(PretrainedConfig):
