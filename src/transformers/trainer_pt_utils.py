@@ -48,8 +48,6 @@ from .utils import (
 )
 
 
-if is_torch_available():
-    from .pytorch_utils import is_torch_greater_or_equal_than_2_0
 
 if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))
