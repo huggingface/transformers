@@ -44,6 +44,7 @@ else:
     _import_structure["text_summarization"] = ["TextSummarizationTool"]
     _import_structure["text_to_speech"] = ["TextToSpeechTool"]
     _import_structure["translation"] = ["TranslationTool"]
+    _import_structure["default_tools"] = ["CalculatorTool", "PythonEvaluatorTool"]
 
 if TYPE_CHECKING:
     from .agents import Agent, CodeAgent, ReactAgent
@@ -65,6 +66,7 @@ if TYPE_CHECKING:
         from .text_summarization import TextSummarizationTool
         from .text_to_speech import TextToSpeechTool
         from .translation import TranslationTool
+        from .default_tools import CalculatorTool, PythonEvaluatorTool
 else:
     import sys
 

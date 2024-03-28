@@ -121,7 +121,6 @@ class Tool:
         self.is_initialized = False
 
     def validate_attributes(self):
-        print("ok")
         required_attributes = {
             "description": str,
             "name": str,
@@ -185,6 +184,8 @@ class Tool:
             "tool_class": full_name,
             "description": self.description,
             "name": self.name,
+            "inputs": str(self.inputs),
+            "output_type": str(self.output_type),
         }
         with open(config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tool_config, indent=2, sort_keys=True) + "\n")
@@ -306,7 +307,7 @@ class Tool:
         tool_class = get_class_from_dynamic_module(
             tool_class, repo_id, token=token, **hub_kwargs
         )
-
+        
         if len(tool_class.name) == 0:
             tool_class.name = custom_tool["name"]
         if tool_class.name != custom_tool["name"]:
@@ -405,7 +406,8 @@ class Tool:
                 self.name = _gradio_tool.name
                 self.description = _gradio_tool.description
 
-        GradioToolWrapper.__call__ = gradio_tool.run
+            def __call__(self, *args, **kwargs):
+                return gradio_tool.run(*args, *list(kwargs.values()))
         return GradioToolWrapper(gradio_tool)
 
     @staticmethod
@@ -443,6 +445,7 @@ DEFAULT_TOOL_DESCRIPTION_TEMPLATE = """
 - {{ tool.name }}: {{ tool.description }}
     Takes inputs: {{tool.inputs}}
 """
+
 
 OPENAI_TOOL_DESCRIPTION_TEMPLATE = """
 {
@@ -720,7 +723,7 @@ class PipelineTool(Tool):
         outputs = send_to_device(outputs, "cpu")
         decoded_outputs = self.decode(outputs)
 
-        return handle_agent_outputs(decoded_outputs, self.outputs)
+        return handle_agent_outputs(decoded_outputs, self.output_type)
 
 
 def launch_gradio_demo(tool_class: Tool):

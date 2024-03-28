@@ -23,7 +23,7 @@
     title: Load and train adapters with 🤗 PEFT
   - local: model_sharing
     title: Share your model
-  - local: transformers_agents
+  - local: agents
     title: Agents
   - local: llm_tutorial
     title: Generation with LLMs
@@ -131,8 +131,6 @@
     title: Notebooks with examples
   - local: community
     title: Community resources
-  - local: custom_tools
-    title: Custom Tools and Prompts
   - local: troubleshooting
     title: Troubleshoot
   - local: hf_quantizer
