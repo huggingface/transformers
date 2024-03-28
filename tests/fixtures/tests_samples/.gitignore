@@ -1,0 +1,6 @@
+cache*
+temp*
+!*.txt
+!*.tsv
+!*.json
+!.gitignore 

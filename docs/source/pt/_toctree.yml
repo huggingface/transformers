@@ -1,0 +1,38 @@
+- sections:
+  - local: index
+    title: 🤗 Transformers
+  - local: quicktour
+    title: Tour rápido
+  - local: installation
+    title: Instalação
+  title: Início
+- sections:
+  - local: pipeline_tutorial
+    title: Pipelines para inferência
+  - local: training
+    title: Fine-tuning de um modelo pré-treinado
+  - local: accelerate
+    title: Treinamento distribuído com 🤗 Accelerate
+  title: Tutoriais
+- sections:
+  - local: fast_tokenizers
+    title: Usando os Tokenizers do 🤗 Tokenizers
+  - local: create_a_model
+    title: Criando uma arquitetura customizada
+  - local: custom_models
+    title: Compartilhando modelos customizados 
+  - local: run_scripts
+    title: Treinamento a partir de um script
+  - local: converting_tensorflow_models
+    title: Convertendo checkpoints do TensorFlow para Pytorch
+  - local: serialization
+    title: Exportando modelos para ONNX
+  - sections:
+    - local: tasks/sequence_classification
+      title: Classificação de texto
+    - local: tasks/token_classification
+      title: Classificação de tokens
+    title: Fine-tuning para tarefas específicas
+  - local: multilingual
+    title: Modelos multilinguísticos para inferência
+  title: Guias práticos

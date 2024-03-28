@@ -1,0 +1,103 @@
+- sections:
+  - local: index
+    title: 🤗 Transformers
+  - local: quicktour
+    title: Tour rápido
+  - local: installation
+    title: Instalación
+  title: Empezar
+- sections:
+  - local: pipeline_tutorial
+    title: Pipelines para inferencia
+  - local: autoclass_tutorial
+    title: Carga instancias preentrenadas con un AutoClass
+  - local: preprocessing
+    title: Preprocesamiento
+  - local: training
+    title: Fine-tuning a un modelo pre-entrenado
+  - local: accelerate
+    title: Entrenamiento distribuido con 🤗 Accelerate
+  - local: model_sharing
+    title: Compartir un modelo
+  title: Tutoriales
+- sections:
+  - isExpanded: false
+    sections:
+    - local: tasks/question_answering
+      title: Respuesta a preguntas
+    - local: tasks/language_modeling
+      title: Modelado de lenguaje
+    - local: tasks/summarization
+      title: Generación de resúmenes
+    - local: tasks/multiple_choice
+      title: Selección múltiple
+    - local: tasks/image_captioning
+      title: Subtítulos de imágenes
+    title: Procesamiento del Lenguaje Natural
+  - isExpanded: false
+    sections:
+    - local: tasks/asr
+      title: Reconocimiento automático del habla
+    title: Audio
+  - isExpanded: false
+    sections:
+    - local: tasks/image_classification
+      title: Clasificación de imágenes
+    title: Visión Artificial
+  title: Guías prácticas
+- sections:
+  - local: fast_tokenizers
+    title: Usa tokenizadores de 🤗 Tokenizers
+  - local: multilingual
+    title: Modelos multilingües para inferencia
+  - local: create_a_model
+    title: Crea una arquitectura personalizada
+  - local: custom_models
+    title: Compartir modelos personalizados
+  - local: run_scripts
+    title: Entrenamiento con scripts
+  - local: chat_templating
+    title: Plantillas para Modelos de Chat
+  - local: trainer
+    title: Entrenador
+  - local: sagemaker
+    title: Ejecutar el entrenamiento en Amazon SageMaker
+  - local: converting_tensorflow_models
+    title: Convertir checkpoints de TensorFlow
+  - local: serialization
+    title: Exportar a ONNX
+  - local: torchscript
+    title: Exportar a TorchScript
+  - local: community
+    title: Los recursos de la comunidad
+  title: Guías para desarrolladores
+- sections:
+  - local: performance
+    title: Descripción general
+  - local: debugging
+    title: Debugging
+  title: Rendimiento y escalabilidad
+- sections:
+  - local: add_new_pipeline
+    title: ¿Cómo puedo añadir un pipeline a 🤗 Transformers?
+  - local: pr_checks
+    title: Verificaciones en un Pull Request
+  title: Contribuir
+- sections:
+  - local: philosophy
+    title: Filosofía
+  - local: glossary
+    title: Glosario
+  - local: task_summary
+    title: Lo que 🤗 Transformers puede hacer
+  - local: tasks_explained
+    title: Como los 🤗 Transformers resuelven tareas
+  - local: attention
+    title: Mecanismos de atención
+  - local: pad_truncation
+    title: Relleno y truncamiento
+  - local: bertology
+    title: BERTología
+  - local: perplexity
+    title: Perplejidad de los modelos de longitud fija
+  title: Guías conceptuales

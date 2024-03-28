@@ -1,0 +1,6 @@
+torch>=1.4.0
+-e git+https://github.com/huggingface/transformers.git@352d5472b0c1dec0f420d606d16747d851b4bda8#egg=transformers
+knockknock>=0.1.8.1
+h5py>=2.10.0
+numpy>=1.18.2
+scipy>=1.4.1
