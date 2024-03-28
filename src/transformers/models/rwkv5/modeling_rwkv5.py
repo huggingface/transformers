@@ -261,7 +261,7 @@ class Rwkv5SelfAttention(nn.Module):
         self.gate = nn.Linear(hidden_size, attention_hidden_size, bias=False)
         self.output = nn.Linear(attention_hidden_size, hidden_size, bias=False)
         # TODO rename this layer norm (from ln_x)
-        self.post_attention_ln = nn.GroupNorm(hidden_size // config.head_size, hidden_size)  
+        self.post_attention_ln = nn.GroupNorm(hidden_size // config.head_size, hidden_size)
 
     def extract_key_value(self, hidden, state=None):
         # Mix hidden with the previous timestep to produce key, value, receptance
