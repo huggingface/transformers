@@ -59,6 +59,7 @@ from . import (
     ctrl,
     cvt,
     data2vec,
+    dbrx,
     deberta,
     deberta_v2,
     decision_transformer,

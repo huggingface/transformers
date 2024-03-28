@@ -131,7 +131,6 @@ _import_structure = {
     ],
     "models": [],
     # Models
-    "models.dbrx": ["DbrxConfig"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -328,6 +327,7 @@ _import_structure = {
         "Data2VecTextConfig",
         "Data2VecVisionConfig",
     ],
+    "models.dbrx": ["DbrxConfig"],
     "models.deberta": [
         "DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DebertaConfig",
@@ -1443,15 +1443,6 @@ else:
 
     # PyTorch models structure
 
-    _import_structure["models.dbrx"].extend(
-        [
-            "DbrxForCausalLM",
-            "DbrxBlock",
-            "DbrxModel",
-            "DbrxPreTrainedModel",
-        ]
-    )
-
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1476,6 +1467,7 @@ else:
             "AlignVisionModel",
         ]
     )
+
     _import_structure["models.altclip"].extend(
         [
             "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1941,6 +1933,14 @@ else:
             "Data2VecVisionForSemanticSegmentation",
             "Data2VecVisionModel",
             "Data2VecVisionPreTrainedModel",
+        ]
+    )
+    _import_structure["models.dbrx"].extend(
+        [
+            "DbrxBlock",
+            "DbrxForCausalLM",
+            "DbrxModel",
+            "DbrxPreTrainedModel",
         ]
     )
     _import_structure["models.deberta"].extend(
@@ -6735,6 +6735,14 @@ if TYPE_CHECKING:
             Data2VecVisionModel,
             Data2VecVisionPreTrainedModel,
         )
+
+        # PyTorch model imports
+        from .models.dbrx import (
+            DbrxBlock,
+            DbrxForCausalLM,
+            DbrxModel,
+            DbrxPreTrainedModel,
+        )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             DebertaForMaskedLM,
@@ -7793,15 +7801,6 @@ if TYPE_CHECKING:
             SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
             SamModel,
             SamPreTrainedModel,
-        )
-
-        # PyTorch model imports
-
-        from .models.dbrx import (
-            DbrxForCausalLM,
-            DbrxBlock,
-            DbrxModel,
-            DbrxPreTrainedModel,
         )
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
