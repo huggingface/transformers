@@ -105,7 +105,7 @@ XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 
 if is_accelerate_available():
-    from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
+    from accelerate import Accelerator, dispatch_model, infer_auto_device_map, init_empty_weights
     from accelerate.hooks import add_hook_to_module
     from accelerate.utils import (
         check_tied_parameters_on_same_device,
@@ -2306,7 +2306,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # Only save the model itself if we are using distributed training
-        model_to_save = unwrap_model(self)
+        model_to_save = unwrap_model(self) if is_accelerate_available() else Accelerator().unwrap_model(self)
 
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
