@@ -372,6 +372,18 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_checkpoints(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
+        pass
+
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""

@@ -868,6 +868,7 @@ class IBertForMaskedLM(IBertPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
+        self.lm_head.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -952,9 +953,13 @@ class IBertLMHead(nn.Module):
 
         return x
 
-    def _tie_weights(self):
-        # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-        self.bias = self.decoder.bias
+    def _tie_weights(self) -> None:
+        # For accelerate compatibility and to not break backward compatibility
+        if self.decoder.bias.device.type == "meta":
+            self.decoder.bias = self.bias
+        else:
+            # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
+            self.bias = self.decoder.bias
 
 
 @add_start_docstrings(

@@ -325,6 +325,18 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_hidden_states_output(self):
         pass
 
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_checkpoints(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
+        pass
+
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
