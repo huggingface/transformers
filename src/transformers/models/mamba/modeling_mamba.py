@@ -506,7 +506,7 @@ class MambaModel(MambaPreTrainedModel):
 
     def load_hook(self, state_dict, prefix, *args):
         for k in state_dict:
-            if "embedding" in k:
+            if "embedding." in k:
                 state_dict[k.replace("embedding.", "embeddings.")] = state_dict.pop(k)
                 break
 
