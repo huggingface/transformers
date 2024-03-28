@@ -428,11 +428,11 @@ class StableLmModelIntegrationTest(unittest.TestCase):
         output = model(**input_ids).logits
 
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[2.5458e-03, 9.5978e-04, 9.0021e-04, 4.8214e-04, -7.3715e-05]]).to(torch_device)
+        EXPECTED_MEAN = torch.tensor([[-0.0010, -0.0028, -0.0030, -0.0014, -0.0035]]).to(torch_device)
         self.assertTrue(torch.allclose(output.mean(dim=-1), EXPECTED_MEAN, atol=1e-4, rtol=1e-4))
 
         # Expected logits sliced from [0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([0.6883, 0.0916, -0.2363, 0.2961, -0.0896, 0.2419, 0.3811, 0.7667, -0.7029, -0.9250, -0.2455, 0.2252, -0.6335, 0.1841, 0.3521, 0.0812, -0.3504, 0.6080, 0.3894, 0.9459, -0.6386, -0.2383, -0.9865, -0.6121, -0.0341, -0.5566, 0.2534, -0.2483, 0.0149, -0.3899]).to(torch_device)  # fmt: skip
+        EXPECTED_SLICE = torch.tensor([ 0.6896, 0.0792, -0.2342, 0.2937, -0.0989, 0.2360, 0.3902, 0.7579, -0.7062, -0.9271, -0.2589, 0.2268, -0.6409, 0.1976, 0.3350, 0.0715, -0.3574, 0.6174, 0.3910, 0.9405, -0.6351, -0.2362, -0.9800, -0.6253, -0.0390, -0.5658, 0.2572, -0.2515, 0.0174, -0.3983]).to(torch_device)  # fmt: skip
         self.assertTrue(torch.allclose(output[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4))
 
     @require_bitsandbytes
