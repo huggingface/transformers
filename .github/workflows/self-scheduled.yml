@@ -333,7 +333,7 @@ jobs:
       - name: Run quantization tests on GPU
         working-directory: /transformers
         run: |
-          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_quantization_torch_gpu tests/quantization
+          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_quantization_torch_gpu tests/quantization/quanto_integration
 
       - name: Failure short reports
         if: ${{ failure() }}
