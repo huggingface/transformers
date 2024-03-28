@@ -362,103 +362,110 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.machine_type }}_run_tests_quantization_torch_gpu_${{ env.matrix_folders }}
-          path: /transformers/reports/${{ matrix.machine_type }}_tests_quantization_torch_gpu${{ matrix.folders }}
+          path: /transformers/reports/${{ matrix.machine_type }}_tests_quantization_torch_gpu_${{ matrix.folders }}
 
-  # run_extract_warnings:
-  #   name: Extract warnings in CI artifacts
-  #   runs-on: ubuntu-22.04
-  #   if: always()
-  #   needs: [
-  #     setup,
-  #     run_tests_gpu,
-  #     run_examples_gpu,
-  #     run_pipelines_tf_gpu,
-  #     run_pipelines_torch_gpu,
-  #     run_all_tests_torch_cuda_extensions_gpu,
-  #     run_tests_quantization_torch_gpu,
-  #   ]
-  #   steps:
-  #     - name: Checkout transformers
-  #       uses: actions/checkout@v3
-  #       with:
-  #         fetch-depth: 2
+  run_extract_warnings:
+    name: Extract warnings in CI artifacts
+    runs-on: ubuntu-22.04
+    if: always()
+    needs: [
+      setup,
+      run_tests_quantization_torch_gpu,
+    ]
+    steps:
+      - name: Checkout transformers
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
 
-  #     - name: Install transformers
-  #       run: pip install transformers
+      - name: Install transformers
+        run: pip install transformers
 
-  #     - name: Show installed libraries and their versions
-  #       run: pip freeze
+      - name: Show installed libraries and their versions
+        run: pip freeze
 
-  #     - name: Create output directory
-  #       run: mkdir warnings_in_ci
+      - name: Create output directory
+        run: mkdir warnings_in_ci
 
-  #     - uses: actions/download-artifact@v3
-  #       with:
-  #         path: warnings_in_ci
+      - uses: actions/download-artifact@v3
+        with:
+          path: warnings_in_ci
 
-  #     - name: Show artifacts
-  #       run: echo "$(python3 -c 'import os; d = os.listdir(); print(d)')"
-  #       working-directory: warnings_in_ci
+      - name: Show artifacts
+        run: echo "$(python3 -c 'import os; d = os.listdir(); print(d)')"
+        working-directory: warnings_in_ci
 
-  #     - name: Extract warnings in CI artifacts
-  #       run: |
-  #         python3 utils/extract_warnings.py --workflow_run_id ${{ github.run_id }} --output_dir warnings_in_ci --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }} --from_gh
-  #         echo "$(python3 -c 'import os; import json; fp = open("warnings_in_ci/selected_warnings.json"); d = json.load(fp); d = "\n".join(d) ;print(d)')"
+      - name: Extract warnings in CI artifacts
+        run: |
+          python3 utils/extract_warnings.py --workflow_run_id ${{ github.run_id }} --output_dir warnings_in_ci --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }} --from_gh
+          echo "$(python3 -c 'import os; import json; fp = open("warnings_in_ci/selected_warnings.json"); d = json.load(fp); d = "\n".join(d) ;print(d)')"
 
-  #     - name: Upload artifact
-  #       if: ${{ always() }}
-  #       uses: actions/upload-artifact@v3
-  #       with:
-  #         name: warnings_in_ci
-  #         path: warnings_in_ci/selected_warnings.json
+      - name: Upload artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: warnings_in_ci
+          path: warnings_in_ci/selected_warnings.json
 
-  # send_results:
-  #   name: Send results to webhook
-  #   runs-on: ubuntu-22.04
-  #   if: always()
-  #   needs: [
-  #     setup,
-  #     run_tests_gpu,
-  #     run_examples_gpu,
-  #     run_pipelines_tf_gpu,
-  #     run_pipelines_torch_gpu,
-  #     run_all_tests_torch_cuda_extensions_gpu,
-  #     run_tests_quantization_torch_gpu,
-  #     run_extract_warnings
-  #   ]
-  #   steps:
-  #     - name: Preliminary job status
-  #       shell: bash
-  #       # For the meaning of these environment variables, see the job `Setup`
-  #       run: |
-  #         echo "Setup status: ${{ needs.setup.result }}"
+  send_results:
+    name: Send results to webhook
+    runs-on: ubuntu-22.04
+    if: always()
+    needs: [
+      setup,
+      run_tests_quantization_torch_gpu,
+      run_extract_warnings
+    ]
+    steps:
+      - name: Preliminary job status
+        shell: bash
+        # For the meaning of these environment variables, see the job `Setup`
+        run: |
+          echo "Setup status: ${{ needs.setup.result }}"
 
-  #     - uses: actions/checkout@v3
-  #     - uses: actions/download-artifact@v3
-  #     - name: Send message to Slack
-  #       env:
-  #         CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
-  #         CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
-  #         CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
-  #         CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
-  #         CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
-  #         ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-  #         CI_EVENT: scheduled
-  #         CI_SHA: ${{ github.sha }}
-  #         CI_WORKFLOW_REF: ${{ github.workflow_ref }}
-  #         SETUP_STATUS: ${{ needs.setup.result }}
-  #       # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
-  #       # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
-  #       run: |
-  #         sudo apt-get install -y curl
-  #         pip install slack_sdk
-  #         pip show slack_sdk
-  #         python utils/notification_service.py "${{ needs.setup.outputs.folder_slices }}"
+      # - uses: actions/checkout@v3
+      # - uses: actions/download-artifact@v3
+      # - name: Send message to Slack
+      #   env:
+      #     CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+      #     CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
+      #     CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
+      #     CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
+      #     CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
+      #     ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+      #     CI_EVENT: scheduled
+      #     CI_SHA: ${{ github.sha }}
+      #     CI_WORKFLOW_REF: ${{ github.workflow_ref }}
+      #     SETUP_STATUS: ${{ needs.setup.result }}
+      #   # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
+      #   # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
+      #   run: |
+      #     sudo apt-get install -y curl
+      #     pip install slack_sdk
+      #     pip show slack_sdk
+      #     python utils/notification_service.py "${{ needs.setup.outputs.folder_slices }}"
 
-  #     # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
-  #     - name: Failure table artifacts
-  #       if: ${{ always() }}
-  #       uses: actions/upload-artifact@v3
-  #       with:
-  #         name: prev_ci_results
-  #         path: prev_ci_results
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+      - name: Send message to Slack for quantization workflow
+        env:
+          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+          CI_EVENT: scheduled
+          CI_SHA: ${{ github.sha }}
+          SETUP_STATUS: ${{ needs.setup.result }}
+        # We pass `needs.setup.outputs.quantization_matrix` as the argument. A processing in `notification_service_quantization.py` to change
+        # `quantization/bnb` to `quantization_bnb` is required, as the artifact names use `_` instead of `/`.
+        run: |
+          sudo apt-get install -y curl
+          pip install slack_sdk
+          pip show slack_sdk
+          python utils/notification_service_quantization.py "${{ needs.setup.outputs.quantization_matrix }}" 
+      
+
+      # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
+      - name: Failure table artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: prev_ci_results
+          path: prev_ci_results
