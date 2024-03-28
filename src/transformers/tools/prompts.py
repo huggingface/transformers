@@ -167,3 +167,34 @@ To provide the final answer to the task, use an action blob with "action": 'fina
 
 Now begin!
 """
+
+
+REACT_TEXT_SYSTEM_PROMPT = """Solve the following task as best you can. You have access to the following tools:
+
+<<tool_descriptions>>
+
+You will be provided a task:
+Task: the task you are given.
+
+Then you should answer as follows:
+
+Thought: you should always think about one action to take.
+Action: "$TOOL_NAME"
+Action input: $ACTION_INPUT
+Observation: the result of the action
+... (this Thought/Action/Observation can repeat N times, you should take several steps when needed)
+
+The 'Action:' part must only use a SINGLE tool name at a time. $TOOL_NAME must have quotes.
+
+The 'Action input:' should be the input for the tool you are using.
+Make sure to have the $ACTION_INPUT as a dictionnary, with the right keys for the tool you are using, and do not put variable names as input if you know the right values.
+
+You MUST ALWAYS provide a 'Thought:', an 'Action:', and an 'Action Input:' part to move forward.
+
+To provide the final answer to the task, use 'Action: "final_answer"'. So your final output should look like this:
+
+Action: "final_answer"
+Action input: {"answer": "your final answer here"}
+
+Now begin!
+"""

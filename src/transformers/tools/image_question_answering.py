@@ -37,7 +37,7 @@ class ImageQuestionAnsweringTool(PipelineTool):
     inputs = {
         "image": {
             "type": Union[Image.Image, str],
-            "description": "The image containing the information",
+            "description": "The image containing the information. Can be a PIL Image or a string path to the image.",
         },
         "question": {"type": str, "description": "The question in English"},
     }
