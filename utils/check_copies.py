@@ -309,7 +309,16 @@ def split_code_into_blocks(
     """
     splits = []
     # `indent - 4` is the indent level of the target class/func header
-    target_block_name = re.search(rf"^{' ' * (indent - 4)}((class|def)\s+\S+)(\(|\:)", lines[start_index]).groups()[0]
+    try:
+        target_block_name = re.search(
+            rf"^{' ' * (indent - 4)}((class|def)\s+\S+)(\(|\:)", lines[start_index]
+        ).groups()[0]
+    except:
+        raise ValueError(
+            f"Tried to split a class or function. It did not work. Error comes from line {start_index}: ```\n"
+            + "".join(lines[start_index:end_index])
+            + "```\n"
+        )
 
     # from now on, the `block` means inner blocks unless explicitly specified
     indent_str = " " * indent
