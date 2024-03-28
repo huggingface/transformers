@@ -1558,6 +1558,9 @@ class JambaModel(JambaPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
+        # The maximum sequence length that this model is intended to be used with. Doesn't have any real effect
+        self.n_ctx = config.n_ctx
+
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
 
         # init each model layer, decide if it's mamba/attention and has experts or not
