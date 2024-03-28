@@ -313,7 +313,7 @@ def split_code_into_blocks(
         target_block_name = re.search(
             rf"^{' ' * (indent - 4)}((class|def)\s+\S+)(\(|\:)", lines[start_index]
         ).groups()[0]
-    except:
+    except ValueError:
         raise ValueError(
             f"Tried to split a class or function. It did not work. Error comes from line {start_index}: ```\n"
             + "".join(lines[start_index:end_index])
