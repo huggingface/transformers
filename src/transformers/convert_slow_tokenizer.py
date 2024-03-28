@@ -1371,9 +1371,9 @@ class LlamaConverter(SpmConverter):
             )
             tokenizer.add_special_tokens(
                 [
-                    AddedToken(self.original_tokenizer.unk_token, normalized=False, special=True),
-                    AddedToken(self.original_tokenizer.bos_token, normalized=False, special=True),
-                    AddedToken(self.original_tokenizer.eos_token, normalized=False, special=True),
+                    AddedToken(self.original_tokenizer.convert_ids_to_tokens(0), normalized=False, special=True),
+                    AddedToken(self.original_tokenizer.convert_ids_to_tokens(1), normalized=False, special=True),
+                    AddedToken(self.original_tokenizer.convert_ids_to_tokens(2), normalized=False, special=True),
                 ]
             )
         else:
