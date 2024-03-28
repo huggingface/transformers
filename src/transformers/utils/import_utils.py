@@ -805,9 +805,7 @@ def is_protobuf_available():
 
 
 def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
-    if min_version is not None:
-        return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
-    return _accelerate_available
+    return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
 
 
 def is_fsdp_available(min_version: str = FSDP_MIN_VERSION):
