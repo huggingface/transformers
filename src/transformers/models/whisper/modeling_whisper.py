@@ -21,7 +21,7 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
@@ -2196,10 +2196,16 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
         loss = None
 
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            # move labels to correct device to enable PP
-            labels = labels.to(logits.device)
-            loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+            if self.config.num_labels > 1:
+                loss_fct = CrossEntropyLoss()
+                # move labels to correct device to enable PP
+                labels = labels.to(logits.device)
+                loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+            else:
+                loss_fct = MSELoss()
+                # move labels to correct device to enable PP
+                labels = labels.to(logits.device)
+                loss = loss_fct(logits.view(-1), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + encoder_outputs[1:]
