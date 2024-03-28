@@ -196,6 +196,7 @@ from . import (
     roc_bert,
     roformer,
     rwkv,
+    rwkv5,
     sam,
     seamless_m4t,
     seamless_m4t_v2,
