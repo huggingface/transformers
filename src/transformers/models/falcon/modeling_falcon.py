@@ -58,14 +58,9 @@ if is_flash_attn_2_available():
 
 logger = logging.get_logger(__name__)
 
-FALCON_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "tiiuae/falcon-40b",
-    "tiiuae/falcon-40b-instruct",
-    "tiiuae/falcon-7b",
-    "tiiuae/falcon-7b-instruct",
-    "tiiuae/falcon-rw-7b",
-    "tiiuae/falcon-rw-1b",
-]
+from ..deprecated._archive_maps import FALCON_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 _CHECKPOINT_FOR_DOC = "Rocketknight1/falcon-rw-1b"
 _CONFIG_FOR_DOC = "FalconConfig"
 
@@ -438,9 +433,9 @@ class FalconAttention(nn.Module):
         else:
             present = None
 
-        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-        # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query_layer.device.type == "cuda" and attention_mask is not None:
+        if self._use_sdpa and query_layer.device.type == "cuda" and attention_mask is not None:
+            # For torch<=2.1.2, SDPA with memory-efficient backend is bugged with non-contiguous inputs with custom attn_mask,
+            # Reference: https://github.com/pytorch/pytorch/issues/112577.
             query_layer = query_layer.contiguous()
             key_layer = key_layer.contiguous()
             value_layer = value_layer.contiguous()
@@ -456,6 +451,7 @@ class FalconAttention(nn.Module):
                     # The query_length > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case query_length == 1.
                     is_causal=self.is_causal and attention_mask is None and query_length > 1,
                 )
+
                 attention_scores = None
             else:
                 attention_scores = query_layer @ key_layer.transpose(-1, -2)
@@ -656,7 +652,7 @@ class FalconFlashAttention2(FalconAttention):
             attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
+            dropout (`float`):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
@@ -1112,18 +1108,17 @@ class FalconModel(FalconPreTrainedModel):
                 if attention_mask_2d is None:
                     attention_mask = alibi / math.sqrt(self.config.hidden_size // self.num_heads)
                 else:
+                    min_dtype = torch.finfo(alibi.dtype).min
                     attention_mask = torch.masked_fill(
                         alibi / math.sqrt(self.config.hidden_size // self.num_heads),
                         attention_mask < -1,
-                        torch.finfo(alibi.dtype).min,
+                        min_dtype,
                     )
 
                     # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
                     # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
-                    if seq_length > 1:
-                        attention_mask = AttentionMaskConverter._unmask_unattended(
-                            attention_mask, attention_mask_2d, unmasked_value=0.0
-                        )
+                    if seq_length > 1 and attention_mask.device.type == "cuda":
+                        attention_mask = AttentionMaskConverter._unmask_unattended(attention_mask, min_dtype=min_dtype)
             else:
                 # PyTorch SDPA does not support head_mask, we fall back on the eager implementation in this case.
                 attention_mask = _prepare_4d_causal_attention_mask(

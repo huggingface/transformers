@@ -27,6 +27,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/spiece.model")
 @require_sentencepiece
 @require_tokenizers
 class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/deberta-v2-xlarge"
     tokenizer_class = DebertaV2Tokenizer
     rust_tokenizer_class = DebertaV2TokenizerFast
     test_sentencepiece = True

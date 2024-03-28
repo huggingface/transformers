@@ -43,7 +43,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import XCLIPModel, XCLIPTextModel, XCLIPVisionModel
-    from transformers.models.x_clip.modeling_x_clip import XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -216,9 +215,9 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = XCLIPVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/xclip-base-patch32"
+        model = XCLIPVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_gradient_checkpointing_backward_compatibility(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -454,9 +453,9 @@ class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = XCLIPTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/xclip-base-patch32"
+        model = XCLIPTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class XCLIPModelTester:
@@ -479,6 +478,7 @@ class XCLIPModelTester:
         self.mit_hidden_size = mit_hidden_size
         self.text_model_tester = XCLIPTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = XCLIPVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -683,9 +683,9 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = XCLIPModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/xclip-base-patch32"
+        model = XCLIPModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on a spaghetti video

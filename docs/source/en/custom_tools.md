@@ -208,7 +208,7 @@ Great now that we know how the prompt is structured, let's see how we can custom
 ### Customizing the tool descriptions
 
 As we've seen before the agent has access to each of the tools' names and descriptions. The base tools 
-should have very precise names and descriptions, however, you might find that it could help to change the 
+should have very precise names and descriptions, however, you might find that it could help to change 
 the description or name of a tool for your specific use case. This might become especially important 
 when you've added multiple tools that are very similar or if you want to use your agent only for a certain 
 domain, *e.g.* image generation and transformations.
@@ -334,6 +334,15 @@ To upload your custom prompt on a repo on the Hub and share it with the communit
 - to put the prompt template for the `run` command in a file named `run_prompt_template.txt`
 
 ## Using custom tools
+
+<Tip warning={true}>
+
+Using custom tools in your local runtime means that you'll download code to run on your machine.
+
+ALWAYS inspect the tool you're downloading before loading it within your runtime, as you would do when
+installing a package using pip/npm/apt.
+
+</Tip>
 
 In this section, we'll be leveraging two existing custom tools that are specific to image generation:
 

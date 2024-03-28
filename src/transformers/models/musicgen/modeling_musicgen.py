@@ -56,10 +56,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MusicgenConfig"
 _CHECKPOINT_FOR_DOC = "facebook/musicgen-small"
 
-MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/musicgen-small",
-    # See all Musicgen models at https://huggingface.co/models?filter=musicgen
-]
+
+from ..deprecated._archive_maps import MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -1336,7 +1334,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 )
 
             # 11. run greedy search
-            outputs = self.greedy_search(
+            outputs = self._greedy_search(
                 input_ids,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
@@ -1361,7 +1359,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             )
 
             # 12. run sample
-            outputs = self.sample(
+            outputs = self._sample(
                 input_ids,
                 logits_processor=logits_processor,
                 logits_warper=logits_warper,
@@ -2402,7 +2400,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 )
 
             # 11. run greedy search
-            outputs = self.greedy_search(
+            outputs = self._greedy_search(
                 input_ids,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
@@ -2428,7 +2426,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             )
 
             # 12. run sample
-            outputs = self.sample(
+            outputs = self._sample(
                 input_ids,
                 logits_processor=logits_processor,
                 logits_warper=logits_warper,

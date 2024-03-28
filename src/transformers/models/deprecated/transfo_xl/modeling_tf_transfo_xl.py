@@ -51,10 +51,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "transfo-xl/transfo-xl-wt103"
 _CONFIG_FOR_DOC = "TransfoXLConfig"
 
-TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "transfo-xl/transfo-xl-wt103",
-    # See all Transformer XL models at https://huggingface.co/models?filter=transfo-xl
-]
+
+from .._archive_maps import TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class TFPositionalEmbedding(keras.layers.Layer):

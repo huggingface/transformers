@@ -47,10 +47,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "VideoMAEConfig"
 _CHECKPOINT_FOR_DOC = "MCG-NJU/videomae-base"
 
-VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "MCG-NJU/videomae-base",
-    # See all VideoMAE models at https://huggingface.co/models?filter=videomae
-]
+
+from ..deprecated._archive_maps import VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass

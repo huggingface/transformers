@@ -147,6 +147,7 @@ docs/source/en/model_doc/lilt.md
 docs/source/en/model_doc/llama.md
 docs/source/en/model_doc/llama2.md
 docs/source/en/model_doc/llava.md
+docs/source/en/model_doc/llava_next.md
 docs/source/en/model_doc/longformer.md
 docs/source/en/model_doc/longt5.md
 docs/source/en/model_doc/luke.md
@@ -176,6 +177,7 @@ docs/source/en/model_doc/mpt.md
 docs/source/en/model_doc/mra.md
 docs/source/en/model_doc/mt5.md
 docs/source/en/model_doc/musicgen.md
+docs/source/en/model_doc/musicgen_melody.md
 docs/source/en/model_doc/mvp.md
 docs/source/en/model_doc/nat.md
 docs/source/en/model_doc/nezha.md
@@ -199,6 +201,7 @@ docs/source/en/model_doc/prophetnet.md
 docs/source/en/model_doc/pvt.md
 docs/source/en/model_doc/qdqbert.md
 docs/source/en/model_doc/qwen2.md
+docs/source/en/model_doc/qwen2_moe.md
 docs/source/en/model_doc/rag.md
 docs/source/en/model_doc/realm.md
 docs/source/en/model_doc/reformer.md
@@ -642,6 +645,8 @@ src/transformers/models/llama/convert_llama_weights_to_hf.py
 src/transformers/models/llama/modeling_llama.py
 src/transformers/models/llava/configuration_llava.py
 src/transformers/models/llava/modeling_llava.py
+src/transformers/models/llava_next/configuration_llava_next.py
+src/transformers/models/llava_next/modeling_llava_next.py
 src/transformers/models/longformer/configuration_longformer.py
 src/transformers/models/longformer/convert_longformer_original_pytorch_lightning_to_pytorch.py
 src/transformers/models/longt5/configuration_longt5.py
@@ -706,6 +711,7 @@ src/transformers/models/mt5/modeling_flax_mt5.py
 src/transformers/models/mt5/modeling_mt5.py
 src/transformers/models/mt5/modeling_tf_mt5.py
 src/transformers/models/musicgen/convert_musicgen_transformers.py
+src/transformers/models/musicgen_melody/convert_musicgen_melody_transformers.py
 src/transformers/models/mvp/modeling_mvp.py
 src/transformers/models/nezha/modeling_nezha.py
 src/transformers/models/nllb_moe/configuration_nllb_moe.py
@@ -754,6 +760,8 @@ src/transformers/models/qwen2/configuration_qwen2.py
 src/transformers/models/qwen2/modeling_qwen2.py
 src/transformers/models/qwen2/tokenization_qwen2.py
 src/transformers/models/qwen2/tokenization_qwen2_fast.py
+src/transformers/models/qwen2_moe/configuration_qwen2_moe.py
+src/transformers/models/qwen2_moe/modeling_qwen2_moe.py
 src/transformers/models/rag/configuration_rag.py
 src/transformers/models/rag/modeling_rag.py
 src/transformers/models/rag/modeling_tf_rag.py
@@ -784,7 +792,7 @@ src/transformers/models/rwkv/configuration_rwkv.py
 src/transformers/models/rwkv/convert_rwkv_checkpoint_to_hf.py
 src/transformers/models/rwkv/modeling_rwkv.py
 src/transformers/models/sam/configuration_sam.py
-src/transformers/models/sam/convert_sam_original_to_hf_format.py
+src/transformers/models/sam/convert_sam_to_hf.py
 src/transformers/models/sam/image_processing_sam.py
 src/transformers/models/sam/modeling_sam.py
 src/transformers/models/sam/modeling_tf_sam.py
@@ -809,6 +817,7 @@ src/transformers/models/splinter/configuration_splinter.py
 src/transformers/models/splinter/modeling_splinter.py
 src/transformers/models/squeezebert/modeling_squeezebert.py
 src/transformers/models/stablelm/modeling_stablelm.py
+src/transformers/models/starcoder2/modeling_starcoder2.py
 src/transformers/models/swiftformer/configuration_swiftformer.py
 src/transformers/models/swiftformer/convert_swiftformer_original_to_hf.py
 src/transformers/models/swiftformer/modeling_swiftformer.py

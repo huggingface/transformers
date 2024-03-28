@@ -20,9 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "adept/persimmon-8b-base": "https://huggingface.co/adept/persimmon-8b-base/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class PersimmonConfig(PretrainedConfig):

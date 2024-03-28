@@ -63,10 +63,7 @@ _CHECKPOINT_FOR_DOC = "hustvl/yolos-small"
 _EXPECTED_OUTPUT_SHAPE = [1, 3401, 384]
 
 
-YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "hustvl/yolos-small",
-    # See all YOLOS models at https://huggingface.co/models?filter=yolos
-]
+from ..deprecated._archive_maps import YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -1079,9 +1076,10 @@ class YolosLoss(nn.Module):
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         world_size = 1
-        if PartialState._shared_state != {}:
-            num_boxes = reduce(num_boxes)
-            world_size = PartialState().num_processes
+        if is_accelerate_available():
+            if PartialState._shared_state != {}:
+                num_boxes = reduce(num_boxes)
+                world_size = PartialState().num_processes
         num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
 
         # Compute all the requested losses

@@ -24,6 +24,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_jieba
 class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "openbmb/cpm-ant-10b"
     tokenizer_class = CpmAntTokenizer
     test_rust_tokenizer = False
 
