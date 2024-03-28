@@ -36,6 +36,7 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
     provide an audio and a set of `candidate_labels`.
 
     <Tip warning={true}>
+
     The default `hypothesis_template` is : `"This is a sound of {}."`. Make sure you update it for your usage.
 
     </Tip>
