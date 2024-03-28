@@ -45,11 +45,8 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = 'DbrxConfig'
 
-#############################################################################
-# Copied from LLaMaRotaryEmbedding
-#############################################################################
 
-
+# Copied from transformers.models.gemma.modeling_gemma. GemmaRotaryEmbedding with Gemma->Dbrx
 class DbrxRotaryEmbedding(nn.Module):
 
     def __init__(self,
@@ -89,14 +86,14 @@ class DbrxRotaryEmbedding(nn.Module):
             sin = emb.sin()
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-
+# Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x: torch.Tensor) -> torch.Tensor:
     """Rotates half the hidden dims of the input."""
     x1 = x[..., :x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2:]
     return torch.cat((-x2, x1), dim=-1)
 
-
+# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(
         q: torch.Tensor,
         k: torch.Tensor,
@@ -127,7 +124,7 @@ def apply_rotary_pos_emb(
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
-
+# Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """Equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep).
 
@@ -144,11 +141,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
                                  head_dim)
 
 
-#############################################################################
-
-#############################################################################
-# Modified from modeling_mixtral
-#############################################################################
 
 
 def load_balancing_loss_func(
@@ -258,7 +250,7 @@ def resolve_ffn_act_fn(
 # Copied from LLaMaAttention
 #############################################################################
 
-
+# Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask: torch.Tensor):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
@@ -522,7 +514,7 @@ class DbrxFlashAttention2(DbrxAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value  # type: ignore
-
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
         self,
         query_states: torch.Tensor,
@@ -588,7 +580,7 @@ class DbrxFlashAttention2(DbrxAttention):
             )
 
         return attn_output
-
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
     def _upad_input(self, query_layer: torch.Tensor, key_layer: torch.Tensor,
                     value_layer: torch.Tensor, attention_mask: torch.Tensor,
                     query_length: int):
