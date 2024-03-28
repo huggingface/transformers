@@ -1008,9 +1008,9 @@ class CohereModel(CoherePreTrainedModel):
             # we can pass both the full 4D mask (i.e. [..., full_len, full_len]) and a 4D mask with the same shape
             # as the causal mask (i.e. [..., seq_len, full_len])
             mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
-            if attention_mask.shape[-2] == cache_position[0] + sequence_length:
-                offset = cache_position[0]
-                mask_slice = mask_slice[..., offset : offset + sequence_length, :]
+            offset = cache_position[0]
+            if attention_mask.shape[-2] == offset + sequence_length:
+                mask_slice = mask_slice[..., offset:, :]
             causal_mask = mask_slice
         else:
             if hasattr(self.layers[0].self_attn, "past_key_value"):  # static cache
