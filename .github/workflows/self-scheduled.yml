@@ -71,7 +71,7 @@ jobs:
         name: Identify quantization method to test
         working-directory: /transformers/tests
         run: |
-          echo "quantization_matrix=$(python3 -c 'import os; tests = os.getcwd(); quantization_tests = os.listdir(os.path.join(tests, "quantization")); d1 = sorted(list(filter(os.path.isdir, [f"quantization/{x}" for x in quantization_tests]))); d = f"{tests}/{d1}; print(d)')" >> $GITHUB_OUTPUT
+          echo "quantization_matrix=$(python3 -c 'import os; tests = os.getcwd(); quantization_tests = os.listdir(os.path.join(tests, "quantization")); d1 = sorted(list(filter(os.path.isdir, [f"quantization/{x}" for x in quantization_tests]))); d = tests + d1; print(d)')" >> $GITHUB_OUTPUT
 
       - name: NVIDIA-SMI
         run: |
