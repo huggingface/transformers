@@ -3502,7 +3502,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 max_memory = get_max_memory(max_memory)
             if hf_quantizer is not None:
                 max_memory = hf_quantizer.adjust_max_memory(max_memory)
-            print(max_memory)
             device_map_kwargs["max_memory"] = max_memory
 
             # Make sure tied weights are tied before creating the device map.
