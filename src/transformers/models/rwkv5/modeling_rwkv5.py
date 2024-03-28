@@ -397,7 +397,7 @@ class Rwkv5PreTrainedModel(PreTrainedModel):
     """
 
     config_class = Rwkv5Config
-    base_model_prefix = "rwkv"
+    base_model_prefix = "rwkv5"
     _no_split_modules = ["Rwkv5Block"]
     _keep_in_fp32_modules = ["time_decay", "time_first"]
     supports_gradient_checkpointing = True
@@ -465,7 +465,7 @@ class Rwkv5PreTrainedModel(PreTrainedModel):
 # Copied from transformers.models.rwkv.modeling_rwkv.RwkvOutput with Rwkv->Rwkv5,RWKV->RWKV5
 class Rwkv5Output(ModelOutput):
     """
-    Class for the RWKV model outputs.
+    Class for the RWKV5 model outputs.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
