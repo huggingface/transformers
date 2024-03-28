@@ -739,6 +739,7 @@ _import_structure = {
         "RealmConfig",
         "RealmTokenizer",
     ],
+    "models.recurrentgemma": ["RECURRENTGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RecurrentGemmaConfig"],
     "models.reformer": ["REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ReformerConfig"],
     "models.regnet": ["REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "RegNetConfig"],
     "models.rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
@@ -3100,6 +3101,13 @@ else:
             "RealmRetriever",
             "RealmScorer",
             "load_tf_weights_in_realm",
+        ]
+    )
+    _import_structure["models.recurrentgemma"].extend(
+        [
+            "RecurrentGemmaForCausalLM",
+            "RecurrentGemmaModel",
+            "RecurrentGemmaPreTrainedModel",
         ]
     )
     _import_structure["models.reformer"].extend(
@@ -7666,6 +7674,11 @@ if TYPE_CHECKING:
             RealmScorer,
             load_tf_weights_in_realm,
         )
+        from .models.recurrentgemma import (
+            RecurrentGemmaForCausalLM,
+            RecurrentGemmaModel,
+            RecurrentGemmaPreTrainedModel,
+        )
         from .models.reformer import (
             REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             ReformerAttention,
@@ -9108,12 +9121,12 @@ if TYPE_CHECKING:
             FlaxPegasusModel,
             FlaxPegasusPreTrainedModel,
         )
-        from .models.recurrentgemma import (
-            RecurrentGemmaForCausalLM,
-            RecurrentGemmaForSequenceClassification,
-            RecurrentGemmaModel,
-            RecurrentGemmaPreTrainedModel,
-        )
+        # Not implemented for FLAX yet.
+        # from .models.recurrentgemma import (
+        #     RecurrentGemmaForCausalLM,
+        #     RecurrentGemmaModel,
+        #     RecurrentGemmaPreTrainedModel,
+        # )
         from .models.regnet import (
             FlaxRegNetForImageClassification,
             FlaxRegNetModel,

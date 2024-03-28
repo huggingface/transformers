@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_gemma": ["GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "GemmaConfig"],
+    "configuration_recurrentgemma": ["RECURRENT_GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RecurrentGemmaConfig"],
 }
 
 try:
@@ -50,11 +50,11 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_gemma"] = [
-        "GemmaForCausalLM",
-        "GemmaModel",
-        "GemmaPreTrainedModel",
-        "GemmaForSequenceClassification",
+    _import_structure["modeling_recurrentgemma"] = [
+        "RecurrentGemmaForCausalLM",
+        "RecurrentGemmaModel",
+        "RecurrentGemmaPreTrainedModel",
+        # "RecurrentGemmaForSequenceClassification",
     ]
 
 try:
@@ -62,12 +62,13 @@ try:
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
-else:
-    _import_structure["modeling_flax_gemma"] = [
-        "FlaxGemmaForCausalLM",
-        "FlaxGemmaModel",
-        "FlaxGemmaPreTrainedModel",
-    ]
+# else:
+    # _import_structure["modeling_flax_gemma"] = [
+    #     "FlaxGemmaForCausalLM",
+    #     "FlaxGemmaModel",
+    #     "FlaxGemmaPreTrainedModel",
+    # ]
+
 
 
 if TYPE_CHECKING:
