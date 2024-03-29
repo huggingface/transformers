@@ -1256,8 +1256,8 @@ class DbrxForCausalLM(DbrxPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, DbrxForCausalLM
 
-        >>> model = DbrxForCausalLM.from_pretrained("databricks/dbrx")
-        >>> tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx")
+        >>> model = DbrxForCausalLM.from_pretrained("databricks/dbrx-instruct")
+        >>> tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
