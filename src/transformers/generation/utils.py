@@ -333,25 +333,16 @@ class GenerationMixin:
     A class containing all functions for auto-regressive text generation, to be used as a mixin in [`PreTrainedModel`].
 
     The class exposes [`~generation.GenerationMixin.generate`], which can be used for:
-        - *greedy decoding* by calling [`~generation.GenerationMixin._greedy_search`] if `num_beams=1` and
-          `do_sample=False`
-        - *contrastive search* by calling [`~generation.GenerationMixin._contrastive_search`] if `penalty_alpha>0` and
-          `top_k>1`
-        - *multinomial sampling* by calling [`~generation.GenerationMixin._sample`] if `num_beams=1` and
-          `do_sample=True`
-        - *beam-search decoding* by calling [`~generation.GenerationMixin._beam_search`] if `num_beams>1` and
-          `do_sample=False`
-        - *beam-search multinomial sampling* by calling [`~generation.GenerationMixin._beam_sample`] if `num_beams>1`
-          and `do_sample=True`
-        - *diverse beam-search decoding* by calling [`~generation.GenerationMixin._group_beam_search`], if `num_beams>1`
-          and `num_beam_groups>1`
-        - *constrained beam-search decoding* by calling [`~generation.GenerationMixin._constrained_beam_search`], if
-          `constraints!=None` or `force_words_ids!=None`
-        - *assisted decoding* by calling [`~generation.GenerationMixin._assisted_decoding`], if
-            `assistant_model` or `prompt_lookup_num_tokens` is passed to `.generate()`
+        - *greedy decoding* if `num_beams=1` and `do_sample=False`
+        - *contrastive search* if `penalty_alpha>0` and `top_k>1`
+        - *multinomial sampling* if `num_beams=1` and `do_sample=True`
+        - *beam-search decoding* if `num_beams>1` and `do_sample=False`
+        - *beam-search multinomial sampling* if `num_beams>1` and `do_sample=True`
+        - *diverse beam-search decoding* if `num_beams>1` and `num_beam_groups>1`
+        - *constrained beam-search decoding* if `constraints!=None` or `force_words_ids!=None`
+        - *assisted decoding* if `assistant_model` or `prompt_lookup_num_tokens` is passed to `.generate()`
 
-    You do not need to call any of the above methods directly. Pass custom parameter values to 'generate' instead. To
-    learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
+    To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
     """
 
     def prepare_inputs_for_generation(self, *args, **kwargs):
@@ -1593,6 +1584,7 @@ class GenerationMixin:
         prepared_stopping_criteria = self._get_stopping_criteria(
             generation_config=generation_config, stopping_criteria=stopping_criteria, tokenizer=tokenizer, **kwargs
         )
+
         # 10. go into different generation modes
         if generation_mode == GenerationMode.ASSISTED_GENERATION:
             if generation_config.num_return_sequences > 1:
@@ -1892,13 +1884,6 @@ class GenerationMixin:
             return False
         return True
 
-    def contrastive_search(self, *args, **kwargs):
-        logger.warning_once(
-            "Calling `contrastive_search` directly is deprecated and will be removed in v4.41. Use `generate` or a "
-            "custom generation loop instead.",
-        )
-        return self._contrastive_search(*args, **kwargs)
-
     @torch.no_grad()
     def _contrastive_search(
         self,
@@ -1909,7 +1894,6 @@ class GenerationMixin:
         logits_warper: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[Union[int, List[int]]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -1923,14 +1907,6 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **contrastive search** and can
         be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
-
-        <Tip warning={true}>
-
-        In most cases, you do not need to call [`~generation.GenerationMixin._contrastive_search`] directly. Use
-        generate() instead. For an overview of generation strategies and code examples, check the [following
-        guide](../generation_strategies).
-
-        </Tip>
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1951,8 +1927,6 @@ class GenerationMixin:
                 used to tell if the generation loop should stop.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`Union[int, List[int]]`, *optional*):
-                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -1983,55 +1957,27 @@ class GenerationMixin:
             [`~generation.GenerateDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
-
-        Examples:
-        ```python
-        >>> from transformers import (
-        ...     AutoTokenizer,
-        ...     AutoModelForCausalLM,
-        ...     StoppingCriteriaList,
-        ...     MaxLengthCriteria,
-        ... )
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
-        >>> model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m")
-        >>> # set pad_token_id to eos_token_id because OPT does not have a PAD token
-        >>> model.config.pad_token_id = model.config.eos_token_id
-        >>> input_prompt = "DeepMind Company is"
-        >>> input_ids = tokenizer(input_prompt, return_tensors="pt")
-        >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=64)])
-        >>> outputs = model._contrastive_search(
-        ...     **input_ids, penalty_alpha=0.6, top_k=4, stopping_criteria=stopping_criteria
-        ... )
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['DeepMind Company is a company that focuses on the development and commercialization of artificial intelligence (AI). DeepMind’s mission is to help people understand and solve problems that are difficult to solve in the world today.\n\nIn this post, we talk about the benefits of deep learning in business and how it']
-        ```"""
+        """
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        if eos_token_id is not None:
-            logger.warning_once(
-                "`eos_token_id` is deprecated in this function and will be removed in v4.41, use"
-                " `stopping_criteria=StoppingCriteriaList([EosTokenCriteria(eos_token_id=eos_token_id)])` instead."
-                " Otherwise make sure to set `model.generation_config.eos_token_id`",
-                FutureWarning,
-            )
-            stopping_criteria.append(EosTokenCriteria(eos_token_id=eos_token_id))
-        else:
-            # TODO remove when the method is totally private
-            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever
-            eos_token_id = [
-                criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
-            ]
-            eos_token_id = eos_token_id[0] if eos_token_id else None
-            if eos_token_id is None and self.generation_config.eos_token_id is not None:
-                eos_token_id = self.generation_config.eos_token_id
-                stopping_criteria.append(EosTokenCriteria(eos_token_id=eos_token_id))
+        has_eos_stopping_criteria = any(hasattr(criteria, "eos_token_id") for criteria in stopping_criteria)
 
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
+        # else:
+        #     # TODO remove when the method is totally private
+        #     # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever
+        #     eos_token_id = [
+        #         criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
+        #     ]
+        #     eos_token_id = eos_token_id[0] if eos_token_id else None
+        #     if eos_token_id is None and self.generation_config.eos_token_id is not None:
+        #         eos_token_id = self.generation_config.eos_token_id
+        #         stopping_criteria.append(EosTokenCriteria(eos_token_id=eos_token_id))
+
+        # if isinstance(eos_token_id, int):
+        #     eos_token_id = [eos_token_id]
         sequential = sequential if sequential is not None else self.generation_config.low_memory
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
@@ -2294,9 +2240,7 @@ class GenerationMixin:
                 continue  # don't waste resources running the code we don't need
 
             # finished sentences should have their next token be a padding token
-            if eos_token_id is not None:
-                if pad_token_id is None:
-                    raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
+            if has_eos_stopping_criteria:
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
             # update generated ids, model inputs, and length for next step
@@ -2352,13 +2296,6 @@ class GenerationMixin:
         else:
             return input_ids
 
-    def greedy_search(self, *args, **kwargs):
-        logger.warning_once(
-            "Calling `greedy_search` directly is deprecated and will be removed in v4.41. Use `generate` or a "
-            "custom generation loop instead.",
-        )
-        return self._greedy_search(*args, **kwargs)
-
     def _greedy_search(
         self,
         input_ids: torch.LongTensor,
@@ -2379,15 +2316,6 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **greedy decoding** and can be
         used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
-
-        <Tip warning={true}>
-
-        In most cases, you do not need to call [`~generation.GenerationMixin._greedy_search`] directly. Use generate()
-        instead. For an overview of generation strategies and code examples, check the [following
-        guide](../generation_strategies).
-
-        </Tip>
-
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2434,43 +2362,7 @@ class GenerationMixin:
             [`~generation.GenerateDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
-
-        Examples:
-
-        ```python
-        >>> from transformers import (
-        ...     AutoTokenizer,
-        ...     AutoModelForCausalLM,
-        ...     LogitsProcessorList,
-        ...     MinLengthLogitsProcessor,
-        ...     StoppingCriteriaList,
-        ...     MaxLengthCriteria,
-        ... )
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
-        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-
-        >>> # set pad_token_id to eos_token_id because GPT2 does not have a PAD token
-        >>> model.generation_config.pad_token_id = model.generation_config.eos_token_id
-
-        >>> input_prompt = "It might be possible to"
-        >>> input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
-
-        >>> # instantiate logits processors
-        >>> logits_processor = LogitsProcessorList(
-        ...     [
-        ...         MinLengthLogitsProcessor(10, eos_token_id=model.generation_config.eos_token_id),
-        ...     ]
-        ... )
-        >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=20)])
-
-        >>> outputs = model._greedy_search(
-        ...     input_ids, logits_processor=logits_processor, stopping_criteria=stopping_criteria
-        ... )
-
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ["It might be possible to get a better understanding of the nature of the problem, but it's not"]
-        ```"""
+        """
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
@@ -2626,13 +2518,6 @@ class GenerationMixin:
         else:
             return input_ids
 
-    def sample(self, *args, **kwargs):
-        logger.warning_once(
-            "Calling `sample` directly is deprecated and will be removed in v4.41. Use `generate` or a "
-            "custom generation loop instead.",
-        )
-        return self._sample(*args, **kwargs)
-
     def _sample(
         self,
         input_ids: torch.LongTensor,
@@ -2654,14 +2539,6 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **multinomial sampling** and
         can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
-
-        <Tip warning={true}>
-
-        In most cases, you do not need to call [`~generation.GenerationMixin._sample`] directly. Use generate() instead.
-        For an overview of generation strategies and code examples, check the [following
-        guide](../generation_strategies).
-
-        </Tip>
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2711,59 +2588,7 @@ class GenerationMixin:
             [`~generation.GenerateDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
-
-        Examples:
-
-        ```python
-        >>> from transformers import (
-        ...     AutoTokenizer,
-        ...     AutoModelForCausalLM,
-        ...     LogitsProcessorList,
-        ...     MinLengthLogitsProcessor,
-        ...     TopKLogitsWarper,
-        ...     TemperatureLogitsWarper,
-        ...     StoppingCriteriaList,
-        ...     MaxLengthCriteria,
-        ... )
-        >>> import torch
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
-        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-
-        >>> # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
-        >>> model.config.pad_token_id = model.config.eos_token_id
-        >>> model.generation_config.pad_token_id = model.config.eos_token_id
-
-        >>> input_prompt = "Today is a beautiful day, and"
-        >>> input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
-
-        >>> # instantiate logits processors
-        >>> logits_processor = LogitsProcessorList(
-        ...     [
-        ...         MinLengthLogitsProcessor(15, eos_token_id=model.generation_config.eos_token_id),
-        ...     ]
-        ... )
-        >>> # instantiate logits processors
-        >>> logits_warper = LogitsProcessorList(
-        ...     [
-        ...         TopKLogitsWarper(50),
-        ...         TemperatureLogitsWarper(0.7),
-        ...     ]
-        ... )
-
-        >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=20)])
-
-        >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
-        >>> outputs = model._sample(
-        ...     input_ids,
-        ...     logits_processor=logits_processor,
-        ...     logits_warper=logits_warper,
-        ...     stopping_criteria=stopping_criteria,
-        ... )
-
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Today is a beautiful day, and we must do everything possible to make it a day of celebration.']
-        ```"""
+        """
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
@@ -2949,13 +2774,6 @@ class GenerationMixin:
             past_key_values.reorder_cache(beam_idx)
         return past_key_values
 
-    def beam_search(self, *args, **kwargs):
-        logger.warning_once(
-            "Calling `beam_search` directly is deprecated and will be removed in v4.41. Use `generate` or a "
-            "custom generation loop instead.",
-        )
-        return self._beam_search(*args, **kwargs)
-
     def _beam_search(
         self,
         input_ids: torch.LongTensor,
@@ -2977,14 +2795,6 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **beam search decoding** and
         can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
-
-        <Tip warning={true}>
-
-        In most cases, you do not need to call [`~generation.GenerationMixin._beam_search`] directly. Use generate()
-        instead. For an overview of generation strategies and code examples, check the [following
-        guide](../generation_strategies).
-
-        </Tip>
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -3034,59 +2844,7 @@ class GenerationMixin:
             [`~generation.GenerateBeamDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
             `return_dict_in_generate=True` or a [`~generation.GenerateBeamEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
-
-
-        Examples:
-
-        ```python
-        >>> from transformers import (
-        ...     AutoTokenizer,
-        ...     AutoModelForSeq2SeqLM,
-        ...     LogitsProcessorList,
-        ...     MinLengthLogitsProcessor,
-        ...     BeamSearchScorer,
-        ... )
-        >>> import torch
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
-        >>> model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
-
-        >>> encoder_input_str = "translate English to German: How old are you?"
-        >>> encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
-
-
-        >>> # lets run beam search using 3 beams
-        >>> num_beams = 3
-        >>> # define decoder start token ids
-        >>> input_ids = torch.ones((num_beams, 1), device=model.device, dtype=torch.long)
-        >>> input_ids = input_ids * model.config.decoder_start_token_id
-
-        >>> # add encoder_outputs to model keyword arguments
-        >>> model_kwargs = {
-        ...     "encoder_outputs": model.get_encoder()(
-        ...         encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True
-        ...     )
-        ... }
-
-        >>> # instantiate beam scorer
-        >>> beam_scorer = BeamSearchScorer(
-        ...     batch_size=1,
-        ...     num_beams=num_beams,
-        ...     device=model.device,
-        ... )
-
-        >>> # instantiate logits processors
-        >>> logits_processor = LogitsProcessorList(
-        ...     [
-        ...         MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id),
-        ...     ]
-        ... )
-
-        >>> outputs = model._beam_search(input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs)
-
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Wie alt bist du?']
-        ```"""
+        """
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
@@ -3348,13 +3106,6 @@ class GenerationMixin:
         else:
             return sequence_outputs["sequences"]
 
-    def beam_sample(self, *args, **kwargs):
-        logger.warning_once(
-            "Calling `beam_sample` directly is deprecated and will be removed in v4.41. Use `generate` or a "
-            "custom generation loop instead.",
-        )
-        return self._beam_sample(*args, **kwargs)
-
     def _beam_sample(
         self,
         input_ids: torch.LongTensor,
@@ -3376,14 +3127,6 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **beam search multinomial
         sampling** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
-
-        <Tip warning={true}>
-
-        In most cases, you do not need to call [`~generation.GenerationMixin._beam_sample`] directly. Use generate()
-        instead. For an overview of generation strategies and code examples, check the [following
-        guide](../generation_strategies).
-
-        </Tip>
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -3433,67 +3176,7 @@ class GenerationMixin:
             [`~generation.GenerateBeamDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
             `return_dict_in_generate=True` or a [`~generation.GenerateBeamEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
-
-        Examples:
-
-        ```python
-        >>> from transformers import (
-        ...     AutoTokenizer,
-        ...     AutoModelForSeq2SeqLM,
-        ...     LogitsProcessorList,
-        ...     MinLengthLogitsProcessor,
-        ...     TopKLogitsWarper,
-        ...     TemperatureLogitsWarper,
-        ...     BeamSearchScorer,
-        ... )
-        >>> import torch
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
-        >>> model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
-
-        >>> encoder_input_str = "translate English to German: How old are you?"
-        >>> encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
-
-        >>> # lets run beam search using 3 beams
-        >>> num_beams = 3
-        >>> # define decoder start token ids
-        >>> input_ids = torch.ones((num_beams, 1), device=model.device, dtype=torch.long)
-        >>> input_ids = input_ids * model.config.decoder_start_token_id
-
-        >>> # add encoder_outputs to model keyword arguments
-        >>> model_kwargs = {
-        ...     "encoder_outputs": model.get_encoder()(
-        ...         encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True
-        ...     )
-        ... }
-
-        >>> # instantiate beam scorer
-        >>> beam_scorer = BeamSearchScorer(
-        ...     batch_size=1,
-        ...     max_length=model.config.max_length,
-        ...     num_beams=num_beams,
-        ...     device=model.device,
-        ... )
-
-        >>> # instantiate logits processors
-        >>> logits_processor = LogitsProcessorList(
-        ...     [MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id)]
-        ... )
-        >>> # instantiate logits processors
-        >>> logits_warper = LogitsProcessorList(
-        ...     [
-        ...         TopKLogitsWarper(50),
-        ...         TemperatureLogitsWarper(0.7),
-        ...     ]
-        ... )
-
-        >>> outputs = model._beam_sample(
-        ...     input_ids, beam_scorer, logits_processor=logits_processor, logits_warper=logits_warper, **model_kwargs
-        ... )
-
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Wie alt bist du?']
-        ```"""
+        """
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
@@ -3710,13 +3393,6 @@ class GenerationMixin:
         else:
             return sequence_outputs["sequences"]
 
-    def group_beam_search(self, *args, **kwargs):
-        logger.warning_once(
-            "Calling `group_beam_search` directly is deprecated and will be removed in v4.41. Use `generate` or a "
-            "custom generation loop instead.",
-        )
-        return self._group_beam_search(*args, **kwargs)
-
     def _group_beam_search(
         self,
         input_ids: torch.LongTensor,
@@ -3737,14 +3413,6 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **diverse beam search
         decoding** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
-
-        <Tip warning={true}>
-
-        In most cases, you do not need to call [`~generation.GenerationMixin._group_beam_search`] directly. Use
-        generate() instead. For an overview of generation strategies and code examples, check the [following
-        guide](../generation_strategies).
-
-        </Tip>
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -3791,64 +3459,7 @@ class GenerationMixin:
             [`~generation.GenerateBeamDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
             `return_dict_in_generate=True` or a [`~generation.GenerateBeamEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
-
-        Examples:
-
-        ```python
-        >>> from transformers import (
-        ...     AutoTokenizer,
-        ...     AutoModelForSeq2SeqLM,
-        ...     LogitsProcessorList,
-        ...     MinLengthLogitsProcessor,
-        ...     HammingDiversityLogitsProcessor,
-        ...     BeamSearchScorer,
-        ... )
-        >>> import torch
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
-        >>> model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
-
-        >>> encoder_input_str = "translate English to German: How old are you?"
-        >>> encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
-
-
-        >>> # lets run diverse beam search using 6 beams
-        >>> num_beams = 6
-        >>> # define decoder start token ids
-        >>> input_ids = torch.ones((num_beams, 1), device=model.device, dtype=torch.long)
-        >>> input_ids = input_ids * model.config.decoder_start_token_id
-
-        >>> # add encoder_outputs to model keyword arguments
-        >>> model_kwargs = {
-        ...     "encoder_outputs": model.get_encoder()(
-        ...         encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True
-        ...     )
-        ... }
-
-        >>> # instantiate beam scorer
-        >>> beam_scorer = BeamSearchScorer(
-        ...     batch_size=1,
-        ...     max_length=model.config.max_length,
-        ...     num_beams=num_beams,
-        ...     device=model.device,
-        ...     num_beam_groups=3,
-        ... )
-
-        >>> # instantiate logits processors
-        >>> logits_processor = LogitsProcessorList(
-        ...     [
-        ...         HammingDiversityLogitsProcessor(5.5, num_beams=6, num_beam_groups=3),
-        ...         MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id),
-        ...     ]
-        ... )
-
-        >>> outputs = model._group_beam_search(
-        ...     input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs
-        ... )
-
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Wie alt bist du?']
-        ```"""
+        """
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
@@ -4122,13 +3733,6 @@ class GenerationMixin:
         else:
             return sequence_outputs["sequences"]
 
-    def constrained_beam_search(self, *args, **kwargs):
-        logger.warning_once(
-            "Calling `constrained_beam_search` directly is deprecated and will be removed in v4.41. Use `generate` or a "
-            "custom generation loop instead.",
-        )
-        return self._constrained_beam_search(*args, **kwargs)
-
     def _constrained_beam_search(
         self,
         input_ids: torch.LongTensor,
@@ -4149,14 +3753,6 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **constrained beam search
         decoding** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
-
-        <Tip warning={true}>
-
-        In most cases, you do not need to call [`~generation.GenerationMixin._constrained_beam_search`] directly. Use
-        generate() instead. For an overview of generation strategies and code examples, check the [following
-        guide](../generation_strategies).
-
-        </Tip>
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -4207,65 +3803,7 @@ class GenerationMixin:
             [`~generation.GenerateBeamDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
             `return_dict_in_generate=True` or a [`~generation.GenerateBeamEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
-
-
-        Examples:
-
-        ```python
-        >>> from transformers import (
-        ...     AutoTokenizer,
-        ...     AutoModelForSeq2SeqLM,
-        ...     LogitsProcessorList,
-        ...     MinLengthLogitsProcessor,
-        ...     ConstrainedBeamSearchScorer,
-        ...     PhrasalConstraint,
-        ... )
-        >>> import torch
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
-        >>> model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
-
-        >>> encoder_input_str = "translate English to German: How old are you?"
-        >>> encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
-
-
-        >>> # lets run beam search using 3 beams
-        >>> num_beams = 3
-        >>> # define decoder start token ids
-        >>> input_ids = torch.ones((num_beams, 1), device=model.device, dtype=torch.long)
-        >>> input_ids = input_ids * model.config.decoder_start_token_id
-
-        >>> # add encoder_outputs to model keyword arguments
-        >>> model_kwargs = {
-        ...     "encoder_outputs": model.get_encoder()(
-        ...         encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True
-        ...     )
-        ... }
-
-        >>> constraint_str = "Sie"
-        >>> constraint_token_ids = tokenizer.encode(constraint_str)[:-1]  # slice to remove eos token
-        >>> constraints = [PhrasalConstraint(token_ids=constraint_token_ids)]
-
-
-        >>> # instantiate beam scorer
-        >>> beam_scorer = ConstrainedBeamSearchScorer(
-        ...     batch_size=1, num_beams=num_beams, device=model.device, constraints=constraints
-        ... )
-
-        >>> # instantiate logits processors
-        >>> logits_processor = LogitsProcessorList(
-        ...     [
-        ...         MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id),
-        ...     ]
-        ... )
-
-        >>> outputs = model._constrained_beam_search(
-        ...     input_ids, beam_scorer, constraints=constraints, logits_processor=logits_processor, **model_kwargs
-        ... )
-
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Wie alt sind Sie?']
-        ```"""
+        """
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
@@ -4490,13 +4028,6 @@ class GenerationMixin:
         else:
             return sequence_outputs["sequences"]
 
-    def assisted_decoding(self, *args, **kwargs):
-        logger.warning_once(
-            "Calling `_assisted_decoding` directly is deprecated and will be removed in v4.41. Use `generate` or a "
-            "custom generation loop instead.",
-        )
-        return self._assisted_decoding(*args, **kwargs)
-
     def _assisted_decoding(
         self,
         input_ids: torch.LongTensor,
@@ -4521,14 +4052,6 @@ class GenerationMixin:
         **sample** (depending on `do_sample`), assisted by candidate sequences. Assisted generation is an example of a
         candidate decoding strategy. Can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text
         models.
-
-        <Tip warning={true}>
-
-        In most cases, you do not need to call [`~generation.GenerationMixin._assisted_decoding`] directly. Use
-        generate() instead. For an overview of generation strategies and code examples, check the [following
-        guide](../generation_strategies).
-
-        </Tip>
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -4580,50 +4103,7 @@ class GenerationMixin:
             [`~generation.GenerateDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
-
-        Examples:
-
-        ```python
-        >>> from transformers import (
-        ...     AutoTokenizer,
-        ...     AutoModelForCausalLM,
-        ...     LogitsProcessorList,
-        ...     MinLengthLogitsProcessor,
-        ...     StoppingCriteriaList,
-        ...     MaxLengthCriteria,
-        ... )
-        >>> from transformers.generation import AssistedCandidateGenerator
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
-        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        >>> assistant_model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
-        >>> # set pad_token_id to eos_token_id because GPT2 does not have a PAD token
-        >>> model.generation_config.pad_token_id = model.generation_config.eos_token_id
-        >>> input_prompt = "It might be possible to"
-        >>> input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
-        >>> # instantiate logits processors
-        >>> logits_processor = LogitsProcessorList(
-        ...     [
-        ...         MinLengthLogitsProcessor(10, eos_token_id=model.generation_config.eos_token_id),
-        ...     ]
-        ... )
-        >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=20)])
-        >>> candidate_generator = AssistedCandidateGenerator(
-        ...     input_ids=input_ids,
-        ...     assistant_model=assistant_model,
-        ...     generation_config=model.generation_config,
-        ...     logits_processor=logits_processor,
-        ...     model_kwargs={},
-        ... )
-        >>> outputs = model._assisted_decoding(
-        ...     input_ids,
-        ...     candidate_generator=candidate_generator,
-        ...     logits_processor=logits_processor,
-        ...     stopping_criteria=stopping_criteria,
-        ... )
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ["It might be possible to get a better understanding of the nature of the problem, but it's not"]
-        ```"""
+        """
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
