@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_dbrx": ["DbrxConfig"],
+    "configuration_dbrx": ["DBRX_PRETRAINED_CONFIG_ARCHIVE_MAP", "DbrxConfig"],
 }
 
 try:
@@ -34,7 +34,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_dbrx import DbrxConfig
+    from .configuration_dbrx import DBRX_PRETRAINED_CONFIG_ARCHIVE_MAP, DbrxConfig
 
     try:
         if not is_torch_available():

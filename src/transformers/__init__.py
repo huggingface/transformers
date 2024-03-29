@@ -327,7 +327,7 @@ _import_structure = {
         "Data2VecTextConfig",
         "Data2VecVisionConfig",
     ],
-    "models.dbrx": ["DbrxConfig"],
+    "models.dbrx": ["DBRX_PRETRAINED_CONFIG_ARCHIVE_MAP", "DbrxConfig"],
     "models.deberta": [
         "DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DebertaConfig",
@@ -1937,6 +1937,7 @@ else:
     )
     _import_structure["models.dbrx"].extend(
         [
+            "DBRX_PRETRAINED_CONFIG_ARCHIVE_MAP",
             "DbrxForCausalLM",
             "DbrxModel",
             "DbrxPreTrainedModel",
@@ -5226,6 +5227,7 @@ if TYPE_CHECKING:
         Data2VecTextConfig,
         Data2VecVisionConfig,
     )
+    from .models.dbrx import DBRX_PRETRAINED_CONFIG_ARCHIVE_MAP, DbrxConfig
     from .models.deberta import (
         DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DebertaConfig,
@@ -6750,7 +6752,12 @@ if TYPE_CHECKING:
         )
 
         # PyTorch model imports
-        from .models.dbrx import DbrxForCausalLM, DbrxModel, DbrxPreTrainedModel
+        from .models.dbrx import (
+            DBRX_PRETRAINED_CONFIG_ARCHIVE_MAP,
+            DbrxForCausalLM,
+            DbrxModel,
+            DbrxPreTrainedModel,
+        )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             DebertaForMaskedLM,

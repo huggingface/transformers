@@ -18,6 +18,9 @@ from typing import Any, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..deprecated._archive_maps import (  # noqa: F401, E402
+    DBRX_PRETRAINED_CONFIG_ARCHIVE_MAP,
+)
 
 
 logger = logging.get_logger(__name__)
