@@ -32,6 +32,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class ProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/prophetnet-large-uncased"
     tokenizer_class = ProphetNetTokenizer
     test_rust_tokenizer = False
 

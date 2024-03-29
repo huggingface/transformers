@@ -335,12 +335,6 @@ generation_output[:2]
     - process
     - finalize
 
-## Utilities
-
-[[autodoc]] top_k_top_p_filtering
-
-[[autodoc]] tf_top_k_top_p_filtering
-
 ## Streamers
 
 [[autodoc]] TextStreamer

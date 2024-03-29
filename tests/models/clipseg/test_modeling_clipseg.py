@@ -52,7 +52,6 @@ if is_torch_available():
 
     from transformers import CLIPSegForImageSegmentation, CLIPSegModel, CLIPSegTextModel, CLIPSegVisionModel
     from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
-    from transformers.models.clipseg.modeling_clipseg import CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -224,9 +223,9 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLIPSegVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "CIDAS/clipseg-rd64-refined"
+        model = CLIPSegVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class CLIPSegTextModelTester:
@@ -365,9 +364,9 @@ class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLIPSegTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "CIDAS/clipseg-rd64-refined"
+        model = CLIPSegTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class CLIPSegModelTester:
@@ -388,6 +387,7 @@ class CLIPSegModelTester:
         self.parent = parent
         self.text_model_tester = CLIPSegTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = CLIPSegVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
         self.extract_layers = extract_layers
 
@@ -767,9 +767,9 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLIPSegModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "CIDAS/clipseg-rd64-refined"
+        model = CLIPSegModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

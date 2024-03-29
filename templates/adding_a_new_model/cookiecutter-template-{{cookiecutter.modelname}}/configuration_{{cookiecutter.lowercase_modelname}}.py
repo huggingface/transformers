@@ -20,11 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-{{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/{{cookiecutter.checkpoint_identifier}}/resolve/main/config.json",
-    # See all {{cookiecutter.modelname}} models at https://huggingface.co/models?filter={{cookiecutter.lowercase_modelname}}
-}
-
 
 class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
     r"""

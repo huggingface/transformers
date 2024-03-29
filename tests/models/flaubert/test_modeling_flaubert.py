@@ -16,7 +16,7 @@ import os
 import tempfile
 import unittest
 
-from transformers import FlaubertConfig, is_torch_available
+from transformers import FlaubertConfig, is_sacremoses_available, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -36,7 +36,6 @@ if is_torch_available():
         FlaubertModel,
         FlaubertWithLMHeadModel,
     )
-    from transformers.models.flaubert.modeling_flaubert import FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class FlaubertModelTester(object):
@@ -386,7 +385,7 @@ class FlaubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             "token-classification": FlaubertForTokenClassification,
             "zero-shot": FlaubertForSequenceClassification,
         }
-        if is_torch_available()
+        if is_torch_available() and is_sacremoses_available()
         else {}
     )
 
@@ -458,9 +457,9 @@ class FlaubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlaubertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "flaubert/flaubert_small_cased"
+        model = FlaubertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     @require_torch_accelerator

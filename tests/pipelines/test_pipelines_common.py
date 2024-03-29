@@ -199,6 +199,29 @@ class CommonPipelineTest(unittest.TestCase):
         outputs = text_classifier(["This is great !"] * 20, batch_size=32)
         self.assertEqual(len(outputs), 20)
 
+    @require_torch
+    def test_torch_dtype_property(self):
+        import torch
+
+        model_id = "hf-internal-testing/tiny-random-distilbert"
+
+        # If dtype is specified in the pipeline constructor, the property should return that type
+        pipe = pipeline(model=model_id, torch_dtype=torch.float16)
+        self.assertEqual(pipe.torch_dtype, torch.float16)
+
+        # If the underlying model changes dtype, the property should return the new type
+        pipe.model.to(torch.bfloat16)
+        self.assertEqual(pipe.torch_dtype, torch.bfloat16)
+
+        # If dtype is NOT specified in the pipeline constructor, the property should just return
+        # the dtype of the underlying model (default)
+        pipe = pipeline(model=model_id)
+        self.assertEqual(pipe.torch_dtype, torch.float32)
+
+        # If underlying model doesn't have dtype property, simply return None
+        pipe.model = None
+        self.assertIsNone(pipe.torch_dtype)
+
 
 @is_pipeline_test
 class PipelineScikitCompatTest(unittest.TestCase):

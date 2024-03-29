@@ -52,13 +52,9 @@ _HIDDEN_STATES_START_POSITION = 2
 _CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
 
-TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/wav2vec2-base-960h",
-    "facebook/wav2vec2-large-960h",
-    "facebook/wav2vec2-large-960h-lv60",
-    "facebook/wav2vec2-large-960h-lv60-self",
-    # See all Wav2Vec2 models at https://huggingface.co/models?filter=wav2vec2
-]
+
+from ..deprecated._archive_maps import TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
 
 LARGE_NEGATIVE = -1e8
 

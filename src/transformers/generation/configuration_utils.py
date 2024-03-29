@@ -279,10 +279,17 @@ class GenerationConfig(PushToHubMixin):
             - `"heuristic_transient"`: Same as `"heuristic"` but `num_assistant_tokens` is reset to its initial value after each generation call.
             - `"constant"`: `num_assistant_tokens` stays unchanged during generation
 
+        prompt_lookup_num_tokens (`int`, *optional*, default to `None`):
+            The number of tokens to be output as candidate tokens.
+
+        max_matching_ngram_size (`int`, *optional*, default to `None`):
+            The maximum ngram size to be considered for matching in the prompt. Default to 2 if not provided.
+
         > Parameters specific to the caching mechanism:
 
         cache_implementation (`str`, *optional*, default to `None`):
             Cache class that should be used when generating.
+
 
         > Wild card
 
@@ -360,6 +367,7 @@ class GenerationConfig(PushToHubMixin):
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
+        self.max_matching_ngram_size = kwargs.pop("max_matching_ngram_size", None)
 
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
@@ -644,7 +652,8 @@ class GenerationConfig(PushToHubMixin):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
 
-        # At save time, validate the instance -- if any warning/exception is thrown, we refuse to save the instance
+        # At save time, validate the instance -- if any warning/exception is thrown, we refuse to save the instance.
+        # This strictness is enforced to prevent bad configurations from being saved and re-used.
         try:
             with warnings.catch_warnings(record=True) as caught_warnings:
                 self.validate()
