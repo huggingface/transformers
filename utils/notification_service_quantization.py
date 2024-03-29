@@ -188,7 +188,7 @@ if __name__ == "__main__":
     try:
         quantization_matrix = ast.literal_eval(arguments)
         # Need to change from elements like `quantization/bnb` to `quantization_bnb` (the ones used as artifact names).
-        quantization_matrix = [x.replace("quantization/", "quantization_") for folders in quantization_matrix for x in folders]
+        quantization_matrix = [x.replace("quantization/", "quantization_") for x in quantization_matrix]
     except SyntaxError:
         Message.error_out(title, ci_title="")
         raise ValueError("Errored out.")
