@@ -1620,7 +1620,6 @@ class GenerationMixin:
                 logits_processor=prepared_logits_processor,
                 logits_warper=self._get_logits_warper(generation_config) if generation_config.do_sample else None,
                 stopping_criteria=prepared_stopping_criteria,
-                pad_token_id=generation_config.pad_token_id,
                 output_attentions=generation_config.output_attentions,
                 output_hidden_states=generation_config.output_hidden_states,
                 output_scores=generation_config.output_scores,
@@ -3726,8 +3725,6 @@ class GenerationMixin:
         logits_processor: LogitsProcessorList,
         logits_warper: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
-        pad_token_id: Optional[int],
-        eos_token_id: Optional[Union[int, List[int]]],
         output_attentions: bool,
         output_hidden_states: bool,
         output_scores: bool,
@@ -3761,10 +3758,6 @@ class GenerationMixin:
             stopping_criteria (`StoppingCriteriaList`):
                 An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
                 used to tell if the generation loop should stop.
-            pad_token_id (`int`, *optional*):
-                The id of the *padding* token.
-            eos_token_id (`Union[int, List[int]]`, *optional*):
-                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
             output_attentions (`bool`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
