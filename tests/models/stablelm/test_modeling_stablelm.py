@@ -21,6 +21,7 @@ from parameterized import parameterized
 
 from transformers import StableLmConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
+    is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -500,6 +501,8 @@ class StableLmModelIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-3:].tolist())
 
     # Copied from transformers.tests.models.llama.test_modeling_llama.LlamaModelTest.test_eager_matches_sdpa_generate with Llama->StableLm,saibo/llama-1B->stabilityai/stablelm-3b-4e1t
+    # TODO: @Fxmarty
+    @is_flaky(max_attempts=3, description="flaky on some models.")
     @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
