@@ -12,7 +12,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - hard_error_safetensors
+      - run_scheduled_ci*
 
 env:
   HF_HOME: /mnt/cache
