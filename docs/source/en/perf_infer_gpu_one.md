@@ -40,6 +40,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Bark](https://huggingface.co/docs/transformers/model_doc/bark#transformers.BarkModel)
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
 * [Cohere](https://huggingface.co/docs/transformers/model_doc/cohere#transformers.CohereModel)
+* [Dbrx](https://huggingface.co/docs/transformers/model_doc/dbrx#transformers.DbrxModel)
 * [DistilBert](https://huggingface.co/docs/transformers/model_doc/distilbert#transformers.DistilBertModel)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
 * [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
@@ -93,8 +94,8 @@ model_id = "tiiuae/falcon-7b"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 model = AutoModelForCausalLM.from_pretrained(
-    model_id, 
-    torch_dtype=torch.bfloat16, 
+    model_id,
+    torch_dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
 )
 ```
@@ -106,7 +107,7 @@ FlashAttention-2 can only be used when the model's dtype is `fp16` or `bf16`. Ma
 <br>
 
 You can also set `use_flash_attention_2=True` to enable FlashAttention-2 but it is deprecated in favor of `attn_implementation="flash_attention_2"`.
-  
+
 </Tip>
 
 FlashAttention-2 can be combined with other optimization techniques like quantization to further speedup inference. For example, you can combine FlashAttention-2 with 8-bit or 4-bit quantization:
@@ -120,14 +121,14 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 # load in 8bit
 model = AutoModelForCausalLM.from_pretrained(
-    model_id, 
+    model_id,
     load_in_8bit=True,
     attn_implementation="flash_attention_2",
 )
 
 # load in 4bit
 model = AutoModelForCausalLM.from_pretrained(
-    model_id, 
+    model_id,
     load_in_4bit=True,
     attn_implementation="flash_attention_2",
 )
