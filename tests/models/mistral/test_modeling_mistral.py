@@ -568,7 +568,7 @@ class MistralIntegrationTest(unittest.TestCase):
                     -5.8711,
                 ]
             ),  # fmt: skip
-        }
+        } # fmt: skip
 
         print(out[0, 0, :30])
         torch.testing.assert_close(
