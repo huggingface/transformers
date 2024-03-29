@@ -72,7 +72,10 @@ class QuantizationMessage(Message):
     @property
     def time(self) -> str:
         all_results = self.results.values()
-        time_spent = [r["time_spent"].split(", ")[0] for r in all_results if len(r["time_spent"])]
+        time_spent = []
+        for r in all_results:
+            if len(r["time_spent"]):
+                time_spent.extend([x for x in r["time_spent"].split(", ") if len(x.strip())])
         total_secs = 0
 
         for time in time_spent:
