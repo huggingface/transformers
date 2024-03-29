@@ -198,24 +198,32 @@ class FlaxLlamaAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
+        self.num_key_value_heads = config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.attention_softmax_in_fp32 = self.dtype is not jnp.float32
 
         dense = partial(
             nn.Dense,
-            self.embed_dim,
             use_bias=config.attention_bias,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
 
-        self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
-        self.o_proj = dense()
+        self.q_proj = dense(self.num_heads * self.head_dim)
+        self.k_proj = dense(self.num_key_value_heads * self.head_dim)
+        self.v_proj = dense(self.num_key_value_heads * self.head_dim)
+        self.o_proj = dense(self.embed_dim)
+        if (self.head_dim * self.num_heads) != self.embed_dim:
+            raise ValueError(
+                f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.embed_dim}"
+                f" and `num_heads`: {self.num_heads})."
+            )
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
         self.rotary_emb = FlaxLlamaRotaryEmbedding(config, dtype=self.dtype)
 
-    def _split_heads(self, hidden_states):
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads, self.head_dim))
+    def _split_heads(self, hidden_states, num_heads):
+        return hidden_states.reshape(hidden_states.shape[:2] + (num_heads, self.head_dim))
 
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
@@ -266,9 +274,9 @@ class FlaxLlamaAttention(nn.Module):
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
 
-        query = self._split_heads(query)
-        key = self._split_heads(key)
-        value = self._split_heads(value)
+        query = self._split_heads(query, self.num_heads)
+        key = self._split_heads(key, self.num_key_value_heads)
+        value = self._split_heads(value, self.num_key_value_heads)
 
         key, query = self.rotary_emb(key, query, position_ids)
 
@@ -297,6 +305,9 @@ class FlaxLlamaAttention(nn.Module):
         # and cache the keys and values step by step.
         if self.has_variable("cache", "cached_key") or init_cache:
             key, value, attention_mask = self._concatenate_to_cache(key, value, query, attention_mask)
+
+        key = jnp.repeat(key, self.num_key_value_groups, axis=2)
+        value = jnp.repeat(value, self.num_key_value_groups, axis=2)
 
         # transform boolean mask into float mask
         attention_bias = lax.select(
