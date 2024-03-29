@@ -235,6 +235,7 @@ if __name__ == "__main__":
                 quantization_results[quant]["failed"][artifact_path["gpu"]] += failed
                 quantization_results[quant]["success"] += success
                 quantization_results[quant]["time_spent"] += time_spent[1:-1] + ", "
+                print(quantization_results[quant])
 
                 stacktraces = handle_stacktraces(artifact["failures_line"])
 
@@ -254,7 +255,7 @@ if __name__ == "__main__":
 
     with open("prev_ci_results/quantization_results.json", "w", encoding="UTF-8") as fp:
         json.dump(quantization_results, fp, indent=4, ensure_ascii=False)
-
+    print(quantization_results)
     message = QuantizationMessage(
         title,
         results=quantization_results,
