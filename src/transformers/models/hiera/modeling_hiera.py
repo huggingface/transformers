@@ -227,13 +227,18 @@ class HieraMaskUnitAttention(nn.Module):
         self.window_size = window_size
         self.use_mask_unit_attn = use_mask_unit_attn
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        head_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
+    ) -> torch.Tensor:
         """Input should be of shape [batch, tokens, channels]."""
         batch_size, seq_len, _ = hidden_states.shape
 
         num_windows = 1
         if self.use_mask_unit_attn:
-            num_windows = seq_len // (self.q_stride * self.window_size)
+            num_windows = seq_len // (self.query_stride * self.window_size)
 
         qkv = self.qkv(hidden_states)
         qkv = qkv.reshape(batch_size, -1, num_windows, 3, self.num_heads, self.head_dim)
@@ -248,6 +253,10 @@ class HieraMaskUnitAttention(nn.Module):
 
         attn_weights = (query * self.scale) @ key.transpose(-1, -2)
         attn_weights = attn_weights.softmax(dim=-1)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            attn_weights = attn_weights * head_mask
 
         attn_output = attn_weights @ value
         attn_output = attn_output.transpose(1, 3).reshape(batch_size, -1, self.dim_out)
@@ -335,17 +344,24 @@ class HieraLayer(nn.Module):
         if dim != dim_out:
             self.proj = nn.Linear(dim, dim_out)
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> torch.Tensor:
-        batch_size, seq_len, hidden_dim = hidden_states.shape
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        head_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
+    ) -> torch.Tensor:
+        batch_size, seq_len, _ = hidden_states.shape
         # Attention + Q Pooling
         hidden_states_norm = self.layernorm_before(hidden_states)
 
         if self.dim != self.dim_out:
             hidden_states = self.proj(hidden_states_norm)
             # Refer to `HieraUnroll` to see how this performs a maxpool-Nd
-            hidden_states = hidden_states.view(batch_size, self.query_stride, -1, hidden_dim).max(dim=1).values
+            hidden_states = hidden_states.view(batch_size, self.query_stride, -1, self.dim_out).max(dim=1).values
 
-        (hidden_states_norm, attn_weights) = self.attn(hidden_states_norm, output_attentions=output_attentions)
+        (hidden_states_norm, attn_weights) = self.attn(
+            hidden_states_norm, head_mask, output_attentions=output_attentions
+        )
         hidden_states = hidden_states + self.drop_path(hidden_states_norm)
 
         residual = hidden_states
@@ -368,8 +384,14 @@ class HieraStage(nn.Module):
         query_stride: List[int],
         window_size: int,
         use_mask_unit_attn: bool,
+        stage_num: int,
     ) -> None:
         super().__init__()
+        # we need to know if the previous stage used masked attention
+        # mask unit or global attention.
+        # lag by 1 layer, so that global attention,
+        # applied post pooling on lower resolution
+        previous_stage_used_masked_attention = config.masked_unit_attention[stage_num - 1 if stage_num > 0 else 0]
         self.layers = nn.ModuleList(
             [
                 HieraLayer(
@@ -380,15 +402,20 @@ class HieraStage(nn.Module):
                     drop_path=drop_path[i],
                     query_stride=query_stride[i],
                     window_size=window_size,
-                    use_mask_unit_attn=use_mask_unit_attn,
+                    use_mask_unit_attn=use_mask_unit_attn or (previous_stage_used_masked_attention and i == 0),
                 )
                 for i in range(depth)
             ]
         )
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> torch.Tensor:
-        for layer_module in self.layers:
-            (hidden_states, attn_weights) = layer_module(hidden_states, output_attentions=output_attentions)
+    def forward(
+        self, hidden_states: torch.Tensor, head_mask: Optional[torch.FloatTensor], output_attentions: bool = False
+    ) -> torch.Tensor:
+        for i, layer_module in enumerate(self.layers):
+            layer_head_mask = head_mask[i] if head_mask is not None else None
+            (hidden_states, attn_weights) = layer_module(
+                hidden_states, layer_head_mask, output_attentions=output_attentions
+            )
 
         return hidden_states, attn_weights
 
@@ -424,6 +451,7 @@ class HieraEncoder(nn.Module):
                 query_stride=query_strides[sum(config.depths[:idx_stage]) : sum(config.depths[: idx_stage + 1])],
                 window_size=int(math.prod(config.masked_unit_size) * math.prod(config.query_stride) ** -idx_stage),
                 use_mask_unit_attn=config.masked_unit_attention[idx_stage],
+                stage_num=idx_stage,
             )
 
             embed_dim = dim_out
@@ -434,6 +462,7 @@ class HieraEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -442,15 +471,16 @@ class HieraEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
 
         for i, stage_module in enumerate(self.stages):
+            layer_head_mask = head_mask[i] if head_mask is not None else None
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    stage_module.__call__, hidden_states, output_attentions
+                    stage_module.__call__, hidden_states, layer_head_mask, output_attentions
                 )
             else:
-                layer_outputs = stage_module(hidden_states, output_attentions)
+                layer_outputs = stage_module(hidden_states, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -775,19 +805,19 @@ class HieraModel(HieraPreTrainedModel):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        head_mask = self.get_head_mask(head_mask, len(self.config.depths))
 
         # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
         expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
         if pixel_values.dtype != expected_dtype:
             pixel_values = pixel_values.to(expected_dtype)
 
-        embedding_output = self.embeddings(
-            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
-        )
+        embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
+
+        hidden_states = self.unroll(embedding_output)
 
         encoder_outputs = self.encoder(
-            embedding_output,
+            hidden_states,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -796,7 +826,8 @@ class HieraModel(HieraPreTrainedModel):
         sequence_output = encoder_outputs[0]
         pooled_output = None
         if self.pooler is not None:
-            pooled_output = self.pooler(sequence_output)
+            pooled_output = self.pooler(sequence_output.transpose(1, 2))
+            pooled_output = torch.flatten(pooled_output, 1)
             pooled_output = self.layernorm(pooled_output)
 
         if not return_dict:

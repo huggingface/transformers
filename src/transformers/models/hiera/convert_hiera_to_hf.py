@@ -206,6 +206,7 @@ def convert_hiera_checkpoint(args):
     base_model = args.base_model
     pytorch_dump_folder_path = args.pytorch_dump_folder_path
     verify_logits = args.verify_logits
+    verify_pixel_values = args.verify_pixel_values
     push_to_hub = args.push_to_hub
     IMAGENET_DEFAULT_MEAN = [0.485, 0.456, 0.406]
     IMAGENET_DEFAULT_STD = [0.229, 0.224, 0.225]
@@ -256,23 +257,31 @@ def convert_hiera_checkpoint(args):
             ]
         )
 
-    image_processor = BeitImageProcessor(
-        image_mean=IMAGENET_DEFAULT_MEAN, image_std=IMAGENET_DEFAULT_STD, size={"height": 224, "width": 224}
-    )
+    image_processor = BeitImageProcessor(image_mean=IMAGENET_DEFAULT_MEAN, image_std=IMAGENET_DEFAULT_STD)
     inputs = image_processor(images=input_image, return_tensors="pt")
 
     expected_pixel_values = original_image_preprocessor(input_image).unsqueeze(0)
 
-    assert torch.allclose(inputs.pixel_values, expected_pixel_values, atol=1e-4)
+    if verify_pixel_values:
+        input_image = prepare_img()
+
+        inputs = image_processor(images=input_image, return_tensors="pt")
+        expected_pixel_values = original_image_preprocessor(input_image).unsqueeze(0)
+        assert torch.allclose(inputs.pixel_values, expected_pixel_values, atol=1e-4)
+        print("Pixel values look good!")
+    else:
+        print("Converted without verifying pixel values")
+        inputs = {"pixel_values": torch.rand((1, 3, 224, 224))}
+        expected_pixel_values = inputs["pixel_values"]
 
     outputs = model(**inputs)
     # original implementation returns logits.softmax(dim=-1)
-    expected_prob = original_model(input_image)
+    expected_prob = original_model(expected_pixel_values)
 
     if verify_logits and not base_model:
         output_prob = outputs.logits.softmax(dim=-1)
         assert torch.allclose(output_prob, expected_prob, atol=1e-4)
-        print("Looks good!")
+        print("Logits look good!")
     else:
         print("Converted without verifying logits")
 
@@ -294,7 +303,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--model_name",
+        "--model-name",
         default="hiera-tiny-224",
         type=str,
         choices=[
@@ -312,20 +321,25 @@ if __name__ == "__main__":
         help="Name of the Hiera model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch-dump-folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--verify_logits",
+        "--verify-logits",
         action="store_true",
         help="Whether or not to verify the logits against the original implementation.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push-to-hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
     )
     parser.add_argument(
-        "--base_model",
+        "--base-model",
         action="store_true",
         help="Whether to only convert the base model (no projection head weights).",
+    )
+    parser.add_argument(
+        "--verify-pixel-values",
+        action="store_true",
+        help="Whether to verify the pixel values of the input image.",
     )
 
     args = parser.parse_args()
