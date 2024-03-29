@@ -21,15 +21,18 @@ from collections import OrderedDict
 from typing import List, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
+from ...dynamic_module_utils import (
+    get_class_from_dynamic_module,
+    resolve_trust_remote_code,
+)
 from ...utils import CONFIG_NAME, logging
-
 
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import CONFIG_ARCHIVE_MAP_MAPPING_NAMES  # noqa: F401, E402
-
+from ..deprecated._archive_maps import (  # noqa: F401, E402
+    CONFIG_ARCHIVE_MAP_MAPPING_NAMES,
+)
 
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
@@ -77,6 +80,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("data2vec-audio", "Data2VecAudioConfig"),
         ("data2vec-text", "Data2VecTextConfig"),
         ("data2vec-vision", "Data2VecVisionConfig"),
+        ("dbrx", "DbrxConfig"),
         ("deberta", "DebertaConfig"),
         ("deberta-v2", "DebertaV2Config"),
         ("decision_transformer", "DecisionTransformerConfig"),
@@ -334,6 +338,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("data2vec-audio", "Data2VecAudio"),
         ("data2vec-text", "Data2VecText"),
         ("data2vec-vision", "Data2VecVision"),
+        ("dbrx", "Dbrx"),
         ("deberta", "DeBERTa"),
         ("deberta-v2", "DeBERTa-v2"),
         ("decision_transformer", "Decision Transformer"),
