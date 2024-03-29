@@ -289,9 +289,6 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
     @slow
     # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenDecoderTest.test_flash_attn_2_inference
     def test_flash_attn_2_inference(self):
-        """
-        Decoder's input batch size must be `num_codebooks*batch_size`.
-        """
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
@@ -418,7 +415,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                 )
 
                 assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
-                
+
                 other_inputs = {
                     "output_hidden_states": True,
                 }
@@ -585,7 +582,6 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                     use_cache=True,
                 )
 
-                
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     @slow
@@ -897,6 +893,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                 )
 
                 self.assertTrue(torch.allclose(res_eager, res_sdpa))
+
 
 def prepare_musicgen_melody_inputs_dict(
     config,
@@ -1969,7 +1966,9 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                             for enable_kernels in [False, True]:
                                 failcase = f"padding_side={padding_side}, use_mask={use_mask}, batch_size={batch_size}, enable_kernels={enable_kernels}"
                                 batch_size_input_ids = self.model_tester.num_codebooks * batch_size
-                                decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:batch_size_input_ids]
+                                decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[
+                                    :batch_size_input_ids
+                                ]
                                 if decoder_input_ids.shape[0] != batch_size_input_ids:
                                     extension = torch.ones(
                                         batch_size_input_ids - decoder_input_ids.shape[0],

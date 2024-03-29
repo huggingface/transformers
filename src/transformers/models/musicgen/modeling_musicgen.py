@@ -545,6 +545,7 @@ class MusicgenFlashAttention2(MusicgenAttention):
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
 
+
 # Copied from transformers.models.bart.modeling_bart.BartSdpaAttention with Bart->Musicgen
 class MusicgenSdpaAttention(MusicgenAttention):
     def forward(
@@ -646,6 +647,7 @@ class MusicgenSdpaAttention(MusicgenAttention):
         attn_output = self.out_proj(attn_output)
 
         return attn_output, None, past_key_value
+
 
 MUSICGEN_ATTENTION_CLASSES = {
     "eager": MusicgenAttention,
@@ -1090,7 +1092,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
                 input_shape,
                 inputs_embeds,
                 past_key_values_length,
-            )        
+            )
         else:
             attention_mask = _prepare_4d_causal_attention_mask(
                 attention_mask, input_shape, inputs_embeds, past_key_values_length

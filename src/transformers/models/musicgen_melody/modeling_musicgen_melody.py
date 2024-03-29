@@ -559,6 +559,7 @@ class MusicgenMelodyFlashAttention2(MusicgenMelodyAttention):
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
 
+
 # Copied from transformers.models.bart.modeling_bart.BartSdpaAttention with Bart->MusicgenMelody
 class MusicgenMelodySdpaAttention(MusicgenMelodyAttention):
     def forward(
@@ -660,6 +661,7 @@ class MusicgenMelodySdpaAttention(MusicgenMelodyAttention):
         attn_output = self.out_proj(attn_output)
 
         return attn_output, None, past_key_value
+
 
 MUSICGEN_MELODY_ATTENTION_CLASSES = {
     "eager": MusicgenMelodyAttention,

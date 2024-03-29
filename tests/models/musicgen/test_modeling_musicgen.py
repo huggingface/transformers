@@ -576,7 +576,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                     do_sample=False,
                     use_cache=True,
                 )
-                
+
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     @slow
@@ -1856,7 +1856,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                     do_sample=False,
                     use_cache=True,
                 )
-            
+
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     @slow
@@ -2008,7 +2008,9 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                             for enable_kernels in [False, True]:
                                 failcase = f"padding_side={padding_side}, use_mask={use_mask}, batch_size={batch_size}, enable_kernels={enable_kernels}"
                                 batch_size_input_ids = self.model_tester.num_codebooks * batch_size
-                                decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:batch_size_input_ids]
+                                decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[
+                                    :batch_size_input_ids
+                                ]
                                 if decoder_input_ids.shape[0] != batch_size_input_ids:
                                     extension = torch.ones(
                                         batch_size_input_ids - decoder_input_ids.shape[0],
