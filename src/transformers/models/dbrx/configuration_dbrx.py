@@ -99,7 +99,7 @@ class DbrxFFNConfig(PretrainedConfig):
         moe_num_experts (int, optional): The number of experts in the mixture of experts layer.
         moe_top_k (int, optional): The number of experts to use in the mixture of experts layer.
         moe_jitter_eps (float, optional): The jitter epsilon for the mixture of experts layer.
-        moe_loss_weight (float, optional): The loss weight for the mixture of experts layer.
+        router_aux_loss_coef (float, optional): The loss weight for the mixture of experts layer.
         moe_normalize_expert_weights (float, optional): The normalization factor for the expert weights.
         uniform_expert_assignment (bool, optional): Whether to use uniform expert assignment.
             This should only be used for benchmarking purposes.
@@ -112,7 +112,7 @@ class DbrxFFNConfig(PretrainedConfig):
         moe_num_experts: int = 4,
         moe_top_k: int = 1,
         moe_jitter_eps: Optional[float] = None,
-        moe_loss_weight: float = 0.01,
+        router_aux_loss_coef: float = 0.01,
         moe_normalize_expert_weights: Optional[float] = 1,
         uniform_expert_assignment: bool = False,
         **kwargs: Any,
@@ -125,7 +125,7 @@ class DbrxFFNConfig(PretrainedConfig):
         self.moe_num_experts = moe_num_experts
         self.moe_top_k = moe_top_k
         self.moe_jitter_eps = moe_jitter_eps
-        self.moe_loss_weight = moe_loss_weight
+        self.router_aux_loss_coef = router_aux_loss_coef
         self.moe_normalize_expert_weights = moe_normalize_expert_weights
         self.uniform_expert_assignment = uniform_expert_assignment
 
