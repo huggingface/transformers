@@ -1650,8 +1650,6 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         batch_size = input_ids.shape[0] // self.num_codebooks
 
         # 4. Define other model kwargs
-        model_kwargs["output_attentions"] = generation_config.output_attentions
-        model_kwargs["output_hidden_states"] = generation_config.output_hidden_states
         model_kwargs["use_cache"] = generation_config.use_cache
         model_kwargs["guidance_scale"] = generation_config.guidance_scale
 
@@ -1749,8 +1747,10 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
+                output_attentions=generation_config.output_attentions,
+                output_hidden_states=generation_config.output_hidden_states,
                 output_scores=generation_config.output_scores,
+                output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
@@ -1775,8 +1775,10 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 logits_warper=logits_warper,
                 stopping_criteria=stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
+                output_attentions=generation_config.output_attentions,
+                output_hidden_states=generation_config.output_hidden_states,
                 output_scores=generation_config.output_scores,
+                output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
@@ -2423,8 +2425,8 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         self,
         inputs_tensor: torch.Tensor,
         model_kwargs,
-        model_input_name: Optional[str] = None,
-        guidance_scale: Optional[float] = None,
+        model_input_name: Optional[str],
+        generation_config: GenerationConfig,
     ) -> Dict[str, Any]:
         # 1. get text encoder
         encoder = self.get_text_encoder()
@@ -2446,6 +2448,9 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             encoder_kwargs = {
                 argument: value for argument, value in encoder_kwargs.items() if argument in encoder_signature
             }
+        encoder_kwargs["output_attentions"] = generation_config.output_attentions
+        encoder_kwargs["output_hidden_states"] = generation_config.output_hidden_states
+        guidance_scale = generation_config.guidance_scale
 
         # 3. make sure that encoder returns `ModelOutput`
         model_input_name = model_input_name if model_input_name is not None else self.text_encoder.main_input_name
@@ -2708,8 +2713,6 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         batch_size = inputs_tensor.shape[0]
 
         # 4. Define other model kwargs
-        model_kwargs["output_attentions"] = generation_config.output_attentions
-        model_kwargs["output_hidden_states"] = generation_config.output_hidden_states
         model_kwargs["use_cache"] = generation_config.use_cache
         model_kwargs["guidance_scale"] = generation_config.guidance_scale
 
@@ -2726,7 +2729,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 inputs_tensor,
                 model_kwargs,
                 model_input_name,
-                guidance_scale=generation_config.guidance_scale,
+                generation_config
             )
 
         if "decoder_input_ids" not in model_kwargs and "input_values" in model_kwargs:
@@ -2832,8 +2835,10 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
+                output_attentions=generation_config.output_attentions,
+                output_hidden_states=generation_config.output_hidden_states,
                 output_scores=generation_config.output_scores,
+                output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
@@ -2859,8 +2864,10 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 logits_warper=logits_warper,
                 stopping_criteria=stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
+                output_attentions=generation_config.output_attentions,
+                output_hidden_states=generation_config.output_hidden_states,
                 output_scores=generation_config.output_scores,
+                output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
