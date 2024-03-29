@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The Qwen team, Alibaba Group and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,19 +12,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Mixtral model. """
+""" Testing suite for the PyTorch Qwen2MoE model. """
 
 
+import gc
 import tempfile
 import unittest
 
 import pytest
 
-from transformers import MixtralConfig, is_torch_available
+from transformers import AutoTokenizer, Qwen2MoeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
+    backend_empty_cache,
+    require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -38,10 +42,14 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import MixtralForCausalLM, MixtralForSequenceClassification, MixtralModel
+    from transformers import (
+        Qwen2MoeForCausalLM,
+        Qwen2MoeForSequenceClassification,
+        Qwen2MoeModel,
+    )
 
 
-class MixtralModelTester:
+class Qwen2MoeModelTester:
     def __init__(
         self,
         parent,
@@ -49,11 +57,14 @@ class MixtralModelTester:
         seq_length=7,
         is_training=True,
         use_input_mask=True,
-        use_token_type_ids=False,
+        use_token_type_ids=True,
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=2,
+        num_hidden_layers=5,
+        max_window_layers=3,
+        use_sliding_window=True,
+        sliding_window=2,
         num_attention_heads=4,
         num_key_value_heads=2,
         intermediate_size=37,
@@ -61,14 +72,23 @@ class MixtralModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
+        expert_interval=1,
+        moe_intermediate_size=12,
+        shared_expert_intermediate_size=36,
+        shared_expert_gate=True,
+        num_experts_per_tok=2,
+        num_experts=8,
+        norm_topk_prob=False,
+        output_router_logits=False,
+        router_aux_loss_coef=0.001,
         type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,
         num_labels=3,
         num_choices=4,
         pad_token_id=0,
+        bos_token_id=1,
         scope=None,
-        router_jitter_noise=0.1,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -80,6 +100,9 @@ class MixtralModelTester:
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
+        self.max_window_layers = max_window_layers
+        self.use_sliding_window = use_sliding_window
+        self.sliding_window = sliding_window
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.intermediate_size = intermediate_size
@@ -93,10 +116,19 @@ class MixtralModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
         self.scope = scope
-        self.router_jitter_noise = router_jitter_noise
+        self.expert_interval = expert_interval
+        self.moe_intermediate_size = moe_intermediate_size
+        self.shared_expert_intermediate_size = shared_expert_intermediate_size
+        self.shared_expert_gate = shared_expert_gate
+        self.num_experts_per_tok = num_experts_per_tok
+        self.num_experts = num_experts
+        self.norm_topk_prob = norm_topk_prob
+        self.output_router_logits = output_router_logits
+        self.router_aux_loss_coef = router_aux_loss_coef
 
-    # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTester.prepare_config_and_inputs
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -121,10 +153,13 @@ class MixtralModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return MixtralConfig(
+        return Qwen2MoeConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
+            max_window_layers=self.max_window_layers,
+            use_sliding_window=self.use_sliding_window,
+            sliding_window=self.sliding_window,
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
             intermediate_size=self.intermediate_size,
@@ -132,27 +167,34 @@ class MixtralModelTester:
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
+            expert_interval=self.expert_interval,
+            moe_intermediate_size=self.moe_intermediate_size,
+            shared_expert_intermediate_size=self.shared_expert_intermediate_size,
+            shared_expert_gate=self.shared_expert_gate,
+            num_experts_per_tok=self.num_experts_per_tok,
+            num_experts=self.num_experts,
+            norm_topk_prob=self.norm_topk_prob,
+            output_router_logits=self.output_router_logits,
+            router_aux_loss_coef=self.router_aux_loss_coef,
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
             pad_token_id=self.pad_token_id,
-            num_experts_per_tok=2,
-            num_local_experts=2,
-            router_jitter_noise=self.router_jitter_noise,
+            bos_token_id=self.bos_token_id,
         )
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Mixtral
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Qwen2Moe
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = MixtralModel(config=config)
+        model = Qwen2MoeModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->Mixtral
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->Qwen2Moe
     def create_and_check_model_as_decoder(
         self,
         config,
@@ -166,7 +208,7 @@ class MixtralModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = MixtralModel(config)
+        model = Qwen2MoeModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -183,7 +225,7 @@ class MixtralModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->Mixtral
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->Qwen2Moe
     def create_and_check_for_causal_lm(
         self,
         config,
@@ -196,13 +238,13 @@ class MixtralModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = MixtralForCausalLM(config=config)
+        model = Qwen2MoeForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->Mixtral
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->Qwen2Moe
     def create_and_check_decoder_model_past_large_inputs(
         self,
         config,
@@ -217,7 +259,7 @@ class MixtralModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = MixtralForCausalLM(config=config)
+        model = Qwen2MoeForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -265,7 +307,7 @@ class MixtralModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common with Llama->Mixtral
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -282,18 +324,18 @@ class MixtralModelTester:
 
 
 @require_torch
-# Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Mixtral
-class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+# Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Qwen2Moe
+class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (MixtralModel, MixtralForCausalLM, MixtralForSequenceClassification) if is_torch_available() else ()
+        (Qwen2MoeModel, Qwen2MoeForCausalLM, Qwen2MoeForSequenceClassification) if is_torch_available() else ()
     )
-    all_generative_model_classes = (MixtralForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (Qwen2MoeForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": MixtralModel,
-            "text-classification": MixtralForSequenceClassification,
-            "text-generation": MixtralForCausalLM,
-            "zero-shot": MixtralForSequenceClassification,
+            "feature-extraction": Qwen2MoeModel,
+            "text-classification": Qwen2MoeForSequenceClassification,
+            "text-generation": Qwen2MoeForCausalLM,
+            "zero-shot": Qwen2MoeForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -308,8 +350,8 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         return True
 
     def setUp(self):
-        self.model_tester = MixtralModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MixtralConfig, hidden_size=37)
+        self.model_tester = Qwen2MoeModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Qwen2MoeConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -324,33 +366,33 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_Mixtral_sequence_classification_model(self):
+    def test_Qwen2Moe_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         print(config)
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = MixtralForSequenceClassification(config)
+        model = Qwen2MoeForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_Mixtral_sequence_classification_model_for_single_label(self):
+    def test_Qwen2Moe_sequence_classification_model_for_single_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.problem_type = "single_label_classification"
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = MixtralForSequenceClassification(config)
+        model = Qwen2MoeForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_Mixtral_sequence_classification_model_for_multi_label(self):
+    def test_Qwen2Moe_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.problem_type = "multi_label_classification"
@@ -359,17 +401,17 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         sequence_labels = ids_tensor(
             [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
         ).to(torch.float)
-        model = MixtralForSequenceClassification(config)
+        model = Qwen2MoeForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    @unittest.skip("Mixtral buffers include complex numbers, which breaks this test")
+    @unittest.skip("Qwen2Moe buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("Mixtral uses GQA on all models so the KV cache is a non standard format")
+    @unittest.skip("Qwen2Moe uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
         pass
 
@@ -433,7 +475,7 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 model.save_pretrained(tmpdirname)
 
                 dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # NOTE: Mixtral apparently does not support right padding + use_cache with FA2.
+                # NOTE: Qwen2Moe apparently does not support right padding + use_cache with FA2.
                 dummy_attention_mask[:, -1] = 1
 
                 model = model_class.from_pretrained(
@@ -457,7 +499,7 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_padding_right(self):
-        self.skipTest("Mixtral flash attention does not support right padding")
+        self.skipTest("Qwen2Moe flash attention does not support right padding")
 
     # Ignore copy
     def test_load_balancing_loss(self):
@@ -466,15 +508,16 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         """
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
-        config.num_local_experts = 8
+        config.num_experts = 8
+        config.expert_interval = 2
         config.output_router_logits = True
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        model = MixtralForCausalLM(config)
+        model = Qwen2MoeForCausalLM(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask)
-        self.assertEqual(result.router_logits[0].shape, (91, config.num_local_experts))
+        self.assertEqual(result.router_logits[0].shape, (91, config.num_experts))
         torch.testing.assert_close(result.aux_loss.cpu(), torch.tensor(2, dtype=torch.float32), rtol=1e-2, atol=1e-2)
 
         # First, we make sure that adding padding tokens doesn't change the loss
@@ -497,57 +540,133 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 
 @require_torch
-class MixtralIntegrationTest(unittest.TestCase):
+class Qwen2MoeIntegrationTest(unittest.TestCase):
     @slow
-    @require_torch_gpu
-    def test_small_model_logits(self):
-        model_id = "hf-internal-testing/Mixtral-tiny"
-        dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
-
-        model = MixtralForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
-            torch_device
-        )
-        # TODO: might need to tweak it in case the logits do not match on our daily runners
-        # these logits have been obtained with the original megablocks impelmentation.
-        EXPECTED_LOGITS = torch.Tensor(
-            [[0.1670, 0.1620, 0.6094], [-0.8906, -0.1588, -0.6060], [0.1572, 0.1290, 0.7246]]
-        ).to(torch_device)
-
+    def test_model_a2_7b_logits(self):
+        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
+        model = Qwen2MoeForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", device_map="auto")
+        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
-            logits = model(dummy_input).logits
+            out = model(input_ids).logits.cpu()
+        # Expected mean on dim = -1
+        EXPECTED_MEAN = torch.tensor([[-4.2125, -3.6416, -4.9136, -4.3005, -4.9938, -3.4393, -3.5195, -4.1621]])
+        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
+        # slicing logits[0, 0, 0:30]
+        EXPECTED_SLICE = torch.tensor([2.3013, -0.6595, -0.1389, -1.4095, -1.7381, -1.7609, -2.0449, -2.4289, -3.0271, -2.1351, -0.6568, -4.6012, -1.9102, -0.7475, -3.1377, 4.6904, 7.1936, 7.0991, 6.4414, 6.1720, 6.2617, 5.8751, 5.6997, 5.6011, 5.5828, -3.9505, -0.5384, -0.3392, 1.2445, 2.0714])  # fmt: skip
+        print(out[0, 0, :30])
+        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
 
-        torch.testing.assert_close(logits[0, :3, :3].half(), EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)
-        torch.testing.assert_close(logits[1, :3, :3].half(), EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)
+        del model
+        backend_empty_cache(torch_device)
+        gc.collect()
 
     @slow
-    # @require_torch_gpu
-    def test_small_model_logits_batched(self):
-        model_id = "hf-internal-testing/Mixtral-tiny"
-        dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
-        attention_mask = dummy_input.ne(0).to(torch.long)
+    def test_model_a2_7b_generation(self):
+        EXPECTED_TEXT_COMPLETION = """To be or not to be, that is the question. This is the question that has been asked by many people over the"""
+        prompt = "To be or not to"
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
+        model = Qwen2MoeForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", device_map="auto")
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
-        model = MixtralForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
-            torch_device
+        # greedy generation outputs
+        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
+        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+        del model
+        backend_empty_cache(torch_device)
+        gc.collect()
+
+    @require_bitsandbytes
+    @slow
+    @require_flash_attn
+    def test_model_a2_7b_long_prompt(self):
+        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
+        # An input with 4097 tokens that is above the size of the sliding window
+        input_ids = [1] + [306, 338] * 2048
+        model = Qwen2MoeForCausalLM.from_pretrained(
+            "Qwen/Qwen1.5-MoE-A2.7B",
+            device_map="auto",
+            load_in_4bit=True,
+            attn_implementation="flash_attention_2",
         )
+        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
+        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
-        # TODO: might need to tweak it in case the logits do not match on our daily runners
-        EXPECTED_LOGITS_LEFT = torch.Tensor(
-            [[0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007]],
+        # Assisted generation
+        assistant_model = model
+        assistant_model.generation_config.num_assistant_tokens = 2
+        assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
+        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+
+        del assistant_model
+        del model
+        backend_empty_cache(torch_device)
+        gc.collect()
+
+    @slow
+    @require_torch_sdpa
+    def test_model_a2_7b_long_prompt_sdpa(self):
+        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
+        # An input with 4097 tokens that is above the size of the sliding window
+        input_ids = [1] + [306, 338] * 2048
+        model = Qwen2MoeForCausalLM.from_pretrained(
+            "Qwen/Qwen1.5-MoE-A2.7B",
+            device_map="auto",
+            attn_implementation="sdpa",
         )
+        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
+        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
-        # logits[0, -3:, -3:].half()
-        EXPECTED_LOGITS_LEFT_UNPADDED = torch.Tensor(
-            [[0.2212, 0.5200, -0.3816], [0.8213, -0.2313, 0.6069], [0.2664, -0.7090, 0.2468]],
+        # Assisted generation
+        assistant_model = model
+        assistant_model.generation_config.num_assistant_tokens = 2
+        assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
+        generated_ids = assistant_model.generate(input_ids, max_new_tokens=4, temperature=0)
+        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+
+        del assistant_model
+
+        backend_empty_cache(torch_device)
+        gc.collect()
+
+        EXPECTED_TEXT_COMPLETION = """To be or not to be, that is the question. This is the question that has been asked by many people over the"""
+        prompt = "To be or not to"
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
+
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+
+        # greedy generation outputs
+        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
+        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+    @slow
+    def test_speculative_generation(self):
+        EXPECTED_TEXT_COMPLETION = (
+            "To be or not to be, that is the question.\nThe answer is to be, of course. But what does it"
         )
-
-        # logits[1, -3:, -3:].half()
-        EXPECTED_LOGITS_RIGHT_UNPADDED = torch.Tensor(
-            [[0.2205, 0.1232, -0.1611], [-0.3484, 0.3030, -1.0312], [0.0742, 0.7930, 0.7969]]
+        prompt = "To be or not to"
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
+        model = Qwen2MoeForCausalLM.from_pretrained(
+            "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", torch_dtype=torch.float16
         )
+        assistant_model = Qwen2MoeForCausalLM.from_pretrained(
+            "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", torch_dtype=torch.float16
+        )
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
-        with torch.no_grad():
-            logits = model(dummy_input, attention_mask=attention_mask).logits
+        # greedy generation outputs
+        set_seed(0)
+        generated_ids = model.generate(
+            input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=assistant_model
+        )
+        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
-        torch.testing.assert_close(logits[0, :3, :3].half(), EXPECTED_LOGITS_LEFT, atol=1e-3, rtol=1e-3)
-        torch.testing.assert_close(logits[0, -3:, -3:].half(), EXPECTED_LOGITS_LEFT_UNPADDED, atol=1e-3, rtol=1e-3)
-        torch.testing.assert_close(logits[1, -3:, -3:].half(), EXPECTED_LOGITS_RIGHT_UNPADDED, atol=1e-3, rtol=1e-3)
+        del model
+        backend_empty_cache(torch_device)
+        gc.collect()
