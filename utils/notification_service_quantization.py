@@ -204,8 +204,9 @@ if __name__ == "__main__":
             "job_link": {},
         }
         for quant in quantization_matrix
-        if f"run_all_tests_gpu_{quant}" in available_artifacts
+        if f"run_tests_quantization_torch_gpu_{quant}" in available_artifacts
     }
+
     github_actions_jobs = get_jobs(
         workflow_run_id=os.environ["GITHUB_RUN_ID"], token=os.environ["ACCESS_REPO_INFO_TOKEN"]
     )
