@@ -1612,13 +1612,17 @@ class GenerationMixin:
                 model_kwargs=model_kwargs,
             )
 
-            # 12. run assisted generate
+            # 12. prepare logits warper (if `do_sample` is `True`)
+            prepared_logits_warper = (
+                self._get_logits_warper(generation_config) if generation_config.do_sample else None
+            )
+
+            # 13. run assisted generate
             result = self._assisted_decoding(
                 input_ids,
                 candidate_generator=candidate_generator,
-                do_sample=generation_config.do_sample,
                 logits_processor=prepared_logits_processor,
-                logits_warper=self._get_logits_warper(generation_config) if generation_config.do_sample else None,
+                logits_warper=prepared_logits_warper,
                 stopping_criteria=prepared_stopping_criteria,
                 output_attentions=generation_config.output_attentions,
                 output_hidden_states=generation_config.output_hidden_states,
@@ -3721,7 +3725,6 @@ class GenerationMixin:
         self,
         input_ids: torch.LongTensor,
         candidate_generator: CandidateGenerator,
-        do_sample: bool,
         logits_processor: LogitsProcessorList,
         logits_warper: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
@@ -3746,15 +3749,13 @@ class GenerationMixin:
             candidate_generator (`CandidateGenerator`):
                 A derived instance of [`CandidateGenerator`] that defines how candidate sequences are generated. For
                 more information, the documentation of [`CandidateGenerator`] should be read.
-            do_sample (`bool`):
-                Whether or not to use sampling ; use greedy decoding otherwise.
             logits_processor (`LogitsProcessorList`):
                 An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
                 used to modify the prediction scores of the language modeling head applied at each generation step.
             logits_warper (`LogitsProcessorList`):
                 An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsWarper`] used
                 to warp the prediction score distribution of the language modeling head applied before multinomial
-                sampling at each generation step.
+                sampling at each generation step. Only used if sampling is active.
             stopping_criteria (`StoppingCriteriaList`):
                 An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
                 used to tell if the generation loop should stop.
@@ -3787,6 +3788,9 @@ class GenerationMixin:
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         """
+        # init values
+        do_sample = logits_warper is not None
+
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
         raw_logits = () if (return_dict_in_generate and output_logits) else None
@@ -3855,7 +3859,7 @@ class GenerationMixin:
             if len(logits_processor) > 0:
                 for i in range(candidate_length + 1):
                     new_logits[:, i, :] = logits_processor(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :])
-            if len(logits_warper) > 0:
+            if do_sample and len(logits_warper) > 0:
                 for i in range(candidate_length + 1):
                     new_logits[:, i, :] = logits_warper(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :])
 
