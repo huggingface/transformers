@@ -305,7 +305,7 @@ jobs:
   #         path: /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu
 
   run_tests_quantization_torch_gpu:
-    name: Quantization tests
+    name: " "
     strategy:
       fail-fast: false
       matrix:
