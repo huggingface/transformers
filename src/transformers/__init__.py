@@ -471,6 +471,11 @@ _import_structure = {
         "GPT2Config",
         "GPT2Tokenizer",
     ],
+    "models.musecoco": [
+        "MUSECOCO_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MuseCocoConfig",
+        "MuseCocoTokenizer",
+    ],
     "models.gpt_bigcode": [
         "GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GPTBigCodeConfig",
@@ -1213,6 +1218,7 @@ else:
     _import_structure["models.funnel"].append("FunnelTokenizerFast")
     _import_structure["models.gemma"].append("GemmaTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
+    _import_structure["models.musecoco"].append("MuseCocoTokenizerFast")
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
@@ -1293,6 +1299,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.gpt2"].append("TFGPT2Tokenizer")
+    _import_structure["models.musecoco"].append("TFMuseCocoTokenizer")
 
 # Vision-specific objects
 try:
@@ -2319,6 +2326,19 @@ else:
             "GPT2Model",
             "GPT2PreTrainedModel",
             "load_tf_weights_in_gpt2",
+        ]
+    )
+    _import_structure["models.musecoco"].extend(
+        [
+            "MUSECOCO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MuseCocoDoubleHeadsModel",
+            "MuseCocoForQuestionAnswering",
+            "MuseCocoForSequenceClassification",
+            "MuseCocoForTokenClassification",
+            "MuseCocoLMHeadModel",
+            "MuseCocoModel",
+            "MuseCocoPreTrainedModel",
+            "load_tf_weights_in_musecoco",
         ]
     )
     _import_structure["models.gpt_bigcode"].extend(
@@ -4217,6 +4237,17 @@ else:
             "TFGPT2PreTrainedModel",
         ]
     )
+    _import_structure["models.musecoco"].extend(
+        [
+            "TF_MUSECOCO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFMuseCocoDoubleHeadsModel",
+            "TFMuseCocoForSequenceClassification",
+            "TFMuseCocoLMHeadModel",
+            "TFMuseCocoMainLayer",
+            "TFMuseCocoModel",
+            "TFMuseCocoPreTrainedModel",
+        ]
+    )
     _import_structure["models.gptj"].extend(
         [
             "TFGPTJForCausalLM",
@@ -4800,6 +4831,7 @@ else:
     )
     _import_structure["models.encoder_decoder"].append("FlaxEncoderDecoderModel")
     _import_structure["models.gpt2"].extend(["FlaxGPT2LMHeadModel", "FlaxGPT2Model", "FlaxGPT2PreTrainedModel"])
+    _import_structure["models.musecoco"].extend(["FlaxMuseCocoLMHeadModel", "FlaxMuseCocoModel", "FlaxMuseCocoPreTrainedModel"])
     _import_structure["models.gpt_neo"].extend(
         ["FlaxGPTNeoForCausalLM", "FlaxGPTNeoModel", "FlaxGPTNeoPreTrainedModel"]
     )
@@ -5355,6 +5387,11 @@ if TYPE_CHECKING:
         GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPT2Config,
         GPT2Tokenizer,
+    )
+    from .models.musecoco import (
+        MUSECOCO_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MuseCocoConfig,
+        MuseCocoTokenizer,
     )
     from .models.gpt_bigcode import (
         GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6080,6 +6117,7 @@ if TYPE_CHECKING:
         from .models.funnel import FunnelTokenizerFast
         from .models.gemma import GemmaTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
+        from .models.musecoco import MuseCocoTokenizerFast
         from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer
         from .models.herbert import HerbertTokenizerFast
@@ -6145,6 +6183,7 @@ if TYPE_CHECKING:
         from .utils.dummy_keras_nlp_objects import *
     else:
         from .models.gpt2 import TFGPT2Tokenizer
+        from .models.musecoco import TFMuseCocoTokenizer
 
     try:
         if not is_vision_available():
@@ -7047,6 +7086,17 @@ if TYPE_CHECKING:
             GPT2Model,
             GPT2PreTrainedModel,
             load_tf_weights_in_gpt2,
+        )
+        from .models.musecoco import (
+            MUSECOCO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MuseCocoDoubleHeadsModel,
+            MuseCocoForQuestionAnswering,
+            MuseCocoForSequenceClassification,
+            MuseCocoForTokenClassification,
+            MuseCocoLMHeadModel,
+            MuseCocoModel,
+            MuseCocoPreTrainedModel,
+            load_tf_weights_in_musecoco,
         )
         from .models.gpt_bigcode import (
             GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -8594,6 +8644,15 @@ if TYPE_CHECKING:
             TFGPT2Model,
             TFGPT2PreTrainedModel,
         )
+        from .models.musecoco import (
+            TF_MUSECOCO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFMuseCocoDoubleHeadsModel,
+            TFMuseCocoForSequenceClassification,
+            TFMuseCocoLMHeadModel,
+            TFMuseCocoMainLayer,
+            TFMuseCocoModel,
+            TFMuseCocoPreTrainedModel,
+        )
         from .models.gptj import (
             TFGPTJForCausalLM,
             TFGPTJForQuestionAnswering,
@@ -9080,6 +9139,11 @@ if TYPE_CHECKING:
             FlaxGPT2LMHeadModel,
             FlaxGPT2Model,
             FlaxGPT2PreTrainedModel,
+        )
+        from .models.musecoco import (
+            FlaxMuseCocoLMHeadModel,
+            FlaxMuseCocoModel,
+            FlaxMuseCocoPreTrainedModel,
         )
         from .models.gpt_neo import (
             FlaxGPTNeoForCausalLM,

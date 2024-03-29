@@ -97,6 +97,7 @@ from . import (
     git,
     glpn,
     gpt2,
+    musecoco,
     gpt_bigcode,
     gpt_neo,
     gpt_neox,
