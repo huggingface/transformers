@@ -43,9 +43,9 @@ class QuantizationMessage(Message):
         self.title = title
 
         # Failures and success of the modeling tests
-        self.n_success = sum(r["success"] for r in results)
-        self.single_gpu_failures = sum(r["failed"]["single"] for r in results)
-        self.multi_gpu_failures = sum(r["failed"]["multi"] for r in results)
+        self.n_success = sum(r["success"] for r in results.values())
+        self.single_gpu_failures = sum(r["failed"]["single"] for r in results.values())
+        self.multi_gpu_failures = sum(r["failed"]["multi"] for r in results.values())
         self.n_failures = self.single_gpu_failures + self.multi_gpu_failures
 
         self.n_tests = self.n_failures + self.n_success
