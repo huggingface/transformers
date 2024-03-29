@@ -2726,10 +2726,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         if "encoder_outputs" not in model_kwargs:
             # encoder_outputs are created and added to `model_kwargs`
             model_kwargs = self._prepare_text_encoder_kwargs_for_generation(
-                inputs_tensor,
-                model_kwargs,
-                model_input_name,
-                generation_config
+                inputs_tensor, model_kwargs, model_input_name, generation_config
             )
 
         if "decoder_input_ids" not in model_kwargs and "input_values" in model_kwargs:
