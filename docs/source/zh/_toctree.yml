@@ -74,6 +74,8 @@
 - sections:
   - local: contributing
     title: 如何为 🤗 Transformers 做贡献？
+  - local: add_new_pipeline
+    title: 如何将流水线添加到 🤗 Transformers？
   title: 贡献
 - sections:
   - local: task_summary
