@@ -194,6 +194,8 @@ if __name__ == "__main__":
         raise ValueError("Errored out.")
 
     available_artifacts = retrieve_available_artifacts()
+    print(available_artifacts)
+    print(quantization_matrix)
 
     quantization_results = {
         quant: {
@@ -206,6 +208,7 @@ if __name__ == "__main__":
         for quant in quantization_matrix
         if f"run_tests_quantization_torch_gpu_{quant}" in available_artifacts
     }
+    print(quantization_results)
 
     github_actions_jobs = get_jobs(
         workflow_run_id=os.environ["GITHUB_RUN_ID"], token=os.environ["ACCESS_REPO_INFO_TOKEN"]
@@ -223,6 +226,7 @@ if __name__ == "__main__":
     for quant in quantization_results.keys():
         for artifact_path in available_artifacts[f"run_tests_quantization_torch_gpu_{quant}"].paths:
             artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
+            print(artifact)
             if "stats" in artifact:
                 # Link to the GitHub Action job
                 job = artifact_name_to_job_map[artifact_path["path"]]
