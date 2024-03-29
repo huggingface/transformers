@@ -2457,13 +2457,6 @@ class Data2VecVisionPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class DbrxBlock(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class DbrxForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 

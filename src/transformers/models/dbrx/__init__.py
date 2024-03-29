@@ -28,7 +28,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_dbrx"] = [
         "DbrxForCausalLM",
-        "DbrxBlock",
         "DbrxModel",
         "DbrxPreTrainedModel",
     ]
@@ -43,12 +42,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_dbrx import (
-            DbrxBlock,
-            DbrxForCausalLM,
-            DbrxModel,
-            DbrxPreTrainedModel,
-        )
+        from .modeling_dbrx import DbrxForCausalLM, DbrxModel, DbrxPreTrainedModel
 
 
 else:
