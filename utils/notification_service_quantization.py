@@ -247,6 +247,9 @@ if __name__ == "__main__":
                         quantization_results[quant]["failures"][artifact_path["gpu"]].append(
                             {"line": line, "trace": stacktraces.pop(0)}
                         )
+    if not os.path.isdir(os.path.join(os.getcwd(), "prev_ci_results")):
+        os.makedirs(os.path.join(os.getcwd(), "prev_ci_results"))
+
     with open("prev_ci_results/quantization_results.json", "w", encoding="UTF-8") as fp:
         json.dump(quantization_results, fp, indent=4, ensure_ascii=False)
 
