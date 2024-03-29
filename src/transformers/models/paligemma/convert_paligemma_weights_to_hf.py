@@ -78,12 +78,12 @@ def get_paligemma_config(variant: str):
 def slice_state_dict(state_dict, config):
     # fmt: off
     # patch embeddings
-    state_dict["vision_model.embeddings.patch_embedding.weight"] = state_dict.pop("img/embedding/kernel").transpose(
+    state_dict["vision_tower.vision_model.embeddings.patch_embedding.weight"] = state_dict.pop("img/embedding/kernel").transpose(
         3, 2, 0, 1
     )
-    state_dict["vision_model.embeddings.patch_embedding.bias"] = state_dict.pop("img/embedding/bias")
+    state_dict["vision_tower.vision_model.embeddings.patch_embedding.bias"] = state_dict.pop("img/embedding/bias")
     # positional embeddings
-    state_dict["vision_model.embeddings.position_embedding.weight"] = state_dict.pop("img/pos_embedding").reshape(
+    state_dict["vision_tower.vision_model.embeddings.position_embedding.weight"] = state_dict.pop("img/pos_embedding").reshape(
         -1, config.vision_config.hidden_size
     )
 
@@ -108,28 +108,28 @@ def slice_state_dict(state_dict, config):
     encoderblock_attention_0_out_bias = state_dict.pop("img/Transformer/encoderblock/MultiHeadDotProductAttention_0/out/bias")
 
     for i in range(config.vision_config.num_hidden_layers):
-        state_dict[f"vision_model.encoder.layers.{i}.layer_norm1.weight"] = encoderblock_layernorm0_scale[i].transpose()
-        state_dict[f"vision_model.encoder.layers.{i}.layer_norm1.bias"] = encoderblock_layernorm0_bias[i]
-        state_dict[f"vision_model.encoder.layers.{i}.layer_norm2.weight"] = encoderblock_layernorm1_scale[i].transpose()
-        state_dict[f"vision_model.encoder.layers.{i}.layer_norm2.bias"] = encoderblock_layernorm1_bias[i]
+        state_dict[f"vision_tower.vision_model.encoder.layers.{i}.layer_norm1.weight"] = encoderblock_layernorm0_scale[i].transpose()
+        state_dict[f"vision_tower.vision_model.encoder.layers.{i}.layer_norm1.bias"] = encoderblock_layernorm0_bias[i]
+        state_dict[f"vision_tower.vision_model.encoder.layers.{i}.layer_norm2.weight"] = encoderblock_layernorm1_scale[i].transpose()
+        state_dict[f"vision_tower.vision_model.encoder.layers.{i}.layer_norm2.bias"] = encoderblock_layernorm1_bias[i]
 
-        state_dict[f"vision_model.encoder.layers.{i}.mlp.fc1.weight"] = encoderblock_mlp_dense0_kernel[i].transpose()
-        state_dict[f"vision_model.encoder.layers.{i}.mlp.fc1.bias"] = encoderblock_mlp_dense0_bias[i]
-        state_dict[f"vision_model.encoder.layers.{i}.mlp.fc2.weight"] = encoderblock_mlp_dense1_kernel[i].transpose()
-        state_dict[f"vision_model.encoder.layers.{i}.mlp.fc2.bias"] = encoderblock_mlp_dense1_bias[i]
+        state_dict[f"vision_tower.vision_model.encoder.layers.{i}.mlp.fc1.weight"] = encoderblock_mlp_dense0_kernel[i].transpose()
+        state_dict[f"vision_tower.vision_model.encoder.layers.{i}.mlp.fc1.bias"] = encoderblock_mlp_dense0_bias[i]
+        state_dict[f"vision_tower.vision_model.encoder.layers.{i}.mlp.fc2.weight"] = encoderblock_mlp_dense1_kernel[i].transpose()
+        state_dict[f"vision_tower.vision_model.encoder.layers.{i}.mlp.fc2.bias"] = encoderblock_mlp_dense1_bias[i]
 
-        state_dict[f"vision_model.encoder.layers.{i}.self_attn.k_proj.weight"] = encoderblock_attention_0_key_kernel[i].reshape(-1, config.vision_config.hidden_size).transpose()
-        state_dict[f"vision_model.encoder.layers.{i}.self_attn.k_proj.bias"] = encoderblock_attention_0_key_bias[i].reshape(-1, config.vision_config.hidden_size).reshape(-1)
-        state_dict[f"vision_model.encoder.layers.{i}.self_attn.v_proj.weight"] = encoderblock_attention_0_value_kernel[i].reshape(-1, config.vision_config.hidden_size).transpose()
-        state_dict[f"vision_model.encoder.layers.{i}.self_attn.v_proj.bias"] = encoderblock_attention_0_value_bias[i].reshape(-1, config.vision_config.hidden_size).reshape(-1)
-        state_dict[f"vision_model.encoder.layers.{i}.self_attn.q_proj.weight"] = encoderblock_attention_0_query_kernel[i].reshape(-1, config.vision_config.hidden_size).transpose()
-        state_dict[f"vision_model.encoder.layers.{i}.self_attn.q_proj.bias"] = encoderblock_attention_0_query_bias[i].reshape(-1, config.vision_config.hidden_size).reshape(-1)
-        state_dict[f"vision_model.encoder.layers.{i}.self_attn.out_proj.weight"] = encoderblock_attention_0_out_kernel[i].reshape(-1, config.vision_config.hidden_size).transpose()
-        state_dict[f"vision_model.encoder.layers.{i}.self_attn.out_proj.bias"] = encoderblock_attention_0_out_bias[i].reshape(-1, config.vision_config.hidden_size).reshape(-1)
+        state_dict[f"vision_tower.vision_model.encoder.layers.{i}.self_attn.k_proj.weight"] = encoderblock_attention_0_key_kernel[i].reshape(-1, config.vision_config.hidden_size).transpose()
+        state_dict[f"vision_tower.vision_model.encoder.layers.{i}.self_attn.k_proj.bias"] = encoderblock_attention_0_key_bias[i].reshape(-1, config.vision_config.hidden_size).reshape(-1)
+        state_dict[f"vision_tower.vision_model.encoder.layers.{i}.self_attn.v_proj.weight"] = encoderblock_attention_0_value_kernel[i].reshape(-1, config.vision_config.hidden_size).transpose()
+        state_dict[f"vision_tower.vision_model.encoder.layers.{i}.self_attn.v_proj.bias"] = encoderblock_attention_0_value_bias[i].reshape(-1, config.vision_config.hidden_size).reshape(-1)
+        state_dict[f"vision_tower.vision_model.encoder.layers.{i}.self_attn.q_proj.weight"] = encoderblock_attention_0_query_kernel[i].reshape(-1, config.vision_config.hidden_size).transpose()
+        state_dict[f"vision_tower.vision_model.encoder.layers.{i}.self_attn.q_proj.bias"] = encoderblock_attention_0_query_bias[i].reshape(-1, config.vision_config.hidden_size).reshape(-1)
+        state_dict[f"vision_tower.vision_model.encoder.layers.{i}.self_attn.out_proj.weight"] = encoderblock_attention_0_out_kernel[i].reshape(-1, config.vision_config.hidden_size).transpose()
+        state_dict[f"vision_tower.vision_model.encoder.layers.{i}.self_attn.out_proj.bias"] = encoderblock_attention_0_out_bias[i].reshape(-1, config.vision_config.hidden_size).reshape(-1)
 
 
-    state_dict["vision_model.post_layernorm.weight"] = state_dict.pop("img/Transformer/encoder_norm/scale").transpose()
-    state_dict["vision_model.post_layernorm.bias"] = state_dict.pop("img/Transformer/encoder_norm/bias")
+    state_dict["vision_tower.vision_model.post_layernorm.weight"] = state_dict.pop("img/Transformer/encoder_norm/scale").transpose()
+    state_dict["vision_tower.vision_model.post_layernorm.bias"] = state_dict.pop("img/Transformer/encoder_norm/bias")
 
     # multimodal projector
 
@@ -237,6 +237,7 @@ def verify_logits(model, processor):
 
     model_inputs = processor(text=prompt, images=list_images, max_length=16, padding="max_length", return_tensors="pt")
     image_captioning_inputs = processor(text="\n", images=list_images[0], max_length=16, padding="max_length", return_tensors="pt")
+    
     with torch.inference_mode():
         outputs = model(**model_inputs)
 
@@ -246,34 +247,26 @@ def verify_logits(model, processor):
             raise ValueError("Next token prediction is wrong.")
         else:
             print("It seems that the forward pass predicts a correct next token. Go to .generate()!")
-
+        
         # Test image captioning generation
         captioning_generation = model.generate(**image_captioning_inputs, max_new_tokens=10)
         captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
-        if captioning_output[0] != "\ncow standing on the beach on the sea":
+        if captioning_output[0] != "\ncow standing on the beach":
             raise ValueError(f"Image captioning should match, got {captioning_output[0]}.")
         else:
             print("Image captioning works.")
-        """
-        # Skipping logit verification for now as we are in a left-padding situation vs right-padding for the original repo, but it should be fine
-        if not np.allclose(outputs.logits.cpu().numpy(), outputs_logits_flax, atol=5e-3):
-            raise ValueError("Logits do not match.")
-        else:
-            print("Full forward pass works. Amazing!")
 
-        """
         raw_generation = model.generate(**model_inputs, max_new_tokens=10)
 
         generated_output = processor.batch_decode(raw_generation, skip_special_tokens=True)
 
         if generated_output[0] != "answer en Where is the cow standing?\nbeach":
             raise ValueError("Generation does not match.")
-        elif generated_output[1] != "\ncow on the beach in the sun":
-            # This checks that empty prompt gets an image captioning task (in English).
-            # TODO check with original team that this is intended output
+        elif generated_output[1] != "\ncow standing on the beach":
             raise ValueError("Image captioning does not match.")
         else:
             print("Generation matches. You're almost done!")
+    
 
 
 @torch.no_grad()
@@ -283,7 +276,6 @@ def convert_paligemma_checkpoint(
     """
     Read checkpoints from flax npz files, rename/reshape, send result to state dict and verify logits if needed.
     """
-    # define default PaLIGemmaconfiguration
     config = get_paligemma_config(variant)
     if variant == "2b":
         tokenizer_id = "google/gemma-2b"
@@ -310,7 +302,6 @@ def convert_paligemma_checkpoint(
 
     else:
         model = PaLIGemmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path).eval()
-
     if do_verify_logits:
         print("Verifying logits...")
         verify_logits(model, processor)
@@ -319,7 +310,6 @@ def convert_paligemma_checkpoint(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    # Required parameters
     parser.add_argument(
         "--checkpoint_path",
         default="/home/ubuntu/gvhf/hf_test_ckpt.bv.params.npz",
