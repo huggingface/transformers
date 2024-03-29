@@ -1618,6 +1618,8 @@ class GenerationMixin:
                 logits_warper=self._get_logits_warper(generation_config) if generation_config.do_sample else None,
                 stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
+                output_attentions=generation_config.output_attentions,
+                output_hidden_states=generation_config.output_hidden_states,
                 output_scores=generation_config.output_scores,
                 output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
@@ -1632,6 +1634,8 @@ class GenerationMixin:
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
+                output_attentions=generation_config.output_attentions,
+                output_hidden_states=generation_config.output_hidden_states,
                 output_scores=generation_config.output_scores,
                 output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
@@ -1651,6 +1655,8 @@ class GenerationMixin:
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
+                output_attentions=generation_config.output_attentions,
+                output_hidden_states=generation_config.output_hidden_states,
                 output_scores=generation_config.output_scores,
                 output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
@@ -1679,6 +1685,8 @@ class GenerationMixin:
                 logits_warper=logits_warper,
                 stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
+                output_attentions=generation_config.output_attentions,
+                output_hidden_states=generation_config.output_hidden_states,
                 output_scores=generation_config.output_scores,
                 output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
@@ -1712,6 +1720,8 @@ class GenerationMixin:
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
+                output_attentions=generation_config.output_attentions,
+                output_hidden_states=generation_config.output_hidden_states,
                 output_scores=generation_config.output_scores,
                 output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
@@ -1751,6 +1761,8 @@ class GenerationMixin:
                 logits_warper=logits_warper,
                 stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
+                output_attentions=generation_config.output_attentions,
+                output_hidden_states=generation_config.output_hidden_states,
                 output_scores=generation_config.output_scores,
                 output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
@@ -1784,6 +1796,8 @@ class GenerationMixin:
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
+                output_attentions=generation_config.output_attentions,
+                output_hidden_states=generation_config.output_hidden_states,
                 output_scores=generation_config.output_scores,
                 output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
@@ -1857,6 +1871,8 @@ class GenerationMixin:
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
+                output_attentions=generation_config.output_attentions,
+                output_hidden_states=generation_config.output_hidden_states,
                 output_scores=generation_config.output_scores,
                 output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
@@ -1888,20 +1904,19 @@ class GenerationMixin:
     def _contrastive_search(
         self,
         input_ids: torch.LongTensor,
-        top_k: Optional[int] = 1,
-        penalty_alpha: Optional[float] = 0,
-        logits_processor: Optional[LogitsProcessorList] = None,
-        logits_warper: Optional[LogitsProcessorList] = None,
-        stopping_criteria: Optional[StoppingCriteriaList] = None,
-        pad_token_id: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_scores: Optional[bool] = None,
-        output_logits: Optional[bool] = None,
-        return_dict_in_generate: Optional[bool] = None,
-        synced_gpus: bool = False,
-        streamer: Optional["BaseStreamer"] = None,
-        sequential: Optional[bool] = None,
+        top_k: int,
+        penalty_alpha: float,
+        logits_processor: LogitsProcessorList,
+        stopping_criteria: StoppingCriteriaList,
+        pad_token_id: int,
+        output_attentions: bool,
+        output_hidden_states: bool,
+        output_scores: bool,
+        output_logits: bool,
+        return_dict_in_generate: bool,
+        synced_gpus: bool,
+        streamer: Optional["BaseStreamer"],
+        sequential: Optional[bool],
         **model_kwargs,
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
         r"""
@@ -1911,36 +1926,36 @@ class GenerationMixin:
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
-            top_k (`int`, *optional*, defaults to 1):
+            top_k (`int`):
                 The size of the candidate set that is used to re-rank for contrastive search
-            penalty_alpha (`float`, *optional*, defaults to 0):
+            penalty_alpha (`float`):
                 The degeneration penalty for contrastive search; activate when it is larger than 0
-            logits_processor (`LogitsProcessorList`, *optional*):
+            logits_processor (`LogitsProcessorList`):
                 An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
                 used to modify the prediction scores of the language modeling head applied at each generation step.
-            logits_warper (`LogitsProcessorList`, *optional*):
+            logits_warper (`LogitsProcessorList`):
                 An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsWarper`] used
                 to warp the prediction score distribution of the language modeling head applied before multinomial
                 sampling at each generation step.
-            stopping_criteria (`StoppingCriteriaList`, *optional*):
+            stopping_criteria (`StoppingCriteriaList`):
                 An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
                 used to tell if the generation loop should stop.
-            pad_token_id (`int`, *optional*):
+            pad_token_id (`int`):
                 The id of the *padding* token.
-            output_attentions (`bool`, *optional*, defaults to `False`):
+            output_attentions (`bool`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
-            output_hidden_states (`bool`, *optional*, defaults to `False`):
+            output_hidden_states (`bool`):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more details.
-            output_scores (`bool`, *optional*, defaults to `False`):
+            output_scores (`bool`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
-            output_logits (`bool`, *optional*, defaults to `False`):
+            output_logits (`bool``):
                 Whether or not to return the raw prediction logit scores. See `logits` under returned tensors
                 for more details.
-            return_dict_in_generate (`bool`, *optional*, defaults to `False`):
+            return_dict_in_generate (`bool`):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-            synced_gpus (`bool`, *optional*, defaults to `False`):
+            synced_gpus (`bool`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
@@ -1959,39 +1974,7 @@ class GenerationMixin:
             `model.config.is_encoder_decoder=True`.
         """
         # init values
-        logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
-        logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
-        stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         has_eos_stopping_criteria = any(hasattr(criteria, "eos_token_id") for criteria in stopping_criteria)
-
-        # else:
-        #     # TODO remove when the method is totally private
-        #     # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever
-        #     eos_token_id = [
-        #         criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
-        #     ]
-        #     eos_token_id = eos_token_id[0] if eos_token_id else None
-        #     if eos_token_id is None and self.generation_config.eos_token_id is not None:
-        #         eos_token_id = self.generation_config.eos_token_id
-        #         stopping_criteria.append(EosTokenCriteria(eos_token_id=eos_token_id))
-
-        # if isinstance(eos_token_id, int):
-        #     eos_token_id = [eos_token_id]
-        sequential = sequential if sequential is not None else self.generation_config.low_memory
-        output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
-        output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
-        output_attentions = (
-            output_attentions if output_attentions is not None else self.generation_config.output_attentions
-        )
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.generation_config.output_hidden_states
-        )
-        return_dict_in_generate = (
-            return_dict_in_generate
-            if return_dict_in_generate is not None
-            else self.generation_config.return_dict_in_generate
-        )
 
         # init attention / hidden states / scores tuples
         raw_logits = () if (return_dict_in_generate and output_logits) else None
@@ -2069,7 +2052,6 @@ class GenerationMixin:
             # contrastive search decoding consists of two steps: (1) candidate tokens recall; (2) candidate re-rank by
             # degeneration penalty
             processed_logit_for_next_step = logits_processor(input_ids, logit_for_next_step)
-            processed_logit_for_next_step = logits_warper(input_ids, processed_logit_for_next_step)
             next_probs = nn.functional.softmax(processed_logit_for_next_step, dim=-1)
 
             top_k_probs, top_k_ids = torch.topk(next_probs, dim=-1, k=top_k)
