@@ -27,12 +27,14 @@ from ...dynamic_module_utils import (
 )
 from ...utils import CONFIG_NAME, logging
 
+
 logger = logging.get_logger(__name__)
 
 
 from ..deprecated._archive_maps import (  # noqa: F401, E402
     CONFIG_ARCHIVE_MAP_MAPPING_NAMES,
 )
+
 
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
