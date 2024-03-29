@@ -1446,7 +1446,10 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             # tie text encoder and decoder base model
             decoder_base_model_prefix = self.decoder.base_model_prefix
             self._tie_encoder_decoder_weights(
-                self.text_encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
+                self.text_encoder,
+                self.decoder._modules[decoder_base_model_prefix],
+                self.decoder.base_model_prefix,
+                "text_encoder",
             )
 
     def get_text_encoder(self):

@@ -1719,7 +1719,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if getattr(self.config, "is_encoder_decoder", False) and getattr(self.config, "tie_encoder_decoder", False):
             if hasattr(self, self.base_model_prefix):
                 self = getattr(self, self.base_model_prefix)
-            tied_weights = self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
+            tied_weights = self._tie_encoder_decoder_weights(
+                self.encoder, self.decoder, self.base_model_prefix, "encoder"
+            )
             # Setting a dynamic variable instead of `_tied_weights_keys` because it's a class
             # attributed not an instance member, therefore modifying it will modify the entire class
             # Leading to issues on subsequent calls by different tests or subsequent calls.
@@ -1730,7 +1732,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 module._tie_weights()
 
     @staticmethod
-    def _tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str):
+    def _tie_encoder_decoder_weights(
+        encoder: nn.Module, decoder: nn.Module, base_model_prefix: str, encoder_name: str
+    ):
         uninitialized_encoder_weights: List[str] = []
         tied_weights: List[str] = []
         if decoder.__class__ != encoder.__class__:
@@ -1754,10 +1758,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if hasattr(decoder_pointer, "weight"):
                 assert hasattr(encoder_pointer, "weight")
                 encoder_pointer.weight = decoder_pointer.weight
-                tied_weights.append(f"encoder{total_encoder_name}.weight")
+                tied_weights.append(f"{encoder_name}{total_encoder_name}.weight")
                 if hasattr(decoder_pointer, "bias"):
                     assert hasattr(encoder_pointer, "bias")
-                    tied_weights.append(f"encoder{total_encoder_name}.bias")
+                    tied_weights.append(f"{encoder_name}{total_encoder_name}.bias")
                     encoder_pointer.bias = decoder_pointer.bias
                 return
 
