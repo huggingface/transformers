@@ -1537,6 +1537,10 @@ class RagTokenForGeneration(RagPreTrainedModel):
             logits_processor=logits_processor,
         )
 
+        prepared_stopping_criteria = self._get_stopping_criteria(
+            generation_config=generation_config, stopping_criteria=stopping_criteria
+        )
+
         if generation_config.num_beams == 1:
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
@@ -1546,9 +1550,15 @@ class RagTokenForGeneration(RagPreTrainedModel):
             return self._greedy_search(
                 input_ids,
                 logits_processor=pre_processor,
-                max_length=generation_config.max_length,
+                stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
+                output_attentions=generation_config.output_attentions,
+                output_hidden_states=generation_config.output_hidden_states,
+                output_scores=generation_config.output_scores,
+                output_logits=generation_config.output_logits,
+                return_dict_in_generate=generation_config.return_dict_in_generate,
+                synced_gpus=False,
+                streamer=None,
                 **model_kwargs,
             )
         elif generation_config.num_beams > 1:
@@ -1567,9 +1577,16 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 input_ids,
                 beam_scorer,
                 logits_processor=pre_processor,
-                max_length=generation_config.max_length,
+                stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
                 eos_token_id=generation_config.eos_token_id,
+                output_attentions=generation_config.output_attentions,
+                output_hidden_states=generation_config.output_hidden_states,
+                output_scores=generation_config.output_scores,
+                output_logits=generation_config.output_logits,
+                return_dict_in_generate=generation_config.return_dict_in_generate,
+                synced_gpus=False,
+                sequential=generation_config.low_memory,
                 **model_kwargs,
             )
         else:
