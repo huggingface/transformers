@@ -154,10 +154,11 @@ class DbrxFFNConfig(PretrainedConfig):
 
 
 class DbrxConfig(PretrainedConfig):
-    """Configuration class for Dbrx.
+    r"""
 
-    [`DbrxModel`]. It is used to instantiate a Dbrx model according to the
-    specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`DbrxModel`]. It is used to instantiate a Dbrx model according to the
+    specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the [databricks/dbrx-instruct](https://huggingface.co/databricks/dbrx-instruct) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
