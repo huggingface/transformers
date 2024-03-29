@@ -188,7 +188,7 @@ if __name__ == "__main__":
     try:
         quantization_matrix = ast.literal_eval(arguments)
         # Need to change from elements like `quantization/bnb` to `quantization_bnb` (the ones used as artifact names).
-        models = [x.replace("quantization/", "quantization_") for folders in quantization_matrix for x in folders]
+        quantization_matrix = [x.replace("quantization/", "quantization_") for folders in quantization_matrix for x in folders]
     except SyntaxError:
         Message.error_out(title, ci_title="")
         raise ValueError("Errored out.")
@@ -204,7 +204,7 @@ if __name__ == "__main__":
             "job_link": {},
         }
         for quant in quantization_matrix
-        if f"run_all_tests_gpu_{quantization_matrix}" in available_artifacts
+        if f"run_all_tests_gpu_{quant}" in available_artifacts
     }
     github_actions_jobs = get_jobs(
         workflow_run_id=os.environ["GITHUB_RUN_ID"], token=os.environ["ACCESS_REPO_INFO_TOKEN"]
