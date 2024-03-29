@@ -58,11 +58,7 @@ class QuantizationMessage(Message):
 
         if self.n_failures > 0:
             blocks.append(self.failures_overwiew)
-
-        if self.n_failures > 0:
-            for block in self.failures_detailed:
-                if block["text"]["text"]:
-                    blocks.append(block)
+            blocks.append(self.failures_detailed)
 
         if self.n_failures == 0:
             blocks.append(self.no_failures)
@@ -123,7 +119,7 @@ class QuantizationMessage(Message):
 
         header = "Single |  Multi | Category\n"
         failures_report = prepare_reports(
-            title="The following non-modeling tests had failures", header=header, reports=individual_reports
+            title="The following quantization tests had failures", header=header, reports=individual_reports
         )
 
         return {"type": "section", "text": {"type": "mrkdwn", "text": failures_report}}
