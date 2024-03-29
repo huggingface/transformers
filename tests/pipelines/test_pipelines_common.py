@@ -860,8 +860,9 @@ class DynamicPipelineTester(unittest.TestCase):
         # dynamic module
         self.assertEqual(new_classifier.__class__.__name__, "PairClassificationPipeline")
         # check for tag exitence, tag needs to be added when we are calling a custom pipeline from the hub
+        # useful for cases such as finetuning
         self.assertDictEqual(
-            classifier.model.config.custom_pipelines,
+            new_classifier.model.config.custom_pipelines,
             {
                 "pair-classification": {
                     "impl": f"{USER}/test-dynamic-pipeline--custom_pipeline.PairClassificationPipeline",
@@ -870,6 +871,12 @@ class DynamicPipelineTester(unittest.TestCase):
                 }
             },
         )
+        # test if the pipeline still works after the model is finetuned
+        # (we are actually testing if the pipeline still works from the final repo)
+        # this is where the user/repo--module.class is used for
+        new_classifier.model.push_to_hub(repo_name=f"{USER}/test-pipeline-for-a-finetuned-model", token=self._token)
+        del new_classifier  # free up memory
+        new_classifier = pipeline(model=f"{USER}/test-pipeline-for-a-finetuned-model", trust_remote_code=True)
 
         results = classifier("I hate you", second_text="I love you")
         new_results = new_classifier("I hate you", second_text="I love you")
