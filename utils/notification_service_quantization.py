@@ -57,7 +57,7 @@ class QuantizationMessage(Message):
         blocks = [self.header]
 
         if self.n_failures > 0:
-            blocks.append(self.failure_overwiew)
+            blocks.append(self.failures_overwiew)
 
         if self.n_failures > 0:
             for block in self.failures_detailed:
