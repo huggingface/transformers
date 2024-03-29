@@ -1733,7 +1733,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @staticmethod
     def _tie_encoder_decoder_weights(
-        encoder: nn.Module, decoder: nn.Module, base_model_prefix: str, encoder_name: str
+        encoder: nn.Module, decoder: nn.Module, base_model_prefix: str, base_encoder_name: str
     ):
         uninitialized_encoder_weights: List[str] = []
         tied_weights: List[str] = []
@@ -1747,6 +1747,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             decoder_pointer: nn.Module,
             encoder_pointer: nn.Module,
             module_name: str,
+            base_encoder_name: str,
             uninitialized_encoder_weights: List[str],
             depth=0,
             total_decoder_name="",
@@ -1758,10 +1759,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if hasattr(decoder_pointer, "weight"):
                 assert hasattr(encoder_pointer, "weight")
                 encoder_pointer.weight = decoder_pointer.weight
-                tied_weights.append(f"{encoder_name}{total_encoder_name}.weight")
+                tied_weights.append(f"{base_encoder_name}{total_encoder_name}.weight")
                 if hasattr(decoder_pointer, "bias"):
                     assert hasattr(encoder_pointer, "bias")
-                    tied_weights.append(f"{encoder_name}{total_encoder_name}.bias")
+                    tied_weights.append(f"{base_encoder_name}{total_encoder_name}.bias")
                     encoder_pointer.bias = decoder_pointer.bias
                 return
 
@@ -1799,6 +1800,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         decoder_modules[decoder_name],
                         encoder_modules[encoder_name],
                         module_name + "/" + name,
+                        base_encoder_name,
                         uninitialized_encoder_weights,
                         depth=depth + 1,
                         total_encoder_name=f"{total_encoder_name}.{encoder_name}",
@@ -1809,7 +1811,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 uninitialized_encoder_weights += list(all_encoder_weights)
 
         # tie weights recursively
-        tie_encoder_to_decoder_recursively(decoder, encoder, base_model_prefix, uninitialized_encoder_weights)
+        tie_encoder_to_decoder_recursively(
+            decoder, encoder, base_model_prefix, base_encoder_name, uninitialized_encoder_weights
+        )
 
         if len(uninitialized_encoder_weights) > 0:
             logger.warning(
