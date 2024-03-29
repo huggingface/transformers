@@ -67,9 +67,6 @@ class QuantizationMessage(Message):
         if self.n_failures == 0:
             blocks.append(self.no_failures)
 
-        if len(self.selected_warnings) > 0:
-            blocks.append(self.warnings)
-
         return json.dumps(blocks)
 
     @property

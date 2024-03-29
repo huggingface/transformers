@@ -364,48 +364,47 @@ jobs:
           name: ${{ matrix.machine_type }}_run_tests_quantization_torch_gpu_${{ env.matrix_folders }}
           path: /transformers/reports/${{ matrix.machine_type }}_tests_quantization_torch_gpu_${{ matrix.folders }}
 
-  run_extract_warnings:
-    name: Extract warnings in CI artifacts
-    runs-on: ubuntu-22.04
-    if: always()
-    needs: [
-      setup,
-      run_tests_quantization_torch_gpu,
-    ]
-    steps:
-      - name: Checkout transformers
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 2
+  # run_extract_warnings:
+  #   name: Extract warnings in CI artifacts
+  #   runs-on: ubuntu-22.04
+  #   if: always()
+  #   needs: [
+  #     setup,
+  #   ]
+  #   steps:
+  #     - name: Checkout transformers
+  #       uses: actions/checkout@v3
+  #       with:
+  #         fetch-depth: 2
 
-      - name: Install transformers
-        run: pip install transformers
+  #     - name: Install transformers
+  #       run: pip install transformers
 
-      - name: Show installed libraries and their versions
-        run: pip freeze
+  #     - name: Show installed libraries and their versions
+  #       run: pip freeze
 
-      - name: Create output directory
-        run: mkdir warnings_in_ci
+  #     - name: Create output directory
+  #       run: mkdir warnings_in_ci
 
-      - uses: actions/download-artifact@v3
-        with:
-          path: warnings_in_ci
+  #     - uses: actions/download-artifact@v3
+  #       with:
+  #         path: warnings_in_ci
 
-      - name: Show artifacts
-        run: echo "$(python3 -c 'import os; d = os.listdir(); print(d)')"
-        working-directory: warnings_in_ci
+  #     - name: Show artifacts
+  #       run: echo "$(python3 -c 'import os; d = os.listdir(); print(d)')"
+  #       working-directory: warnings_in_ci
 
-      - name: Extract warnings in CI artifacts
-        run: |
-          python3 utils/extract_warnings.py --workflow_run_id ${{ github.run_id }} --output_dir warnings_in_ci --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }} --from_gh
-          echo "$(python3 -c 'import os; import json; fp = open("warnings_in_ci/selected_warnings.json"); d = json.load(fp); d = "\n".join(d) ;print(d)')"
+  #     - name: Extract warnings in CI artifacts
+  #       run: |
+  #         python3 utils/extract_warnings.py --workflow_run_id ${{ github.run_id }} --output_dir warnings_in_ci --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }} --from_gh
+  #         echo "$(python3 -c 'import os; import json; fp = open("warnings_in_ci/selected_warnings.json"); d = json.load(fp); d = "\n".join(d) ;print(d)')"
 
-      - name: Upload artifact
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v3
-        with:
-          name: warnings_in_ci
-          path: warnings_in_ci/selected_warnings.json
+  #     - name: Upload artifact
+  #       if: ${{ always() }}
+  #       uses: actions/upload-artifact@v3
+  #       with:
+  #         name: warnings_in_ci
+  #         path: warnings_in_ci/selected_warnings.json
 
   send_results:
     name: Send results to webhook
@@ -413,8 +412,7 @@ jobs:
     if: always()
     needs: [
       setup,
-      run_tests_quantization_torch_gpu,
-      run_extract_warnings
+      run_tests_quantization_torch_gpu
     ]
     steps:
       - name: Preliminary job status
