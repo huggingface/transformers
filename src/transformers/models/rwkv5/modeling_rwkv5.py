@@ -244,11 +244,11 @@ class Rwkv5SelfAttention(nn.Module):
         self.num_attention_heads = num_attention_heads
         attention_hidden_size = (
             config.attention_hidden_size if config.attention_hidden_size is not None else hidden_size
-        )  # TODO this should be done in the config?
+        )
         self.attention_hidden_size = attention_hidden_size
 
         self.time_decay = nn.Parameter(torch.empty(num_attention_heads, config.head_size))
-        self.time_faaaa = nn.Parameter(torch.empty(num_attention_heads, config.head_size))  # TODO this is unused
+        self.time_faaaa = nn.Parameter(torch.empty(num_attention_heads, config.head_size))
         self.time_mix_gate = nn.Parameter(torch.empty(1, 1, hidden_size))
 
         self.time_mix_key = nn.Parameter(torch.empty(1, 1, hidden_size))
@@ -262,7 +262,7 @@ class Rwkv5SelfAttention(nn.Module):
         self.gate = nn.Linear(hidden_size, attention_hidden_size, bias=False)
         self.output = nn.Linear(attention_hidden_size, hidden_size, bias=False)
         # TODO rename this layer norm (from ln_x)
-        self.post_attention_ln = nn.GroupNorm(hidden_size // config.head_size, hidden_size)
+        self.ln_x = nn.GroupNorm(hidden_size // config.head_size, hidden_size)
 
     def extract_key_value(self, hidden, state=None):
         # Mix hidden with the previous timestep to produce key, value, receptance
