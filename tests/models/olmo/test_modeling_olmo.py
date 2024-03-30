@@ -21,13 +21,13 @@ import pytest
 from parameterized import parameterized
 
 from transformers import OLMoConfig, StaticCache, is_torch_available, logging, set_seed
+from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
     CaptureLogger,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
     require_torch,
-    require_torch_accelerator,
     require_torch_gpu,
     require_torch_sdpa,
     slow,
@@ -44,12 +44,8 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        CodeOLMoTokenizer,
         OLMoForCausalLM,
-        OLMoForQuestionAnswering,
-        OLMoForSequenceClassification,
         OLMoModel,
-        OLMoTokenizer,
     )
 
 
@@ -68,7 +64,7 @@ class OLMoModelTester:
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
-        hidden_act="gelu",
+        hidden_act="silu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
@@ -282,12 +278,19 @@ class OLMoModelTester:
 @require_torch
 class OLMoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (OLMoModel, OLMoForCausalLM, OLMoForSequenceClassification, OLMoForQuestionAnswering)
+        (OLMoModel, OLMoForCausalLM)
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (OLMoForCausalLM,) if is_torch_available() else ()
-    test_headmasking = False
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": OLMoModel,
+            "text-generation": OLMoForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     fx_compatible = False
 
@@ -306,51 +309,15 @@ class OLMoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip("OLMo does not support head pruning.")
+    def test_headmasking(self):
+        pass
+
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_olmo_sequence_classification_model(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = OLMoForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_olmo_sequence_classification_model_for_single_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "single_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = OLMoForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_olmo_sequence_classification_model_for_multi_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "multi_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor(
-            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
-        ).to(torch.float)
-        model = OLMoForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
     @unittest.skip("OLMo buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
@@ -387,131 +354,6 @@ class OLMoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
-    @require_flash_attn
-    @require_torch_gpu
-    @require_bitsandbytes
-    @pytest.mark.flash_attn_test
-    @require_read_token
-    @slow
-    def test_flash_attn_2_generate_padding_right(self):
-        """
-        Overwritting the common test as the test is flaky on tiny models
-        """
-        model = OLMoForCausalLM.from_pretrained(
-            "allenai/OLMo-hf",
-            load_in_4bit=True,
-            device_map={"": 0},
-        )
-
-        tokenizer = OLMoTokenizer.from_pretrained("allenai/OLMo-hf")
-
-        texts = ["hi", "Hello this is a very long sentence"]
-
-        tokenizer.padding_side = "right"
-        tokenizer.pad_token = tokenizer.eos_token
-
-        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(0)
-
-        output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_native = tokenizer.batch_decode(output_native)
-
-        model = OLMoForCausalLM.from_pretrained(
-            "allenai/OLMo-hf", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2"
-        )
-
-        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_fa_2 = tokenizer.batch_decode(output_fa_2)
-
-        self.assertListEqual(output_native, output_fa_2)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @slow
-    def test_use_flash_attention_2_true(self):
-        """
-        NOTE: this is the only test testing that the legacy `use_flash_attention=2` argument still works as intended.
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                model = model_class(config)
-                model.save_pretrained(tmp_dir)
-
-                new_model = OLMoForCausalLM.from_pretrained(
-                    tmp_dir, use_flash_attention_2=True, torch_dtype=torch.float16
-                ).to("cuda")
-
-                self.assertTrue(new_model.config._attn_implementation == "flash_attention_2")
-
-                has_flash = False
-                for name, submodule in new_model.named_modules():
-                    if "FlashAttention" in submodule.__class__.__name__:
-                        has_flash = True
-                        break
-                if not has_flash:
-                    raise ValueError("The flash model should have flash attention layers")
-
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_generate(self):
-        """
-        Overwritting the common test as the test is flaky on tiny models
-        """
-        max_new_tokens = 30
-
-        tokenizer = OLMoTokenizer.from_pretrained("saibo/olmo-1B")
-
-        model_sdpa = OLMoForCausalLM.from_pretrained(
-            "saibo/olmo-1B",
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
-        ).to(torch_device)
-
-        self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-
-        model_eager = OLMoForCausalLM.from_pretrained(
-            "saibo/olmo-1B",
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
-            attn_implementation="eager",
-        ).to(torch_device)
-
-        self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-        for name, submodule in model_eager.named_modules():
-            if "SdpaAttention" in submodule.__class__.__name__:
-                raise ValueError("The eager model should not have SDPA attention layers")
-
-        has_sdpa = False
-        for name, submodule in model_sdpa.named_modules():
-            if "SdpaAttention" in submodule.__class__.__name__:
-                has_sdpa = True
-                break
-        if not has_sdpa:
-            raise ValueError("The SDPA model should have SDPA attention layers")
-
-        texts = [
-            "hi here's a longer context, getting longer and",
-            "Hello this is a very long sentence my friend, very long for real",
-            "Today I am in Paris and",
-        ]
-
-        for padding_side in ["left", "right"]:
-            tokenizer.padding_side = padding_side
-            tokenizer.pad_token = tokenizer.eos_token
-
-            inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
-
-            res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-            res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-
-            with self.subTest(f"{padding_side}"):
-                torch.testing.assert_close(
-                    res_eager,
-                    res_sdpa,
-                    msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
-                )
-
     @unittest.skip("TODO @gante fix this for OLMo")
     @parameterized.expand([(1, False), (1, True), (4, False)])
     def test_new_cache_format(self, num_beams, do_sample):
@@ -520,70 +362,52 @@ class OLMoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
 @require_torch
 class OLMoIntegrationTest(unittest.TestCase):
-    @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
+    @slow
+    def test_model_1b_logits(self):
+        input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
+        model = OLMoForCausalLM.from_pretrained("allenai/OLMo-1B")
+        out = model(torch.tensor(input_ids)).logits
+        # Expected mean on dim = -1
+        EXPECTED_MEAN = torch.tensor([[2.2869, 0.3315, 0.9876, 1.4146, 1.8804, 2.0430, 1.7055, 1.2065]])
+        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
+        # slicing logits[0, 0, 0:30]
+        EXPECTED_SLICE = torch.tensor([2.5551, -1.1230, 11.0510, 12.4977, 7.9651, 7.2342, 6.1885, 7.8340, 9.9847, 12.6695, 12.2345, 10.7970, 8.4749, 14.2483, 12.9588, 13.9233, 11.0496, 5.5749, 7.4466, 7.7914, 6.8440, 5.8951, 4.8180, 4.1935, 4.5216, 4.7256, 3.9553, 12.2870, 12.4990, 8.1591])  # fmt: skip
+        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-2, rtol=1e-2)
+
     @slow
     def test_model_7b_logits(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = OLMoForCausalLM.from_pretrained("allenai/OLMo-hf", device_map="auto")
-        out = model(torch.tensor([input_ids]))
+        input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
+        model = OLMoForCausalLM.from_pretrained("allenai/OLMo-7B")
+        out = model(torch.tensor(input_ids)).logits
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-6.6550, -4.1227, -4.9859, -3.2406, 0.8262, -3.0033, 1.2964, -3.3699]])
+        EXPECTED_MEAN = torch.tensor([[0.0271, 0.0249, -0.0578, -0.0870, 0.0167, 0.0710, 0.1002, 0.0677]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([-12.8281, -7.4453, -0.4639, -8.0625, -7.2500, -8.0000, -6.4883, -7.7695, -7.8438, -7.0312, -6.2188, -7.1328, -1.8496, 1.9961, -8.6250, -6.7227, -12.8281, -6.9492, -7.0742, -7.7852, -7.5820, -7.9062, -6.9375, -7.9805, -8.3438, -8.1562, -8.0469, -7.6250, -7.7422, -7.3398,])  # fmt: skip
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
+        EXPECTED_SLICE = torch.tensor([-1.7433, -1.6685, 7.4941, 6.1506, 0.1364, -0.1127, 1.3224, 4.5458, 4.2068, 5.8296, 7.4723, 2.7925, 3.1245, 10.8872, 10.0758, 10.6717, 7.0945, 1.2398, 3.6766, 4.2365, 2.5655, 2.2222, 1.7418, 0.5223, 0.7753, 1.0938, 0.6723, 6.2522, 6.2264, 1.8105])  # fmt: skip
+        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-2, rtol=1e-2)
 
-    @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
+    # @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
     @slow
-    def test_model_13b_logits(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = OLMoForCausalLM.from_pretrained("meta-olmo/OLMo-2-13b-hf", device_map="auto")
-        out = model(torch.tensor(input_ids))
+    def test_model_7b_twin_2t_logits(self):
+        input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
+        model = OLMoForCausalLM.from_pretrained("allenai/OLMo-7B-Twin-2T")
+        out = model(torch.tensor(input_ids)).logits
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-2.0622, -1.2794, -1.1638, -0.9788, -1.4603, -1.0238, -1.7893, -1.4411]])
+        EXPECTED_MEAN = torch.tensor([[-0.3636, -0.3825, -0.4800, -0.3696, -0.8388, -0.9737, -0.9849, -0.8356]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([-8.1406, -8.0547, 2.7461, -1.2344, -0.1448, -1.8262, -1.0020, -1.8154, -1.6895, -1.8516, -2.3574, -0.9277, 3.7598, 6.5742, -1.2998, -0.1177, -8.1406, -2.9688, -2.9199, -3.1699, -3.5254, -2.3555, -2.7988, -3.4141, -2.8262, -4.5195, -3.3379, -3.3164, -2.7832, -3.0273])  # fmt: skip
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
-
-    @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
-    @slow
-    def test_model_13bf_logits(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = OLMoForCausalLM.from_pretrained("meta-olmo/OLMo-2-13b-chat-hf", device_map="auto")
-        out = model(torch.tensor(input_ids))
-        # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-0.8562, -1.8520, -0.7551, -0.4162, -1.5161, -1.2038, -2.4823, -2.3254]])
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
-        # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([-2.2227, 4.8828, 0.9023, -0.4578, -0.7871, -0.1033, -0.6221, -0.5786, -0.7803, -1.0674, -1.2920, -0.1570, 0.8008, 2.0723, -0.9497, 0.2771, -2.2227, -0.7612, -1.4346, -1.2061, -1.6426, -0.3000, -0.7139, -1.1934, -1.8691, -1.6973, -1.5947, -1.2705, -0.3523, -0.5513])  # fmt: skip
-        torch.testing.assert_close(out.mean(-1), EXPECTED_SLICE, atol=1e-2, rtol=1e-2)
-
-    @unittest.skip(
-        "Logits are not exactly the same, once we fix the instabalities somehow, will update! Also it is gonna be a `too_slow` test"
-    )
-    @slow
-    def test_model_70b_logits(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = OLMoForCausalLM.from_pretrained("meta-olmo/OLMo-2-70b-hf", device_map="auto")
-        out = model(torch.tensor(input_ids))
-
-        EXPECTED_MEAN = torch.tensor(
-            [[-4.2327, -3.3360, -4.6665, -4.7631, -1.8180, -3.4170, -1.4211, -3.1810]], dtype=torch.float32
-        )
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
-        EXPECTED_SLICE = torch.tensor([-9.4922, -3.9551, 1.7998, -5.6758, -5.1055, -5.8984, -4.8320, -6.8086, -6.5391, -5.6172, -5.5820, -5.5352, 1.7881, 3.6289, -6.5117, -3.4785, -9.5000, -6.0352, -6.8125, -6.0195, -6.6836, -5.4727, -6.2812, -6.0391, -7.3398, -7.4297, -7.4844, -6.5820, -5.8789, -5.5312])  # fmt: skip
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
+        EXPECTED_SLICE = torch.tensor([-2.0833, -1.9234, 8.7312, 7.8049, 1.0372, 0.8941, 3.1548, 1.8502, 5.5511, 5.5793, 8.1166, 4.5906, 1.8691, 11.6377, 8.9858, 11.6447, 7.4549, 1.4725, 2.8399, 2.7568, 1.4011, 1.6958, 0.5572, 0.5231, 0.3068, 0.5364, 0.6769, 7.9636, 8.2379, 1.7950])  # fmt: skip
+        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-2, rtol=1e-2)
 
     @unittest.skip("Model is curently gated")
     @slow
-    def test_model_13b_greedy_generation(self):
+    def test_model_7b_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the laws of physics are the same everywhere in the universe and 2) the passage of time and the length of objects can vary depending on the observer\'s frame of reference.\n\nThe first part of the theory, that the laws of physics are the same everywhere, is known as the "princi"""
         prompt = "Simply put, the theory of relativity states that "
-        tokenizer = OLMoTokenizer.from_pretrained("meta-olmo/OLMo-2-13b-chat-hf")
+        tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B")
         input_ids = tokenizer.encode(prompt, return_tensors="pt")
         model = OLMoForCausalLM.from_pretrained(
-            "meta-olmo/OLMo-2-13b-chat-hf", device_map="sequential", use_safetensors=False
+            "allenai/OLMo-7B", device_map="sequential", use_safetensors=False
         )
 
         # greedy generation outputs
@@ -640,85 +464,3 @@ class OLMoIntegrationTest(unittest.TestCase):
 
         text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-
-@require_torch
-class CodeOLMoIntegrationTest(unittest.TestCase):
-    PROMPTS = [
-        '''def remove_non_ascii(s: str) -> str:
-    """ <FILL_ME>
-    return result
-''',
-        """# Installation instructions:
-    ```bash
-<FILL_ME>
-    ```
-This downloads the OLMo inference code and installs the repository as a local pip package.
-""",
-        """class InterfaceManagerFactory(AbstractManagerFactory):
-    def __init__(<FILL_ME>
-def main():
-    factory = InterfaceManagerFactory(start=datetime.now())
-    managers = []
-    for i in range(10):
-        managers.append(factory.build(id=i))
-""",
-        """/-- A quasi-prefunctoid is 1-connected iff all its etalisations are 1-connected. -/
-theorem connected_iff_etalisation [C D : precategoroid] (P : quasi_prefunctoid C D) :
-π₁ P = 0 ↔ <FILL_ME> = 0 :=
-begin
-split,
-{ intros h f,
-    rw pi_1_etalisation at h,
-    simp [h],
-    refl
-},
-{ intro h,
-    have := @quasi_adjoint C D P,
-    simp [←pi_1_etalisation, this, h],
-    refl
-}
-end
-""",
-    ]
-
-    @require_torch_accelerator
-    @slow
-    def test_model_7b_logits(self):
-        model = OLMoForCausalLM.from_pretrained("codeolmo/CodeOLMo-7b-hf").to(torch_device)
-        tokenizer = CodeOLMoTokenizer.from_pretrained("codeolmo/CodeOLMo-7b-hf")
-        # Tokenize and prepare for the model a list of sequences or a list of pairs of sequences.
-        # meaning by default this supports passing splitted list of inputs
-        processed_text = tokenizer.batch_decode(tokenizer(self.PROMPTS)["input_ids"], add_special_tokens=False)
-        # fmt: off
-        EXPECTED_TEXT = [
-            '<s> <PRE> def remove_non_ascii(s: str) -> str:\n    """  <SUF>\n    return result\n <MID>',
-            '<s> <PRE> # Installation instructions:\n    ```bash\n <SUF>\n    ```\nThis downloads the OLMo inference code and installs the repository as a local pip package.\n <MID>',
-            '<s> <PRE> class InterfaceManagerFactory(AbstractManagerFactory):\n    def __init__( <SUF>\ndef main():\n    factory = InterfaceManagerFactory(start=datetime.now())\n    managers = []\n    for i in range(10):\n        managers.append(factory.build(id=i))\n <MID>',
-            '<s> <PRE> /-- A quasi-prefunctoid is 1-connected iff all its etalisations are 1-connected. -/\ntheorem connected_iff_etalisation [C D : precategoroid] (P : quasi_prefunctoid C D) :\nπ₁ P = 0 ↔  <SUF> = 0 :=\nbegin\nsplit,\n{ intros h f,\n    rw pi_1_etalisation at h,\n    simp [h],\n    refl\n},\n{ intro h,\n    have := @quasi_adjoint C D P,\n    simp [←pi_1_etalisation, this, h],\n    refl\n}\nend\n <MID>'
-        ]
-        # fmt: on
-        self.assertEqual(processed_text, EXPECTED_TEXT)
-        processed_text_suffix_first = tokenizer.batch_decode(
-            tokenizer(self.PROMPTS, suffix_first=True, add_special_tokens=False)["input_ids"]
-        )
-
-        # fmt: off
-        EXPECTED_TEXT = [
-            '<PRE> <SUF>\n    return result\n <MID> def remove_non_ascii(s: str) -> str:\n    """ ',
-            '<PRE> <SUF>\n    ```\nThis downloads the OLMo inference code and installs the repository as a local pip package.\n <MID> # Installation instructions:\n    ```bash\n',
-            '<PRE> <SUF>\ndef main():\n    factory = InterfaceManagerFactory(start=datetime.now())\n    managers = []\n    for i in range(10):\n        managers.append(factory.build(id=i))\n <MID> class InterfaceManagerFactory(AbstractManagerFactory):\n    def __init__(',
-            '<PRE> <SUF> = 0 :=\nbegin\nsplit,\n{ intros h f,\n    rw pi_1_etalisation at h,\n    simp [h],\n    refl\n},\n{ intro h,\n    have := @quasi_adjoint C D P,\n    simp [←pi_1_etalisation, this, h],\n    refl\n}\nend\n <MID> /-- A quasi-prefunctoid is 1-connected iff all its etalisations are 1-connected. -/\ntheorem connected_iff_etalisation [C D : precategoroid] (P : quasi_prefunctoid C D) :\nπ₁ P = 0 ↔ '
-        ]
-        EXPECTED_IDS = torch.tensor([[    1, 32007, 822, 3349, 29918, 5464, 29918, 294, 18869, 29898,29879, 29901, 851, 29897, 1599, 851, 29901, 13, 1678, 9995, 29871, 32008, 13, 1678, 736, 1121, 13, 32009, 15941, 1661, 29899, 28599, 2687, 4890, 515, 263, 1347, 29889, 13, 13, 1678, 826, 3174, 29901, 13, 4706, 269, 29901, 450, 1347, 304, 3349, 1661, 29899, 28599, 2687, 4890, 515, 29889, 13, 13, 1678, 16969, 29901, 13, 4706, 450, 1347, 411, 1661, 29899, 28599, 2687, 4890, 6206, 29889, 13, 1678, 9995, 13, 1678, 1121, 353, 5124, 13, 1678, 363, 274, 297, 269, 29901, 13, 4706, 565, 4356, 29898, 29883, 29897, 529, 29871, 29896, 29906, 29947, 29901, 13, 9651, 1121, 4619, 274, 32010, 2]])
-        # fmt: on
-        self.assertEqual(processed_text_suffix_first, EXPECTED_TEXT)
-        input_ids = tokenizer(self.PROMPTS[0], return_tensors="pt")["input_ids"]
-        generated_ids = model.generate(input_ids.to(torch_device), max_new_tokens=128)
-        torch.testing.assert_close(generated_ids, EXPECTED_IDS)
-
-        EXPECTED_INFILLING = [
-            '<s> <PRE> def remove_non_ascii(s: str) -> str:\n    """  <SUF>\n    return result\n <MID>Remove non-ASCII characters from a string.\n\n    Args:\n        s: The string to remove non-ASCII characters from.\n\n    Returns:\n        The string with non-ASCII characters removed.\n    """\n    result = ""\n    for c in s:\n        if ord(c) < 128:\n            result += c <EOT></s>'
-        ]
-        infilling = tokenizer.batch_decode(generated_ids)
-        self.assertEqual(infilling, EXPECTED_INFILLING)
