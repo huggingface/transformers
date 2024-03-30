@@ -2657,7 +2657,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             "temperature": (0.0,),
             "compression_ratio_threshold": 1.35,
             "condition_on_prev_tokens": True,
-            "logprob_threshold": 0.1,  # Ignore logprob, use only no-speech prob
+            "logprob_threshold": 0.0,  # Ignore logprob, use only no-speech prob
             "num_beams": 5,
         }
 
