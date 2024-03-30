@@ -501,7 +501,14 @@ class MambaModel(MambaPreTrainedModel):
         self.gradient_checkpointing = False
         self.norm_f = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         # Initialize weights and apply final processing
+        self._register_load_state_dict_pre_hook(self.load_hook)
         self.post_init()
+
+    def load_hook(self, state_dict, prefix, *args):
+        for k in state_dict:
+            if "embedding." in k:
+                state_dict[k.replace("embedding.", "embeddings.")] = state_dict.pop(k)
+                break
 
     def get_input_embeddings(self):
         return self.embeddings
