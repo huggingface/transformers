@@ -1751,4 +1751,3 @@ class MaskedImageModelingOutput(ModelOutput):
             FutureWarning,
         )
         return self.reconstruction
-
