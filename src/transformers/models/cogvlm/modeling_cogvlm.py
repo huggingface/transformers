@@ -693,7 +693,9 @@ class CogvlmModel(CogvlmPreTrainedModel):
         ) ** 2 + 2
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([CogvlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [CogvlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.norm = CogvlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         vision_input_ids = torch.tensor(
@@ -1069,7 +1071,6 @@ class CogvlmForCausalLM(CogvlmPreTrainedModel):
     ):
         position_ids = kwargs.get("position_ids", None)
         if past_key_values is not None:
-
             if position_ids is None:
                 # the reason we add + 2 + 1 here is because we have 2 additional vision tokens,
                 # and we need to add 1 to take into account the one extra token that is going to
