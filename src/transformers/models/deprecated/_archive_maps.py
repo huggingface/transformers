@@ -1516,6 +1516,14 @@ NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = DeprecatedDict(
 
 NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = DeprecatedList(["uw-madison/nystromformer-512"])
 
+OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP = DeprecatedDict(
+    {
+        "allenai/OLMo-1B": "https://huggingface.co/allenai/OLMo-1B/resolve/main/config.json",
+        "allenai/OLMo-7B": "https://huggingface.co/allenai/OLMo-7B/resolve/main/config.json",
+        "allenai/OLMo-7B-Twin-2T": "https://huggingface.co/allenai/OLMo-7B-Twin-2T/resolve/main/config.json",
+    }
+)
+
 ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = DeprecatedDict(
     {
         "shi-labs/oneformer_ade20k_swin_tiny": "https://huggingface.co/shi-labs/oneformer_ade20k_swin_tiny/blob/main/config.json"
@@ -2667,6 +2675,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("nllb-moe", "NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("nystromformer", "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("oneformer", "ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("olmo", "OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("open-llama", "OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("openai-gpt", "OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("opt", "OPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),

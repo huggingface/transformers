@@ -27,14 +27,6 @@ _import_structure = {
 }
 
 try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_olmo_fast"] = ["OLMoTokenizerFast"]
-
-try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
@@ -48,14 +40,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_olmo import OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP, OLMoConfig
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_olmo_fast import OLMoTokenizerFast
 
     try:
         if not is_torch_available():

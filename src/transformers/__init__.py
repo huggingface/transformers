@@ -1229,7 +1229,6 @@ else:
     _import_structure["models.mvp"].append("MvpTokenizerFast")
     _import_structure["models.nllb"].append("NllbTokenizerFast")
     _import_structure["models.nougat"].append("NougatTokenizerFast")
-    _import_structure["models.olmo"].append("OLMoTokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
     _import_structure["models.pegasus"].append("PegasusTokenizerFast")
     _import_structure["models.qwen2"].append("Qwen2TokenizerFast")
@@ -6095,7 +6094,6 @@ if TYPE_CHECKING:
         from .models.mvp import MvpTokenizerFast
         from .models.nllb import NllbTokenizerFast
         from .models.nougat import NougatTokenizerFast
-        from .models.olmo import OLMoTokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
         from .models.qwen2 import Qwen2TokenizerFast
