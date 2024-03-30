@@ -480,10 +480,10 @@ class FlaxNoRepeatNGramLogitsProcessor(FlaxLogitsProcessor):
         The BCOO representation allow to store only the few non-zero entries, instead of the full (huge) matrix
         """
         batch_size, seq_len = input_ids.shape
-        #number of n-grams in the whole sequence
-        seq_ngrams = (seq_len - (self.ngram_size - 1))
-        #number of n-grams in the currently generated sequence
-        cur_ngrams = (cur_len - (self.ngram_size - 1))
+        # number of n-grams in the whole sequence
+        seq_ngrams = seq_len - (self.ngram_size - 1)
+        # number of n-grams in the currently generated sequence
+        cur_ngrams = cur_len - (self.ngram_size - 1)
 
         def body_fun(i, val):
             b = i % batch_size
@@ -503,9 +503,7 @@ class FlaxNoRepeatNGramLogitsProcessor(FlaxLogitsProcessor):
         )
 
         # ignore the n-grams not yet generated
-        data = (
-            jnp.arange(batch_size * seq_ngrams) < batch_size * cur_ngrams
-        ).astype("float32")
+        data = (jnp.arange(batch_size * seq_ngrams) < batch_size * cur_ngrams).astype("float32")
 
         return sparse.BCOO((data, all_update_indices), shape=(batch_size,) + (vocab_size,) * self.ngram_size)
 
