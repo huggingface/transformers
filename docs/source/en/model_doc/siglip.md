@@ -124,6 +124,10 @@ If you're interested in submitting a resource to be included here, please feel f
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
+## SiglipTokenizerFast
+
+[[autodoc]] SiglipTokenizerFast
+
 ## SiglipImageProcessor
 
 [[autodoc]] SiglipImageProcessor
