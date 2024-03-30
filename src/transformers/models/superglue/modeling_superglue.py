@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch SuperGlue model."""
-import logging
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -20,41 +19,36 @@ from typing import List, Optional, Tuple, Union
 import torch
 from torch import Tensor, nn
 
+from transformers import PreTrainedModel, add_start_docstrings
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
-from transformers import PreTrainedModel
-from ..superpoint.modeling_superpoint import ImagePointDescriptionOutput
 
 from ...utils import (
     ModelOutput,
-    add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
 )
 from ..auto import AutoModelForKeypointDetection
 
+
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC_ = "SuperGlueConfig"
 
-_CHECKPOINT_FOR_DOC_ = "stevenbucaille/superglue"
+_CHECKPOINT_FOR_DOC_ = "stevenbucaille/superglue_indoor"
 
-SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST = ["stevenbucaille/superglue"]
+SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST = ["stevenbucaille/superglue_indoor", "stevenbucaille/superglue_outdoor"]
 
 
 def attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     dim = query.shape[1]
-    scores = torch.einsum('bdhn,bdhm->bhnm', query, key) / dim ** .5
+    scores = torch.einsum("bdhn,bdhm->bhnm", query, key) / dim**0.5
     prob = torch.nn.functional.softmax(scores, dim=-1)
-    output = torch.einsum('bhnm,bdhm->bdhn', prob, value)
+    output = torch.einsum("bhnm,bdhm->bdhn", prob, value)
     return output, prob
 
 
-def normalize_keypoints(
-        keypoints: torch.Tensor,
-        height: int,
-        width: int
-):
-    """ Normalize keypoints locations based on image image_shape"""
+def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int):
+    """Normalize keypoints locations based on image image_shape"""
     one = keypoints.new_tensor(1)
     size = torch.stack([one * width, one * height])[None]
     center = size / 2
@@ -62,13 +56,8 @@ def normalize_keypoints(
     return (keypoints - center[:, None, :]) / scaling[:, None, :]
 
 
-def log_sinkhorn_iterations(
-        Z: torch.Tensor,
-        log_mu: torch.Tensor,
-        log_nu: torch.Tensor,
-        iters: int
-) -> torch.Tensor:
-    """ Perform Sinkhorn Normalization in Log-space for stability"""
+def log_sinkhorn_iterations(Z: torch.Tensor, log_mu: torch.Tensor, log_nu: torch.Tensor, iters: int) -> torch.Tensor:
+    """Perform Sinkhorn Normalization in Log-space for stability"""
     u, v = torch.zeros_like(log_mu), torch.zeros_like(log_nu)
     for _ in range(iters):
         u = log_mu - torch.logsumexp(Z + v.unsqueeze(1), dim=2)
@@ -77,7 +66,7 @@ def log_sinkhorn_iterations(
 
 
 def log_optimal_transport(scores: torch.Tensor, alpha: torch.Tensor, iters: int) -> torch.Tensor:
-    """ Perform Differentiable Optimal Transport in Log-space for stability"""
+    """Perform Differentiable Optimal Transport in Log-space for stability"""
     b, m, n = scores.shape
     one = scores.new_tensor(1)
     ms, ns = (m * one).to(scores), (n * one).to(scores)
@@ -86,10 +75,9 @@ def log_optimal_transport(scores: torch.Tensor, alpha: torch.Tensor, iters: int)
     bins1 = alpha.expand(b, 1, n)
     alpha = alpha.expand(b, 1, 1)
 
-    couplings = torch.cat([torch.cat([scores, bins0], -1),
-                           torch.cat([bins1, alpha], -1)], 1)
+    couplings = torch.cat([torch.cat([scores, bins0], -1), torch.cat([bins1, alpha], -1)], 1)
 
-    norm = - (ms + ns).log()
+    norm = -(ms + ns).log()
     log_mu = torch.cat([norm.expand(m), ns.log()[None] + norm])
     log_nu = torch.cat([norm.expand(n), ms.log()[None] + norm])
     log_mu, log_nu = log_mu[None].expand(b, -1), log_nu[None].expand(b, -1)
@@ -117,23 +105,16 @@ class ImageMatchingOutput(ModelOutput):
 
 class SuperGlueMultiLayerPerceptron(nn.Module):
     def __init__(
-            self,
-            config: SuperGlueConfig,
-            channels: List[int],
-            do_batch_norm: bool = True,
+        self,
+        config: SuperGlueConfig,
+        channels: List[int],
+        do_batch_norm: bool = True,
     ):
         super().__init__()
         num_layers = len(channels)
         layers = []
         for i in range(1, num_layers):
-            layers.append(
-                nn.Conv1d(
-                    channels[i - 1],
-                    channels[i],
-                    kernel_size=1,
-                    bias=True
-                )
-            )
+            layers.append(nn.Conv1d(channels[i - 1], channels[i], kernel_size=1, bias=True))
             if i < (num_layers - 1):
                 if do_batch_norm:
                     layers.append(nn.BatchNorm1d(channels[i]))
@@ -146,17 +127,14 @@ class SuperGlueMultiLayerPerceptron(nn.Module):
 
 
 class SuperGlueKeypointEncoder(nn.Module):
-
     def __init__(
-            self,
-            config: SuperGlueConfig,
+        self,
+        config: SuperGlueConfig,
     ):
         super().__init__()
         self.layer_sizes = config.keypoint_encoder_sizes
         self.feature_dim = config.descriptor_dim
-        self.encoder = SuperGlueMultiLayerPerceptron(
-            config, [3] + self.layer_sizes + [self.feature_dim]
-        )
+        self.encoder = SuperGlueMultiLayerPerceptron(config, [3] + self.layer_sizes + [self.feature_dim])
 
     def forward(self, keypoints: Tensor, scores: Tensor) -> Tensor:
         keypoints = keypoints.transpose(1, 2)
@@ -166,10 +144,7 @@ class SuperGlueKeypointEncoder(nn.Module):
 
 
 class SuperGlueMultiHeadAttention(nn.Module):
-    def __init__(
-            self,
-            config: SuperGlueConfig
-    ):
+    def __init__(self, config: SuperGlueConfig):
         super().__init__()
         self.feature_dim = config.descriptor_dim
         self.num_heads = config.num_heads
@@ -177,16 +152,10 @@ class SuperGlueMultiHeadAttention(nn.Module):
         self.merge = nn.Conv1d(self.feature_dim, self.feature_dim, kernel_size=1)
         self.proj = nn.ModuleList([deepcopy(self.merge) for _ in range(3)])
 
-    def forward(
-            self,
-            query: torch.Tensor,
-            key: torch.Tensor,
-            value: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
         batch_dim = query.size(0)
         query, key, value = [
-            layer(x).view(batch_dim, self.dim, self.num_heads, -1)
-            for layer, x in zip(self.proj, (query, key, value))
+            layer(x).view(batch_dim, self.dim, self.num_heads, -1) for layer, x in zip(self.proj, (query, key, value))
         ]
         x, _ = attention(query, key, value)
         output = self.merge(x.contiguous().view(batch_dim, self.dim * self.num_heads, -1))
@@ -195,8 +164,8 @@ class SuperGlueMultiHeadAttention(nn.Module):
 
 class SuperGlueAttentionalPropagation(nn.Module):
     def __init__(
-            self,
-            config: SuperGlueConfig,
+        self,
+        config: SuperGlueConfig,
     ):
         super().__init__()
         self.descriptor_dim = config.descriptor_dim
@@ -216,8 +185,8 @@ class SuperGlueAttentionalPropagation(nn.Module):
 
 class SuperGlueAttentionalGNN(nn.Module):
     def __init__(
-            self,
-            config: SuperGlueConfig,
+        self,
+        config: SuperGlueConfig,
     ):
         super().__init__()
         self.descriptor_dim = config.descriptor_dim
@@ -235,7 +204,7 @@ class SuperGlueAttentionalGNN(nn.Module):
 
     def forward(self, descriptors_0: torch.Tensor, descriptors_1: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         for gnn_layer, type in zip(self.layers, self.layers_types):
-            if type == 'cross':
+            if type == "cross":
                 source_0, source_1 = descriptors_1, descriptors_0
             else:  # if type == 'self':
                 source_0, source_1 = descriptors_0, descriptors_1
@@ -267,8 +236,8 @@ class SuperGlue(nn.Module):
     """
 
     def __init__(
-            self,
-            config: SuperGlueConfig,
+        self,
+        config: SuperGlueConfig,
     ):
         super().__init__()
 
@@ -278,19 +247,19 @@ class SuperGlue(nn.Module):
         self.descriptor_dim = config.descriptor_dim
         self.final_proj = nn.Conv1d(self.descriptor_dim, self.descriptor_dim, kernel_size=1, bias=True)
 
-        bin_score = torch.nn.Parameter(torch.tensor(1.))
-        self.register_parameter('bin_score', bin_score)
+        bin_score = torch.nn.Parameter(torch.tensor(1.0))
+        self.register_parameter("bin_score", bin_score)
 
         self.matching_threshold = config.matching_threshold
 
     def forward(
-            self,
-            keypoints_0: Tensor,
-            scores_0: Tensor,
-            descriptors_0: Tensor,
-            keypoints_1: Tensor,
-            scores_1: Tensor,
-            descriptors_1: Tensor
+        self,
+        keypoints_0: Tensor,
+        scores_0: Tensor,
+        descriptors_0: Tensor,
+        keypoints_1: Tensor,
+        scores_1: Tensor,
+        descriptors_1: Tensor,
     ):
         """Run SuperGlue on a pair of keypoints and descriptors"""
         if keypoints_0.shape[1] == 0 or keypoints_1.shape[1] == 0:  # no keypoints
@@ -299,7 +268,7 @@ class SuperGlue(nn.Module):
                 keypoints_0.new_full(shape0, -1, dtype=torch.int),
                 keypoints_1.new_full(shape1, -1, dtype=torch.int),
                 keypoints_0.new_zeros(shape0),
-                keypoints_1.new_zeros(shape1)
+                keypoints_1.new_zeros(shape1),
             )
 
         # Keypoint MLP encoder.
@@ -314,15 +283,11 @@ class SuperGlue(nn.Module):
         projected_descriptors_1 = self.final_proj(descriptors_1)
 
         # Compute matching descriptor distance.
-        scores = torch.einsum('bdn,bdm->bnm', projected_descriptors_0, projected_descriptors_1)
-        scores = scores / self.descriptor_dim ** .5
+        scores = torch.einsum("bdn,bdm->bnm", projected_descriptors_0, projected_descriptors_1)
+        scores = scores / self.descriptor_dim**0.5
 
         # Run the optimal transport.
-        scores = self.log_optimal_transport(
-            scores,
-            self.bin_score,
-            iters=self.sinkhorn_iterations
-        )
+        scores = self.log_optimal_transport(scores, self.bin_score, iters=self.sinkhorn_iterations)
 
         # Get the matches with score above "match_threshold".
         max0, max1 = scores[:, :-1, :-1].max(2), scores[:, :-1, :-1].max(1)
@@ -338,7 +303,6 @@ class SuperGlue(nn.Module):
         matches_1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
 
         return matches_0, matches_1, matching_scores_0, matching_scores_1
-
 
 
 class SuperGluePreTrainedModel(PreTrainedModel):
@@ -371,58 +335,55 @@ SUPERGLUE_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`SuperPointConfig`]): Model configuration class with all the parameters of the model.
+        config ([`SuperGlueConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
     """
 
-# TODO
-SUPERGLUE_INPUTS_DOCSTRING = r""" 
-    """
+SUPERGLUE_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`SuperPointImageProcessor`]. See
+            [`SuperPointImageProcessor.__call__`] for details.
+
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
 
 
+@add_start_docstrings(
+    "The SuperGlue core model taking keypoints with their descriptors and scores as input and outputting keypoint matching information.",
+    SUPERGLUE_INPUTS_DOCSTRING,
+)
 class SuperGlueModel(SuperGluePreTrainedModel):
-    #TODO documentation
-
     def __init__(self, config: SuperGlueConfig):
         super().__init__(config)
 
-        if config.keypoint_detector_config.name_or_path != "":
-            self.keypoint_detector = AutoModelForKeypointDetection.from_pretrained(
-                config.keypoint_detector_config.name_or_path)
-        else:
-            self.keypoint_detector = AutoModelForKeypointDetection.from_config(config.keypoint_detector_config)
         self.keypoint_encoder = SuperGlueKeypointEncoder(config)
         self.gnn = SuperGlueAttentionalGNN(config)
 
         self.final_proj = nn.Conv1d(config.descriptor_dim, config.descriptor_dim, kernel_size=1, bias=True)
 
-        bin_score = torch.nn.Parameter(torch.tensor(1.))
-        self.register_parameter('bin_score', bin_score)
+        bin_score = torch.nn.Parameter(torch.tensor(1.0))
+        self.register_parameter("bin_score", bin_score)
 
     @add_start_docstrings_to_model_forward(SUPERGLUE_INPUTS_DOCSTRING)
     def forward(
-            self,
-            pixel_values: torch.FloatTensor = None,
-            return_dict: Optional[bool] = None,
+        self,
+        image0_keypoints: torch.Tensor = None,
+        image0_descriptors: torch.Tensor = None,
+        image0_scores: torch.Tensor = None,
+        image1_keypoints: torch.Tensor = None,
+        image1_descriptors: torch.Tensor = None,
+        image1_scores: torch.Tensor = None,
+        height: int = None,
+        width: int = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, ImageMatchingOutput]:
         # TODO documentation example
-
-        if pixel_values.shape[0] != 2:
-            # TODO Define input strategy : should input contain exactly 2 images or modulo 2 images and treat them as bathes
-            raise ValueError("Input does not contain exactly 2 images")
-
-        _, _, height, width = pixel_values.shape
-        keypoint_detection: ImagePointDescriptionOutput = self.keypoint_detector(pixel_values)
-
-        image0_indices = torch.nonzero(keypoint_detection.mask[0]).squeeze()
-        image0_keypoints = torch.unsqueeze(keypoint_detection.keypoints[0][image0_indices], dim=0)
-        image0_descriptors = torch.unsqueeze(keypoint_detection.descriptors[0][image0_indices], dim=0)
-        image0_scores = torch.unsqueeze(keypoint_detection.scores[0][image0_indices], dim=0)
-        image1_indices = torch.nonzero(keypoint_detection.mask[1]).squeeze()
-        image1_keypoints = torch.unsqueeze(keypoint_detection.keypoints[1][image1_indices], dim=0)
-        image1_descriptors = torch.unsqueeze(keypoint_detection.descriptors[1][image1_indices], dim=0)
-        image1_scores = torch.unsqueeze(keypoint_detection.scores[1][image1_indices], dim=0)
 
         if image0_keypoints.shape[1] == 0 or image1_keypoints.shape[1] == 0:  # no keypoints
             shape0, shape1 = image0_keypoints.shape[:-1], image1_keypoints.shape[:-1]
@@ -430,7 +391,7 @@ class SuperGlueModel(SuperGluePreTrainedModel):
                 image0_keypoints.new_full(shape0, -1, dtype=torch.int),
                 image1_keypoints.new_full(shape1, -1, dtype=torch.int),
                 image0_keypoints.new_zeros(shape0),
-                image1_keypoints.new_zeros(shape1)
+                image1_keypoints.new_zeros(shape1),
             )
 
         descriptors_0 = torch.transpose(image0_descriptors, -1, -2)
@@ -452,15 +413,11 @@ class SuperGlueModel(SuperGluePreTrainedModel):
         projected_descriptors_1 = self.final_proj(descriptors_1)
 
         # Compute matching descriptor distance.
-        scores = torch.einsum('bdn,bdm->bnm', projected_descriptors_0, projected_descriptors_1)
-        scores = scores / self.config.descriptor_dim ** .5
+        scores = torch.einsum("bdn,bdm->bnm", projected_descriptors_0, projected_descriptors_1)
+        scores = scores / self.config.descriptor_dim**0.5
 
         # Run the optimal transport.
-        scores = log_optimal_transport(
-            scores,
-            self.bin_score,
-            iters=self.config.sinkhorn_iterations
-        )
+        scores = log_optimal_transport(scores, self.bin_score, iters=self.config.sinkhorn_iterations)
 
         # Get the matches with score above "match_threshold".
         max0, max1 = scores[:, :-1, :-1].max(2), scores[:, :-1, :-1].max(1)
@@ -484,3 +441,59 @@ class SuperGlueModel(SuperGluePreTrainedModel):
             image0_matching_scores=matching_scores_0,
             image1_matching_scores=matching_scores_1,
         )
+
+
+@add_start_docstrings(
+    "SuperGlue model taking images as inputs and outputting the matching of them.",
+    SUPERGLUE_START_DOCSTRING,
+)
+class SuperGlueForImageMatching(SuperGluePreTrainedModel):
+    # TODO documentation
+
+    def __init__(self, config: SuperGlueConfig):
+        super().__init__(config)
+
+        if config.keypoint_detector_config.name_or_path != "":
+            self.keypoint_detector = AutoModelForKeypointDetection.from_pretrained(
+                config.keypoint_detector_config.name_or_path
+            )
+        else:
+            self.keypoint_detector = AutoModelForKeypointDetection.from_config(config.keypoint_detector_config)
+        self.keypoint_matcher = SuperGlueModel(config)
+
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, ImageMatchingOutput]:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if pixel_values.shape[0] != 2:
+            # TODO Define input strategy : should input contain exactly 2 images or modulo 2 images and treat them as bathes
+            raise ValueError("Input does not contain exactly 2 images")
+
+        _, _, height, width = pixel_values.shape
+        keypoint_detection_output = self.keypoint_detector(
+            pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict
+        )
+
+        image0_indices = torch.nonzero(keypoint_detection_output.mask[0]).squeeze()
+        image0_keypoints = torch.unsqueeze(keypoint_detection_output.keypoints[0][image0_indices], dim=0)
+        image0_descriptors = torch.unsqueeze(keypoint_detection_output.descriptors[0][image0_indices], dim=0)
+        image0_scores = torch.unsqueeze(keypoint_detection_output.scores[0][image0_indices], dim=0)
+        image1_indices = torch.nonzero(keypoint_detection_output.mask[1]).squeeze()
+        image1_keypoints = torch.unsqueeze(keypoint_detection_output.keypoints[1][image1_indices], dim=0)
+        image1_descriptors = torch.unsqueeze(keypoint_detection_output.descriptors[1][image1_indices], dim=0)
+        image1_scores = torch.unsqueeze(keypoint_detection_output.scores[1][image1_indices], dim=0)
+
+        image_matching_output = self.keypoint_matcher(
+            image0_keypoints,
+            image0_descriptors,
+            image0_scores,
+            image1_keypoints,
+            image1_descriptors,
+            image1_scores,
+        )
+
+        return image_matching_output

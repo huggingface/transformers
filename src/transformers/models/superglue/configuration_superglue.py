@@ -17,37 +17,34 @@ from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
 
+
 logger = logging.get_logger(__name__)
 
-SUPERPOINT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "sbucaille/superglue": "https://huggingface.co/sbucaille/superpoint/blob/main/config.json"
+SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "sbucaille/superglue_indoor": "https://huggingface.co/stevenbucaille/superglue_indoor/blob/main/config.json",
+    "sbucaille/superglue_outdoor": "https://huggingface.co/stevenbucaille/superglue_outdoor/blob/main/config.json",
 }
 
 
 class SuperGlueConfig(PretrainedConfig):
-    #TODO add documentation
+    # TODO add documentation
 
     model_type = "superglue"
 
     def __init__(
-            self,
-            keypoint_detector_config=None,
-            descriptor_dim: int = 256,
-            keypoint_encoder_sizes: List[int] = [32, 64, 128, 256],
-            gnn_layers_types: List[str] = ['self', 'cross'] * 9,
-            num_heads: int = 4,
-            sinkhorn_iterations: int = 100,
-            matching_threshold: float = 0.2,
-            model_version: str = "indoor",
-            **kwargs,
+        self,
+        keypoint_detector_config=None,
+        descriptor_dim: int = 256,
+        keypoint_encoder_sizes: List[int] = [32, 64, 128, 256],
+        gnn_layers_types: List[str] = ["self", "cross"] * 9,
+        num_heads: int = 4,
+        sinkhorn_iterations: int = 100,
+        matching_threshold: float = 0.2,
+        **kwargs,
     ):
-
         # Check whether all gnn_layers_types are either 'self' or 'cross'
-        if not all([layer_type in ['self', 'cross'] for layer_type in gnn_layers_types]):
+        if not all(layer_type in ["self", "cross"] for layer_type in gnn_layers_types):
             raise ValueError("All gnn_layers_types must be either 'self' or 'cross'")
-
-        if model_version != "indoor" and model_version != "outdoor":
-            raise ValueError("model_version must be either 'indoor' or 'outdoor'")
 
         if descriptor_dim % num_heads != 0:
             raise ValueError("descriptor_dim % num_heads is different from zero")
@@ -58,14 +55,14 @@ class SuperGlueConfig(PretrainedConfig):
         self.num_heads = num_heads
         self.sinkhorn_iterations = sinkhorn_iterations
         self.matching_threshold = matching_threshold
-        self.model_version = model_version
 
         if isinstance(keypoint_detector_config, dict):
             keypoint_detector_config["model_type"] = (
                 keypoint_detector_config["model_type"] if "model_type" in keypoint_detector_config else "superpoint"
             )
             keypoint_detector_config = CONFIG_MAPPING[keypoint_detector_config["model_type"]](
-                **keypoint_detector_config)
+                **keypoint_detector_config
+            )
         if keypoint_detector_config is None:
             keypoint_detector_config = CONFIG_MAPPING["superpoint"]()
 
