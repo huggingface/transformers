@@ -26,6 +26,7 @@ from transformers.activations import ACT2FN
 from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from transformers.utils.logging import get_logger
 
+from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from .configuration_cogvlm import CogvlmConfig
@@ -394,13 +395,14 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 class CogvlmVisionExpertAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: CogvlmConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
         self.max_position_embeddings = config.max_position_embeddings
+        self.layer_idx = layer_idx
 
         self.rotary_emb = CogvlmRotaryEmbedding(self.head_dim)
         self.vision_expert_query_key_value = nn.Linear(self.hidden_size, self.hidden_size * 3, bias=False)
@@ -421,7 +423,7 @@ class CogvlmVisionExpertAttention(nn.Module):
         token_type_ids: torch.LongTensor,
         position_ids: torch.LongTensor,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
@@ -441,7 +443,7 @@ class CogvlmVisionExpertAttention(nn.Module):
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            kv_seq_len += past_key_value[0].shape[-2]
+            kv_seq_len += past_key_value.get_seq_length(self.layer_idx)
 
         cos, sin = self.rotary_emb(value_states, seq_len=position_ids.max() + 1)
         cos, sin = (
@@ -453,10 +455,8 @@ class CogvlmVisionExpertAttention(nn.Module):
         )
 
         if past_key_value is not None:
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
-
-        past_key_value = (key_states, value_states) if use_cache else None
+            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
@@ -502,7 +502,7 @@ class CogvlmVisionExpertSdpaAttention(CogvlmVisionExpertAttention):
         token_type_ids: torch.LongTensor,
         position_ids: torch.LongTensor,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
@@ -522,7 +522,7 @@ class CogvlmVisionExpertSdpaAttention(CogvlmVisionExpertAttention):
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            kv_seq_len += past_key_value[0].shape[-2]
+            kv_seq_len += past_key_value.get_seq_length(self.layer_idx)
 
         cos, sin = self.rotary_emb(value_states, seq_len=position_ids.max() + 1)
         cos, sin = (
@@ -534,10 +534,8 @@ class CogvlmVisionExpertSdpaAttention(CogvlmVisionExpertAttention):
         )
 
         if past_key_value is not None:
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
-
-        past_key_value = (key_states, value_states) if use_cache else None
+            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_mask_bool = attention_mask == 0
         is_full = (attention_mask_bool > 0).all()
@@ -572,12 +570,12 @@ COGVLM_ATTENTION_CLASSES = {
 
 
 class CogvlmDecoderLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: CogvlmConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         # TODO eager isn't giving logits with same tolerance
         config._attn_implementation = "sdpa"
-        self.self_attn = COGVLM_ATTENTION_CLASSES[config._attn_implementation](config=config)
+        self.self_attn = COGVLM_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
         self.mlp = CogvlmVisionExpertMLP(config)
         self.input_layernorm = CogvlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = CogvlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -633,6 +631,7 @@ class CogvlmPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _no_split_modules = ["CogvlmDecoderLayer", "CogvlmVisionTransformerLayer"]
     _skip_keys_device_placement = "past_key_values"
+    _supports_cache_class = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -694,7 +693,7 @@ class CogvlmModel(CogvlmPreTrainedModel):
         ) ** 2 + 2
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([CogvlmDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([CogvlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
         self.norm = CogvlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         vision_input_ids = torch.tensor(
@@ -840,9 +839,11 @@ class CogvlmModel(CogvlmPreTrainedModel):
         seq_length_with_past = seq_length
         past_key_values_length = 0
 
-        if past_key_values is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
-            seq_length_with_past = seq_length_with_past + past_key_values_length
+        if use_cache:
+            use_legacy_cache = not isinstance(past_key_values, Cache)
+            if use_legacy_cache:
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            past_key_values_length = past_key_values.get_seq_length()
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -869,26 +870,25 @@ class CogvlmModel(CogvlmPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = () if use_cache else None
+        next_decoder_cache = None
 
-        for idx, decoder_layer in enumerate(self.layers):
+        for decoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
             layer_outputs = decoder_layer(
                 hidden_states,
                 token_type_ids=token_type_ids,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_value,
+                past_key_value=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
             )
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
+                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -899,7 +899,10 @@ class CogvlmModel(CogvlmPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
+        next_cache = None
+        if use_cache:
+            next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
+
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
@@ -1065,7 +1068,8 @@ class CogvlmForCausalLM(CogvlmPreTrainedModel):
         **kwargs,
     ):
         position_ids = kwargs.get("position_ids", None)
-        if past_key_values:
+        if past_key_values is not None:
+
             if position_ids is None:
                 # the reason we add + 2 + 1 here is because we have 2 additional vision tokens,
                 # and we need to add 1 to take into account the one extra token that is going to
