@@ -21,13 +21,11 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..deprecated._archive_maps import OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 logger = logging.get_logger(__name__)
 
-OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "allenai/OLMo": "https://huggingface.co/allenai/OLMo/resolve/main/config.json",
-}
 
 class OLMoConfig(PretrainedConfig):
     r"""
@@ -40,7 +38,7 @@ class OLMoConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
+        vocab_size (`int`, *optional*, defaults to 50304):
             Vocabulary size of the OLMo model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`OLMoModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
@@ -62,20 +60,17 @@ class OLMoConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. OLMo 1 supports up to 2048 tokens,
-            OLMo 2 up to 4096, CodeOLMo up to 16384.
+            The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*):
+        pad_token_id (`int`, *optional*, defaults to 1):
             Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 1):
+        bos_token_id (`int`, *optional*):
             Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 2):
+        eos_token_id (`int`, *optional*, defaults to 50279):
             End of stream token id.
         pretraining_tp (`int`, *optional*, defaults to 1):
             Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
@@ -92,7 +87,7 @@ class OLMoConfig(PretrainedConfig):
             `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
             `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
             these scaling strategies behave:
-            https://www.reddit.com/r/LocalOLMo/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
+            https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
             experimental feature, subject to breaking API changes in future versions.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
@@ -117,7 +112,7 @@ class OLMoConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
+        vocab_size=50304,
         hidden_size=4096,
         intermediate_size=11008,
         num_hidden_layers=32,
@@ -126,11 +121,10 @@ class OLMoConfig(PretrainedConfig):
         hidden_act="silu",
         max_position_embeddings=2048,
         initializer_range=0.02,
-        rms_norm_eps=1e-6,
         use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
+        pad_token_id=1,
+        bos_token_id=None,
+        eos_token_id=50279,
         pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=10000.0,
@@ -153,7 +147,6 @@ class OLMoConfig(PretrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
         self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
         self.rope_theta = rope_theta
