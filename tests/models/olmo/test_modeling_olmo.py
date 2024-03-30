@@ -14,22 +14,17 @@
 # limitations under the License.
 """ Testing suite for the PyTorch OLMo model. """
 
-import tempfile
 import unittest
 
-import pytest
 from parameterized import parameterized
 
 from transformers import OLMoConfig, StaticCache, is_torch_available, logging, set_seed
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
     CaptureLogger,
-    require_bitsandbytes,
-    require_flash_attn,
     require_read_token,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -277,11 +272,7 @@ class OLMoModelTester:
 
 @require_torch
 class OLMoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (OLMoModel, OLMoForCausalLM)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (OLMoModel, OLMoForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (OLMoForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -406,9 +397,7 @@ class OLMoIntegrationTest(unittest.TestCase):
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B")
         input_ids = tokenizer.encode(prompt, return_tensors="pt")
-        model = OLMoForCausalLM.from_pretrained(
-            "allenai/OLMo-7B", device_map="sequential", use_safetensors=False
-        )
+        model = OLMoForCausalLM.from_pretrained("allenai/OLMo-7B", device_map="sequential", use_safetensors=False)
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
@@ -428,7 +417,7 @@ class OLMoIntegrationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = OLMoTokenizer.from_pretrained("allenai/OLMo-hf", pad_token="</s>", padding_side="right")
+        tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-hf", pad_token="</s>", padding_side="right")
         model = OLMoForCausalLM.from_pretrained("allenai/OLMo-hf", device_map="sequential")
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 

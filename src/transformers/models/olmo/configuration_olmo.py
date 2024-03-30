@@ -31,7 +31,7 @@ class OLMoConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`OLMoModel`]. It is used to instantiate an OLMo
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the OLMo-7B.
+    defaults will yield a similar configuration to that of the [allenai/OLMo-7B](https://huggingface.co/allenai/OLMo-7B).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
