@@ -101,18 +101,18 @@ class Rwkv5LinearAttention(torch.autograd.Function):
                 dtype=torch.bfloat16,
                 memory_format=torch.contiguous_format,
             )
-            rwkv5_cuda_kernel.forward(
+            rwkv5_cuda_kernel.forward_bf16(
                 batch,
                 seq_length,
                 hidden_size,
                 head_size,
+                state,
                 receptance,
                 key,
                 value,
                 ee_time_decay,
                 time_first,
                 out,
-                state,
             )
             return out, state
 
@@ -164,7 +164,7 @@ class Rwkv5LinearAttention(torch.autograd.Function):
                 dtype=torch.bfloat16,
                 memory_format=torch.contiguous_format,
             )
-            rwkv5_cuda_kernel.backward(
+            rwkv5_cuda_kernel.backward_bf16(
                 batch,
                 seq_length,
                 hidden_size,
