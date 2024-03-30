@@ -255,6 +255,7 @@ class Rwkv5SelfAttention(nn.Module):
                 logger.info("Could not load the custom CUDA kernel for RWKV5 attention.")
         self.layer_id = layer_id
         hidden_size = config.hidden_size
+        self.head_size_divisor = config.head_size_divisor
         num_attention_heads = hidden_size // config.head_size
         self.num_attention_heads = num_attention_heads
         attention_hidden_size = (
@@ -271,13 +272,13 @@ class Rwkv5SelfAttention(nn.Module):
         self.time_mix_receptance = nn.Parameter(torch.empty(1, 1, hidden_size))
 
         self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
+        self.receptance = nn.Linear(hidden_size, attention_hidden_size, bias=False)
         self.key = nn.Linear(hidden_size, attention_hidden_size, bias=False)
         self.value = nn.Linear(hidden_size, attention_hidden_size, bias=False)
-        self.receptance = nn.Linear(hidden_size, attention_hidden_size, bias=False)
         self.gate = nn.Linear(hidden_size, attention_hidden_size, bias=False)
         self.output = nn.Linear(attention_hidden_size, hidden_size, bias=False)
         # TODO rename this layer norm (from ln_x)
-        self.ln_x = nn.GroupNorm(hidden_size // config.head_size, hidden_size)
+        self.ln_x = nn.GroupNorm(num_attention_heads, attention_hidden_size)
 
     def extract_key_value(self, hidden, state=None):
         # Mix hidden with the previous timestep to produce key, value, receptance
@@ -295,9 +296,9 @@ class Rwkv5SelfAttention(nn.Module):
         gate = hidden * self.time_mix_gate + shifted * (1 - self.time_mix_gate)
 
         # https://github.com/BlinkDL/ChatRWKV/blob/main/rwkv_pip_package/src/rwkv/model.py#L693
+        receptance = self.receptance(receptance)
         key = self.key(key)
         value = self.value(value)
-        receptance = self.receptance(receptance)
         gate = F.silu(self.gate(gate))
 
         if state is not None:
@@ -321,11 +322,12 @@ class Rwkv5SelfAttention(nn.Module):
         # out = F.group_norm(out, num_groups=num_heads, weight=layer_norm_weight, bias=layer_norm_bias).reshape(
         #     batch, seq_length, num_heads * head_size
         # )
-        out = self.ln_x(rwkv)
+        batch, seq_length, _ = rwkv.size()
+        
+        out = self.ln_x(rwkv.view(batch * seq_length, -1)/self.head_size_divisor ).view(batch, seq_length, -1)
 
         # TODO explain what is stored in the states[0] and states[1]
-
-        return self.output(gate * out.to(dtype=hidden.dtype)), state
+        return self.output(gate * out), state
 
 
 # Copied from rwkv exceot for the intermediate size

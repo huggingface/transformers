@@ -51,6 +51,8 @@ class Rwkv5Config(PretrainedConfig):
         num_attention_heads (`int`, *optional*, defaults to 64):
             The attention heads to use in rwkv5 self_attention module.
         head_size (`int`, *optional*, defaults to 64): head_size of rwkv5 self_attention module.
+        head_size_divisor (`int`, *optional*, defaults to 8):
+            The head size divisor to use in rwkv5 self_attention module.
         intermediate_size (`int`, *optional*):
             Dimensionality of the inner feed-forward layers. Will default to 4 times `hidden_size` if unset.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
@@ -95,6 +97,7 @@ class Rwkv5Config(PretrainedConfig):
         attention_hidden_size=None,
         num_attention_heads=64,
         head_size=64,
+        head_size_divisor=8,
         intermediate_size=None,
         layer_norm_epsilon=1e-5,
         bos_token_id=0,
@@ -110,6 +113,7 @@ class Rwkv5Config(PretrainedConfig):
         self.attention_hidden_size = attention_hidden_size if attention_hidden_size is not None else hidden_size
         self.num_attention_heads = num_attention_heads
         self.head_size = head_size
+        self.head_size_divisor = head_size_divisor
         self.intermediate_size = None
         self.layer_norm_epsilon = layer_norm_epsilon
         self.rescale_every = rescale_every
