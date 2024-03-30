@@ -17,9 +17,9 @@ import unittest
 
 from transformers import (
     AddedToken,
-    OLMoTokenizerFast,
     is_torch_available,
 )
+from transformers.models.gpt_neox.tokenization_gpt_neox_fast import GPTNeoXTokenizerFast
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
@@ -46,8 +46,8 @@ class OLMoTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # `tokenizer_class` is normally supposed to be a slow tokenizer. It is set to the fast tokenizer
     # because there is no slow OLMo tokenizer and some fast tests still expect this to be set.
-    tokenizer_class = OLMoTokenizerFast
-    rust_tokenizer_class = OLMoTokenizerFast
+    tokenizer_class = GPTNeoXTokenizerFast
+    rust_tokenizer_class = GPTNeoXTokenizerFast
 
     test_slow_tokenizer = False
     test_rust_tokenizer = True
@@ -55,11 +55,11 @@ class OLMoTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        tokenizer = OLMoTokenizerFast.from_pretrained("allenai/OLMo-1B")
+        tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMo-1B")
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_full_tokenizer(self):
-        tokenizer = OLMoTokenizerFast.from_pretrained("allenai/OLMo-1B")
+        tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMo-1B")
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["This", "Ġis", "Ġa", "Ġtest"])
@@ -142,7 +142,7 @@ class OLMoIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         checkpoint_name = "allenai/OLMo-1B"
-        cls.rust_tokenizer = OLMoTokenizerFast.from_pretrained(checkpoint_name)
+        cls.rust_tokenizer = GPTNeoXTokenizerFast.from_pretrained(checkpoint_name)
         return cls
 
     @require_torch
