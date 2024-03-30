@@ -134,7 +134,6 @@ def is_fsdp_enabled():
         torch.distributed.is_available()
         and torch.distributed.is_initialized()
         and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
-        and strtobool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "False")) == 1
     )
 
 
@@ -2869,7 +2868,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         adapter_name = kwargs.pop("adapter_name", "default")
         use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
 
-        if is_fsdp_enabled():
+        # FSDP_CPU_RAM_EFFICIENT_LOADING is set by Accelerate launcher not by TrainingArguments.
+        # Unless it is turned off explicitly low_cpu_mem_usage should be turned on by default
+        # when FSDP is on since sync_module_states is also default on.
+        if is_fsdp_enabled() and strtobool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "True")) == 1:
             low_cpu_mem_usage = True
 
         if use_auth_token is not None:
