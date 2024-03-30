@@ -603,9 +603,10 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         self.assertEqual(output_str, EXPECTED_OUTPUT)
 
     @slow
+    @require_bitsandbytes
     def test_lm_generate_falcon_10b(self):
         tokenizer = AutoTokenizer.from_pretrained("tiiuae/flacon-10B", padding_side="left")
-        model = FalconForCausalLM.from_pretrained("tiiuae/flacon-10B")
+        model = FalconForCausalLM.from_pretrained("tiiuae/flacon-10B", load_in_8bit=True)
         model.eval()
         model.to(torch_device)
         inputs = tokenizer("Two roads diverged in a yellow wood", return_tensors="pt", return_token_type_ids=False).to(
