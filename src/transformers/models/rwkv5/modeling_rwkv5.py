@@ -190,7 +190,7 @@ class Rwkv5LinearAttention(torch.autograd.Function):
 def rwkv5_linear_attention_cpu(receptance, time_decay, time_first, key, value, state=None, return_state=False):
     # For CPU fallback. Will be slower and probably take more memory than the custom CUDA kernel if not executed
     # within a torch.no_grad.
-    batch, seq_length, num_heads = key.size()  # TODO resize outside of this function?
+    batch, seq_length, num_heads = time_first.size()  # TODO resize outside of this function?
     head_size = 0
     key = key.float32().view(batch, seq_length, num_heads, head_size).transpose(1, 2).transpose(-2, -1)
     value = value.float32().view(batch, seq_length, num_heads, head_size).transpose(1, 2)
@@ -293,7 +293,7 @@ class Rwkv5SelfAttention(nn.Module):
         receptance, key, value, gate, state = self.extract_key_value(hidden, state=state)
         layer_state = state[1][:, :, :, :, self.layer_id] if state is not None else None
         rwkv, layer_state = RWKV5_linear_attention(
-            receptance, key, value, self.time_decay, self.time_first, layer_state, return_state=use_cache
+            receptance, key, value, self.time_decay, self.time_faaaa, layer_state, return_state=use_cache
         )
 
         if layer_state is not None:
@@ -411,6 +411,7 @@ class Rwkv5PreTrainedModel(PreTrainedModel):
             num_hidden_layers = module.config.num_hidden_layers
             hidden_size = module.config.hidden_size
             attention_hidden_size = module.attention_hidden_size
+            num_attention_heads = hidden_size // module.config.num_attention_heads
 
             ratio_0_to_1 = layer_id / (num_hidden_layers - 1)  # 0 to 1
             ratio_1_to_almost0 = 1.0 - (layer_id / num_hidden_layers)  # 1 to ~0
@@ -422,27 +423,31 @@ class Rwkv5PreTrainedModel(PreTrainedModel):
             )
             time_weight = time_weight[None, None, :]
 
+            # https://github.com/BlinkDL/RWKV-LM/blob/main/RWKV-v4neo/src/model.py#L398
             decay_speed = [
-                -5 + 8 * (h / (attention_hidden_size - 1)) ** (0.7 + 1.3 * ratio_0_to_1)
+                -6.0 + 5.0 * (h / (attention_hidden_size - 1)) ** (0.7 + 1.3 * ratio_0_to_1)
                 for h in range(attention_hidden_size)
             ]
             decay_speed = torch.tensor(decay_speed, dtype=module.time_decay.dtype, device=module.time_decay.device)
-            zigzag = (
-                torch.tensor(
-                    [(i + 1) % 3 - 1 for i in range(attention_hidden_size)],
-                    dtype=module.time_first.dtype,
-                    device=module.time_first.device,
-                )
-                * 0.5
+
+            zigzag = torch.tensor(
+                [
+                    (1.0 - (i / (attention_hidden_size - 1.0))) * ratio_0_to_1 + 0.1 * ((i + 1) % 3 - 1)
+                    for i in range(attention_hidden_size)
+                ],
+                dtype=module.time_faaaa.dtype,
+                device=module.time_faaaa.device,
             )
 
             with torch.no_grad():
-                module.time_decay.data = decay_speed
-                module.time_first.data = torch.ones_like(module.time_first * math.log(0.3) + zigzag)
-
+                module.time_decay.data = decay_speed.reshape(num_attention_heads, module.config.num_attention_heads)
+                module.time_faaaa.data = zigzag.reshape(num_attention_heads, module.config.num_attention_heads)
                 module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
+
                 module.time_mix_value.data = torch.pow(time_weight, ratio_1_to_almost0) + 0.3 * ratio_0_to_1
                 module.time_mix_receptance.data = torch.pow(time_weight, 0.5 * ratio_1_to_almost0)
+                module.time_mix_gate.data = torch.pow(time_weight, 0.5 * ratio_1_to_almost0)
+
         elif isinstance(module, Rwkv5FeedForward):
             layer_id = module.layer_id
             num_hidden_layers = module.config.num_hidden_layers
@@ -669,7 +674,7 @@ class Rwkv5Model(Rwkv5PreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         for idx, block in enumerate(self.blocks):
             hidden_states, state, attentions = block(
-                hidden_states, state=state, use_cache=use_cache, output_attentions=output_attentions, seq_mode=seq_mode
+                hidden_states, state=state, use_cache=use_cache, output_attentions=output_attentions
             )
             if (
                 self.layers_are_rescaled

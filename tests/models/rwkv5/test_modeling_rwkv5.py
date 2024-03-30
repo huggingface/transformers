@@ -503,22 +503,22 @@ class Rwkv5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=1.3)
 
 
-@unittest.skipIf(
-    not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
-)
-@slow
+# @unittest.skipIf(
+#     not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
+# )
+# @slow
 class RWKVIntegrationTests(unittest.TestCase):
     def setUp(self):
-        self.model_id = "RWKV/rwkv-5-169m-pile"
+        self.model_id = "ArthurZ/rwkv-5-utf"
         self.tokenizer = Rwkv5Tokenizer.from_pretrained(self.model_id)
 
     def test_logits_3b(self):
         EXPECTED_LOGIT_SLICE = torch.tensor([ -2.1855, -10.0000,  -7.8594,  -9.2500,  -7.8125, -12.5859, -12.0703, -13.3125, -11.2109,  -8.6406,  -4.4531,  -0.3540, -18.2344, -13.5000, -10.5156, -18.7812,  -6.3906, -13.9062, -15.8516, -20.0469, -17.3438, -13.8125, -19.6094, -16.3594, -20.1562, -19.3438, -15.2266, -14.5547, -8.5703, -21.5938, -19.2969, -14.4688, -10.9375,  -0.2996,  -1.5283, -0.9731,  -3.8672,  -4.5391,  -5.8906,  -3.7930])  # fmt: skip
         EXPECTED_STATE_SLICE = torch.tensor([-0.0178,  0.0632, -0.1251, -0.0677,  0.1719,  0.0703, -0.0425,  0.1726, 0.1201,  0.0201, -0.2527,  0.1229, -0.2053,  0.1537, -0.0358, -0.2959, -0.1437, -0.0544,  0.2321, -0.0936, -0.2583,  0.1097, -0.3572,  0.0836, -0.0183,  0.1713,  0.0213, -0.0340,  0.3206,  0.1466, -0.1797,  0.0023, 0.0220, -0.0548,  0.4478, -0.4431,  0.0831,  0.0669, -0.0726, -0.1273])  # fmt: skip
         input_text = ["请介绍北京的旅游景点", "介绍一下大熊猫", "乌兰察布"]
-        model_id = "RWKV/HF_v5-Eagle-7B"
+        model_id = "RWKV/v5-Eagle-7B-HF"
 
-        tokenizer = Rwkv5Tokenizer.from_pretrained(model_id)
+        tokenizer = Rwkv5Tokenizer.from_pretrained("ArthurZ/rwkv-5-utf")
         model = Rwkv5ForCausalLM.from_pretrained(model_id, dtype=torch.float16).to(torch_device)
         inputs = tokenizer(input_text, return_tensors="pt").to(torch_device)
         outputs = model(**inputs)
