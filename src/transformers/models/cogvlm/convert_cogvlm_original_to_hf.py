@@ -152,7 +152,7 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
 
     # verify generation
     with torch.no_grad():
-        outputs = model.generate(**inputs, **gen_kwargs, use_cache=False)
+        outputs = model.generate(**inputs, **gen_kwargs)
         outputs = outputs[:, inputs["input_ids"].shape[1] :]
         generated_text = tokenizer.decode(outputs[0])
 

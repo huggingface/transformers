@@ -539,13 +539,16 @@ class CogvlmVisionExpertSdpaAttention(CogvlmVisionExpertAttention):
 
         past_key_value = (key_states, value_states) if use_cache else None
 
+        attention_mask_bool = attention_mask == 0
+        is_full = (attention_mask_bool > 0).all()
+
         context_layer = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
             attn_mask=None,
             dropout_p=0.0,
-            is_causal=True,
+            is_causal=not is_full,
         )
 
         if context_layer.size() != (batch_size, self.num_heads, q_len, self.head_dim):
