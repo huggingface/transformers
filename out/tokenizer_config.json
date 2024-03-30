@@ -1,0 +1,83 @@
+{
+  "add_bos_token": true,
+  "add_eos_token": false,
+  "added_tokens_decoder": {
+    "0": {
+      "content": "<unk>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "1": {
+      "content": "<s>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "2": {
+      "content": "</s>",
+      "lstrip": false,
+      "normalized": true,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "32000": {
+      "content": "▁<PRE>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "32001": {
+      "content": "▁<MID>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "32002": {
+      "content": "▁<SUF>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "32003": {
+      "content": "▁<EOT>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    }
+  },
+  "additional_special_tokens": [
+    "▁<PRE>",
+    "▁<MID>",
+    "▁<SUF>",
+    "▁<EOT>"
+  ],
+  "bos_token": "<s>",
+  "clean_up_tokenization_spaces": false,
+  "eos_token": "</s>",
+  "eot_token": "▁<EOT>",
+  "fill_token": "<FILL_ME>",
+  "legacy": null,
+  "middle_token": "▁<MID>",
+  "model_max_length": 1000000000000000019884624838656,
+  "pad_token": null,
+  "prefix_token": "▁<PRE>",
+  "sp_model_kwargs": {},
+  "suffix_token": "▁<SUF>",
+  "tokenizer_class": "CodeLlamaTokenizer",
+  "unk_token": "<unk>",
+  "use_default_system_prompt": false
+}

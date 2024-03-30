@@ -187,7 +187,7 @@ class Rwkv5LinearAttention(torch.autograd.Function):
             return (None, None, None, None, greceptance, g_key, g_value, g_time_decay, g_time_first)
 
 
-def rwkv5_linear_attention_cpu(receptance, time_decay, time_first, key, value, state=None, return_state=False):
+def rwkv5_linear_attention_cpu(receptance, key, value, time_decay, time_first, state=None, return_state=False):
     # For CPU fallback. Will be slower and probably take more memory than the custom CUDA kernel if not executed
     # within a torch.no_grad.
     batch, seq_length, num_heads = time_first.size()  # TODO resize outside of this function?
