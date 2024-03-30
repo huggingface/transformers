@@ -418,7 +418,7 @@ class HfArgumentParser(ArgumentParser):
         """
         outputs = self.parse_dict(yaml.safe_load(Path(yaml_file).read_text()), allow_extra_keys=allow_extra_keys)
         return tuple(outputs)
-        
+
     def _to(
         self,
         serializer: Callable[[Dict, io.TextIOWrapper], None],
@@ -447,7 +447,7 @@ class HfArgumentParser(ArgumentParser):
 
         Returns:
             None. The output is written to a file specified by `file_path`.
-        """        
+        """
         return self._to(json.dump, args, file_path)
 
     def to_yaml(self, args: Tuple[DataClass, ...], file_path: str):
