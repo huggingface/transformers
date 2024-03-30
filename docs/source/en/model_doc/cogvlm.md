@@ -44,11 +44,6 @@ The original code can be found [here](https://github.com/THUDM/CogVLM).
 
 [[autodoc]] CogvlmProcessor
 
-## CogvlmVisionModel
-
-[[autodoc]] CogvlmVisionModel
-    - forward
-
 ## CogvlmModel
 
 [[autodoc]] CogvlmModel

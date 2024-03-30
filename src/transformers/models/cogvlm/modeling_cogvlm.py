@@ -43,12 +43,6 @@ VISION_TOKEN_TYPE = 1
 _CONFIG_FOR_DOC = "CogvlmConfig"
 
 
-COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "THUDM/cogvlm-chat-hf",
-    # See all CogVLM models at https://huggingface.co/models?filter=cogvlm
-]
-
-
 COGVLM_START_DOCSTRING = r"""
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the

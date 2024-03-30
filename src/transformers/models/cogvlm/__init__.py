@@ -32,7 +32,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_cogvlm"] = [
-        "COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "CogvlmModel",
         "CogvlmForCausalLM",
         "CogvlmPreTrainedModel",
@@ -53,7 +52,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_cogvlm import (
-            COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             CogvlmForCausalLM,
             CogvlmModel,
             CogvlmPreTrainedModel,

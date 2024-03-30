@@ -1838,7 +1838,6 @@ else:
     )
     _import_structure["models.cogvlm"].extend(
         [
-            "COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST",
             "CogvlmForCausalLM",
             "CogvlmModel",
             "CogvlmPreTrainedModel",
@@ -6655,7 +6654,6 @@ if TYPE_CHECKING:
             CodeGenPreTrainedModel,
         )
         from .models.cogvlm import (
-            COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             CogvlmForCausalLM,
             CogvlmModel,
             CogvlmPreTrainedModel,

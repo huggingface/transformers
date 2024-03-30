@@ -42,7 +42,6 @@ if is_torch_available():
     import torch
 
     from transformers import CogvlmForCausalLM, CogvlmModel
-    from transformers.models.cogvlm.modeling_cogvlm import COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -211,9 +210,9 @@ class CogvlmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST:
-            model = CogvlmForCausalLM.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "THUDM/cogvlm-chat-hf"
+        model = CogvlmForCausalLM.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
