@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import dataclasses
+import io
 import json
 import sys
 import types
