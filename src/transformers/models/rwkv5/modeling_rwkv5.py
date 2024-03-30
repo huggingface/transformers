@@ -191,23 +191,23 @@ def rwkv5_linear_attention_cpu(receptance, key, value, time_decay, time_first, s
     # For CPU fallback. Will be slower and probably take more memory than the custom CUDA kernel if not executed
     # within a torch.no_grad.
     batch, seq_length, num_heads = key.size()  # TODO resize outside of this function?
-    head_size = 0
-    key = key.float32().view(batch, seq_length, num_heads, head_size).transpose(1, 2).transpose(-2, -1)
-    value = value.float32().view(batch, seq_length, num_heads, head_size).transpose(1, 2)
-    receptance = receptance.float32().view(batch, seq_length, num_heads, head_size).transpose(1, 2)
-    time_decay = torch.exp(-torch.exp(time_decay.float())).reshape(-1, 1, 1).reshape(num_heads, -1, 1)
-    time_first = time_first.float().reshape(-1, 1, 1).reshape(num_heads, -1, 1)
-    out = torch.zeros_like(key).reshape(batch, seq_length, num_heads, head_size)
+    head_size = time_decay.shape[0]
+    key = key.float().view(batch, seq_length, num_heads//head_size, head_size).transpose(1, 2).transpose(-2, -1)
+    value = value.float().view(batch, seq_length, num_heads//head_size, head_size).transpose(1, 2)
+    receptance = receptance.float().view(batch, seq_length, num_heads//head_size, head_size).transpose(1, 2)
+    time_decay = torch.exp(-torch.exp(time_decay.float())).reshape(-1, 1, 1).reshape(num_heads//head_size, -1, 1)
+    time_first = time_first.float().reshape(-1, 1, 1).reshape(num_heads//head_size, -1, 1)
+    out = torch.zeros_like(key).reshape(batch, seq_length, num_heads//head_size, head_size)
 
     if state is None:  # TODO states should probably not be intialized here?
-        state = torch.zeros_like(key[:, 0], dtype=torch.float32)
+        state = torch.zeros_like(key[:, 0], dtype=torch.float)
 
-    for current_index in range(seq_length):
-        current_receptance = receptance[:, :, current_index, :]
-        current_key = key[:, :, :, current_index]
-        current_value = value[:, :, current_index, :]
+    for time in range(seq_length):
+        current_receptance = receptance[:, :, time:time+1, :]
+        current_key = key[:, :, :, time:time+1]
+        current_value = value[:, :, time:time+1, :]
         attention_output = current_key @ current_value
-        out[:, current_index] = (current_receptance @ (time_first * attention_output + state)).squeeze(2)
+        out[:, time] = (current_receptance @ (time_first * attention_output + state)).squeeze(2)
         with torch.no_grad():
             state = attention_output + time_decay * state
 
@@ -279,6 +279,7 @@ class Rwkv5SelfAttention(nn.Module):
         receptance = hidden * self.time_mix_receptance + shifted * (1 - self.time_mix_receptance)
         gate = hidden * self.time_mix_gate + shifted * (1 - self.time_mix_gate)
 
+        # https://github.com/BlinkDL/ChatRWKV/blob/main/rwkv_pip_package/src/rwkv/model.py#L693
         key = self.key(key)
         value = self.value(value)
         receptance = self.receptance(receptance)
@@ -288,6 +289,7 @@ class Rwkv5SelfAttention(nn.Module):
             state[0][:, :, self.layer_id] = hidden[:, -1]
 
         return receptance, key, value, gate, state
+
 
     def forward(self, hidden, state=None, use_cache=False, seq_mode=True):
         receptance, key, value, gate, state = self.extract_key_value(hidden, state=state)
@@ -653,7 +655,7 @@ class Rwkv5Model(Rwkv5PreTrainedModel):
                     self.config.hidden_size // num_attention_heads,
                     self.config.num_hidden_layers,
                 ),
-                dtype=torch.float32,
+                dtype=torch.float,
                 requires_grad=False,
                 device=inputs_embeds.device,
             ).contiguous()
