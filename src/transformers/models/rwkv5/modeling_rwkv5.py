@@ -306,7 +306,7 @@ class Rwkv5SelfAttention(nn.Module):
         # out = F.group_norm(out, num_groups=num_heads, weight=layer_norm_weight, bias=layer_norm_bias).reshape(
         #     batch, seq_length, num_heads * head_size
         # )
-        out = self.post_attention_ln(rwkv)
+        out = self.ln_x(rwkv)
 
         # TODO explain what is stored in the states[0] and states[1]
 
