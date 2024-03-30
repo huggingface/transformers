@@ -602,6 +602,27 @@ class FalconLanguageGenerationTest(unittest.TestCase):
 
         self.assertEqual(output_str, EXPECTED_OUTPUT)
 
+
+    @slow
+    def test_lm_generate_falcon_10b(self):
+        tokenizer = AutoTokenizer.from_pretrained("tiiuae/flacon-10B", padding_side="left")
+        model = FalconForCausalLM.from_pretrained("tiiuae/flacon-10B")
+        model.eval()
+        model.to(torch_device)
+        inputs = tokenizer(
+            "Two roads diverged in a yellow wood",
+            return_tensors="pt",
+            return_token_type_ids=False
+        ).to(torch_device)
+
+        EXPECTED_OUTPUT = "Two roads diverged in a yellow wood,\nAnd sorry I could not travel both"
+
+        output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=9)
+        output_str = tokenizer.batch_decode(output_ids)[0]
+
+        self.assertEqual(output_str, EXPECTED_OUTPUT)
+
+
     @slow
     def test_lm_generation_big_models(self):
         # The big models are way too big for the CI, so we use tiny random models that resemble their
