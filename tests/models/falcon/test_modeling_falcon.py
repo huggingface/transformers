@@ -27,7 +27,14 @@ from transformers import (
     is_torch_available,
     set_seed,
 )
-from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_sdpa, slow, torch_device
+from transformers.testing_utils import (
+    is_flaky,
+    require_bitsandbytes,
+    require_torch,
+    require_torch_sdpa,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -503,6 +510,8 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             torch.testing.assert_close(ntk_sin_long, original_sin_long)
         self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
 
+    # TODO: @Fxmarty
+    @is_flaky(max_attempts=3, description="flaky on some models.")
     @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
