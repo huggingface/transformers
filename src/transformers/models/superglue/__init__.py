@@ -17,9 +17,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {
-    "configuration_superglue": ["SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP", "SuperGlueConfig"]
-}
+_import_structure = {"configuration_superglue": ["SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP", "SuperGlueConfig"]}
 
 
 try:
@@ -31,6 +29,7 @@ else:
     _import_structure["modeling_superglue"] = [
         "SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SuperGlueModel",
+        "SuperGlueForImageMatching",
         "SuperGluePreTrainedModel",
     ]
 
@@ -46,6 +45,7 @@ if TYPE_CHECKING:
         from .modeling_superglue import (
             SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST,
             SuperGlueModel,
+            SuperGlueForImageMatching,
             SuperGluePreTrainedModel,
         )
 
