@@ -171,6 +171,7 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, keras.layers.Dense))
 
+    # Copied from transformers.tests.models.deit.test_modeling_tf_deit.py
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
