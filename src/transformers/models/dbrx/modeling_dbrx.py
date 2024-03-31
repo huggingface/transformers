@@ -28,7 +28,11 @@ from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_flash_attn_2_available, logging
+from ...utils import (
+    is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
+    logging,
+)
 from .configuration_dbrx import DbrxConfig
 
 
@@ -246,6 +250,7 @@ class DbrxAttention(nn.Module):
         self.num_key_value_heads = attn_config.kv_n_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.rope_theta = attn_config.rope_theta
+        self.is_casual = True
 
         self.Wqkv = nn.Linear(
             self.hidden_size, self.hidden_size + 2 * self.num_key_value_heads * self.head_dim, bias=False
@@ -339,6 +344,12 @@ class DbrxFlashAttention2(DbrxAttention):
             raise ImportError("Flash Attention 2 is not available. Please install it with `pip install flash-attn`.")
 
         super().__init__(*args, **kwargs)
+
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        # From: https://github.com/huggingface/transformers/blob/3b8e2932ce743008f63585aae1e1b8b30dc8b3ac/src/transformers/models/gemma/modeling_gemma.py#L318
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
     def forward(
         self,
