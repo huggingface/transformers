@@ -549,7 +549,14 @@ class TokenizerTesterMixin:
             # to make sure `tokenizer.pad(...)` works correctly
             self.assertTrue(tokenizer.model_input_names[0] in accepted_model_main_input_names)
 
-        # TODO make sure slow and fast tokenizer have the same model_input_names
+    def test_model_input_names_python_rust_equals(self):
+        if not self.test_rust_tokenizer:
+            return
+
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                self.assertListEqual(tokenizer.model_input_names, tokenizer.model_input_names)
 
     def test_rust_tokenizer_signature(self):
         if not self.test_rust_tokenizer:
