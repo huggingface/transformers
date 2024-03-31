@@ -298,9 +298,7 @@ class DbrxModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = DbrxModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=DbrxConfig, ffn_config={"ffn_hidden_size": 37, "model_type": ""}
-        )
+        self.config_tester = ConfigTester(self, config_class=DbrxConfig, d_model=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
