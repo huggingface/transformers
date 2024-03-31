@@ -1555,7 +1555,7 @@ class Trainer:
             has_warning = True
 
         if has_warning:
-            logger.warning(warning_str)
+            logger.warning_once(warning_str)
 
     def _wrap_model(self, model, training=True, dataloader=None):
         if self.args.use_ipex:
