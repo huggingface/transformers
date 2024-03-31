@@ -273,6 +273,7 @@ class DbrxModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common with Llama->Dbrx
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -284,7 +285,7 @@ class DbrxModelTester:
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
 
