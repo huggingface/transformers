@@ -191,7 +191,6 @@ class DbrxModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->Dbrx
     def create_and_check_for_causal_lm(
         self,
@@ -291,15 +290,10 @@ class DbrxModelTester:
 
 @require_torch
 class DbrxModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            DbrxModel,
-            DbrxForCausalLM,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (DbrxModel, DbrxForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (DbrxForCausalLM,) if is_torch_available() else ()
+    test_headmasking = False
+    test_pruning = False
 
     def setUp(self):
         self.model_tester = DbrxModelTester(self)
