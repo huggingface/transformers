@@ -1216,6 +1216,8 @@ class DbrxModel(DbrxPreTrainedModel):
 
 
 class DbrxForCausalLM(DbrxPreTrainedModel):
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config: DbrxConfig):
         super().__init__(config)
         self.transformer = DbrxModel(config)
