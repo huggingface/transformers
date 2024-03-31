@@ -1323,10 +1323,7 @@ class JambaMambaDecoderLayer(nn.Module):
             hidden_states=hidden_states,
             past_key_value=past_key_value,
         )
-        bs, seqlen, _ = hidden_states.shape
-        past_seqlen = self._get_past_seqlen(past_key_value, seqlen)
-        num_attention_heads = self.mamba.config.num_attention_heads
-        self_attn_weights = torch.empty(bs, num_attention_heads, seqlen, past_seqlen, device="meta")
+        self_attn_weights = None
 
         # residual connection after mamba
         hidden_states = residual + hidden_states
@@ -1349,18 +1346,6 @@ class JambaMambaDecoderLayer(nn.Module):
             outputs += (router_logits,)
 
         return outputs
-
-    def _get_past_seqlen(self, past_key_value, seqlen):
-        if past_key_value is None:
-            return seqlen
-        past_seqlen = past_key_value.get_seq_length()
-        if past_seqlen == 0:
-            return seqlen
-        if past_key_value.attention_layer_idx is None:
-            return seqlen
-        if self.mamba.layer_idx < past_key_value.attention_layer_idx:
-            return past_seqlen + 1
-        return past_seqlen
 
 
 JAMBA_START_DOCSTRING = r"""
@@ -1715,7 +1700,9 @@ class JambaModel(JambaPreTrainedModel):
                 next_decoder_cache = layer_outputs[2 if output_attentions else 1]
 
             if output_attentions:
-                all_self_attns += (layer_outputs[1],)
+                if layer_outputs[1] is not None:
+                    # append attentions only of attention layers. Mamba layers return `None` as the attention weights
+                    all_self_attns += (layer_outputs[1],)
 
             if output_router_logits:
                 all_router_logits += (layer_outputs[-1],)
