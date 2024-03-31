@@ -245,6 +245,10 @@ class XLMPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        if isinstance(module, XLMModel) and self.config.sinusoidal_embeddings:
+            create_sinusoidal_embeddings(
+                self.config.max_position_embeddings, self.config.emb_dim, out=module.position_embeddings.weight
+            )
 
 
 @dataclass
@@ -447,8 +451,6 @@ class XLMModel(XLMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-        if config.sinusoidal_embeddings:
-            create_sinusoidal_embeddings(config.max_position_embeddings, self.dim, out=self.position_embeddings.weight)
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
