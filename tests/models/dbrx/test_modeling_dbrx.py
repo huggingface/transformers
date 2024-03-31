@@ -21,16 +21,18 @@ from transformers import DbrxConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    floats_tensor,
+    ids_tensor,
+    random_attention_mask,
+)
 
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        DbrxForCausalLM,
-        DbrxModel,
-    )
+    from transformers import DbrxForCausalLM, DbrxModel
 
 
 class DbrxModelTester:
@@ -41,7 +43,7 @@ class DbrxModelTester:
         seq_length=7,
         is_training=True,
         use_input_mask=True,
-        use_token_type_ids=True,
+        use_token_type_ids=False,
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
