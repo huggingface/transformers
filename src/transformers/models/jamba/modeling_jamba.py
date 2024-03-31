@@ -94,9 +94,12 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "JambaConfig"
 
 
-# Adapted from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
+# Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func with gate->router
 def load_balancing_loss_func(
-    gate_logits: torch.Tensor, num_experts: torch.Tensor = None, top_k=2, attention_mask: Optional[torch.Tensor] = None
+    router_logits: torch.Tensor,
+    num_experts: torch.Tensor = None,
+    top_k=2,
+    attention_mask: Optional[torch.Tensor] = None,
 ) -> float:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
@@ -106,7 +109,7 @@ def load_balancing_loss_func(
     experts is too unbalanced.
 
     Args:
-        gate_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
+        router_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
             Logits from the `router`, should be a tuple of model.config.num_hidden_layers tensors of
             shape [batch_size X sequence_length, num_experts].
         attention_mask (`torch.Tensor`, None):
@@ -118,16 +121,16 @@ def load_balancing_loss_func(
     Returns:
         The auxiliary loss.
     """
-    if gate_logits is None or not isinstance(gate_logits, tuple):
+    if router_logits is None or not isinstance(router_logits, tuple):
         return 0
 
-    if isinstance(gate_logits, tuple):
-        compute_device = gate_logits[0].device
-        concatenated_gate_logits = torch.cat(
-            [layer_gate.to(compute_device) for layer_gate in gate_logits if layer_gate.shape[1] > 1], dim=0
+    if isinstance(router_logits, tuple):
+        compute_device = router_logits[0].device
+        concatenated_router_logits = torch.cat(
+            [layer_router.to(compute_device) for layer_router in router_logits], dim=0
         )
 
-    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+    routing_weights = torch.nn.functional.softmax(concatenated_router_logits, dim=-1)
 
     _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
 
@@ -141,7 +144,7 @@ def load_balancing_loss_func(
         router_prob_per_expert = torch.mean(routing_weights, dim=0)
     else:
         batch_size, sequence_length = attention_mask.shape
-        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+        num_hidden_layers = concatenated_router_logits.shape[0] // (batch_size * sequence_length)
 
         # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
         expert_attention_mask = (
@@ -1129,20 +1132,14 @@ class JambaSparseMoeBlock(nn.Module):
     and memory on padding.
     """
 
-    def __init__(self, config: JambaConfig, num_experts: int, num_experts_per_tok: int):
+    def __init__(self, config: JambaConfig):
         super().__init__()
         self.hidden_dim = config.hidden_size
         self.ffn_dim = config.intermediate_size
+        self.num_experts = config.num_experts
+        self.top_k = config.num_experts_per_tok
 
-        #   these values are decided on runtime depending on the layer index
-        self.num_experts = num_experts
-        self.top_k = num_experts_per_tok
-
-        if num_experts > 1:
-            # expert routing
-            self.router = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
-        else:
-            self.router = None
+        self.router = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
 
         self.experts = nn.ModuleList([JambaMLP(config) for _ in range(self.num_experts)])
 
@@ -1150,18 +1147,6 @@ class JambaSparseMoeBlock(nn.Module):
         """ """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
 
-        if self.num_experts == 1:
-            # in this case we have a single MLP block and don't need to do any routing
-            final_hidden_states = self.experts[0](hidden_states)
-            router_logits = torch.ones(
-                (batch_size * sequence_length, 1),
-                device=hidden_states.device,
-                dtype=hidden_states.dtype,
-                requires_grad=hidden_states.requires_grad,
-            )
-            return final_hidden_states, router_logits
-
-        # in this case we have multiple experts and need to do routing
         hidden_states = hidden_states.view(-1, hidden_dim)
         # router_logits: (batch * sequence_length, n_experts)
         router_logits = self.router(hidden_states)
@@ -1209,10 +1194,10 @@ class JambaAttentionDecoderLayer(nn.Module):
 
         self.self_attn = JAMBA_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
-        num_experts_per_tok = config.num_experts_per_tok if num_experts > 1 else 1
-        self.moe = JambaSparseMoeBlock(config, num_experts=num_experts, num_experts_per_tok=num_experts_per_tok)
+        ffn_layer_class = JambaSparseMoeBlock if num_experts > 1 else JambaMLP
+        self.feed_forward = ffn_layer_class(config)
         self.input_layernorm = JambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.pre_moe_layernorm = JambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.pre_ff_layernorm = JambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -1257,10 +1242,14 @@ class JambaAttentionDecoderLayer(nn.Module):
         # residual connection after attention
         hidden_states = residual + hidden_states
 
-        # Experts
+        # feed-forward (experts/MLP)
         residual = hidden_states
-        hidden_states = self.pre_moe_layernorm(hidden_states)
-        hidden_states, router_logits = self.moe(hidden_states)
+        hidden_states = self.pre_ff_layernorm(hidden_states)
+        ff_outputs = self.feed_forward(hidden_states)
+        if isinstance(ff_outputs, tuple):
+            hidden_states, router_logits = ff_outputs
+        else:
+            hidden_states, router_logits = ff_outputs, None
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -1283,10 +1272,10 @@ class JambaMambaDecoderLayer(nn.Module):
 
         self.mamba = JambaMambaMixer(config=config, layer_idx=layer_idx)
 
-        num_experts_per_tok = config.num_experts_per_tok if num_experts > 1 else 1
-        self.moe = JambaSparseMoeBlock(config, num_experts=num_experts, num_experts_per_tok=num_experts_per_tok)
+        ffn_layer_class = JambaSparseMoeBlock if num_experts > 1 else JambaMLP
+        self.feed_forward = ffn_layer_class(config)
         self.input_layernorm = JambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.pre_moe_layernorm = JambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.pre_ff_layernorm = JambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -1328,10 +1317,13 @@ class JambaMambaDecoderLayer(nn.Module):
         # residual connection after mamba
         hidden_states = residual + hidden_states
 
-        # Experts
-        residual = hidden_states
-        hidden_states = self.pre_moe_layernorm(hidden_states)
-        hidden_states, router_logits = self.moe(hidden_states)
+        # feed-forward (experts/MLP)
+        hidden_states = self.pre_ff_layernorm(hidden_states)
+        ff_outputs = self.feed_forward(hidden_states)
+        if isinstance(ff_outputs, tuple):
+            hidden_states, router_logits = ff_outputs
+        else:
+            hidden_states, router_logits = ff_outputs, None
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -1705,7 +1697,9 @@ class JambaModel(JambaPreTrainedModel):
                     all_self_attns += (layer_outputs[1],)
 
             if output_router_logits:
-                all_router_logits += (layer_outputs[-1],)
+                if layer_outputs[-1] is not None:
+                    # append router logits only of expert layers. Regular MLP layers return `None` as the router logits
+                    all_router_logits += (layer_outputs[-1],)
 
         hidden_states = self.final_layernorm(hidden_states)
 
