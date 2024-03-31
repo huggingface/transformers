@@ -144,8 +144,9 @@ class LlavaNextVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(1).to(torch_device)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
+        # attention_mask = input_ids.ne(1).to(torch_device)
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
         # we are giving 3 images let's make sure we pass in 3 image tokens
         input_ids[:, 1] = config.image_token_index
         inputs_dict = {
@@ -451,9 +452,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             [self.prompt, self.prompt], images=[self.image, cats_image], return_tensors="pt", padding=True
         ).to(torch_device)
 
-        # make sure image_sizes are the same
-        # as otherwise batched generation doesn't work
-        inputs.image_sizes[1] = inputs.image_sizes[0]
+        # it should not matter now whether two image is same size or not
 
         output = model.generate(**inputs, max_new_tokens=20)
 
