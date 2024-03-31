@@ -1111,16 +1111,16 @@ class JambaMambaMixer(nn.Module):
         return res, past_key_value
 
 
+# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Jamba
 class JambaMLP(nn.Module):
-    def __init__(self, config: JambaConfig):
+    def __init__(self, config):
         super().__init__()
-        self.ffn_dim = config.intermediate_size
-        self.hidden_dim = config.hidden_size
-
-        self.gate_proj = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-        self.down_proj = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
-        self.up_proj = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
