@@ -940,18 +940,10 @@ class JambaMambaMixer(nn.Module):
             # in order to make quantization work. Quantization code replaces `torch.nn.Linear` layers with quantized
             # linear layers, and requires to call the forward pass directly.
             # The original code here was: ```discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)```
-            if hasattr(self.dt_proj, "base_layer"):
-                # In case of LoRA, we need to access the base layer to get the bias
-                time_proj_bias = self.dt_proj.base_layer.bias
-                self.dt_proj.base_layer.bias = None
-            else:
-                time_proj_bias = self.dt_proj.bias
-                self.dt_proj.bias = None
+            time_proj_bias = self.dt_proj.bias
+            self.dt_proj.bias = None
             discrete_time_step = self.dt_proj(time_step).transpose(1, 2)
-            if hasattr(self.dt_proj, "base_layer"):
-                self.dt_proj.base_layer.bias = time_proj_bias
-            else:
-                self.dt_proj.bias = time_proj_bias
+            self.dt_proj.bias = time_proj_bias
 
             A = -torch.exp(self.A_log.float())
             # 3.c perform the recurrence y ← SSM(A, B, C)(x)
