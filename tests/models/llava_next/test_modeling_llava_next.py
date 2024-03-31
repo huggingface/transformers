@@ -145,10 +145,13 @@ class LlavaNextVisionText2TextModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
-        # attention_mask = input_ids.ne(1).to(torch_device)
+        # attention mask is full
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
         # we are giving 3 images let's make sure we pass in 3 image tokens
         input_ids[:, 1] = config.image_token_index
+        labels = input_ids.clone()
+        # maskout where the image token is
+        labels[labels == config.image_token_index] == -100
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_sizes": torch.tensor(
@@ -156,6 +159,7 @@ class LlavaNextVisionText2TextModelTester:
             ),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "labels": labels,
         }
         return config, inputs_dict
 
