@@ -457,7 +457,7 @@ class DbrxFlashAttention2(DbrxAttention):
         attention_mask: torch.Tensor,
         query_length: int,
         dropout: float = 0.0,
-        softmax_scale: optional[float] = None,
+        softmax_scale: Optional[float] = None,
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -523,8 +523,8 @@ class DbrxFlashAttention2(DbrxAttention):
         key_layer: torch.Tensor,
         value_layer: torch.Tensor,
         attention_mask: torch.Tensor,
-        query_length: int
-        ):
+        query_length: int,
+    ):
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
