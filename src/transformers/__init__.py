@@ -131,6 +131,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.llamavid": ["LLAMAVID_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaVidConfig", "LlamaVidTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1182,6 +1183,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
+    _import_structure["models.llamavid"].append("LlamaVidTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -1441,6 +1443,22 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.llamavid"].extend(
+        [
+            "LLAMAVID_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LlamaVidForMaskedLM",
+            "LlamaVidForCausalLM",
+            "LlamaVidForMultipleChoice",
+            "LlamaVidForQuestionAnswering",
+            "LlamaVidForSequenceClassification",
+            "LlamaVidForTokenClassification",
+            "LlamaVidLayer",
+            "LlamaVidModel",
+            "LlamaVidPreTrainedModel",
+            "load_tf_weights_in_llamavid",
+        ]
+    )
 
     _import_structure["models.albert"].extend(
         [
@@ -5025,6 +5043,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.llamavid import LLAMAVID_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaVidConfig, LlamaVidTokenizer
     from .models.align import (
         ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AlignConfig,
@@ -6051,6 +6070,7 @@ if TYPE_CHECKING:
         from .utils.dummy_tokenizers_objects import *
     else:
         # Fast tokenizers imports
+        from .models.llamavid import LlamaVidTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -7786,6 +7806,20 @@ if TYPE_CHECKING:
         )
 
         # PyTorch model imports
+
+        from .models.llamavid import (
+            LLAMAVID_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LlamaVidForMaskedLM,
+            LlamaVidForCausalLM,
+            LlamaVidForMultipleChoice,
+            LlamaVidForQuestionAnswering,
+            LlamaVidForSequenceClassification,
+            LlamaVidForTokenClassification,
+            LlamaVidLayer,
+            LlamaVidModel,
+            LlamaVidPreTrainedModel,
+            load_tf_weights_in_llamavid,
+        )
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeamlessM4TCodeHifiGan,
