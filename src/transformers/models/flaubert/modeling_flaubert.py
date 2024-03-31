@@ -370,6 +370,10 @@ class FlaubertPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        if isinstance(module, FlaubertModel) and self.config.sinusoidal_embeddings:
+            create_sinusoidal_embeddings(
+                self.config.max_position_embeddings, self.config.emb_dim, out=module.position_embeddings.weight
+            )
 
 
 class FlaubertModel(FlaubertPreTrainedModel):
@@ -439,9 +443,6 @@ class FlaubertModel(FlaubertPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-        if config.sinusoidal_embeddings:
-            create_sinusoidal_embeddings(config.max_position_embeddings, self.dim, out=self.position_embeddings.weight)
 
         self.layerdrop = getattr(config, "layerdrop", 0.0)
         self.pre_norm = getattr(config, "pre_norm", False)
