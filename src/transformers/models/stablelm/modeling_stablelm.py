@@ -210,12 +210,12 @@ class StableLmLayerNormPerHead(nn.Module):
         self.num_heads = num_heads
         self.norms = nn.ModuleList([nn.LayerNorm(dim, eps=eps, bias=bias) for _ in range(self.num_heads)])
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor):
         # Split along the num_heads axis to get per-head inputs
         # [batch_size, num_heads, seq_len, head_dim] -> [batch_size, 1, seq_len, head_dim] * num_heads
-        heads = torch.split(x, 1, dim=1)
+        states_per_heads = torch.split(hidden_states, 1, dim=1)
         # Normalize and merge the heads back together
-        return torch.cat([norm(x) for norm, x in zip(self.norms, heads)], dim=1)
+        return torch.cat([norm(hidden_states) for norm, hidden_states in zip(self.norms, states_per_heads)], dim=1)
 
 
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
