@@ -149,9 +149,11 @@ class LlavaNextVisionText2TextModelTester:
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
         # we are giving 3 images let's make sure we pass in 3 image tokens
         input_ids[:, 1] = config.image_token_index
-        labels = input_ids.clone()
+        labels = torch.zeros(
+            (self.batch_size, self.seq_length), dtype=torch.long, device=torch_device
+        )
         # maskout where the image token is
-        labels[labels == config.image_token_index] == -100
+        labels[:, 1] == self.ignore_index
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_sizes": torch.tensor(
