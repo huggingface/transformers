@@ -125,7 +125,9 @@ class DbrxFFNConfig(PretrainedConfig):
         self.moe_num_experts = moe_num_experts
         self.moe_top_k = moe_top_k
         self.moe_jitter_eps = moe_jitter_eps
-        self.router_aux_loss_coef = router_aux_loss_coef
+        self.router_aux_loss_coef = (
+            router_aux_loss_coef if "moe_loss_weight" not in kwargs else kwargs["moe_loss_weight"]
+        )
         self.moe_normalize_expert_weights = moe_normalize_expert_weights
         self.uniform_expert_assignment = uniform_expert_assignment
 
@@ -245,6 +247,10 @@ class DbrxConfig(PretrainedConfig):
         if ffn_config is None:
             self.ffn_config = DbrxFFNConfig()
         elif isinstance(ffn_config, dict):
+            # use router_aux_loss_coef over ffn_config["moe_loss_weight"]
+            if "moe_loss_weight" in ffn_config and "router_aux_loss_coef" not in ffn_config:
+                ffn_config["router_aux_loss_coef"] = ffn_config["moe_loss_weight"]
+                del ffn_config["moe_loss_weight"]
             self.ffn_config = DbrxFFNConfig(**ffn_config)
         else:
             self.ffn_config = ffn_config
