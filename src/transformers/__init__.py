@@ -5409,7 +5409,7 @@ if TYPE_CHECKING:
         InstructBlipQFormerConfig,
         InstructBlipVisionConfig,
     )
-    from .models.jamba import JAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP, JambaConfig
+    from .models.jamba import JambaConfig
     from .models.jukebox import (
         JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP,
         JukeboxConfig,
@@ -7168,7 +7168,6 @@ if TYPE_CHECKING:
             InstructBlipVisionModel,
         )
         from .models.jamba import (
-            JAMBA_PRETRAINED_MODEL_ARCHIVE_LIST,
             JambaForCausalLM,
             JambaForSequenceClassification,
             JambaModel,

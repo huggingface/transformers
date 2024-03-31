@@ -36,7 +36,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_jamba import JAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP, JambaConfig
+    from .configuration_jamba import JambaConfig
 
     try:
         if not is_torch_available():
@@ -45,7 +45,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_jamba import (
-            JAMBA_PRETRAINED_MODEL_ARCHIVE_LIST,
             JambaForCausalLM,
             JambaForSequenceClassification,
             JambaModel,

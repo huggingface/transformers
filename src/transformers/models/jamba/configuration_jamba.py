@@ -21,10 +21,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-JAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ai21labs/Jamba-v0.1": "https://huggingface.co/ai21labs/Jamba-v0.1/resolve/main/config.json",
-}
-
 
 class JambaConfig(PretrainedConfig):
     r"""
