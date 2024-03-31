@@ -450,7 +450,6 @@ class XLMModel(XLMPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
