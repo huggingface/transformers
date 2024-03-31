@@ -93,11 +93,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "JambaConfig"
 
-JAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ai21labs/Jamba-v0.1",
-    # See all Jamba models at https://huggingface.co/models?filter=jamba
-]
-
 
 # Adapted from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
 def load_balancing_loss_func(

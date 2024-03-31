@@ -515,7 +515,7 @@ _import_structure = {
         "InstructBlipQFormerConfig",
         "InstructBlipVisionConfig",
     ],
-    "models.jamba": ["JAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP", "JambaConfig"],
+    "models.jamba": ["JambaConfig"],
     "models.jukebox": [
         "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "JukeboxConfig",
@@ -2461,7 +2461,6 @@ else:
     )
     _import_structure["models.jamba"].extend(
         [
-            "JAMBA_PRETRAINED_MODEL_ARCHIVE_LIST",
             "JambaForCausalLM",
             "JambaForSequenceClassification",
             "JambaModel",
@@ -7168,8 +7167,6 @@ if TYPE_CHECKING:
             InstructBlipQFormerModel,
             InstructBlipVisionModel,
         )
-
-        # PyTorch model imports
         from .models.jamba import (
             JAMBA_PRETRAINED_MODEL_ARCHIVE_LIST,
             JambaForCausalLM,

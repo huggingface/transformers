@@ -1,4 +1,4 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+<!--Copyright 2024 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -49,12 +49,10 @@ You also have to have the model on a CUDA device.
 You can run the model not using the optimized Mamba kernels, but it is **not** recommended as it will result in significantly lower latencies. In order to do that, you'll need to specify `use_mamba_kernels=False` when loading the model.
 
 ### Run the model
-Please note that, at the moment, `trust_remote_code=True` is required for running the new Jamba architecture.
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("ai21labs/Jamba-v0.1",
-                                             trust_remote_code=True)
+model = AutoModelForCausalLM.from_pretrained("ai21labs/Jamba-v0.1")
 tokenizer = AutoTokenizer.from_pretrained("ai21labs/Jamba-v0.1")
 
 input_ids = tokenizer("In the recent Super Bowl LVIII,", return_tensors='pt').to(model.device)["input_ids"]
@@ -73,9 +71,8 @@ The published checkpoint is saved in BF16. In order to load it into RAM in BF16/
 ```python
 from transformers import AutoModelForCausalLM
 import torch
-model = AutoModelForCausalLM.from_pretrained("ai21labs/Jamba-v0.1",
-                                             trust_remote_code=True,
-                                             torch_dtype=torch.bfloat16)    # you can also use torch_dtype=torch.float16
+model = AutoModelForCausalLM.from_pretrained("ai21labs/Jamba-v0.1", torch_dtype=torch.bfloat16)
+# you can also use torch_dtype=torch.float16
 ```
 
 When using half precision, you can enable the [FlashAttention2](https://github.com/Dao-AILab/flash-attention) implementation of the Attention blocks. In order to use it, you also need the model on a CUDA device. Since in this precision the model is to big to fit on a single 80GB GPU, you'll also need to parallelize it using [accelerate](https://huggingface.co/docs/accelerate/index):
@@ -83,7 +80,6 @@ When using half precision, you can enable the [FlashAttention2](https://github.c
 from transformers import AutoModelForCausalLM
 import torch
 model = AutoModelForCausalLM.from_pretrained("ai21labs/Jamba-v0.1",
-                                             trust_remote_code=True,
                                              torch_dtype=torch.bfloat16,
                                              attn_implementation="flash_attention_2",
                                              device_map="auto")
@@ -96,13 +92,10 @@ model = AutoModelForCausalLM.from_pretrained("ai21labs/Jamba-v0.1",
 
 ```python
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
-quantization_config = BitsAndBytesConfig(load_in_8bit=True,
-                                         llm_int8_skip_modules=["mamba"])
-model = AutoModelForCausalLM.from_pretrained("ai21labs/Jamba-v0.1",
-                                             trust_remote_code=True,
-                                             torch_dtype=torch.bfloat16,
-                                             attn_implementation="flash_attention_2",
-                                             quantization_config=quantization_config)
+quantization_config = BitsAndBytesConfig(load_in_8bit=True, llm_int8_skip_modules=["mamba"])
+model = AutoModelForCausalLM.from_pretrained(
+    "ai21labs/Jamba-v0.1", torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", quantization_config=quantization_config
+)
 ```
 </details>
 
