@@ -846,12 +846,12 @@ class JambaMambaMixer(nn.Module):
 
         if self.apply_inner_layernorms:
             self.dt_layernorm = JambaRMSNorm(self.time_step_rank, eps=config.rms_norm_eps)
-            self.B_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
-            self.C_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
+            self.b_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
+            self.c_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
         else:
             self.dt_layernorm = None
-            self.B_layernorm = None
-            self.C_layernorm = None
+            self.b_layernorm = None
+            self.c_layernorm = None
 
         if not is_fast_path_available:
             logger.warning_once(
@@ -859,15 +859,6 @@ class JambaMambaMixer(nn.Module):
                 " is None. To install follow https://github.com/state-spaces/mamba/#installation and"
                 " https://github.com/Dao-AILab/causal-conv1d. If you want to use the naive implementation, set `use_mamba_kernels=False` in the model config"
             )
-
-    def _apply_layernorms(self, dt, B, C):
-        if self.dt_layernorm is not None:
-            dt = self.dt_layernorm(dt)
-        if self.B_layernorm is not None:
-            B = self.B_layernorm(B)
-        if self.C_layernorm is not None:
-            C = self.C_layernorm(C)
-        return dt, B, C
 
     def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params: MambaCacheParams = None):
         # 1. Gated MLP's linear projection
@@ -922,7 +913,11 @@ class JambaMambaMixer(nn.Module):
             time_step, B, C = torch.split(
                 ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
             )
-            time_step, B, C = self._apply_layernorms(time_step, B, C)
+
+            if self.apply_inner_layernorms:
+                time_step = self.dt_layernorm(time_step)
+                B = self.b_layernorm(B)
+                C = self.c_layernorm(C)
 
             # Here we need to apply dt_proj without the bias, as the bias is added in the selective scan kernel.
             # This is a hack to apply dt_proj while still using the forward pass of `torch.nn.Linear`, which is needed
@@ -1015,7 +1010,12 @@ class JambaMambaMixer(nn.Module):
         time_step, B, C = torch.split(
             ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
         )
-        time_step, B, C = self._apply_layernorms(time_step, B, C)
+
+        if self.apply_inner_layernorms:
+            time_step = self.dt_layernorm(time_step)
+            B = self.b_layernorm(B)
+            C = self.c_layernorm(C)
+
         discrete_time_step = self.dt_proj(time_step)                                    # [batch, seq_len, intermediate_size]
         discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1, 2) # [batch, intermediate_size, seq_len]
 
