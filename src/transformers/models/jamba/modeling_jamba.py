@@ -1544,10 +1544,8 @@ class JambaModel(JambaPreTrainedModel):
             is_expert = True if (i - self.config.expert_layer_offset) % self.config.expert_layer_period == 0 else False
 
             num_experts = self.config.num_experts if is_expert else 1
-            if is_attn:
-                decoder_layers.append(JambaAttentionDecoderLayer(config, num_experts=num_experts, layer_idx=i))
-            else:
-                decoder_layers.append(JambaMambaDecoderLayer(config, num_experts=num_experts, layer_idx=i))
+            layer_class = JambaAttentionDecoderLayer if is_attn else JambaMambaDecoderLayer
+            decoder_layers.append(layer_class(config, num_experts=num_experts, layer_idx=i))
 
         if not any(isinstance(layer, JambaAttentionDecoderLayer) for layer in decoder_layers):
             raise ValueError("At least one layer in the decoder must be an attention layer")
@@ -1580,7 +1578,6 @@ class JambaModel(JambaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    # Ignore copy
     @add_start_docstrings_to_model_forward(JAMBA_INPUTS_DOCSTRING)
     def forward(
         self,
