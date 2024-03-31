@@ -222,6 +222,10 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_pickle_subword_regularization_tokenizer(self):
         pass
 
+    # @unittest.skip(reason="SiglipTokenizer has custom lowercase logic")
+    # def test_added_tokens_do_lower_case(self):
+    #     pass
+
     # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.test_special_tokens_initialization with T5->Siglip
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
