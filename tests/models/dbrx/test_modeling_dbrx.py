@@ -28,7 +28,6 @@ from ...test_modeling_common import (
     random_attention_mask,
 )
 
-
 if is_torch_available():
     import torch
 
@@ -150,17 +149,18 @@ class DbrxModelTester:
             encoder_attention_mask,
         )
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Dbrx
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = DbrxModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        result = model(input_ids, token_type_ids=token_type_ids)
+        result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->Dbrx
     def create_and_check_model_as_decoder(
         self,
         config,
@@ -180,19 +180,19 @@ class DbrxModelTester:
         result = model(
             input_ids,
             attention_mask=input_mask,
-            token_type_ids=token_type_ids,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
         )
         result = model(
             input_ids,
             attention_mask=input_mask,
-            token_type_ids=token_type_ids,
             encoder_hidden_states=encoder_hidden_states,
         )
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->Dbrx
     def create_and_check_for_causal_lm(
         self,
         config,
@@ -208,7 +208,7 @@ class DbrxModelTester:
         model = DbrxForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_decoder_model_past_large_inputs(
