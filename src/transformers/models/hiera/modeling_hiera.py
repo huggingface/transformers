@@ -14,11 +14,9 @@
 # Paper: https://arxiv.org/abs/2306.00989/
 # --------------------------------------------------------
 
-import collections.abc
 import math
 from dataclasses import dataclass
 from functools import partial
-from itertools import repeat
 from typing import Callable, List, Optional, Tuple, Type, Union
 
 import torch
@@ -90,7 +88,9 @@ def undo_windowing(tensor: torch.Tensor, spatial_shape: List[int], mask_unit_sha
     num_dimensions = len(spatial_shape)
     batch_size, channels = tensor.shape[0], tensor.shape[-1]
     # [batch_size, num_mask_units_y*num_mask_units_x, mask_unit_height, mask_unit_width, channels] -> [batch_size, num_mask_units_y, num_mask_units_x, mask_unit_height, mask_unit_width, channels]
-    num_mask_units = [spatial_dim // mask_unit_dim for spatial_dim, mask_unit_dim in zip(spatial_shape, mask_unit_shape)]
+    num_mask_units = [
+        spatial_dim // mask_unit_dim for spatial_dim, mask_unit_dim in zip(spatial_shape, mask_unit_shape)
+    ]
     tensor = tensor.view(batch_size, *num_mask_units, *mask_unit_shape, channels)
 
     # Calculate the permutation order for restoring spatial organization
@@ -139,9 +139,6 @@ class HieraDropPath(nn.Module):
         return drop_path(x, self.drop_prob, self.training, self.scale_by_keep)
 
 
-
-
-
 class HieraMlp(nn.Module):
     """MLP as used in Vision Transformer, MLP-Mixer and related networks"""
 
@@ -169,14 +166,14 @@ class HieraMlp(nn.Module):
         self.act = act_layer()
         self.drop1 = nn.Dropout(drop_probs[0])
         self.drop2 = nn.Dropout(drop_probs[1])
-        self.norm = norm_layer(hidden_features) if norm_layer is not None else nn.Identity()  
+        self.norm = norm_layer(hidden_features) if norm_layer is not None else nn.Identity()
 
-        if use_conv:  
-            self.fc1 = nn.Conv2d(in_features, hidden_features, kernel_size=1, bias=bias[0])  
-            self.fc2 = nn.Conv2d(hidden_features, out_features, kernel_size=1, bias=bias[1])  
-        else:  
-            self.fc1 = nn.Linear(in_features, hidden_features, bias=bias[0])  
-            self.fc2 = nn.Linear(hidden_features, out_features, bias=bias[1])  
+        if use_conv:
+            self.fc1 = nn.Conv2d(in_features, hidden_features, kernel_size=1, bias=bias[0])
+            self.fc2 = nn.Conv2d(hidden_features, out_features, kernel_size=1, bias=bias[1])
+        else:
+            self.fc1 = nn.Linear(in_features, hidden_features, bias=bias[0])
+            self.fc2 = nn.Linear(hidden_features, out_features, bias=bias[1])
 
     def forward(self, x):
         x = self.fc1(x)
@@ -234,13 +231,19 @@ class HieraUnroll(nn.Module):
             # Create a view of the tensor with the patch stride as separate dims
             # For example in 2d: [B, H // Sy, Sy, W // Sx, Sx, C]
             current_size = [dimension // stride for dimension, stride in zip(current_size, stride_steps)]
-            new_shape = [batch_size] + sum([[dimension, stride] for dimension, stride in zip(current_size, stride_steps)], []) + [channels]
+            new_shape = (
+                [batch_size]
+                + sum([[dimension, stride] for dimension, stride in zip(current_size, stride_steps)], [])
+                + [channels]
+            )
             embeddings = embeddings.view(new_shape)
 
             # Move the patch stride into the batch dimension
             # For example in 2d: [B, Sy, Sx, H // Sy, W // Sx, C]
             shape_length = len(new_shape)
-            permute_order = [0] + list(range(2, shape_length - 1, 2)) + list(range(1, shape_length - 1, 2)) + [shape_length - 1]
+            permute_order = (
+                [0] + list(range(2, shape_length - 1, 2)) + list(range(1, shape_length - 1, 2)) + [shape_length - 1]
+            )
             embeddings = embeddings.permute(*permute_order)
 
             # Now finally flatten the relevant dims into the batch dimension
@@ -259,7 +262,6 @@ class HieraReroll(nn.Module):
     def __init__(
         self,
         config: HieraConfig,
-        
     ):
         super().__init__()
         self.config = config
@@ -273,7 +275,7 @@ class HieraReroll(nn.Module):
         for i in range(self.stage_ends[-1] + 1):
             self.schedule[i] = unroll_schedule, size
             # schedule unchanged if no pooling at a stage end
-            if i in self.stage_ends[:self.config.q_pool]:
+            if i in self.stage_ends[: self.config.q_pool]:
                 if len(unroll_schedule) > 0:
                     size = [new_size // stride for new_size, stride in zip(size, unroll_schedule[0])]
                 unroll_schedule = unroll_schedule[1:]
@@ -295,7 +297,9 @@ class HieraReroll(nn.Module):
 
         for strides in schedule:
             # Extract the current patch from N
-            embeddings = embeddings.view(batch_size, *strides, num_tokens // math.prod(strides), *current_mask_unit_shape, num_channels)
+            embeddings = embeddings.view(
+                batch_size, *strides, num_tokens // math.prod(strides), *current_mask_unit_shape, num_channels
+            )
 
             # Move that patch into the current MU
             # Example in 2d: [B, Sy, Sx, N//(Sy*Sx), MUy, MUx, C] -> [B, N//(Sy*Sx), Sy, MUy, Sx, MUx, C]
@@ -303,7 +307,10 @@ class HieraReroll(nn.Module):
             permute = (
                 [0, 1 + num_dimensions]
                 + sum(
-                    [list(p) for p in zip(range(1, 1 + num_dimensions), range(1 + num_dimensions + 1, shape_length - 1))],
+                    [
+                        list(p)
+                        for p in zip(range(1, 1 + num_dimensions), range(1 + num_dimensions + 1, shape_length - 1))
+                    ],
                     [],
                 )
                 + [shape_length - 1]
@@ -347,7 +354,6 @@ class HieraModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
-
 class HieraMaskUnitAttention(nn.Module):
     """
     Computes either Mask Unit or Global Attention. Also is able to perform q pooling.
@@ -361,7 +367,7 @@ class HieraMaskUnitAttention(nn.Module):
         config: HieraConfig,
         input_dim: int,
         output_dim: int,
-        number_of_heads: int,
+        num_attention_heads: int,
         q_stride: int = 1,
         window_size: int = 0,
         use_mask_unit_attention: bool = False,
@@ -370,7 +376,7 @@ class HieraMaskUnitAttention(nn.Module):
         Args:
             input_dim (`int`): The input feature dimensions.
             output_dim (`int`): The output feature dimensions.
-            number_of_heads (`int`): The number of attention heads.
+            num_attention_heads (`int`): The number of attention heads.
             q_stride: If greater than 1, pool q with this stride. The stride should be flattened (e.g., 2x2 = 4).
             window_size: The current (flattened) size of a mask unit *after* pooling (if any).
             use_mask_unit_attention: Use Mask Unit or Global Attention.
@@ -379,10 +385,10 @@ class HieraMaskUnitAttention(nn.Module):
         self.config = config
         self.input_dim = input_dim
         self.output_dim = output_dim
-        self.number_of_heads = number_of_heads
+        self.num_attention_heads = num_attention_heads
         self.q_stride = q_stride
 
-        self.head_dim = output_dim // number_of_heads
+        self.head_dim = output_dim // num_attention_heads
         self.scale = (self.head_dim) ** -0.5
 
         self.qkv = nn.Linear(input_dim, 3 * output_dim)
@@ -398,7 +404,7 @@ class HieraMaskUnitAttention(nn.Module):
 
         qkv = (
             self.qkv(embeddings)
-            .reshape(batch_size, -1, num_windows, 3, self.number_of_heads, self.head_dim)
+            .reshape(batch_size, -1, num_windows, 3, self.num_attention_heads, self.head_dim)
             .permute(3, 0, 4, 2, 1, 5)
         )
         q, k, v = qkv[0], qkv[1], qkv[2]
@@ -406,12 +412,11 @@ class HieraMaskUnitAttention(nn.Module):
         if self.q_stride > 1:
             # Refer to HieraUnroll to see how this performs a maxpool-Nd
             q = (
-                q.view(batch_size, self.number_of_heads, num_windows, self.q_stride, -1, self.head_dim)
+                q.view(batch_size, self.num_attention_heads, num_windows, self.q_stride, -1, self.head_dim)
                 .max(dim=3)
                 .values
             )
 
-    
         attention = (q * self.scale) @ k.transpose(-1, -2)
         attention = attention.softmax(dim=-1)
         embeddings = attention @ v
@@ -427,7 +432,7 @@ class HieraBlock(nn.Module):
         config: HieraConfig,
         input_dim: int,
         output_dim: int,
-        number_of_heads: int,
+        num_attention_heads: int,
         drop_path: float = 0.0,
         norm_layer: nn.Module = nn.LayerNorm,
         act_layer: nn.Module = nn.GELU,
@@ -441,11 +446,11 @@ class HieraBlock(nn.Module):
         self.output_dim = output_dim
         self.norm1 = norm_layer(input_dim)
         self.attention = HieraMaskUnitAttention(
-            config, input_dim, output_dim, number_of_heads, q_stride, window_size, use_mask_unit_attention
+            config, input_dim, output_dim, num_attention_heads, q_stride, window_size, use_mask_unit_attention
         )
 
         self.norm2 = norm_layer(output_dim)
-        self.mlp = HieraMlp(config, output_dim,  act_layer=act_layer)
+        self.mlp = HieraMlp(config, output_dim, act_layer=act_layer)
 
         self.drop_path = HieraDropPath(drop_path) if drop_path > 0 else nn.Identity()
         if input_dim != output_dim:
@@ -456,7 +461,7 @@ class HieraBlock(nn.Module):
         normalized_embeddings = self.norm1(embeddings)
         if self.input_dim != self.output_dim:
             embeddings = do_pool(self.projection(normalized_embeddings), stride=self.attention.q_stride)
-        attention_output , attention_weights = self.attention(normalized_embeddings)
+        attention_output, attention_weights = self.attention(normalized_embeddings)
         embeddings = embeddings + self.drop_path(attention_output)
 
         # MLP
@@ -484,6 +489,7 @@ class HieraHead(nn.Module):
         if not self.training:
             x = self.act_func(x)
         return x
+
 
 class HieraPatchEmbedding(nn.Module):
     def __init__(
@@ -517,7 +523,7 @@ class HieraPreTrainedModel(PreTrainedModel):
     config_class = HieraConfig
     base_model_prefix = "hiera"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
 
     def _init_weights(self, module, init_bias=0.02):
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d)):
@@ -545,7 +551,7 @@ class HieraPreTrainedModel(PreTrainedModel):
     Example usage:
         >>> from transformers import HieraModel, HieraConfig
         >>> import torch
-        >>> config = HieraConfig(embedding_dimension=96, number_of_heads=1, stages=(2, 3, 16, 3))
+        >>> config = HieraConfig(embedding_dimension=96, num_attention_heads=1, stages=(2, 3, 16, 3))
         >>> model = HieraModel(config)
         >>> inputs = torch.rand((1, 3, 224, 224))
         >>> outputs = model(inputs)
@@ -555,13 +561,13 @@ class HieraModel(HieraPreTrainedModel):
     config_class = HieraConfig
     base_model_prefix = "hiera"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
 
     def __init__(self, config: HieraConfig):
         self.input_size = config.input_size
         self.in_chans = config.in_chans
         self.embedding_dimension = config.embedding_dimension
-        self.number_of_heads = config.number_of_heads
+        self.num_attention_heads = config.num_attention_heads
         self.num_classes = config.num_classes
         self.stages = config.stages
         self.q_pool = config.q_pool
@@ -581,7 +587,7 @@ class HieraModel(HieraPreTrainedModel):
 
         super().__init__(config)
         self.config = config
-        norm_layer = partial(nn.LayerNorm, eps=1e-6) 
+        norm_layer = partial(nn.LayerNorm, eps=1e-6)
         depth = sum(self.stages)
         self.tokens_spatial_shape = [i // s for i, s in zip(self.input_size, self.patch_stride)]
         num_tokens = math.prod(self.tokens_spatial_shape)
@@ -610,9 +616,9 @@ class HieraModel(HieraPreTrainedModel):
             self.position_embeddings = nn.Parameter(torch.zeros(1, num_tokens, self.embedding_dimension))
 
         # Setup roll and reroll modules
-        self.unroll = HieraUnroll(config) 
+        self.unroll = HieraUnroll(config)
         self.reroll = HieraReroll(config)
-        
+
         # q_pool locations
         q_pool_blocks = [x + 1 for x in self.stage_ends[: self.q_pool]]
         # stochastic depth decay rule
@@ -628,17 +634,16 @@ class HieraModel(HieraPreTrainedModel):
 
             if i - 1 in self.stage_ends:
                 output_dim = int(self.embedding_dimension * self.dim_mul)
-                self.number_of_heads = int(self.number_of_heads * self.head_mul)  # Update the class variable
+                self.num_attention_heads = int(self.num_attention_heads * self.head_mul)  # Update the class variable
                 cur_stage += 1
                 if i in q_pool_blocks:
                     flat_mu_size //= flat_q_stride
-
 
             block = HieraBlock(
                 config,
                 input_dim=self.embedding_dimension,
                 output_dim=output_dim,
-                number_of_heads=self.number_of_heads,
+                num_attention_heads=self.num_attention_heads,
                 drop_path=dpr[i],
                 norm_layer=norm_layer,
                 q_stride=(flat_q_stride if i in q_pool_blocks else 1),
@@ -646,7 +651,7 @@ class HieraModel(HieraPreTrainedModel):
                 use_mask_unit_attention=use_mask_unit_attention,
             )
 
-            self.embedding_dimension = output_dim 
+            self.embedding_dimension = output_dim
             self.blocks.append(block)
 
         self.norm = norm_layer(self.embedding_dimension)
@@ -731,9 +736,8 @@ class HieraModel(HieraPreTrainedModel):
         output_intermediates: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        
     ) -> Union[Tuple[torch.Tensor], HieraModelOutput]:
-        intermediates = [] if output_intermediates  else None
+        intermediates = [] if output_intermediates else None
         attentions = [] if output_attentions else None
         hidden_states = [] if output_hidden_states else None
 

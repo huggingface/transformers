@@ -14,15 +14,15 @@
 # limitations under the License.
 
 import argparse
+
+import requests
+import torch
 from PIL import Image
 
-import torch
-
 # from transformers import HieraConfig, HieraModel
-from transformers import HieraConfig, HieraModel
-from transformers import BeitImageProcessor
-from transformers.image_utils import PILImageResampling, IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
-import requests
+from transformers import BeitImageProcessor, HieraConfig, HieraModel
+from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
+
 
 def rename_key(name):
     if ".proj." in name:
@@ -195,37 +195,36 @@ def convert_Hiera_checkpoint(checkpoint_url, pytorch_dump_folder_path, **kwargs)
 
         model.load_state_dict(state_dict["model_state"], strict=strict)
 
-
     image_processor = BeitImageProcessor(
-                                        size = {"height":256,"width":256},
-                                        do_rescale=True,
-                                        do_center_crop=True,
-                                        crop_size = {"height":224,"width":224},
-                                        do_normalize=True,
-                                        do_reduce_labels=False,
-                                        do_resize=True,
-                                        image_std=IMAGENET_DEFAULT_STD,
-                                        image_mean=IMAGENET_DEFAULT_MEAN,
-                                        resample = PILImageResampling.BICUBIC)  
-    
-    
+        size={"height": 256, "width": 256},
+        do_rescale=True,
+        do_center_crop=True,
+        crop_size={"height": 224, "width": 224},
+        do_normalize=True,
+        do_reduce_labels=False,
+        do_resize=True,
+        image_std=IMAGENET_DEFAULT_STD,
+        image_mean=IMAGENET_DEFAULT_MEAN,
+        resample=PILImageResampling.BICUBIC,
+    )
+
     url = "https://user-images.githubusercontent.com/11435359/147738734-196fd92f-9260-48d5-ba7e-bf103d29364d.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
 
-    processed_image = image_processor(images=image, return_tensors="pt")  
+    processed_image = image_processor(images=image, return_tensors="pt")
     model.load_state_dict(state_dict["model_state"], strict=strict)
-    expected_slice = torch.tensor(
-    [ 0.1825,  0.8655,  0.5779,  1.1550,  1.1025,  0.6381,  1.0288, -0.0624, 0.1455]
-        )
+    expected_slice = torch.tensor([0.1825, 0.8655, 0.5779, 1.1550, 1.1025, 0.6381, 1.0288, -0.0624, 0.1455])
     # If you also want intermediate feature maps
     out = model(processed_image.pixel_values)
     out.last_hidden_state.argmax(dim=-1).item()
     assert torch.allclose(out.last_hidden_state[0, :9], expected_slice, atol=1e-4)
 
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained("/home/ubuntu/home/hiera/hiera_base_224_image_processor/")
 
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path, safe_serialization=False)
-    
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

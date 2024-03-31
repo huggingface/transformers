@@ -40,26 +40,46 @@ class HieraConfig(PretrainedConfig):
 
 
     Args:
-        input_size (Tuple[int, int] or int, , defaults to `(224, 224)`): Dimensions of the input image (height, width).
-        in_chans (int, optional, , defaults to 3): Number of input channels. 
-        embedding_dimension (int, optional, defaults to 96): Dimension of the initial embedding. 
-        number_of_heads (int, optional, defaults to 1): Initial number of attention heads. 
-        num_classes (int, optional, , defaults to 1000): Number of output classes. 
-        stages (Tuple[int, ...], optional, , defaults to `(2, 3, 16, 3)`): Defines the number of blocks at each stage of the model.
-        q_pool (int, optional, , defaults to 3): Number of pooling stages for queries. .
-        q_stride (Tuple[int, ...], optional, , defaults to `(2, 2)`): Stride size for pooling.
-        mask_unit_size (Tuple[int, ...], optional, , defaults to `(8, 8)`): Dimensions for the mask unit. Must be compatible with q_stride.
-        mask_unit_attn (Tuple[bool, ...], optional, , defaults to `(True, True, False, False)`): Specifies which stages use mask unit attention.
-        dim_mul (float, optional, , defaults to 2.0): Factor for increasing the dimensionality through the network. 
-        head_mul (float, optional, , defaults to 2.0): Factor for increasing the number of heads through the network. 
-        patch_kernel (Tuple[int, ...], optional, , defaults to `(7, 7)`): Kernel size for patch embedding. 
-        patch_stride (Tuple[int, ...], optional, , defaults to `(4, 4)`): Stride for patch embedding. 
-        patch_padding (Tuple[int, ...], optional, , defaults to `(3, 3)`): Padding for patch embedding. 
-        mlp_ratio (float, optional, , defaults to 4.0): Ratio of hidden size to feed-forward layer size.
-        drop_path_rate (float, optional, , defaults to 0.0): Dropout rate for stochastic depth. 
-        head_dropout (float, optional, , defaults to 0.0): Dropout rate for attention heads. 
-        head_init_scale (float, optional, , defaults to 0.001): Initial scaling factor for attention head weights.
-        sep_position_embeddings (bool, optional, , defaults to `False`): Whether to use separate position embeddings.
+        input_size (`Tuple[int, int]` or `int`, *optional*, defaults to `(224, 224)`):
+            Dimensions of the input image (height, width).
+        in_chans (`int`, *optional*, defaults to 3):
+            Number of input channels.
+        embedding_dimension (`int`, *optional*, defaults to 96):
+            Dimension of the initial embedding.
+        num_attention_heads (`int`, *optional*, defaults to 1):
+            Initial number of attention heads.
+        num_classes (`int`, *optional*, defaults to 1000):
+            Number of output classes.
+        stages (`Tuple[int, ...]`, *optional*, defaults to `(2, 3, 16, 3)`):
+            Defines the number of blocks at each stage of the model.
+        q_pool (`int`, *optional*, defaults to 3):
+            Number of pooling stages for queries.
+        q_stride (`Tuple[int, ...]`, *optional*, defaults to `(2, 2)`):
+            Stride size for pooling.
+        mask_unit_size (`Tuple[int, ...]`, *optional*, defaults to `(8, 8)`):
+            Dimensions for the mask unit. Must be compatible with q_stride.
+        mask_unit_attn (`Tuple[bool, ...]`, *optional*, defaults to `(True, True, False, False)`):
+            Specifies which stages use mask unit attention.
+        dim_mul (`float`, *optional*, defaults to 2.0):
+            Factor for increasing the dimensionality through the network.
+        head_mul (`float`, *optional*, defaults to 2.0):
+            Factor for increasing the number of heads through the network.
+        patch_kernel (`Tuple[int, ...]`, *optional*, defaults to `(7, 7)`):
+            Kernel size for patch embedding.
+        patch_stride (`Tuple[int, ...]`, *optional*, defaults to `(4, 4)`):
+            Stride for patch embedding.
+        patch_padding (`Tuple[int, ...]`, *optional*, defaults to `(3, 3)`):
+            Padding for patch embedding.
+        mlp_ratio (`float`, *optional*, defaults to 4.0):
+            Ratio of hidden size to feed-forward layer size.
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
+            Dropout rate for stochastic depth.
+        head_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout rate for attention heads.
+        head_init_scale (`float`, *optional*, defaults to 0.001):
+            Initial scaling factor for attention head weights.
+        sep_position_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to use separate position embeddings.
     """
 
     model_type = "hiera"
@@ -69,7 +89,7 @@ class HieraConfig(PretrainedConfig):
         input_size: Tuple[int, ...] = (224, 224),
         in_chans: int = 3,
         embedding_dimension: int = 96,  # initial embedding input_dim
-        number_of_heads: int = 1,  # initial number of number_of_heads
+        num_attention_heads: int = 1,  # initial number of num_attention_heads
         num_classes: int = 1000,
         stages: Tuple[int, ...] = (2, 3, 16, 3),
         q_pool: int = 3,  # number of q_pool stages
@@ -93,7 +113,7 @@ class HieraConfig(PretrainedConfig):
         self.input_size = input_size
         self.in_chans = in_chans
         self.embedding_dimension = embedding_dimension
-        self.number_of_heads = number_of_heads
+        self.num_attention_heads = num_attention_heads
         self.num_classes = num_classes
         self.stages = stages
         self.q_pool = q_pool
