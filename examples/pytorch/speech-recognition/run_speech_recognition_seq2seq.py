@@ -458,16 +458,16 @@ def main():
             "The use of `forced_decoder_ids` is deprecated and will be removed in v4.40."
             "Please use the `language` and `task` arguments instead"
         )
-        model.generation_config["forced_decoder_ids"] = model_args.forced_decoder_ids
+        model.generation_config.forced_decoder_ids = model_args.forced_decoder_ids
     else:
-        model.generation_config["forced_decoder_ids"] = None
+        model.generation_config.forced_decoder_ids = None
 
     if model_args.suppress_tokens is not None:
         logger.warning(
             "The use of `suppress_tokens` is deprecated and will be removed in v4.40."
             "Should you need `suppress_tokens`, please manually set them in the fine-tuning script."
         )
-        model.generation_config["suppress_tokens"] = model_args.suppress_tokens
+        model.generation_config.suppress_tokens = model_args.suppress_tokens
 
     # 6. Resample speech dataset if necessary
     dataset_sampling_rate = next(iter(raw_datasets.values())).features[data_args.audio_column_name].sampling_rate
