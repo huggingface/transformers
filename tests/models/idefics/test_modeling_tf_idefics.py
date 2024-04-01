@@ -796,6 +796,9 @@ class TFIdeficsForVisionText2TextTest(TFIdeficsModelTest, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
+    @unittest.skip(reason="""IDEFICS loss computation is done in TFIdeficsModel""")
+    def test_loss_computation(self):
+        pass
 
 @require_tf
 @require_vision
