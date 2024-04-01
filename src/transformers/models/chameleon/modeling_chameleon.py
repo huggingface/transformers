@@ -1326,6 +1326,7 @@ class ChameleonForCausalLM(ChameleonPreTrainedModel):
     """,
     CHAMELEON_START_DOCSTRING,
 )
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Chameleon, LLAMA->CHAMELEON
 class ChameleonForSequenceClassification(ChameleonPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1457,6 +1458,7 @@ class ChameleonForQuestionAnswering(ChameleonPreTrainedModel):
         self.transformer.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(CHAMELEON_INPUTS_DOCSTRING)
+    # Copied from transformers.models.llama.modeling_llama.LlamaForQuestionAnswering.forward
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
