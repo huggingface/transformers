@@ -38,9 +38,10 @@ and inference.
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+During inference, the model's computational performance is derived from combining tokens across batches into groups of a specified size, denoted as *group_size* in the model configuration. If the batch size is not evenly divisible by *group_size*, the model will internally pad the batch to ensure divisibility. To achieve optimal performance, it is advisable to conduct batched inference using a batch size that is a multiple of *group_size*.
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
+
+This model was contributed by [jaszczur](https://huggingface.co/jaszczur).
 The original code can be found [here](https://github.com/llm-random/llm-random/blob/main/research/conditional/moe_layers/continuous_moe.py).
 
 
