@@ -719,7 +719,7 @@ class GenerationTesterMixin:
             self.assertTrue(output_generate.shape[-1] == max_length)
 
             input_embeds = model.get_input_embeddings()(input_ids)
-            beam_kwargs.update({"input_embeds": input_embeds})
+            beam_kwargs.update({"inputs_embeds": input_embeds})
             output_generate = self._beam_sample_generate(
                 model=model,
                 input_ids=None,
