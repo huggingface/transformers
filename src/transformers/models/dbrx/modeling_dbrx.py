@@ -1087,17 +1087,6 @@ class DbrxModel(DbrxPreTrainedModel):
                 all_hidden_states += (hidden_states,)  # type: ignore
 
             if self.gradient_checkpointing and self.training:
-                # block_outputs = self._gradient_checkpointing_func(
-                #     block.__call__,
-                #     hidden_states,
-                #     attention_mask=causal_mask,
-                #     position_ids=position_ids,
-                #     past_key_values=past_key_values,
-                #     output_attentions=output_attentions,
-                #     output_router_logits=output_router_logits,
-                #     use_cache=use_cache,
-                #     cache_position=cache_position,
-                # )
                 block_outputs = self._gradient_checkpointing_func(
                     block.__call__,
                     hidden_states,
