@@ -36,7 +36,7 @@ from ...file_utils import (
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ..auto import AutoBackbone
+from ...utils.backbone_utils import load_backbone
 from .configuration_zoedepth import ZoeDepthConfig
 
 
@@ -46,8 +46,10 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ZoeDepthConfig"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "Intel/zoedepth-base"
+_CHECKPOINT_FOR_DOC = "Intel/zoedepth-nyu"
 _EXPECTED_OUTPUT_SHAPE = [1, 577, 1024]
+
+N_MIDAS_OUT = 32
 
 
 class ZoeDepthReassembleStage(nn.Module):
@@ -73,8 +75,6 @@ class ZoeDepthReassembleStage(nn.Module):
         self.layers = nn.ModuleList()
         self._init_reassemble_zoedepth(config)
 
-        self.neck_ignore_stages = config.neck_ignore_stages
-
     def _init_reassemble_zoedepth(self, config):
         for i, factor in zip(range(len(config.neck_hidden_sizes)), config.reassemble_factors):
             self.layers.append(ZoeDepthReassembleLayer(config, channels=config.neck_hidden_sizes[i], factor=factor))
@@ -87,7 +87,6 @@ class ZoeDepthReassembleStage(nn.Module):
                     nn.Sequential(nn.Linear(2 * hidden_size, hidden_size), ACT2FN[config.hidden_act])
                 )
 
-    # Copied from transformers.models.dpt.modeling_dpt.DPTReassembleStage.forward
     def forward(self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None) -> List[torch.Tensor]:
         """
         Args:
@@ -97,30 +96,29 @@ class ZoeDepthReassembleStage(nn.Module):
         out = []
 
         for i, hidden_state in enumerate(hidden_states):
-            if i not in self.neck_ignore_stages:
-                # reshape to (batch_size, num_channels, height, width)
-                cls_token, hidden_state = hidden_state[:, 0], hidden_state[:, 1:]
-                batch_size, sequence_length, num_channels = hidden_state.shape
-                if patch_height is not None and patch_width is not None:
-                    hidden_state = hidden_state.reshape(batch_size, patch_height, patch_width, num_channels)
-                else:
-                    size = int(math.sqrt(sequence_length))
-                    hidden_state = hidden_state.reshape(batch_size, size, size, num_channels)
-                hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
+            # reshape to (batch_size, num_channels, height, width)
+            cls_token, hidden_state = hidden_state[:, 0], hidden_state[:, 1:]
+            batch_size, sequence_length, num_channels = hidden_state.shape
+            if patch_height is not None and patch_width is not None:
+                hidden_state = hidden_state.reshape(batch_size, patch_height, patch_width, num_channels)
+            else:
+                size = int(math.sqrt(sequence_length))
+                hidden_state = hidden_state.reshape(batch_size, size, size, num_channels)
+            hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
 
-                feature_shape = hidden_state.shape
-                if self.config.readout_type == "project":
-                    # reshape to (batch_size, height*width, num_channels)
-                    hidden_state = hidden_state.flatten(2).permute((0, 2, 1))
-                    readout = cls_token.unsqueeze(1).expand_as(hidden_state)
-                    # concatenate the readout token to the hidden states and project
-                    hidden_state = self.readout_projects[i](torch.cat((hidden_state, readout), -1))
-                    # reshape back to (batch_size, num_channels, height, width)
-                    hidden_state = hidden_state.permute(0, 2, 1).reshape(feature_shape)
-                elif self.config.readout_type == "add":
-                    hidden_state = hidden_state.flatten(2) + cls_token.unsqueeze(-1)
-                    hidden_state = hidden_state.reshape(feature_shape)
-                hidden_state = self.layers[i](hidden_state)
+            feature_shape = hidden_state.shape
+            if self.config.readout_type == "project":
+                # reshape to (batch_size, height*width, num_channels)
+                hidden_state = hidden_state.flatten(2).permute((0, 2, 1))
+                readout = cls_token.unsqueeze(1).expand_as(hidden_state)
+                # concatenate the readout token to the hidden states and project
+                hidden_state = self.readout_projects[i](torch.cat((hidden_state, readout), -1))
+                # reshape back to (batch_size, num_channels, height, width)
+                hidden_state = hidden_state.permute(0, 2, 1).reshape(feature_shape)
+            elif self.config.readout_type == "add":
+                hidden_state = hidden_state.flatten(2) + cls_token.unsqueeze(-1)
+                hidden_state = hidden_state.reshape(feature_shape)
+            hidden_state = self.layers[i](hidden_state)
             out.append(hidden_state)
 
         return out
@@ -719,7 +717,7 @@ class ZoeDepthAttractorLayerUnnormed(nn.Module):
         alpha=300,
         gamma=2,
         kind="sum",
-        memory_efficient=False,
+        memory_efficient=True,
     ):
         """
         Attractor layer for bin centers. Bin centers are unbounded
@@ -807,6 +805,220 @@ class ZoeDepthProjector(nn.Module):
         return self._net(x)
 
 
+class ZoeDepthPatchTransformerEncoder(nn.Module):
+    def __init__(self, in_channels, patch_size=10, embedding_dim=128, num_heads=4, use_class_token=False):
+        """ViT-like transformer block
+
+        Args:
+            in_channels (int): Input channels
+            patch_size (int, optional): patch size. Defaults to 10.
+            embedding_dim (int, optional): Embedding dimension in transformer model. Defaults to 128.
+            num_heads (int, optional): number of attention heads. Defaults to 4.
+            use_class_token (bool, optional): Whether to use extra token at the start for global accumulation (called as "class token"). Defaults to False.
+        """
+        super().__init__()
+        encoder_layers = nn.TransformerEncoderLayer(embedding_dim, num_heads, dim_feedforward=1024)
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers=4)  # takes shape S,N,E
+
+        self.embedding_convPxP = nn.Conv2d(
+            in_channels, embedding_dim, kernel_size=patch_size, stride=patch_size, padding=0
+        )
+
+    def positional_encoding_1d(self, sequence_length, batch_size, embedding_dim, device="cpu"):
+        """Generate positional encodings
+
+        Args:
+            sequence_length (int): Sequence length
+            embedding_dim (int): Embedding dimension
+
+        Returns:
+            torch.Tensor SBE: Positional encodings
+        """
+        position = torch.arange(0, sequence_length, dtype=torch.float32, device=device).unsqueeze(1)
+        index = torch.arange(0, embedding_dim, 2, dtype=torch.float32, device=device).unsqueeze(0)
+        div_term = torch.exp(index * (-torch.log(torch.tensor(10000.0, device=device)) / embedding_dim))
+        pos_encoding = position * div_term
+        pos_encoding = torch.cat([torch.sin(pos_encoding), torch.cos(pos_encoding)], dim=1)
+        pos_encoding = pos_encoding.unsqueeze(1).repeat(1, batch_size, 1)
+        return pos_encoding
+
+    def forward(self, x):
+        """Forward pass
+
+        Args:
+            x (torch.Tensor - NCHW): Input feature tensor
+
+        Returns:
+            torch.Tensor - SNE: Transformer output embeddings. S - sequence length (=HW/patch_size^2), N - batch size, E - embedding dim
+        """
+        embeddings = self.embedding_convPxP(x).flatten(2)  # .shape = n,c,s = n, embedding_dim, s
+        if self.use_class_token:
+            # extra special token at start ?
+            embeddings = nn.functional.pad(embeddings, (1, 0))
+
+        # change to S,N,E format required by transformer
+        embeddings = embeddings.permute(2, 0, 1)
+        S, N, E = embeddings.shape
+        embeddings = embeddings + self.positional_encoding_1d(S, N, E, device=embeddings.device)
+        x = self.transformer_encoder(embeddings)  # .shape = S, N, E
+        return x
+
+
+class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
+    """
+    Multiple metric depth estimation heads. Each head consists of a transformer encoder and a linear classifier.
+    """
+
+    def __init__(self, config):
+        n_bins = config.n_bins
+        bin_embedding_dim = config.bin_embedding_dim
+        min_depth = config.min_depth
+        max_depth = config.max_depth
+        n_attractors = config.num_attractors
+        num_out_features = config.num_out_features
+        attractor_alpha = config.attractor_alpha
+        attractor_gamma = config.attractor_gamma
+        attractor_kind = config.attractor_kind
+        min_temp = config.min_temp
+        max_temp = config.max_temp
+        bin_centers_type = config.bin_centers_type
+
+        self.min_depth = min_depth
+        self.max_depth = max_depth
+        self.bin_centers_type = bin_centers_type
+
+        # Bottleneck convolution
+        bottleneck_features = config.bottleneck_features
+        self.conv2 = nn.Conv2d(bottleneck_features, bottleneck_features, kernel_size=1, stride=1, padding=0)
+
+        # Transformer classifier on the bottleneck
+        self.patch_transformer = ZoeDepthPatchTransformerEncoder(bottleneck_features, 1, 128, use_class_token=True)
+        self.mlp_classifier = nn.Sequential(nn.Linear(128, 128), nn.ReLU(), nn.Linear(128, 2))
+
+        # Regressor and attractor
+        if self.bin_centers_type == "normed":
+            SeedBinRegressorLayer = ZoeDepthSeedBinRegressor
+            Attractor = ZoeDepthAttractorLayer
+        elif self.bin_centers_type == "softplus":
+            SeedBinRegressorLayer = ZoeDepthSeedBinRegressorUnnormed
+            Attractor = ZoeDepthAttractorLayerUnnormed
+
+        self.bin_centers_type = bin_centers_type
+        # We have bins for each bin conf.
+        # Create a map (ModuleDict) of 'name' -> seed_bin_regressor
+        self.seed_bin_regressors = nn.ModuleDict(
+            {
+                conf["name"]: SeedBinRegressorLayer(
+                    bottleneck_features,
+                    conf["n_bins"],
+                    mlp_dim=bin_embedding_dim // 2,
+                    min_depth=conf["min_depth"],
+                    max_depth=conf["max_depth"],
+                )
+                for conf in config.bin_conf
+            }
+        )
+
+        self.seed_projector = ZoeDepthProjector(bottleneck_features, bin_embedding_dim, mlp_dim=bin_embedding_dim // 2)
+        self.projectors = nn.ModuleList(
+            [
+                ZoeDepthProjector(num_out, bin_embedding_dim, mlp_dim=bin_embedding_dim // 2)
+                for num_out in num_out_features
+            ]
+        )
+
+        # Create a map (ModuleDict) of 'name' -> attractors (ModuleList)
+        self.attractors = nn.ModuleDict(
+            {
+                conf["name"]: nn.ModuleList(
+                    [
+                        Attractor(
+                            bin_embedding_dim,
+                            n_attractors[i],
+                            mlp_dim=bin_embedding_dim,
+                            alpha=attractor_alpha,
+                            gamma=attractor_gamma,
+                            kind=attractor_kind,
+                            min_depth=conf["min_depth"],
+                            max_depth=conf["max_depth"],
+                        )
+                        for i in range(len(n_attractors))
+                    ]
+                )
+                for conf in config.bin_conf
+            }
+        )
+
+        last_in = N_MIDAS_OUT
+        # conditional log binomial for each bin conf
+        self.conditional_log_binomial = nn.ModuleDict(
+            {
+                conf["name"]: ZoeDepthConditionalLogBinomial(
+                    last_in,
+                    bin_embedding_dim,
+                    conf["n_bins"],
+                    bottleneck_factor=4,
+                    min_temp=self.min_temp,
+                    max_temp=self.max_temp,
+                )
+                for conf in config.bin_conf
+            }
+        )
+
+    def forward(self, out, rel_depth):
+        outconv_activation = out[0]
+        btlnck = out[1]
+        x_blocks = out[2:]
+
+        x_d0 = self.conv2(btlnck)
+        x = x_d0
+
+        # Predict which path to take
+        embedding = self.patch_transformer(x)[0]  # N, E
+        domain_logits = self.mlp_classifier(embedding)  # N, 2
+        domain_vote = torch.softmax(domain_logits.sum(dim=0, keepdim=True), dim=-1)  # 1, 2
+
+        # Get the path
+        bin_conf_name = ["nyu", "kitti"][torch.argmax(domain_vote, dim=-1).squeeze().item()]
+
+        try:
+            conf = [c for c in self.bin_conf if c.name == bin_conf_name][0]
+        except IndexError:
+            raise ValueError(f"bin_conf_name {bin_conf_name} not found in bin_confs")
+
+        min_depth = conf["min_depth"]
+        max_depth = conf["max_depth"]
+
+        seed_bin_regressor = self.seed_bin_regressors[bin_conf_name]
+        _, seed_b_centers = seed_bin_regressor(x)
+        if self.bin_centers_type == "normed" or self.bin_centers_type == "hybrid2":
+            b_prev = (seed_b_centers - min_depth) / (max_depth - min_depth)
+        else:
+            b_prev = seed_b_centers
+        prev_b_embedding = self.seed_projector(x)
+
+        attractors = self.attractors[bin_conf_name]
+        for projector, attractor, x in zip(self.projectors, attractors, x_blocks):
+            b_embedding = projector(x)
+            b, b_centers = attractor(b_embedding, b_prev, prev_b_embedding, interpolate=True)
+            b_prev = b
+            prev_b_embedding = b_embedding
+
+        last = outconv_activation
+
+        b_centers = nn.functional.interpolate(b_centers, last.shape[-2:], mode="bilinear", align_corners=True)
+        b_embedding = nn.functional.interpolate(b_embedding, last.shape[-2:], mode="bilinear", align_corners=True)
+
+        clb = self.conditional_log_binomial[bin_conf_name]
+        x = clb(last, b_embedding)
+
+        # Now depth value is Sum px * cx , where cx are bin_centers from the last bin tensor
+        out = torch.sum(x * b_centers, dim=1, keepdim=True)
+
+        output = dict(domain_logits=domain_logits, metric_depth=out)
+        return output
+
+
 class ZoeDepthMetricDepthEstimationHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -864,7 +1076,6 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
             ]
         )
 
-        N_MIDAS_OUT = 32
         last_in = N_MIDAS_OUT + 1  # +1 for relative depth
 
         # use log binomial instead of softmax
@@ -923,7 +1134,7 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         super().__init__(config)
 
         # TODO perhaps just use AutoModelForDepthEstimation?
-        self.backbone = AutoBackbone.from_config(config.backbone_config)
+        self.backbone = load_backbone(config)
         self.neck = ZoeDepthNeck(config)
         self.relative_head = ZoeDepthRelativeDepthEstimationHead(config)
 
@@ -959,8 +1170,8 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("Intel/zoedepth-base")
-        >>> model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-base")
+        >>> image_processor = AutoImageProcessor.from_pretrained("Intel/zoedepth-nyu")
+        >>> model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu")
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt")

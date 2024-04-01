@@ -37,7 +37,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DPTImageProcessor
+    from transformers import ZoeDepthImageProcessor
 
 
 class ZoeDepthModelTester:
@@ -269,7 +269,7 @@ def prepare_img():
 @slow
 class ZoeDepthModelIntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
-        image_processor = DPTImageProcessor.from_pretrained("Intel/zoedepth-base")
+        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-base")
         model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-base").to(torch_device)
 
         image = prepare_img()

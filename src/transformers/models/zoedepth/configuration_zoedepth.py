@@ -14,7 +14,6 @@
 # limitations under the License.
 """ ZoeDepth model configuration"""
 
-import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -24,7 +23,7 @@ from ..auto.configuration_auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Intel/zoedepth-base": "https://huggingface.co/Intel/zoedepth-base/resolve/main/config.json",
+    "Intel/zoedepth-nyu": "https://huggingface.co/Intel/zoedepth-nyu/resolve/main/config.json",
 }
 
 
@@ -33,22 +32,28 @@ class ZoeDepthConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`ZoeDepthForDepthEstimation`]. It is used to instantiate an ZoeDepth
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the ZoeDepth
-    [Intel/zoedepth-base](https://huggingface.co/Intel/zoedepth-base) architecture.
+    [Intel/zoedepth-nyu](https://huggingface.co/Intel/zoedepth-nyu) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
+        backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*, defaults to `BeitConfig()`):
+            The configuration of the backbone model.
+        backbone (`str`, *optional*):
+            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
+            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
+            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
+        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
+            Whether to use pretrained weights for the backbone.
+        backbone_kwargs (`dict`, *optional*):
+            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
+            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        image_size (`int`, *optional*, defaults to 384):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
         readout_type (`str`, *optional*, defaults to `"project"`):
             The readout type to use when processing the readout token (CLS token) of the intermediate hidden states of
             the ViT backbone. Can be one of [`"ignore"`, `"add"`, `"project"`].
@@ -72,17 +77,6 @@ class ZoeDepthConfig(PretrainedConfig):
             Whether to use bias in the pre-activate residual units of the fusion blocks.
         add_projection (`bool`, *optional*, defaults to `False`):
             Whether to add a projection layer before the depth estimation head.
-        neck_ignore_stages (`List[int]`, *optional*, defaults to `[0, 1]`):
-            Used only for the `hybrid` embedding type. The stages of the readout layers to ignore.
-        backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
-            The configuration of the backbone model. Only used in case `is_hybrid` is `True` or in case you want to
-            leverage the [`AutoBackbone`] API.
-        backbone (`str`, *optional*):
-            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
-            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
-            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use pretrained weights for the backbone.
         bottleneck_features (`int`, *optional*, defaults to 256):
             The number of features in the bottleneck layer.
         n_bins (`int`, *optional*, defaults to 64):
@@ -130,10 +124,12 @@ class ZoeDepthConfig(PretrainedConfig):
 
     def __init__(
         self,
+        backbone_config=None,
+        backbone=None,
+        use_pretrained_backbone=False,
+        backbone_kwargs=None,
         hidden_act="gelu",
         initializer_range=0.02,
-        image_size=384,
-        patch_size=16,
         readout_type="project",
         reassemble_factors=[4, 2, 1, 0.5],
         neck_hidden_sizes=[96, 192, 384, 768],
@@ -142,10 +138,6 @@ class ZoeDepthConfig(PretrainedConfig):
         use_batch_norm_in_fusion_residual=False,
         use_bias_in_fusion_residual=None,
         add_projection=False,
-        neck_ignore_stages=[0, 1],
-        backbone_config=None,
-        backbone=None,
-        use_pretrained_backbone=False,
         bottleneck_features=256,
         n_bins=64,
         min_depth=0.001,
@@ -169,31 +161,24 @@ class ZoeDepthConfig(PretrainedConfig):
         if backbone_config is not None and backbone is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
-        use_autobackbone = False
-        if backbone_config is not None:
-            use_autobackbone = True
+        if backbone_config is None and backbone is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
+            backbone_config = CONFIG_MAPPING["beit"](out_features=["stage1", "stage2", "stage3", "stage4"])
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.get("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
 
-            if isinstance(backbone_config, dict):
-                backbone_model_type = backbone_config.get("model_type")
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
+        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
+            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
 
-            self.backbone_config = backbone_config
-            self.neck_ignore_stages = []
-
-        else:
-            self.backbone_config = backbone_config
-            self.neck_ignore_stages = []
-
+        self.backbone_config = backbone_config
         self.backbone = backbone
         self.hidden_act = hidden_act
         self.use_pretrained_backbone = use_pretrained_backbone
-        self.image_size = None if use_autobackbone else image_size
-        self.patch_size = None if use_autobackbone else patch_size
-
+        self.initializer_range = initializer_range
         if readout_type not in ["ignore", "add", "project"]:
             raise ValueError("Readout_type must be one of ['ignore', 'add', 'project']")
-        self.initializer_range = initializer_range
         self.readout_type = readout_type
         self.reassemble_factors = reassemble_factors
         self.neck_hidden_sizes = neck_hidden_sizes
@@ -216,16 +201,3 @@ class ZoeDepthConfig(PretrainedConfig):
         self.min_temp = min_temp
         self.max_temp = max_temp
         self.bin_centers_type = bin_centers_type
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-
-        if output["backbone_config"] is not None:
-            output["backbone_config"] = self.backbone_config.to_dict()
-
-        output["model_type"] = self.__class__.model_type
-        return output
