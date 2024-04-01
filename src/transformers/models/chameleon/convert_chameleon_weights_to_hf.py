@@ -96,8 +96,8 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     dims_per_head = dim // n_heads
     base = params.get("rope_theta", 10000.0)
     inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
-    use_qk_norm = params["qk_normalization"]
-    use_swin_norm = params["swin_norm"]
+    qk_layernorm = params["qk_normalization"]
+    swin_norm = params["swin_norm"]
     if base > 10000.0:
         max_position_embeddings = 16384
     else:
@@ -154,7 +154,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
                 f"model.layers.{layer_i}.input_layernorm.weight": loaded[f"layers.{layer_i}.attention_norm.weight"],
                 f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[f"layers.{layer_i}.ffn_norm.weight"],
             }
-            if use_qk_norm:
+            if qk_layernorm:
                 state_dict[f"model.layers.{layer_i}.self_attn.q_norm.weight"] = loaded[
                     f"layers.{layer_i}.attention.q_normalization.weight"
                 ]
@@ -195,7 +195,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
                 dim=0,
             ).reshape(key_value_dim, dim)
 
-            if use_qk_norm:
+            if qk_layernorm:
                 state_dict[f"model.layers.{layer_i}.self_attn.q_norm.weight"] = torch.stack(
                     [l[f"layers.{layer_i}.attention.q_normalization.weight"] for l in loaded]
                 ).mean(dim=0)
@@ -274,8 +274,8 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
         vocab_size=VOCAB_SIZE,
         rope_theta=base,
         max_position_embeddings=max_position_embeddings,
-        use_qk_norm=use_qk_norm,
-        use_swin_norm=use_swin_norm,
+        qk_layernorm=qk_layernorm,
+        swin_norm=swin_norm,
     )
     config.save_pretrained(tmp_model_path)
 

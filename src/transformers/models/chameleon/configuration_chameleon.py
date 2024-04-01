@@ -85,9 +85,9 @@ class ChameleonConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        use_qk_norm (`bool`, *optional*, defaults to `False`):
+        qk_layernorm (`bool`, *optional*, defaults to `False`):
             Whether to use query-key normalization.
-        use_swin_norm (`bool`, *optional*, defaults to `False`):
+        swin_norm (`bool`, *optional*, defaults to `False`):
             Use Swin Transformer normalization.
     ```python
     >>> from transformers import ChameleonModel, ChameleonConfig
@@ -126,8 +126,8 @@ class ChameleonConfig(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
-        use_qk_norm=False,
-        use_swin_norm=False,
+        qk_layernorm=False,
+        swin_norm=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -151,8 +151,8 @@ class ChameleonConfig(PretrainedConfig):
         self._rope_scaling_validation()
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.use_qk_norm = use_qk_norm
-        self.use_swin_norm = use_swin_norm
+        self.qk_layernorm = qk_layernorm
+        self.swin_norm = swin_norm
 
         super().__init__(
             pad_token_id=pad_token_id,
