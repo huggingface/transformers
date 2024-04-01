@@ -976,8 +976,7 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
 
         self.layers = nn.ModuleList([MusicgenMelodyDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.layer_norm = nn.LayerNorm(config.hidden_size)
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-        self._use_sdpa = config._attn_implementation == "sdpa"
+        self.attn_implementation = config._attn_implementation
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -1047,9 +1046,9 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
 
         input_shape = inputs_embeds.size()[:-1]
 
-        if self._use_flash_attention_2:
+        if self.attn_implementation == "flash_attention_2":
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        elif self._use_sdpa and not output_attentions:
+        elif self.attn_implementation == "sdpa" and not output_attentions:
             # output_attentions=True can not be supported when using SDPA, and we fall back on
             # the manual implementation that requires a 4D causal mask in all cases.
             attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
