@@ -274,3 +274,36 @@ class TrieTest(unittest.TestCase):
         trie = Trie()
         parts = trie.cut_text("ABC", [0, 0, 2, 1, 2, 3])
         self.assertEqual(parts, ["AB", "C"])
+
+    def test_extensions(self):
+        # Test searching by prefix
+        trie = Trie()
+        trie.add('foo')
+        trie.add('food')
+        trie.add('foodie')
+        trie.add('helium')
+        self.assertEqual(
+            trie.extensions('foo'),
+            ['foo', 'food', 'foodie']
+        )
+        self.assertEqual(trie.extensions('helium'), ['helium'])
+
+    def test_empty_prefix(self):
+        trie = Trie()
+        # Test searching with an empty prefix returns all values
+        trie.add('hello')
+        trie.add('bye')
+        self.assertEqual(trie.extensions(''), ['hello', 'bye'])
+
+    def test_no_extension_match(self):
+        trie = Trie()
+        # Test searching for a prefix that doesn't match any key
+        with self.assertRaises(KeyError):
+            trie.extensions('unknown')
+
+    def test_update_value(self):
+        trie = Trie()
+        # Test updating the value of an existing key
+        trie.add('hi')
+        trie.add('hi')
+        self.assertEqual(trie.extensions('hi'), ['hi'])
