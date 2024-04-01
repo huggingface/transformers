@@ -1223,7 +1223,7 @@ class DbrxForCausalLM(DbrxPreTrainedModel):
         self.transformer = DbrxModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.router_aux_loss_coef = config.router_aux_loss_coef
+        self.moe_loss_weight = config.ffn_config.moe_loss_weight
         self.num_experts = config.ffn_config.moe_num_experts
         self.num_experts_per_tok = config.ffn_config.moe_top_k
 
@@ -1330,7 +1330,7 @@ class DbrxForCausalLM(DbrxPreTrainedModel):
                 attention_mask,
             )
             if labels is not None and loss is not None:
-                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+                loss += self.moe_loss_weight * aux_loss.to(loss.device)  # make sure to reside in the same device
 
         if not return_dict:
             output = (logits,) + outputs[1:]

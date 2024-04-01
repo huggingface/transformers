@@ -60,12 +60,11 @@ class DbrxModelTester:
         moe_loss_weight=0.05,
         moe_num_experts=16,
         moe_top_k=4,
-        fnn_config_model_type="",
+        ffn_config_model_type="",
         ffn_act_fn_name="gelu",
         initializer_range=0.02,
         output_router_logits=False,
         resid_pdrop=0.0,
-        router_aux_loss_coef=0.05,
         tie_word_embeddings=False,
         torch_dtype="bfloat16",
         vocab_size=99,
@@ -90,13 +89,13 @@ class DbrxModelTester:
         self.rope_theta = rope_theta
         self.attn_config_model_type = attn_config_model_type
 
-        # fnn_config params
+        # ffn_config params
         self.ffn_hidden_size = ffn_hidden_size
         self.moe_jitter_eps = moe_jitter_eps
         self.moe_loss_weight = moe_loss_weight
         self.moe_num_experts = moe_num_experts
         self.moe_top_k = moe_top_k
-        self.fnn_config_model_type = fnn_config_model_type
+        self.ffn_config_model_type = ffn_config_model_type
         self.ffn_act_fn_name = ffn_act_fn_name
 
         # Other params
@@ -110,7 +109,6 @@ class DbrxModelTester:
         self.emb_pdrop = emb_pdrop
         self.output_router_logits = output_router_logits
         self.resid_pdrop = resid_pdrop
-        self.router_aux_loss_coef = router_aux_loss_coef
         self.tie_word_embeddings = tie_word_embeddings
         self.torch_dtype = torch_dtype
 
@@ -121,7 +119,7 @@ class DbrxModelTester:
             "moe_loss_weight": self.moe_loss_weight,
             "moe_num_experts": self.moe_num_experts,
             "moe_top_k": self.moe_top_k,
-            "model_type": self.fnn_config_model_type,
+            "model_type": self.ffn_config_model_type,
             "ffn_act_fn": {"name": self.ffn_act_fn_name},
         }
         self.attn_config = {
@@ -172,7 +170,6 @@ class DbrxModelTester:
             use_cache=self.use_cache,
             initializer_range=self.initializer_range,
             output_router_logits=self.output_router_logits,
-            router_aux_loss_coef=self.router_aux_loss_coef,
             is_decoder=False,
         )
         return config
