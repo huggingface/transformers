@@ -31,7 +31,7 @@ from ...utils import PaddingStrategy, TensorType
 
 class ChameleonProcessor(ProcessorMixin):
     attributes = ["tokenizer", "image_processor"]
-    tokenizer_class = ("ChameleonTokenizer", "ChameleonTokenizerFast")
+    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
     image_processor_class = "ChameleonImageProcessor"
 
     def __init__(self, tokenizer=None, image_processor=None):

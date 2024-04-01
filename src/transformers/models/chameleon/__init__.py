@@ -28,22 +28,6 @@ _import_structure = {
     "processing_chameleon": ["ChameleonProcessor"],
 }
 
-try:
-    if not is_sentencepiece_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_chameleon"] = ["ChameleonTokenizer"]
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_chameleon_fast"] = ["ChameleonTokenizerFast"]
-
 
 try:
     if not is_torch_available():
@@ -71,22 +55,6 @@ else:
 if TYPE_CHECKING:
     from .configuration_chameleon import ChameleonConfig
     from .processing_chameleon import ChameleonProcessor
-
-    try:
-        if not is_sentencepiece_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_chameleon import ChameleonTokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_chameleon_fast import ChameleonTokenizerFast
 
     try:
         if not is_torch_available():

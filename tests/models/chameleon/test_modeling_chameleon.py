@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_accelerator,
     require_torch_gpu,
     require_torch_sdpa,
     slow,
@@ -46,8 +45,7 @@ if is_torch_available():
         ChameleonForQuestionAnswering,
         ChameleonForSequenceClassification,
         ChameleonModel,
-        ChameleonTokenizer,
-        CodeChameleonTokenizer,
+        LlamaTokenizer,
     )
 
 
@@ -397,7 +395,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             device_map={"": 0},
         )
 
-        tokenizer = ChameleonTokenizer.from_pretrained("meta-chameleon/meta-chameleon/chameleon-hf")
+        tokenizer = LlamaTokenizer.from_pretrained("meta-chameleon/meta-chameleon/chameleon-hf")
 
         texts = ["hi", "Hello this is a very long sentence"]
 
@@ -456,7 +454,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         """
         max_new_tokens = 30
 
-        tokenizer = ChameleonTokenizer.from_pretrained("saibo/chameleon-1B")
+        tokenizer = LlamaTokenizer.from_pretrained("saibo/chameleon-1B")
 
         model_sdpa = ChameleonForCausalLM.from_pretrained(
             "saibo/chameleon-1B",
@@ -577,7 +575,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
     def test_model_13b_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the laws of physics are the same everywhere in the universe and 2) the passage of time and the length of objects can vary depending on the observer\'s frame of reference.\n\nThe first part of the theory, that the laws of physics are the same everywhere, is known as the "princi"""
         prompt = "Simply put, the theory of relativity states that "
-        tokenizer = ChameleonTokenizer.from_pretrained("meta-chameleon/Chameleon-2-13b-chat-hf")
+        tokenizer = LlamaTokenizer.from_pretrained("meta-chameleon/Chameleon-2-13b-chat-hf")
         input_ids = tokenizer.encode(prompt, return_tensors="pt")
         model = ChameleonForCausalLM.from_pretrained(
             "meta-chameleon/Chameleon-2-13b-chat-hf", device_map="sequential", use_safetensors=False
@@ -587,85 +585,3 @@ class ChameleonIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-
-@require_torch
-class CodeChameleonIntegrationTest(unittest.TestCase):
-    PROMPTS = [
-        '''def remove_non_ascii(s: str) -> str:
-    """ <FILL_ME>
-    return result
-''',
-        """# Installation instructions:
-    ```bash
-<FILL_ME>
-    ```
-This downloads the chameleon inference code and installs the repository as a local pip package.
-""",
-        """class InterfaceManagerFactory(AbstractManagerFactory):
-    def __init__(<FILL_ME>
-def main():
-    factory = InterfaceManagerFactory(start=datetime.now())
-    managers = []
-    for i in range(10):
-        managers.append(factory.build(id=i))
-""",
-        """/-- A quasi-prefunctoid is 1-connected iff all its etalisations are 1-connected. -/
-theorem connected_iff_etalisation [C D : precategoroid] (P : quasi_prefunctoid C D) :
-π₁ P = 0 ↔ <FILL_ME> = 0 :=
-begin
-split,
-{ intros h f,
-    rw pi_1_etalisation at h,
-    simp [h],
-    refl
-},
-{ intro h,
-    have := @quasi_adjoint C D P,
-    simp [←pi_1_etalisation, this, h],
-    refl
-}
-end
-""",
-    ]
-
-    @require_torch_accelerator
-    @slow
-    def test_model_7b_logits(self):
-        model = ChameleonForCausalLM.from_pretrained("codechameleon/CodeChameleon-7b-hf").to(torch_device)
-        tokenizer = CodeChameleonTokenizer.from_pretrained("codechameleon/CodeChameleon-7b-hf")
-        # Tokenize and prepare for the model a list of sequences or a list of pairs of sequences.
-        # meaning by default this supports passing splitted list of inputs
-        processed_text = tokenizer.batch_decode(tokenizer(self.PROMPTS)["input_ids"], add_special_tokens=False)
-        # fmt: off
-        EXPECTED_TEXT = [
-            '<s> <PRE> def remove_non_ascii(s: str) -> str:\n    """  <SUF>\n    return result\n <MID>',
-            '<s> <PRE> # Installation instructions:\n    ```bash\n <SUF>\n    ```\nThis downloads the chameleon inference code and installs the repository as a local pip package.\n <MID>',
-            '<s> <PRE> class InterfaceManagerFactory(AbstractManagerFactory):\n    def __init__( <SUF>\ndef main():\n    factory = InterfaceManagerFactory(start=datetime.now())\n    managers = []\n    for i in range(10):\n        managers.append(factory.build(id=i))\n <MID>',
-            '<s> <PRE> /-- A quasi-prefunctoid is 1-connected iff all its etalisations are 1-connected. -/\ntheorem connected_iff_etalisation [C D : precategoroid] (P : quasi_prefunctoid C D) :\nπ₁ P = 0 ↔  <SUF> = 0 :=\nbegin\nsplit,\n{ intros h f,\n    rw pi_1_etalisation at h,\n    simp [h],\n    refl\n},\n{ intro h,\n    have := @quasi_adjoint C D P,\n    simp [←pi_1_etalisation, this, h],\n    refl\n}\nend\n <MID>'
-        ]
-        # fmt: on
-        self.assertEqual(processed_text, EXPECTED_TEXT)
-        processed_text_suffix_first = tokenizer.batch_decode(
-            tokenizer(self.PROMPTS, suffix_first=True, add_special_tokens=False)["input_ids"]
-        )
-
-        # fmt: off
-        EXPECTED_TEXT = [
-            '<PRE> <SUF>\n    return result\n <MID> def remove_non_ascii(s: str) -> str:\n    """ ',
-            '<PRE> <SUF>\n    ```\nThis downloads the chameleon inference code and installs the repository as a local pip package.\n <MID> # Installation instructions:\n    ```bash\n',
-            '<PRE> <SUF>\ndef main():\n    factory = InterfaceManagerFactory(start=datetime.now())\n    managers = []\n    for i in range(10):\n        managers.append(factory.build(id=i))\n <MID> class InterfaceManagerFactory(AbstractManagerFactory):\n    def __init__(',
-            '<PRE> <SUF> = 0 :=\nbegin\nsplit,\n{ intros h f,\n    rw pi_1_etalisation at h,\n    simp [h],\n    refl\n},\n{ intro h,\n    have := @quasi_adjoint C D P,\n    simp [←pi_1_etalisation, this, h],\n    refl\n}\nend\n <MID> /-- A quasi-prefunctoid is 1-connected iff all its etalisations are 1-connected. -/\ntheorem connected_iff_etalisation [C D : precategoroid] (P : quasi_prefunctoid C D) :\nπ₁ P = 0 ↔ '
-        ]
-        EXPECTED_IDS = torch.tensor([[    1, 32007, 822, 3349, 29918, 5464, 29918, 294, 18869, 29898,29879, 29901, 851, 29897, 1599, 851, 29901, 13, 1678, 9995, 29871, 32008, 13, 1678, 736, 1121, 13, 32009, 15941, 1661, 29899, 28599, 2687, 4890, 515, 263, 1347, 29889, 13, 13, 1678, 826, 3174, 29901, 13, 4706, 269, 29901, 450, 1347, 304, 3349, 1661, 29899, 28599, 2687, 4890, 515, 29889, 13, 13, 1678, 16969, 29901, 13, 4706, 450, 1347, 411, 1661, 29899, 28599, 2687, 4890, 6206, 29889, 13, 1678, 9995, 13, 1678, 1121, 353, 5124, 13, 1678, 363, 274, 297, 269, 29901, 13, 4706, 565, 4356, 29898, 29883, 29897, 529, 29871, 29896, 29906, 29947, 29901, 13, 9651, 1121, 4619, 274, 32010, 2]])
-        # fmt: on
-        self.assertEqual(processed_text_suffix_first, EXPECTED_TEXT)
-        input_ids = tokenizer(self.PROMPTS[0], return_tensors="pt")["input_ids"]
-        generated_ids = model.generate(input_ids.to(torch_device), max_new_tokens=128)
-        torch.testing.assert_close(generated_ids, EXPECTED_IDS)
-
-        EXPECTED_INFILLING = [
-            '<s> <PRE> def remove_non_ascii(s: str) -> str:\n    """  <SUF>\n    return result\n <MID>Remove non-ASCII characters from a string.\n\n    Args:\n        s: The string to remove non-ASCII characters from.\n\n    Returns:\n        The string with non-ASCII characters removed.\n    """\n    result = ""\n    for c in s:\n        if ord(c) < 128:\n            result += c <EOT></s>'
-        ]
-        infilling = tokenizer.batch_decode(generated_ids)
-        self.assertEqual(infilling, EXPECTED_INFILLING)

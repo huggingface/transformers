@@ -24,13 +24,13 @@ from transformers import ChameleonConfig, ChameleonForCausalLM
 
 
 try:
-    from transformers import ChameleonTokenizerFast
+    from transformers import LlamaTokenizerFast
 except ImportError as e:
     warnings.warn(e)
     warnings.warn(
         "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizers` library and re-run the tokenizer conversion"
     )
-    ChameleonTokenizerFast = None
+    LlamaTokenizerFast = None
 
 """
 Sample usage:
@@ -43,10 +43,10 @@ python src/transformers/models/chameleon/convert_chameleon_weights_to_hf.py \
 Thereafter, models can be loaded via:
 
 ```py
-from transformers import ChameleonForCausalLM, ChameleonTokenizer
+from transformers import ChameleonForCausalLM, LlamaTokenizer
 
 model = ChameleonForCausalLM.from_pretrained("/output/path")
-tokenizer = ChameleonTokenizer.from_pretrained("/output/path")
+tokenizer = LlamaTokenizer.from_pretrained("/output/path")
 ```
 
 Important note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
