@@ -250,7 +250,6 @@ _import_structure = {
         "CanineTokenizer",
     ],
     "models.chameleon": [
-        "CHAMELEON_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ChameleonConfig",
         "ChameleonProcessor",
     ],
@@ -5162,7 +5161,6 @@ if TYPE_CHECKING:
         CanineTokenizer,
     )
     from .models.chameleon import (
-        CHAMELEON_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ChameleonConfig,
         ChameleonProcessor,
     )

@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_chameleon": ["CHAMELEON_PRETRAINED_CONFIG_ARCHIVE_MAP", "ChameleonConfig"],
+    "configuration_chameleon": ["ChameleonConfig"],
     "processing_chameleon": ["ChameleonProcessor"],
 }
 
@@ -69,7 +69,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_chameleon import CHAMELEON_PRETRAINED_CONFIG_ARCHIVE_MAP, ChameleonConfig
+    from .configuration_chameleon import ChameleonConfig
     from .processing_chameleon import ChameleonProcessor
 
     try:
