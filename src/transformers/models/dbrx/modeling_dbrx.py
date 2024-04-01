@@ -41,10 +41,14 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import is_flash_attn_2_available, logging
 from .configuration_dbrx import DbrxAttentionConfig, DbrxConfig
 
+
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import pad_input  # noqa
-    from flash_attn.bert_padding import index_first_axis, unpad_input
+    from flash_attn.bert_padding import (
+        index_first_axis,
+        pad_input,  # noqa
+        unpad_input,
+    )
 
 logger = logging.get_logger(__name__)
 
@@ -271,6 +275,7 @@ class DbrxAttention(nn.Module):
                 + "when creating this class."
             )
 
+        self.is_casual = True
         self.attn_pdrop = attn_config.attn_pdrop
         self.clip_qkv = attn_config.clip_qkv
         self.num_key_value_heads = attn_config.kv_n_heads
@@ -467,31 +472,35 @@ class DbrxFlashAttention2(DbrxAttention):
 
         return attn_output, attn_weights, past_key_value  # type: ignore
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
-        self,
-        query_states: torch.Tensor,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        attention_mask: Union[torch.LongTensor, None],
-        query_length: int,
-        dropout: float = 0.0,
-        softmax_scale: Optional[float] = None,
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
-        """Use FlashAttention, stripping padding tokens if necessary.
+        """
+        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
+        first unpad the input, then computes the attention scores and pad the final attention scores.
 
         Args:
-            query_states (torch.Tensor): Input query states to be passed to Flash Attention API
-            key_states (torch.Tensor): Input key states to be passed to Flash Attention API
-            value_states (torch.Tensor): Input value states to be passed to Flash Attention API
-            attention_mask (torch.LongTensor | None): The padding mask - corresponds to a tensor of size
-                (batch_size, seq_len) where 0 stands for the position of padding tokens and 1
-                for the position of non-padding tokens.
-            query_length (int): The length of the query sequence
-            dropout (float): Attention dropout
-            softmax_scale (float, optional): The scaling of QK^T before applying softmax.
-                Defaults to 1 / sqrt(head_dim)
+            query_states (`torch.Tensor`):
+                Input query states to be passed to Flash Attention API
+            key_states (`torch.Tensor`):
+                Input key states to be passed to Flash Attention API
+            value_states (`torch.Tensor`):
+                Input value states to be passed to Flash Attention API
+            attention_mask (`torch.Tensor`):
+                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
+                position of padding tokens and 1 for the position of non-padding tokens.
+            dropout (`float`):
+                Attention dropout
+            softmax_scale (`float`, *optional*):
+                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
-        causal = True
+        if not self._flash_attn_uses_top_left_mask:
+            causal = self.is_causal
+        else:
+            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
+            causal = self.is_causal and query_length != 1
+
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
@@ -515,32 +524,16 @@ class DbrxFlashAttention2(DbrxAttention):
                 causal=causal,
             )
 
-            attn_output = pad_input(
-                attn_output_unpad,
-                indices_q,
-                batch_size,
-                query_length,
-            )
+            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
-                query_states,
-                key_states,
-                value_states,
-                dropout,
-                softmax_scale=softmax_scale,
-                causal=causal,
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
             )
 
         return attn_output
 
-    def _upad_input(
-        self,
-        query_layer: torch.Tensor,
-        key_layer: torch.Tensor,
-        value_layer: torch.Tensor,
-        attention_mask: torch.Tensor,
-        query_length: int,
-    ):
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
+    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
@@ -579,9 +572,105 @@ class DbrxFlashAttention2(DbrxAttention):
         )
 
 
+class DbrxSdpaAttention(DbrxAttention):
+    """
+    Dbrx attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `DbrxAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    SDPA API.
+    """
+
+    # Ignore copy
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+
+        if output_attentions:
+            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            logger.warning_once(
+                "GemmaModel is using GemmaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+
+            return super().forward(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+            )
+
+        bsz, q_len, _ = hidden_states.size()
+
+        qkv_states = self.Wqkv(hidden_states)
+        if self.clip_qkv is not None:
+            qkv_states = qkv_states.clamp(min=-self.clip_qkv, max=self.clip_qkv)
+
+        query_states, key_states, value_states = qkv_states.split(
+            [
+                self.hidden_size,
+                self.num_key_value_heads * self.head_dim,
+                self.num_key_value_heads * self.head_dim,
+            ],
+            dim=2,
+        )
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
+
+        past_key_value = getattr(self, "past_key_value", past_key_value)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        causal_mask = attention_mask
+        if attention_mask is not None:
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
+
+        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+        # Reference: https://github.com/pytorch/pytorch/issues/112577.
+        if query_states.device.type == "cuda" and causal_mask is not None:
+            query_states = query_states.contiguous()
+            key_states = key_states.contiguous()
+            value_states = value_states.contiguous()
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=causal_mask,
+            dropout_p=self.attn_pdrop if self.training else 0.0,
+        )
+
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.view(bsz, q_len, -1)
+
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, None, past_key_value
+
+
 DBRX_ATTENTION_CLASSES = {
     "eager": DbrxAttention,
     "flash_attention_2": DbrxFlashAttention2,
+    "sdpa": DbrxSdpaAttention,
 }
 
 
