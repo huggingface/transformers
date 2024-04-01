@@ -1,71 +1,65 @@
-# coding=utf-8
-# Copyright 2022 Databricks Mosaic Research and The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-""" PyTorch DBRX model. """
+"""PyTorch Dbrx model."""
 
 import math
 import warnings
-from typing import Any, Dict, Optional, Tuple, Union
+from copy import deepcopy
+from functools import partial
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
-    logging,
+from transformers.cache_utils import Cache, DynamicCache, StaticCache
+from transformers.modeling_attn_mask_utils import AttentionMaskConverter
+from transformers.modeling_outputs import (
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
 )
-from .configuration_dbrx import DbrxConfig
+from transformers.modeling_utils import PreTrainedModel
+from transformers.utils import is_flash_attn_2_available, logging
+
+from .configuration_dbrx import DbrxAttentionConfig, DbrxConfig, DbrxFFNConfig
 
 
 if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import (
-        index_first_axis,
-        pad_input,  # noqa
-        unpad_input,
-    )
+    try:
+        from flash_attn import flash_attn_func, flash_attn_varlen_func
+        from flash_attn.bert_padding import (
+            index_first_axis,
+            pad_input,  # noqa
+            unpad_input,
+        )
+    except ImportError:
+        pass
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DbrxConfig"
 
+#############################################################################
+# Copied from LLaMaRotaryEmbedding
+#############################################################################
 
-# Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with Gemma->Dbrx
+
 class DbrxRotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+    def __init__(
+        self, dim: int, max_position_embeddings: int = 2048, base: float = 10000.0, scaling_factor: float = 1.0
+    ):
         super().__init__()
-
+        self.scaling_factor = scaling_factor
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        self.register_buffer("inv_freq", None, persistent=False)
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        # For BC we register cos and sin cached
+        self.max_seq_len_cached = max_position_embeddings
 
     @torch.no_grad()
-    def forward(self, x, position_ids, seq_len=None):
+    def forward(self, x: torch.Tensor, position_ids: torch.LongTensor) -> Tuple[torch.Tensor, torch.Tensor]:
         # x: [bs, num_attention_heads, seq_len, head_size]
-        if self.inv_freq is None:
-            self.inv_freq = 1.0 / (
-                self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device=x.device).float() / self.dim)
-            )
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 since bfloat16 loses precision on long contexts
@@ -80,16 +74,16 @@ class DbrxRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-# Copied from transformers.models.llama.modeling_llama.rotate_half
-def rotate_half(x):
+def rotate_half(x: torch.Tensor) -> torch.Tensor:
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, unsqueeze_dim: int = 1
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -97,15 +91,14 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos and
+            sin so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos and sin have the shape [batch_size, seq_len, head_dim]. Then, if q and
             k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            cos and sin broadcastable to the shapes of q and k. Similarly, if q and k have
             the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
@@ -116,17 +109,24 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-# Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """Equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep).
+
+    The hidden states go from (batch, num_key_value_heads, seqlen, head_dim) to
+    (batch, num_attention_heads, seqlen, head_dim)
     """
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+#############################################################################
+
+#############################################################################
+# Modified from modeling_mixtral
+#############################################################################
 
 
 def load_balancing_loss_func(
@@ -209,8 +209,34 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
-# Copied from transformers.models.llama.modeling_llama._get_unpad_data
-def _get_unpad_data(attention_mask):
+#############################################################################
+
+
+def resolve_ffn_act_fn(ffn_act_fn: dict) -> Callable[[torch.Tensor], torch.Tensor]:
+    """Resolve the activation function for the feed-forward network.
+
+    Args:
+        ffn_act_fn (dict): The configuration dictionary for the activation function.
+            The dict config must specify the 'name' of a torch.nn.functional activation
+            function. All of other key values pairs are bound to the function as a partial.
+
+    Returns:
+        Callable[[torch.Tensor], torch.Tensor]: The activation function.
+    """
+    config = deepcopy(ffn_act_fn)
+    name = config.pop("name")
+    if not hasattr(nn.functional, name):
+        raise ValueError(f"Unrecognised activation function name ({name}).")
+    act = getattr(nn.functional, name)
+    return partial(act, **config)
+
+
+#############################################################################
+# Copied from LLaMaAttention
+#############################################################################
+
+
+def _get_unpad_data(attention_mask: torch.Tensor):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
@@ -227,16 +253,19 @@ class DbrxAttention(nn.Module):
 
     def __init__(
         self,
-        config: DbrxConfig,
+        hidden_size: int,
+        num_heads: int,
+        max_position_embeddings: int,
+        attn_config: DbrxAttentionConfig,
         block_idx: Optional[int] = None,
     ):
         super().__init__()
-        self.config = config
-        self.hidden_size = config.d_model
-        self.num_heads = config.n_heads
+        self.hidden_size = hidden_size
+        self.num_heads = num_heads
         self.head_dim = self.hidden_size // self.num_heads
-        self.max_position_embeddings = config.max_seq_len
+        self.max_position_embeddings = max_position_embeddings
         self.block_idx = block_idx
+        self.config = attn_config
         if block_idx is None:
             logger.warning_once(
                 f"Instantiating {self.__class__.__name__} without passing a `block_idx` is not recommended and will "
@@ -244,13 +273,11 @@ class DbrxAttention(nn.Module):
                 + "when creating this class."
             )
 
-        attn_config = config.attn_config
         self.attn_pdrop = attn_config.attn_pdrop
         self.clip_qkv = attn_config.clip_qkv
         self.num_key_value_heads = attn_config.kv_n_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.rope_theta = attn_config.rope_theta
-        self.is_casual = True
 
         self.Wqkv = nn.Linear(
             self.hidden_size, self.hidden_size + 2 * self.num_key_value_heads * self.head_dim, bias=False
@@ -344,12 +371,6 @@ class DbrxFlashAttention2(DbrxAttention):
             raise ImportError("Flash Attention 2 is not available. Please install it with `pip install flash-attn`.")
 
         super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        # From: https://github.com/huggingface/transformers/blob/3b8e2932ce743008f63585aae1e1b8b30dc8b3ac/src/transformers/models/gemma/modeling_gemma.py#L318
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
     def forward(
         self,
@@ -448,35 +469,31 @@ class DbrxFlashAttention2(DbrxAttention):
 
         return attn_output, attn_weights, past_key_value  # type: ignore
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
+        self,
+        query_states: torch.Tensor,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        attention_mask: Union[torch.LongTensor, None],
+        query_length: int,
+        dropout: float = 0.0,
+        softmax_scale: Optional[float] = None,
     ):
-        """
-        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
-        first unpad the input, then computes the attention scores and pad the final attention scores.
+        """Use FlashAttention, stripping padding tokens if necessary.
 
         Args:
-            query_states (`torch.Tensor`):
-                Input query states to be passed to Flash Attention API
-            key_states (`torch.Tensor`):
-                Input key states to be passed to Flash Attention API
-            value_states (`torch.Tensor`):
-                Input value states to be passed to Flash Attention API
-            attention_mask (`torch.Tensor`):
-                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
-                position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`float`):
-                Attention dropout
-            softmax_scale (`float`, *optional*):
-                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
+            query_states (torch.Tensor): Input query states to be passed to Flash Attention API
+            key_states (torch.Tensor): Input key states to be passed to Flash Attention API
+            value_states (torch.Tensor): Input value states to be passed to Flash Attention API
+            attention_mask (torch.LongTensor | None): The padding mask - corresponds to a tensor of size
+                (batch_size, seq_len) where 0 stands for the position of padding tokens and 1
+                for the position of non-padding tokens.
+            query_length (int): The length of the query sequence
+            dropout (float): Attention dropout
+            softmax_scale (float, optional): The scaling of QK^T before applying softmax.
+                Defaults to 1 / sqrt(head_dim)
         """
-        if not self._flash_attn_uses_top_left_mask:
-            causal = self.is_causal
-        else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
-            causal = self.is_causal and query_length != 1
-
+        causal = True
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
@@ -500,16 +517,32 @@ class DbrxFlashAttention2(DbrxAttention):
                 causal=causal,
             )
 
-            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+            attn_output = pad_input(
+                attn_output_unpad,
+                indices_q,
+                batch_size,
+                query_length,
+            )
         else:
             attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
+                query_states,
+                key_states,
+                value_states,
+                dropout,
+                softmax_scale=softmax_scale,
+                causal=causal,
             )
 
         return attn_output
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
+    def _upad_input(
+        self,
+        query_layer: torch.Tensor,
+        key_layer: torch.Tensor,
+        value_layer: torch.Tensor,
+        attention_mask: torch.Tensor,
+        query_length: int,
+    ):
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
@@ -548,121 +581,35 @@ class DbrxFlashAttention2(DbrxAttention):
         )
 
 
-class DbrxSdpaAttention(DbrxAttention):
-    """
-    Dbrx attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `DbrxAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
-    SDPA API.
-    """
-
-    # Ignore copy
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        if output_attentions:
-            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
-            logger.warning_once(
-                "GemmaModel is using GemmaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
-                cache_position=cache_position,
-            )
-
-        bsz, q_len, _ = hidden_states.size()
-
-        qkv_states = self.Wqkv(hidden_states)
-        if self.clip_qkv is not None:
-            qkv_states = qkv_states.clamp(min=-self.clip_qkv, max=self.clip_qkv)
-
-        query_states, key_states, value_states = qkv_states.split(
-            [
-                self.hidden_size,
-                self.num_key_value_heads * self.head_dim,
-                self.num_key_value_heads * self.head_dim,
-            ],
-            dim=2,
-        )
-
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
-
-        past_key_value = getattr(self, "past_key_value", past_key_value)
-
-        if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-
-        causal_mask = attention_mask
-        if attention_mask is not None:
-            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
-
-        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-        # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query_states.device.type == "cuda" and causal_mask is not None:
-            query_states = query_states.contiguous()
-            key_states = key_states.contiguous()
-            value_states = value_states.contiguous()
-
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=causal_mask,
-            dropout_p=self.attn_pdrop if self.training else 0.0,
-        )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, q_len, -1)
-
-        attn_output = self.o_proj(attn_output)
-
-        return attn_output, None, past_key_value
-
-
 DBRX_ATTENTION_CLASSES = {
     "eager": DbrxAttention,
     "flash_attention_2": DbrxFlashAttention2,
-    "sdpa": DbrxSdpaAttention,
 }
 
 
 class DbrxNormAttentionNorm(nn.Module):
     def __init__(
         self,
-        config: DbrxConfig,
+        hidden_size: int,
+        num_heads: int,
+        max_position_embeddings: int,
+        resid_pdrop: float,
+        attn_implementation: str,
+        attn_config: DbrxAttentionConfig,
         block_idx: Optional[int] = None,
     ):
         super().__init__()
         self.block_idx = block_idx
-        self.resid_pdrop = config.resid_pdrop
-        self.norm_1 = nn.LayerNorm(config.d_model, bias=False)
-        self.attn = DBRX_ATTENTION_CLASSES[config._attn_implementation](
-            config=config,
+        self.resid_pdrop = resid_pdrop
+        self.norm_1 = nn.LayerNorm(hidden_size, bias=False)
+        self.attn = DBRX_ATTENTION_CLASSES[attn_implementation](
+            hidden_size=hidden_size,
+            num_heads=num_heads,
+            max_position_embeddings=max_position_embeddings,
+            attn_config=attn_config,
             block_idx=block_idx,
         )
-        self.norm_2 = nn.LayerNorm(config.d_model, bias=False)
+        self.norm_2 = nn.LayerNorm(hidden_size, bias=False)
 
     def forward(
         self,
@@ -718,9 +665,17 @@ class DbrxRouter(nn.Module):
 
         self.layer = nn.Linear(self.hidden_size, self.moe_num_experts, bias=False)
 
+    def jitter(self, x: torch.Tensor) -> torch.Tensor:
+        if self.moe_jitter_eps is None:
+            raise RuntimeError("The router does not have moe_jitter_eps set.")
+        low = 1.0 - self.moe_jitter_eps
+        high = 1.0 + self.moe_jitter_eps
+        noise = torch.rand(x.size(), dtype=x.dtype, device=x.device)
+        return low + noise * (high - low)
+
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]:
         if self.training and self.moe_jitter_eps is not None:
-            x *= torch.empty_like(x).uniform_(1.0 - self.moe_jitter_eps, 1.0 + self.moe_jitter_eps)
+            x = x * self.jitter(x)
 
         weights = self.layer(x.view(-1, x.shape[-1])).softmax(dim=-1, dtype=torch.float32)
         top_weights, top_experts = torch.topk(weights, self.moe_top_k, dim=-1)
@@ -745,43 +700,28 @@ class DbrxRouter(nn.Module):
 
 
 class DbrxExpertGLU(nn.Module):
-    def __init__(self, hidden_size: int, ffn_hidden_size: int, moe_num_experts: int, ffn_act_fn: dict):
+    def __init__(self, hidden_size: int, ffn_hidden_size: int, ffn_act_fn: dict):
         super().__init__()
-        self.hidden_size = hidden_size
-        self.ffn_hidden_size = ffn_hidden_size
-        self.moe_num_experts = moe_num_experts
+        self.w1 = nn.Linear(hidden_size, ffn_hidden_size, bias=False)
+        self.v1 = nn.Linear(hidden_size, ffn_hidden_size, bias=False)
+        self.w2 = nn.Linear(ffn_hidden_size, hidden_size, bias=False)
+        self.activation_fn = resolve_ffn_act_fn(ffn_act_fn)
 
-        self.w1 = nn.Parameter(torch.empty(moe_num_experts * ffn_hidden_size, hidden_size))
-        self.v1 = nn.Parameter(torch.empty(moe_num_experts * ffn_hidden_size, hidden_size))
-        self.w2 = nn.Parameter(torch.empty(moe_num_experts * ffn_hidden_size, hidden_size))
-
-        act_fn_name = ffn_act_fn.pop("name", "silu")
-        if len(ffn_act_fn) != 0:
-            raise ValueError(f"FFN activation function has unhandled kwargs {ffn_act_fn=}")
-        self.activation_fn = ACT2FN[act_fn_name]
-
-    def forward(self, x: torch.Tensor, expert_idx: int) -> torch.Tensor:
-        expert_w1 = self.w1.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx]
-        expert_v1 = self.v1.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx]
-        expert_w2 = self.w2.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx]
-
-        gate_proj = x.matmul(expert_w1.t())
-        up_proj = x.matmul(expert_v1.t())
-        gate_proj = self.activation_fn(gate_proj)
-        intermediate_states = gate_proj * up_proj
-        down_proj = intermediate_states.matmul(expert_w2)
-        return down_proj
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x1 = self.w1(x)
+        x2 = self.v1(x)
+        x1 = self.activation_fn(x1)
+        x1 = x1 * x2
+        x1 = self.w2(x1)
+        return x1
 
 
 class DbrxExperts(nn.Module):
     def __init__(self, hidden_size: int, ffn_hidden_size: int, moe_num_experts: int, ffn_act_fn: dict):
         super().__init__()
         self.moe_num_experts = moe_num_experts
-        self.mlp = DbrxExpertGLU(
-            hidden_size=hidden_size,
-            ffn_hidden_size=ffn_hidden_size,
-            moe_num_experts=moe_num_experts,
-            ffn_act_fn=ffn_act_fn,
+        self.mlp_experts = nn.ModuleList(
+            [DbrxExpertGLU(hidden_size, ffn_hidden_size, ffn_act_fn) for _ in range(moe_num_experts)]
         )
 
     def forward(
@@ -801,7 +741,7 @@ class DbrxExperts(nn.Module):
             topk_list = topk_idx.tolist()
 
             expert_tokens = x[None, token_list].reshape(-1, hidden_size)
-            expert_out = self.mlp(expert_tokens, expert_idx) * top_weights[token_list, topk_list, None]
+            expert_out = self.mlp_experts[expert_idx](expert_tokens) * top_weights[token_list, topk_list, None]
 
             out.index_add_(0, token_idx, expert_out)
 
@@ -810,12 +750,11 @@ class DbrxExperts(nn.Module):
 
 
 class DbrxFFN(nn.Module):
-    def __init__(self, config: DbrxConfig):
+    def __init__(self, hidden_size: int, ffn_config: DbrxFFNConfig):
         super().__init__()
 
-        ffn_config = config.ffn_config
         self.router = DbrxRouter(
-            hidden_size=config.d_model,
+            hidden_size,
             moe_num_experts=ffn_config.moe_num_experts,
             moe_top_k=ffn_config.moe_top_k,
             moe_jitter_eps=ffn_config.moe_jitter_eps,
@@ -824,7 +763,7 @@ class DbrxFFN(nn.Module):
         )
 
         self.experts = DbrxExperts(
-            hidden_size=config.d_model,
+            hidden_size=hidden_size,
             ffn_hidden_size=ffn_config.ffn_hidden_size,
             moe_num_experts=ffn_config.moe_num_experts,
             ffn_act_fn=ffn_config.ffn_act_fn,
@@ -843,16 +782,21 @@ class DbrxBlock(nn.Module):
         self.resid_pdrop = config.resid_pdrop
         self.block_idx = block_idx
         self.norm_attn_norm = DbrxNormAttentionNorm(
-            config=config,
+            hidden_size=config.d_model,
+            num_heads=config.n_heads,
+            max_position_embeddings=config.max_seq_len,
+            resid_pdrop=config.resid_pdrop,
+            attn_implementation=config._attn_implementation,
+            attn_config=config.attn_config,
             block_idx=block_idx,
         )
-        self.ffn = DbrxFFN(config=config)
+        self.ffn = DbrxFFN(hidden_size=config.d_model, ffn_config=config.ffn_config)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_ids: torch.LongTensor,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids: torch.LongTensor = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         output_router_logits: Optional[bool] = False,
@@ -944,10 +888,6 @@ class DbrxPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, DbrxExpertGLU):
-            module.w1.data.normal_(mean=0.0, std=std)
-            module.v1.data.normal_(mean=0.0, std=std)
-            module.w2.data.normal_(mean=0.0, std=std)
 
     def _setup_cache(
         self, cache_cls: Any, max_batch_size: int, max_cache_len: int
@@ -980,9 +920,7 @@ class DbrxModel(DbrxPreTrainedModel):
     [`DbrxBlock`] layers.
 
     Args:
-        config ([`DbrxConfig`]): Model configuration class with all parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+        config: DbrxConfig
     """
 
     def __init__(self, config: DbrxConfig):
@@ -1090,25 +1028,14 @@ class DbrxModel(DbrxPreTrainedModel):
                 block_outputs = self._gradient_checkpointing_func(
                     block.__call__,
                     hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_values=past_key_values,
-                    output_attentions=output_attentions,
-                    output_router_logits=output_router_logits,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
+                    causal_mask,
+                    position_ids,
+                    past_key_values,
+                    output_attentions,
+                    output_router_logits,
+                    use_cache,
+                    cache_position,
                 )
-                # block_outputs = self._gradient_checkpointing_func(
-                #     block.__call__,
-                #     hidden_states,
-                #     causal_mask,
-                #     position_ids,
-                #     past_key_values,
-                #     output_attentions,
-                #     output_router_logits,
-                #     use_cache,
-                #     cache_position,
-                # )
             else:
                 block_outputs = block(
                     hidden_states,
@@ -1280,8 +1207,8 @@ class DbrxForCausalLM(DbrxPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, DbrxForCausalLM
 
-        >>> model = DbrxForCausalLM.from_pretrained("databricks/dbrx-instruct")
-        >>> tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct")
+        >>> model = DbrxForCausalLM.from_pretrained("databricks/dbrx")
+        >>> tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
