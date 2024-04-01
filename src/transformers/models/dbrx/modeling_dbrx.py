@@ -25,12 +25,6 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-# from transformers.cache_utils import Cache, DynamicCache, StaticCache
-# from transformers.modeling_attn_mask_utils import AttentionMaskConverter
-# from transformers.modeling_outputs import (
-#     MoeCausalLMOutputWithPast,
-#     MoeModelOutputWithPast,
-# )
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import is_flash_attn_2_available, logging
 
@@ -41,14 +35,10 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import is_flash_attn_2_available, logging
 from .configuration_dbrx import DbrxAttentionConfig, DbrxConfig
 
-
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import (
-        index_first_axis,
-        pad_input,  # noqa
-        unpad_input,
-    )
+    from flash_attn.bert_padding import pad_input  # noqa
+    from flash_attn.bert_padding import index_first_axis, unpad_input
 
 logger = logging.get_logger(__name__)
 
@@ -255,19 +245,16 @@ class DbrxAttention(nn.Module):
 
     def __init__(
         self,
-        hidden_size: int,
-        num_heads: int,
-        max_position_embeddings: int,
-        attn_config: DbrxAttentionConfig,
+        config: DbrxConfig,
         block_idx: Optional[int] = None,
     ):
         super().__init__()
-        self.hidden_size = hidden_size
-        self.num_heads = num_heads
+        self.config = config
+        self.hidden_size = config.d_model
+        self.num_heads = config.n_heads
         self.head_dim = self.hidden_size // self.num_heads
-        self.max_position_embeddings = max_position_embeddings
+        self.max_position_embeddings = config.max_seq_len
         self.block_idx = block_idx
-        self.config = attn_config
         if block_idx is None:
             logger.warning_once(
                 f"Instantiating {self.__class__.__name__} without passing a `block_idx` is not recommended and will "
@@ -275,12 +262,13 @@ class DbrxAttention(nn.Module):
                 + "when creating this class."
             )
 
-        self.is_casual = True
+        attn_config = config.attn_config
         self.attn_pdrop = attn_config.attn_pdrop
         self.clip_qkv = attn_config.clip_qkv
         self.num_key_value_heads = attn_config.kv_n_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.rope_theta = attn_config.rope_theta
+        self.is_casual = True
 
         self.Wqkv = nn.Linear(
             self.hidden_size, self.hidden_size + 2 * self.num_key_value_heads * self.head_dim, bias=False
@@ -677,6 +665,7 @@ DBRX_ATTENTION_CLASSES = {
 class DbrxNormAttentionNorm(nn.Module):
     def __init__(
         self,
+        config: DbrxConfig,
         hidden_size: int,
         num_heads: int,
         max_position_embeddings: int,
@@ -689,11 +678,8 @@ class DbrxNormAttentionNorm(nn.Module):
         self.block_idx = block_idx
         self.resid_pdrop = resid_pdrop
         self.norm_1 = nn.LayerNorm(hidden_size, bias=False)
-        self.attn = DBRX_ATTENTION_CLASSES[attn_implementation](
-            hidden_size=hidden_size,
-            num_heads=num_heads,
-            max_position_embeddings=max_position_embeddings,
-            attn_config=attn_config,
+        self.attn = DBRX_ATTENTION_CLASSES[config._attn_implementation](
+            config=config,
             block_idx=block_idx,
         )
         self.norm_2 = nn.LayerNorm(hidden_size, bias=False)
@@ -870,6 +856,7 @@ class DbrxBlock(nn.Module):
         self.resid_pdrop = config.resid_pdrop
         self.block_idx = block_idx
         self.norm_attn_norm = DbrxNormAttentionNorm(
+            config=config,
             hidden_size=config.d_model,
             num_heads=config.n_heads,
             max_position_embeddings=config.max_seq_len,
