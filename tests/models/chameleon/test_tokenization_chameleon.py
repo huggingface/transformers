@@ -25,7 +25,6 @@ from transformers import (
     SPIECE_UNDERLINE,
     AddedToken,
     ChameleonTokenizer,
-    ChameleonTokenizer,
     is_torch_available,
 )
 from transformers.convert_slow_tokenizer import convert_slow_tokenizer

@@ -42,12 +42,12 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        CodeChameleonTokenizer,
         ChameleonForCausalLM,
         ChameleonForQuestionAnswering,
         ChameleonForSequenceClassification,
         ChameleonModel,
         ChameleonTokenizer,
+        CodeChameleonTokenizer,
     )
 
 
@@ -410,7 +410,10 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         output_native = tokenizer.batch_decode(output_native)
 
         model = ChameleonForCausalLM.from_pretrained(
-            "meta-chameleon/meta-chameleon/chameleon-hf", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2"
+            "meta-chameleon/meta-chameleon/chameleon-hf",
+            load_in_4bit=True,
+            device_map={"": 0},
+            attn_implementation="flash_attention_2",
         )
 
         output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)

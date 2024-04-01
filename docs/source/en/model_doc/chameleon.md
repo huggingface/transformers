@@ -54,6 +54,15 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
     - update_post_processor
     - save_vocabulary
 
+## ChameleonProcessor
+
+[[autodoc]] ChameleonProcessor
+
+## ChameleonImageProcessor
+
+[[autodoc]] ChameleonImageProcessor
+    - preprocess
+
 ## ChameleonModel
 
 [[autodoc]] ChameleonModel

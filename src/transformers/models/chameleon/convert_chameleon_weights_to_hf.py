@@ -20,7 +20,7 @@ import warnings
 
 import torch
 
-from transformers import ChameleonConfig, ChameleonForCausalLM, ChameleonTokenizer
+from transformers import ChameleonConfig, ChameleonForCausalLM
 
 
 try:
@@ -75,9 +75,7 @@ def write_json(text, path):
         json.dump(text, f)
 
 
-def write_model(
-    model_path, input_base_path, model_size, safe_serialization=True, chameleon_version=1
-):
+def write_model(model_path, input_base_path, model_size, safe_serialization=True, chameleon_version=1):
     # for backward compatibility, before you needed the repo to be called `my_repo/model_size`
     if not os.path.isfile(os.path.join(input_base_path, "params.json")):
         input_base_path = os.path.join(input_base_path, model_size)
@@ -157,16 +155,28 @@ def write_model(
                 f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[f"layers.{layer_i}.ffn_norm.weight"],
             }
             if use_qk_norm:
-                state_dict[f"model.layers.{layer_i}.self_attn.q_norm.weight"] = loaded[f"layers.{layer_i}.attention.q_normalization.weight"]
-                state_dict[f"model.layers.{layer_i}.self_attn.q_norm.bias"] = loaded[f"layers.{layer_i}.attention.q_normalization.bias"]
-                state_dict[f"model.layers.{layer_i}.self_attn.k_norm.weight"] = loaded[f"layers.{layer_i}.attention.k_normalization.weight"]
-                state_dict[f"model.layers.{layer_i}.self_attn.k_norm.bias"] = loaded[f"layers.{layer_i}.attention.k_normalization.bias"]
+                state_dict[f"model.layers.{layer_i}.self_attn.q_norm.weight"] = loaded[
+                    f"layers.{layer_i}.attention.q_normalization.weight"
+                ]
+                state_dict[f"model.layers.{layer_i}.self_attn.q_norm.bias"] = loaded[
+                    f"layers.{layer_i}.attention.q_normalization.bias"
+                ]
+                state_dict[f"model.layers.{layer_i}.self_attn.k_norm.weight"] = loaded[
+                    f"layers.{layer_i}.attention.k_normalization.weight"
+                ]
+                state_dict[f"model.layers.{layer_i}.self_attn.k_norm.bias"] = loaded[
+                    f"layers.{layer_i}.attention.k_normalization.bias"
+                ]
 
         else:
             # Sharded
             state_dict = {
-                f"model.layers.{layer_i}.input_layernorm.weight": torch.stack([l[f"layers.{layer_i}.attention_norm.weight"] for l in loaded]).mean(dim=0),
-                f"model.layers.{layer_i}.post_attention_layernorm.weight": torch.stack([l[f"layers.{layer_i}.ffn_norm.weight"] for l in loaded]).mean(dim=0),
+                f"model.layers.{layer_i}.input_layernorm.weight": torch.stack(
+                    [l[f"layers.{layer_i}.attention_norm.weight"] for l in loaded]
+                ).mean(dim=0),
+                f"model.layers.{layer_i}.post_attention_layernorm.weight": torch.stack(
+                    [l[f"layers.{layer_i}.ffn_norm.weight"] for l in loaded]
+                ).mean(dim=0),
             }
             state_dict[f"model.layers.{layer_i}.self_attn.q_proj.weight"] = torch.cat(
                 [
@@ -177,17 +187,27 @@ def write_model(
             ).reshape(dim, dim)
             state_dict[f"model.layers.{layer_i}.self_attn.k_proj.weight"] = torch.cat(
                 [
-                    loaded[i][f"layers.{layer_i}.attention.wk.weight"].view(num_local_key_value_heads, dims_per_head, dim)
+                    loaded[i][f"layers.{layer_i}.attention.wk.weight"].view(
+                        num_local_key_value_heads, dims_per_head, dim
+                    )
                     for i in range(num_shards)
                 ],
                 dim=0,
             ).reshape(key_value_dim, dim)
 
             if use_qk_norm:
-                state_dict[f"model.layers.{layer_i}.self_attn.q_norm.weight"] = torch.stack([l[f"layers.{layer_i}.attention.q_normalization.weight"] for l in loaded]).mean(dim=0)
-                state_dict[f"model.layers.{layer_i}.self_attn.q_norm.bias"] = torch.stack([l[f"layers.{layer_i}.attention.q_normalization.bias"] for l in loaded]).mean(dim=0)
-                state_dict[f"model.layers.{layer_i}.self_attn.k_norm.weight"] = torch.stack([l[f"layers.{layer_i}.attention.k_normalization.weight"] for l in loaded]).mean(dim=0)
-                state_dict[f"model.layers.{layer_i}.self_attn.k_norm.bias"] = torch.stack([l[f"layers.{layer_i}.attention.k_normalization.bias"] for l in loaded]).mean(dim=0)
+                state_dict[f"model.layers.{layer_i}.self_attn.q_norm.weight"] = torch.stack(
+                    [l[f"layers.{layer_i}.attention.q_normalization.weight"] for l in loaded]
+                ).mean(dim=0)
+                state_dict[f"model.layers.{layer_i}.self_attn.q_norm.bias"] = torch.stack(
+                    [l[f"layers.{layer_i}.attention.q_normalization.bias"] for l in loaded]
+                ).mean(dim=0)
+                state_dict[f"model.layers.{layer_i}.self_attn.k_norm.weight"] = torch.stack(
+                    [l[f"layers.{layer_i}.attention.k_normalization.weight"] for l in loaded]
+                ).mean(dim=0)
+                state_dict[f"model.layers.{layer_i}.self_attn.k_norm.bias"] = torch.stack(
+                    [l[f"layers.{layer_i}.attention.k_normalization.bias"] for l in loaded]
+                ).mean(dim=0)
             state_dict[f"model.layers.{layer_i}.self_attn.v_proj.weight"] = torch.cat(
                 [
                     loaded[i][f"layers.{layer_i}.attention.wv.weight"].view(

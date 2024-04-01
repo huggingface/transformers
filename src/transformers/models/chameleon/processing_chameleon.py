@@ -19,15 +19,14 @@ Processor class for Chameleon.
 
 from typing import List, Optional, Union
 
-from ...tokenization_utils_base import BatchEncoding
+import numpy as np
+import PIL
+import torch
+
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import PaddingStrategy, TensorType
-
-import PIL
-import numpy as np
-import torch
 
 
 class ChameleonProcessor(ProcessorMixin):

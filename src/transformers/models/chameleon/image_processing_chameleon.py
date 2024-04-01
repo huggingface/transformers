@@ -14,15 +14,15 @@
 # limitations under the License.
 """Image processor class for Chameleon."""
 
-import json
 from functools import cached_property
-
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from .vqgan import VQModel
+from typing import Dict
 
 import numpy as np
 import PIL
 import torch
+
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from .modeling_chameleon import VQModel
 
 
 class _VocabInfo:
@@ -46,34 +46,22 @@ class _VocabInfo:
 
     @cached_property
     def image_tokens(self) -> list[int]:
-        return sorted(
-            [val for name, val in self.name2val.items() if name.startswith("IMGIMG")]
-        )
+        return sorted([val for name, val in self.name2val.items() if name.startswith("IMGIMG")])
 
     @cached_property
     def special_tokens(self) -> list[int]:
-        return sorted(
-            [
-                val
-                for name, val in self.name2val.items()
-                if name.startswith("<") and name != "<"
-            ]
-        )
+        return sorted([val for name, val in self.name2val.items() if name.startswith("<") and name != "<"])
 
     @cached_property
     def text_tokens(self) -> list[int]:
-        return sorted(
-            set(self.all_tokens) - set(self.image_tokens) - set(self.special_tokens)
-        )
+        return sorted(set(self.all_tokens) - set(self.image_tokens) - set(self.special_tokens))
 
     @cached_property
     def bpe2img(self) -> dict[int, int]:
         img_tkn_chr_mapping = {chr(ord("A") + i): str(i) for i in range(10)}
 
         def remap(old_name: str) -> str:
-            return "".join(
-                img_tkn_chr_mapping.get(c, c) for c in old_name[len("IMGIMG") : -1]
-            )
+            return "".join(img_tkn_chr_mapping.get(c, c) for c in old_name[len("IMGIMG") : -1])
 
         return {tok: int(remap(self.val2name[tok])) for tok in self.image_tokens}
 
@@ -83,9 +71,7 @@ class _VocabInfo:
 
     @cached_property
     def bpe2img_search_tensors(self) -> tuple[torch.Tensor, torch.Tensor]:
-        return torch.tensor(sorted(self.bpe2img.keys())), torch.tensor(
-            sorted(self.bpe2img.values())
-        )
+        return torch.tensor(sorted(self.bpe2img.keys())), torch.tensor(sorted(self.bpe2img.values()))
 
     @cached_property
     def img2bpe_mapping_tensor(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -107,12 +93,49 @@ class ChameleonImageProcessor(BaseImageProcessor):
     Constructs an Chameleon image processor.
 
     Args:
-        TODO
+        ddconfig (`dict`):
+            TODO
+        n_embed (`int`):
+            TODO
+        embed_dim (`int`):
+            TODO
+        ckpt_path (`str`, *optional*):
+            TODO
+        ignore_keys (`list`, *optional*, defaults to `[]`):
+            TODO
+        image_key (`str`, *optional*, defaults to `"image"`):
+            TODO
+        colorize_nlabels (`int`, *optional*):
+            TODO
+        remap (`dict`, *optional*):
+            TODO
+        sane_index_shape (`bool`, *optional*, defaults to `False`):
+            TODO
     """
-    def __init__(self, *args, **kwargs):
-        # TODO: kwargs come from ChameleonProcessor.from_pretrained('/path') -> /path/preprocessor_config.json
-        self._saved_kwargs = kwargs
-        self._vq_model = VQModel(**kwargs["model"]["params"])
+
+    def __init__(
+        self,
+        ddconfig: Dict,
+        n_embed: int,
+        embed_dim,
+        ckpt_path=None,
+        ignore_keys=[],
+        image_key="image",
+        colorize_nlabels=None,
+        remap=None,
+        sane_index_shape=False,
+    ):
+        self._vq_model = VQModel(
+            ddconfig=ddconfig,
+            n_embed=n_embed,
+            embed_dim=embed_dim,
+            ckpt_path=ckpt_path,
+            ignore_keys=ignore_keys,
+            image_key=image_key,
+            colorize_nlabels=colorize_nlabels,
+            remap=remap,
+            sane_index_shape=sane_index_shape,
+        )
         self._vq_model.eval()
 
         self._vocab = None
@@ -131,16 +154,13 @@ class ChameleonImageProcessor(BaseImageProcessor):
         image = self._whiten_transparency(image)
         vqgan_input = self._vqgan_input_from(image).to(self._device).to(self._dtype)
         _, _, [_, _, img_toks] = self._vq_model.encode(vqgan_input)
-        bpe_toks = [self._vocab.image_start_id] + self._vocab.convert_img2bp2(img_toks).tolist() + [self._vocab.image_end_id]
+        bpe_toks = (
+            [self._vocab.image_start_id] + self._vocab.convert_img2bp2(img_toks).tolist() + [self._vocab.image_end_id]
+        )
         return BatchFeature(data={"tokens": bpe_toks})
 
     def set_vocab(self, vocab_map: dict[str, int]):
         self._vocab = _VocabInfo(vocab_map)
-
-    def __repr__(self):
-        json_string = json.dumps(self._saved_kwargs, indent=2, sort_keys=True) + "\n"
-        return f"{self.__class__.__name__} {json_string}"
-
 
     def _whiten_transparency(self, img: PIL.Image) -> PIL.Image:
         # Check if it's already in RGB format.
@@ -161,27 +181,25 @@ class ChameleonImageProcessor(BaseImageProcessor):
         vals_rgb = (1 - alpha[:, :, np.newaxis]) * 255 + alpha[:, :, np.newaxis] * vals_rgba[:, :, :3]
         return PIL.Image.fromarray(vals_rgb.astype("uint8"), "RGB")
 
-
     def _vqgan_input_from(self, img: PIL.Image, target_image_size=512) -> torch.Tensor:
         # Resize with aspect ratio preservation.
         s = min(img.size)
         scale = target_image_size / s
         new_size = (round(scale * img.size[0]), round(scale * img.size[1]))
         img = img.resize(new_size, PIL.Image.LANCZOS)
-        
+
         # Center crop.
         x0 = (img.width - target_image_size) // 2
         y0 = (img.height - target_image_size) // 2
         img = img.crop((x0, y0, x0 + target_image_size, y0 + target_image_size))
-        
+
         # Convert to tensor.
         np_img = np.array(img) / 255.0  # Normalize to [0, 1]
         np_img = np_img * 2 - 1  # Scale to [-1, 1]
         tensor_img = torch.from_numpy(np_img).permute(2, 0, 1).float()  # CHW format.
-        
+
         # Add batch dimension.
         return tensor_img.unsqueeze(0)
-
 
     def decode(self, x: torch.Tensor) -> PIL.Image:
         pass

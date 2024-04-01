@@ -51,6 +51,13 @@ class BridgeTowerImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class ChameleonImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class ChineseCLIPFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
