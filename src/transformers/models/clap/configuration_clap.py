@@ -23,11 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = {
-    "laion/clap-htsat-fused": "https://huggingface.co/laion/clap-htsat-fused/resolve/main/config.json",
-    "laion/clap-htsat-unfused": "https://huggingface.co/laion/clap-htsat-unfused/resolve/main/config.json",
-}
-
 
 class ClapTextConfig(PretrainedConfig):
     r"""

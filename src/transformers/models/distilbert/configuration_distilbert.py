@@ -23,23 +23,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "distilbert-base-uncased": "https://huggingface.co/distilbert-base-uncased/resolve/main/config.json",
-    "distilbert-base-uncased-distilled-squad": (
-        "https://huggingface.co/distilbert-base-uncased-distilled-squad/resolve/main/config.json"
-    ),
-    "distilbert-base-cased": "https://huggingface.co/distilbert-base-cased/resolve/main/config.json",
-    "distilbert-base-cased-distilled-squad": (
-        "https://huggingface.co/distilbert-base-cased-distilled-squad/resolve/main/config.json"
-    ),
-    "distilbert-base-german-cased": "https://huggingface.co/distilbert-base-german-cased/resolve/main/config.json",
-    "distilbert-base-multilingual-cased": (
-        "https://huggingface.co/distilbert-base-multilingual-cased/resolve/main/config.json"
-    ),
-    "distilbert-base-uncased-finetuned-sst-2-english": (
-        "https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class DistilBertConfig(PretrainedConfig):

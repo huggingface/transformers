@@ -38,10 +38,8 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "VipLlavaConfig"
 
-VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "llava-hf/vip-llava-7b-hf",
-    # See all VipLlava models at https://huggingface.co/models?filter=vipllava
-]
+
+from ..deprecated._archive_maps import VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass

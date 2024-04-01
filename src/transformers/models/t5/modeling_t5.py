@@ -59,14 +59,8 @@ _CHECKPOINT_FOR_DOC = "google-t5/t5-small"
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
-T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google-t5/t5-small",
-    "google-t5/t5-base",
-    "google-t5/t5-large",
-    "google-t5/t5-3b",
-    "google-t5/t5-11b",
-    # See all T5 models at https://huggingface.co/models?filter=t5
-]
+
+from ..deprecated._archive_maps import T5_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 ####################################################
@@ -683,7 +677,7 @@ class T5Block(nn.Module):
             if len(past_key_value) != expected_num_past_key_values:
                 raise ValueError(
                     f"There should be {expected_num_past_key_values} past states. "
-                    f"{'2 (past / key) for cross attention. ' if expected_num_past_key_values == 4 else ''}"
+                    f"{'2 (key / value) for cross attention. ' if expected_num_past_key_values == 4 else ''}"
                     f"Got {len(past_key_value)} past key / value states"
                 )
 
