@@ -717,7 +717,7 @@ class GenerationTesterMixin:
             )
 
             self.assertTrue(output_generate.shape[-1] == max_length)
-            if "inputs_embeds" in inspect.signature(model.prepare_inputs_for_generation):
+            if "inputs_embeds" in set(inspect.signature(model.prepare_inputs_for_generation).parameters):
                 input_embeds = model.get_input_embeddings()(input_ids)
                 beam_kwargs.update({"inputs_embeds": input_embeds})
                 output_generate2 = self._beam_sample_generate(
