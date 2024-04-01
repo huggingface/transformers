@@ -729,7 +729,7 @@ class GenerationTesterMixin:
                 logits_warper_kwargs=logits_warper_kwargs,
             )
 
-            torch.testing.assert_close(output_generate[:,input_embeds.shape[1]:], output_generate2)
+            torch.testing.assert_close(output_generate[:, input_embeds.shape[1] :], output_generate2)
 
     def test_beam_sample_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
