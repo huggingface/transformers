@@ -24,7 +24,6 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
-
 if is_torch_available():
     import torch
 
@@ -345,6 +344,10 @@ class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         model_name = "databricks/dbrx-instruct"
         model = DbrxModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    @unittest.skip("Dbrx models have weight tying disabled.")
+    def test_tied_weights_keys(self):
+        pass
 
     # @is_flaky(max_attempts=3, description="flaky on some models.")
     # @require_torch_sdpa
