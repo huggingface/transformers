@@ -25,6 +25,7 @@ import regex as re
 
 from ...utils import is_tf_available, is_torch_available, logging, to_py_obj
 
+
 if TYPE_CHECKING:
     if is_torch_available():
         import torch
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
         import tensorflow as tf
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+
 
 logger = logging.get_logger(__name__)
 
@@ -132,6 +134,8 @@ class CodeGenTokenizer(PreTrainedTokenizer):
             other word. (CodeGen tokenizer detect beginning of words by the preceding space).
         add_bos_token (`bool`, *optional*, defaults to `False`):
             Whether to add a beginning of sequence token at the start of sequences.
+        return_token_type_ids (`bool`, *optional*, defaults to `False`):
+            Whether to return token type IDs.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -148,6 +152,7 @@ class CodeGenTokenizer(PreTrainedTokenizer):
         pad_token=None,
         add_prefix_space=False,
         add_bos_token=False,
+        return_token_type_ids=False,
         **kwargs,
     ):
         bos_token = AddedToken(bos_token, special=True) if isinstance(bos_token, str) else bos_token
@@ -155,6 +160,9 @@ class CodeGenTokenizer(PreTrainedTokenizer):
         unk_token = AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token
         pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
         self.add_bos_token = add_bos_token
+        self.return_token_type_ids = return_token_type_ids
+        if self.return_token_type_ids:
+            self.model_input_names.append("token_type_ids")
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -179,6 +187,7 @@ class CodeGenTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             add_prefix_space=add_prefix_space,
             add_bos_token=add_bos_token,
+            return_token_type_ids=return_token_type_ids,
             **kwargs,
         )
 

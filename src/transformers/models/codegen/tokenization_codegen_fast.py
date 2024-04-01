@@ -23,6 +23,7 @@ import numpy as np
 
 from ...utils import is_tf_available, is_torch_available, logging
 
+
 if TYPE_CHECKING:
     if is_torch_available():
         import torch
@@ -34,6 +35,7 @@ from tokenizers import pre_tokenizers
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from .tokenization_codegen import CodeGenTokenizer
+
 
 logger = logging.get_logger(__name__)
 
@@ -89,6 +91,8 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (CodeGen tokenizer detect beginning of words by the preceding space).
+        return_token_type_ids (`bool`, *optional*, defaults to `False`):
+            Whether to return token type IDs.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -104,8 +108,13 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
         add_prefix_space=False,
+        return_token_type_ids=False,
         **kwargs,
     ):
+        self.return_token_type_ids = return_token_type_ids
+        if self.return_token_type_ids:
+            self.model_input_names.append("token_type_ids")
+
         super().__init__(
             vocab_file,
             merges_file,
@@ -114,6 +123,7 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
             bos_token=bos_token,
             eos_token=eos_token,
             add_prefix_space=add_prefix_space,
+            return_token_type_ids=return_token_type_ids,
             **kwargs,
         )
 
