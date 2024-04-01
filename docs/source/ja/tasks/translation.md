@@ -349,7 +349,8 @@ TensorFlow でモデルを微調整するには、オプティマイザー関数
 ```py
 >>> from transformers import pipeline
 
->>> translator = pipeline("translation", model="my_awesome_opus_books_model")
+# Change `xx` to the language of the input and `yy` to the language of the desired output.
+>>> translator = pipeline("translation_xx_to_yy", model="my_awesome_opus_books_model")
 >>> translator(text)
 [{'translation_text': 'Legumes partagent des ressources avec des bactéries azotantes.'}]
 ```
