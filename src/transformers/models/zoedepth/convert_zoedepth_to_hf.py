@@ -122,10 +122,69 @@ def create_rename_keys(config):
     for i in range(4):
         rename_keys.append((f"core.core.scratch.layer{i+1}_rn.weight", f"neck.convs.{i}.weight"))
 
-    # head
-    for i in range(0, 5, 2):
-        rename_keys.append((f"core.core.scratch.output_conv.{i}.weight", f"head.head.{i}.weight"))
-        rename_keys.append((f"core.core.scratch.output_conv.{i}.bias", f"head.head.{i}.bias"))
+    # relative depth estimation head
+    rename_keys.append(("core.core.scratch.output_conv.0.weight", "relative_head.conv1.weight"))
+    rename_keys.append(("core.core.scratch.output_conv.0.bias", "relative_head.conv1.bias"))
+    rename_keys.append(("core.core.scratch.output_conv.2.weight", "relative_head.conv2.weight"))
+    rename_keys.append(("core.core.scratch.output_conv.2.bias", "relative_head.conv2.bias"))
+    rename_keys.append(("core.core.scratch.output_conv.4.weight", "relative_head.conv3.weight"))
+    rename_keys.append(("core.core.scratch.output_conv.4.bias", "relative_head.conv3.bias"))
+
+    # metric depth estimation head
+    rename_keys.append(("conv2.weight", "metric_head.conv2.weight"))
+    rename_keys.append(("conv2.bias", "metric_head.conv2.bias"))
+
+    # seed regressor and projector
+    rename_keys.append(("seed_bin_regressor._net.0.weight", "metric_head.seed_bin_regressor._net.0.weight"))
+    rename_keys.append(("seed_bin_regressor._net.0.bias", "metric_head.seed_bin_regressor._net.0.bias"))
+    rename_keys.append(("seed_bin_regressor._net.2.weight", "metric_head.seed_bin_regressor._net.2.weight"))
+    rename_keys.append(("seed_bin_regressor._net.2.bias", "metric_head.seed_bin_regressor._net.2.bias"))
+    rename_keys.append(("seed_projector._net.0.weight", "metric_head.seed_projector._net.0.weight"))
+    rename_keys.append(("seed_projector._net.0.bias", "metric_head.seed_projector._net.0.bias"))
+    rename_keys.append(("seed_projector._net.2.weight", "metric_head.seed_projector._net.2.weight"))
+    rename_keys.append(("seed_projector._net.2.bias", "metric_head.seed_projector._net.2.bias"))
+
+    rename_keys.append(("projectors.0._net.0.weight", "metric_head.projectors.0._net.0.weight"))
+    rename_keys.append(("projectors.0._net.0.bias", "metric_head.projectors.0._net.0.bias"))
+    rename_keys.append(("projectors.0._net.2.weight", "metric_head.projectors.0._net.2.weight"))
+    rename_keys.append(("projectors.0._net.2.bias", "metric_head.projectors.0._net.2.bias"))
+    rename_keys.append(("projectors.1._net.0.weight", "metric_head.projectors.1._net.0.weight"))
+    rename_keys.append(("projectors.1._net.0.bias", "metric_head.projectors.1._net.0.bias"))
+    rename_keys.append(("projectors.1._net.2.weight", "metric_head.projectors.1._net.2.weight"))
+    rename_keys.append(("projectors.1._net.2.bias", "metric_head.projectors.1._net.2.bias"))
+    rename_keys.append(("projectors.2._net.0.weight", "metric_head.projectors.2._net.0.weight"))
+    rename_keys.append(("projectors.2._net.0.bias", "metric_head.projectors.2._net.0.bias"))
+    rename_keys.append(("projectors.2._net.2.weight", "metric_head.projectors.2._net.2.weight"))
+    rename_keys.append(("projectors.2._net.2.bias", "metric_head.projectors.2._net.2.bias"))
+    rename_keys.append(("projectors.3._net.0.weight", "metric_head.projectors.3._net.0.weight"))
+    rename_keys.append(("projectors.3._net.0.bias", "metric_head.projectors.3._net.0.bias"))
+    rename_keys.append(("projectors.3._net.2.weight", "metric_head.projectors.3._net.2.weight"))
+    rename_keys.append(("projectors.3._net.2.bias", "metric_head.projectors.3._net.2.bias"))
+
+    rename_keys.append(("attractors.0._net.0.weight", "metric_head.attractors.0._net.0.weight"))
+    rename_keys.append(("attractors.0._net.0.bias", "metric_head.attractors.0._net.0.bias"))
+    rename_keys.append(("attractors.0._net.2.weight", "metric_head.attractors.0._net.2.weight"))
+    rename_keys.append(("attractors.0._net.2.bias", "metric_head.attractors.0._net.2.bias"))
+    rename_keys.append(("attractors.1._net.0.weight", "metric_head.attractors.1._net.0.weight"))
+    rename_keys.append(("attractors.1._net.0.bias", "metric_head.attractors.1._net.0.bias"))
+    rename_keys.append(("attractors.1._net.2.weight", "metric_head.attractors.1._net.2.weight"))
+    rename_keys.append(("attractors.1._net.2.bias", "metric_head.attractors.1._net.2.bias"))
+    rename_keys.append(("attractors.2._net.0.weight", "metric_head.attractors.2._net.0.weight"))
+    rename_keys.append(("attractors.2._net.0.bias", "metric_head.attractors.2._net.0.bias"))
+    rename_keys.append(("attractors.2._net.2.weight", "metric_head.attractors.2._net.2.weight"))
+    rename_keys.append(("attractors.2._net.2.bias", "metric_head.attractors.2._net.2.bias"))
+    rename_keys.append(("attractors.3._net.0.weight", "metric_head.attractors.3._net.0.weight"))
+    rename_keys.append(("attractors.3._net.0.bias", "metric_head.attractors.3._net.0.bias"))
+    rename_keys.append(("attractors.3._net.2.weight", "metric_head.attractors.3._net.2.weight"))
+    rename_keys.append(("attractors.3._net.2.bias", "metric_head.attractors.3._net.2.bias"))
+
+    # conditional log binomial
+    rename_keys.append(("conditional_log_binomial.mlp.0.weight", "metric_head.conditional_log_binomial.mlp.0.weight"))
+    rename_keys.append(("conditional_log_binomial.mlp.0.bias", "metric_head.conditional_log_binomial.mlp.0.bias"))
+    rename_keys.append(("conditional_log_binomial.mlp.2.weight", "metric_head.conditional_log_binomial.mlp.2.weight"))
+    rename_keys.append(("conditional_log_binomial.mlp.2.bias", "metric_head.conditional_log_binomial.mlp.2.bias"))
+    # rename_keys.append(("conditional_log_binomial.log_binomial_transform.k_idxt", "metric_head.conditional_log_binomial.log_binomial_transform.k_idx"))
+    # rename_keys.append(("conditional_log_binomial.log_binomial_transform.K_minus_1", "metric_head.conditional_log_binomial.log_binomial_transform.K_minus_1"))
 
     return rename_keys
 
@@ -174,15 +233,16 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
 
     # define ZoeDepth configuration based on URL
     config, image_size = get_zoedepth_config(model_name)
+    
     # load original model
-    model = torch.hub.load(
+    original_model = torch.hub.load(
         "NielsRogge/ZoeDepth:understanding_zoedepth", model_name, pretrained=True, force_reload=True
     )
-    model.eval()
-    state_dict = model.state_dict()
+    original_model.eval()
+    state_dict = original_model.state_dict()
 
-    for name, param in model.named_parameters():
-        print(name, param.shape)
+    # for name, param in original_model.named_parameters():
+    #     print(name, param.shape)
 
     # remove certain keys
     remove_ignore_keys_(state_dict)
@@ -221,11 +281,16 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
 
     pixel_values = transform(image).unsqueeze(0)
 
-    # forward pass
+    print("Mean of what we need:", pixel_values.mean())
+
+    # forward pass original model
+    # out = original_model(pixel_values)
+
+    # forward pass HF model
     depth = model(pixel_values).predicted_depth
 
-    print(depth.shape)
-    print("Mean of depth:", depth.mean())
+    print("Shape of metric depth:", depth.shape)
+    print("Mean of metric depth:", depth.mean())
 
     # TODO Assert logits
     # expected_slice = torch.tensor([[6.3199, 6.3629, 6.4148], [6.3850, 6.3615, 6.4166], [6.3519, 6.3176, 6.3575]])
