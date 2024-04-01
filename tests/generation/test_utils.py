@@ -718,6 +718,19 @@ class GenerationTesterMixin:
 
             self.assertTrue(output_generate.shape[-1] == max_length)
 
+            input_embeds = model.get_input_embeddings()(input_ids)
+            output_generate = self._beam_search_generate(
+                model=model,
+                input_ids=None,
+                attention_mask=attention_mask,
+                max_length=max_length,
+                beam_kwargs=beam_kwargs,
+                logits_process_kwargs=logits_process_kwargs,
+                beam_kwargs={"input_embeds":input_embeds}
+            )
+
+            self.assertTrue(output_generate.shape[-1] == max_length)
+            
     def test_beam_sample_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()

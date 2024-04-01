@@ -3436,7 +3436,11 @@ class GenerationMixin:
         batch_size = len(beam_scorer._beam_hyps)
         num_beams = beam_scorer.num_beams
 
-        batch_beam_size, cur_len = input_ids.shape
+        batch_beam_size, cur_len = (
+            model_kwargs["attention_mask"].shape
+            if model_kwargs.get("attention_mask", None) is not None
+            else input_ids.shape
+        )
         model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
         # init attention / hidden states / scores tuples
