@@ -177,9 +177,10 @@ PyTorch's [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.o
 For now, Transformers supports SDPA inference and training for the following architectures:
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
 * [Cohere](https://huggingface.co/docs/transformers/model_doc/cohere#transformers.CohereModel)
-* [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
+* [Dbrx](https://huggingface.co/docs/transformers/model_doc/dbrx#transformers.DbrxModel)
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
+* [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
 * [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel)
 * [Phi](https://huggingface.co/docs/transformers/model_doc/phi#transformers.PhiModel)
 * [Idefics](https://huggingface.co/docs/transformers/model_doc/idefics#transformers.IdeficsModel)
