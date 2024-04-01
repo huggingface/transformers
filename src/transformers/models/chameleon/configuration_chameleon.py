@@ -1,11 +1,6 @@
 # coding=utf-8
 # Copyright 2024 Meta Inc. and The HuggingFace Inc. team. All rights reserved.
 #
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
-#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -25,16 +20,13 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CHAMELEON_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "meta-chameleon/chameleon": "https://huggingface.co/meta-chameleon/chameleon/resolve/main/config.json",
-}
 
 
 class ChameleonConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ChameleonModel`]. It is used to instantiate an chameleon
+    This is the configuration class to store the configuration of a [`ChameleonModel`]. It is used to instantiate a chameleon
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the chameleon-7B.
+    defaults will yield a similar configuration to that of the [chameleon-7B](hf.co/meta/chameleon-7B).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -77,11 +69,6 @@ class ChameleonConfig(PretrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 2):
             End of stream token id.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism) to understand more about it. This value is
-            necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
-            issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 10000.0):

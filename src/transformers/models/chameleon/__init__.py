@@ -86,7 +86,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_chameleon_fast import ChameleonTokenizer
+        from .tokenization_chameleon_fast import ChameleonTokenizerFast
 
     try:
         if not is_torch_available():

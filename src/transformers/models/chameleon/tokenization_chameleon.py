@@ -37,30 +37,8 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "hf-internal-testing/chameleon-tokenizer": "https://huggingface.co/hf-internal-testing/chameleon-tokenizer/resolve/main/tokenizer.model",
-    },
-    "tokenizer_file": {
-        "hf-internal-testing/chameleon-tokenizer": "https://huggingface.co/hf-internal-testing/chameleon-tokenizer/resolve/main/tokenizer_config.json",
-    },
-}
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "hf-internal-testing/chameleon-tokenizer": 4096,
-}
 SPIECE_UNDERLINE = "▁"
 
-B_INST, E_INST = "[INST]", "[/INST]"
-B_SYS, E_SYS = "<<SYS>>\n", "\n<</SYS>>\n\n"
-
-# fmt: off
-DEFAULT_SYSTEM_PROMPT = """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your \
-answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure\
- that your responses are socially unbiased and positive in nature.
-
-If a question does not make any sense, or is not factually coherent, explain why instead of answering something not \
-correct. If you don't know the answer to a question, please don't share false information."""
-# fmt: on
 
 
 class ChameleonTokenizer(PreTrainedTokenizer):
