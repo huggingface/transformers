@@ -1,4 +1,18 @@
-"""PyTorch Dbrx model."""
+# coding=utf-8
+# Copyright 2022 Databricks Mosaic Research and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+""" PyTorch DBRX model. """
 
 import math
 import warnings
@@ -22,15 +36,11 @@ from transformers.utils import is_flash_attn_2_available, logging
 
 from .configuration_dbrx import DbrxAttentionConfig, DbrxConfig, DbrxFFNConfig
 
-
 if is_flash_attn_2_available():
     try:
         from flash_attn import flash_attn_func, flash_attn_varlen_func
-        from flash_attn.bert_padding import (
-            index_first_axis,
-            pad_input,  # noqa
-            unpad_input,
-        )
+        from flash_attn.bert_padding import pad_input  # noqa
+        from flash_attn.bert_padding import index_first_axis, unpad_input
     except ImportError:
         pass
 
