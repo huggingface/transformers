@@ -35,14 +35,10 @@ from ...utils import (
 )
 from .configuration_dbrx import DbrxConfig
 
-
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import (
-        index_first_axis,
-        pad_input,  # noqa
-        unpad_input,
-    )
+    from flash_attn.bert_padding import pad_input  # noqa
+    from flash_attn.bert_padding import index_first_axis, unpad_input
 
 logger = logging.get_logger(__name__)
 
@@ -1276,24 +1272,23 @@ class DbrxForCausalLM(DbrxPreTrainedModel):
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""Forward function for causal language modeling.
 
-        Example:
-        ```python
-        >>> from transformers import AutoTokenizer, DbrxForCausalLM
+        # ToDo: this doc-test fails in circle.ci because "databricks/dbrx-instruct" is a gated repo
+        # and circle.ci doesn't have access to it
+        # Example:
+        # ```python
+        # >>> from transformers import AutoTokenizer, DbrxForCausalLM
 
-        # ToDo: change `"eitanturok/dbrx-tiny"` to `"databricks/dbrx-instruct"`
-        # However, `"databricks/dbrx-instruct"` is a gated model which causes issues
-        # with circle.ci
-        >>> model = DbrxForCausalLM.from_pretrained("eitanturok/dbrx-tiny")
-        >>> tokenizer = AutoTokenizer.from_pretrained("eitanturok/dbrx-tiny")
+        # >>> model = DbrxForCausalLM.from_pretrained("databricks/dbrx-instruct")
+        # >>> tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct", trust_remote_code=True)
 
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
+        # >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        # >>> inputs = tokenizer(prompt, return_tensors="pt")
 
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```
+        # >>> # Generate
+        # >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        # >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        # "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        # ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
