@@ -517,25 +517,60 @@ def undo_windowing(hidden_states: torch.Tensor, shape: List[int], mask_unit_shap
     return hidden_states
 
 
-class HieraReroll(nn.Module):
-    """
-    Undos the "unroll" operation so that you can use intermediate features.
-    """
-
-    def __init__(self, config):
+class HieraEncoder(nn.Module):
+    def __init__(self, config: HieraConfig) -> None:
         super().__init__()
+        self.config = config
+
+        # stochastic depth decay rule
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        # query strides rule
+        stage_ends = [sum(config.depths[:i]) - 1 for i in range(1, len(config.depths) + 1)]
+        query_pool_layer = [stage_end + 1 for stage_end in stage_ends[: config.num_query_pool]]
+        query_strides = [
+            math.prod(config.query_stride) if i in query_pool_layer else 1 for i in range(sum(config.depths))
+        ]
+
+        # Transformer blocks
+        self.stages = nn.ModuleList()
+        embed_dim = config.embed_dim
+
+        for idx_stage, depth in enumerate(config.depths):
+            dim_out = int(config.embed_dim * config.embed_dim_multiplier**idx_stage)
+
+            stage = HieraStage(
+                config=config,
+                depth=depth,
+                dim=embed_dim,
+                dim_out=dim_out,
+                num_heads=int(config.initial_num_heads * config.num_head_multiplier**idx_stage),
+                drop_path=dpr[sum(config.depths[:idx_stage]) : sum(config.depths[: idx_stage + 1])],
+                query_stride=query_strides[sum(config.depths[:idx_stage]) : sum(config.depths[: idx_stage + 1])],
+                window_size=int(math.prod(config.masked_unit_size) * math.prod(config.query_stride) ** -idx_stage),
+                use_mask_unit_attn=config.masked_unit_attention[idx_stage],
+                stage_num=idx_stage,
+            )
+
+            embed_dim = dim_out
+            self.stages.append(stage)
+
+        # Setting reroll schedule
+        # The first stage has to reverse everything
+        # The next stage has to reverse all but the first unroll, etc.
         size = [i // s for i, s in zip(config.input_size, config.patch_stride)]
         unroll_schedule = [config.query_stride] * len(config.depths[:-1])
 
-        # The first stage has to reverse everything
-        # The next stage has to reverse all but the first unroll, etc.
         self.schedule = {}
         for idx_stage in range(len(config.depths)):
             stage_size = [i // (s**idx_stage) for i, s in zip(size, config.query_stride)]
             schedule = unroll_schedule[idx_stage:]
             self.schedule[idx_stage] = schedule, stage_size
 
-    def forward(self, hidden_states: torch.Tensor, stage_idx: int, bool_mask_pos: torch.Tensor = None) -> torch.Tensor:
+        self.gradient_checkpointing = False
+
+    def reroll(
+        self, hidden_states: torch.Tensor, stage_idx: int, bool_masked_pos: Optional[torch.BoolTensor] = None
+    ) -> torch.Tensor:
         """
         Roll the given tensor back up to spatial order assuming it's from the given block.
 
@@ -582,54 +617,13 @@ class HieraReroll(nn.Module):
         hidden_states = hidden_states.view(batch_size, seq_len, *mask_unit_shape, hidden_size)
 
         # If masked, return [B, #MUs, MUy, MUx, C]
-        if bool_mask_pos is not None:
+        if bool_masked_pos is not None:
             return hidden_states
 
         # If not masked, we can return [B, H, W, C]
         hidden_states = undo_windowing(hidden_states, size, mask_unit_shape)
 
         return hidden_states
-
-
-class HieraEncoder(nn.Module):
-    def __init__(self, config: HieraConfig) -> None:
-        super().__init__()
-        self.config = config
-
-        # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
-        # query strides rule
-        stage_ends = [sum(config.depths[:i]) - 1 for i in range(1, len(config.depths) + 1)]
-        query_pool_layer = [stage_end + 1 for stage_end in stage_ends[: config.num_query_pool]]
-        query_strides = [
-            math.prod(config.query_stride) if i in query_pool_layer else 1 for i in range(sum(config.depths))
-        ]
-
-        # Transformer blocks
-        self.stages = nn.ModuleList()
-        embed_dim = config.embed_dim
-
-        for idx_stage, depth in enumerate(config.depths):
-            dim_out = int(config.embed_dim * config.embed_dim_multiplier**idx_stage)
-
-            stage = HieraStage(
-                config=config,
-                depth=depth,
-                dim=embed_dim,
-                dim_out=dim_out,
-                num_heads=int(config.initial_num_heads * config.num_head_multiplier**idx_stage),
-                drop_path=dpr[sum(config.depths[:idx_stage]) : sum(config.depths[: idx_stage + 1])],
-                query_stride=query_strides[sum(config.depths[:idx_stage]) : sum(config.depths[: idx_stage + 1])],
-                window_size=int(math.prod(config.masked_unit_size) * math.prod(config.query_stride) ** -idx_stage),
-                use_mask_unit_attn=config.masked_unit_attention[idx_stage],
-                stage_num=idx_stage,
-            )
-
-            embed_dim = dim_out
-            self.stages.append(stage)
-
-        self.reroll = HieraReroll(config)
-        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -678,7 +672,7 @@ class HieraEncoder(nn.Module):
         )
 
 
-class HieraUnroll(nn.Module):
+def unroll(hidden_states: torch.Tensor, size, schedule) -> torch.Tensor:
     """
     Reorders the tokens such that patches are contiguous in memory.
     E.g., given [batch_size, (height, width), hidden_size] and stride of (stride, stride), this will re-order the tokens as
@@ -697,47 +691,35 @@ class HieraUnroll(nn.Module):
     need to be re-rolled if you want to use the intermediate values as a height x width feature map.
     The last block of the network is fine though, since by then the strides are all consumed.
     """
+    batch_size, _, hidden_size = hidden_states.shape
 
-    def __init__(self, config) -> None:
-        super().__init__()
-        self.size = [i // s for i, s in zip(config.input_size, config.patch_stride)]
-        self.schedule = [config.query_stride] * len(config.depths[:-1])
+    current_size = size
+    hidden_states = hidden_states.view(*([batch_size] + current_size + [hidden_size]))
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """
-        Input: Flattened patch embeddings [batch_size, seq_len, hidden_size]
-        Output: Patch embeddings [batch_size, seq_len, hidden_size] permuted such
-            that [batch_size, 4, seq_len//4, hidden_size].max(1) etc. performs MaxPoolNd
-        """
-        batch_size, _, hidden_size = hidden_states.shape
+    for strides in schedule:
+        # Move patches with the given strides to the batch dimension
 
-        current_size = self.size
-        hidden_states = hidden_states.view(*([batch_size] + current_size + [hidden_size]))
+        # Create a view of the tensor with the patch stride as separate dims
+        # For example in 2d: [batch_size, height // stride, stride, width // stride, stride, C]
+        current_size = [i // s for i, s in zip(current_size, strides)]
+        # initialize new_shape with [height // stride, stride, width // stride, stride]
+        new_shape = [item for pair in zip(current_size, strides) for item in pair]
+        # add batch_size and hidden_size to new_shape
+        new_shape = [batch_size] + new_shape + [hidden_size]
+        hidden_states = hidden_states.view(new_shape)
 
-        for strides in self.schedule:
-            # Move patches with the given strides to the batch dimension
+        # Move the patch stride into the batch dimension
+        # For example in 2d: [batch_size, stride, stride, height // stride, width // stride, hidden_size]
+        num_dims = len(new_shape)
+        permute = [0] + list(range(2, num_dims - 1, 2)) + list(range(1, num_dims - 1, 2)) + [num_dims - 1]
+        hidden_states = hidden_states.permute(permute)
 
-            # Create a view of the tensor with the patch stride as separate dims
-            # For example in 2d: [batch_size, height // stride, stride, width // stride, stride, C]
-            current_size = [i // s for i, s in zip(current_size, strides)]
-            # initialize new_shape with [height // stride, stride, width // stride, stride]
-            new_shape = [item for pair in zip(current_size, strides) for item in pair]
-            # add batch_size and hidden_size to new_shape
-            new_shape = [batch_size] + new_shape + [hidden_size]
-            hidden_states = hidden_states.view(new_shape)
+        # Now finally flatten the relevant dims into the batch dimension
+        hidden_states = hidden_states.flatten(0, len(strides))
+        batch_size *= math.prod(strides)
 
-            # Move the patch stride into the batch dimension
-            # For example in 2d: [batch_size, stride, stride, height // stride, width // stride, hidden_size]
-            num_dims = len(new_shape)
-            permute = [0] + list(range(2, num_dims - 1, 2)) + list(range(1, num_dims - 1, 2)) + [num_dims - 1]
-            hidden_states = hidden_states.permute(permute)
-
-            # Now finally flatten the relevant dims into the batch dimension
-            hidden_states = hidden_states.flatten(0, len(strides))
-            batch_size *= math.prod(strides)
-
-        hidden_states = hidden_states.reshape(-1, math.prod(self.size), hidden_size)
-        return hidden_states
+    hidden_states = hidden_states.reshape(-1, math.prod(size), hidden_size)
+    return hidden_states
 
 
 class HieraPreTrainedModel(PreTrainedModel):
@@ -834,8 +816,10 @@ class HieraModel(HieraPreTrainedModel):
         self.num_features = int(config.embed_dim * config.embed_dim_multiplier ** (len(config.depths) - 1))
 
         self.embeddings = HieraEmbeddings(config, use_mask_token=use_mask_token)
-        self.unroll = HieraUnroll(config)
         self.encoder = HieraEncoder(config)
+
+        self.unroll_size = [i // s for i, s in zip(config.input_size, config.patch_stride)]
+        self.unroll_schedule = [config.query_stride] * len(config.depths[:-1])
 
         self.pooler = HieraPooler(config) if add_pooling_layer else None
 
@@ -898,7 +882,7 @@ class HieraModel(HieraPreTrainedModel):
 
         embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
 
-        hidden_states = self.unroll(embedding_output)
+        hidden_states = unroll(embedding_output, self.unroll_size, self.unroll_schedule)
 
         encoder_outputs = self.encoder(
             hidden_states,
