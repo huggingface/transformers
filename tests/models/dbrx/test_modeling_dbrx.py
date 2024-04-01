@@ -18,7 +18,11 @@
 import unittest
 
 from transformers import DbrxConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -68,6 +72,7 @@ class DbrxModelTester:
         tie_word_embeddings=False,
         torch_dtype="bfloat16",
         vocab_size=99,
+        is_decoder=True,
     ):
         # Parameters unique to testing
         self.batch_size = batch_size
@@ -98,7 +103,7 @@ class DbrxModelTester:
         self.ffn_config_model_type = ffn_config_model_type
         self.ffn_act_fn_name = ffn_act_fn_name
 
-        # Other params
+        # Other model params
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -111,6 +116,7 @@ class DbrxModelTester:
         self.resid_pdrop = resid_pdrop
         self.tie_word_embeddings = tie_word_embeddings
         self.torch_dtype = torch_dtype
+        self.is_decoder = is_decoder
 
         # Make the dictionaries
         self.ffn_config = {
@@ -170,7 +176,7 @@ class DbrxModelTester:
             use_cache=self.use_cache,
             initializer_range=self.initializer_range,
             output_router_logits=self.output_router_logits,
-            is_decoder=False,
+            is_decoder=self.is_decoder,
         )
         return config
 
@@ -322,7 +328,7 @@ class DbrxModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = DbrxModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DbrxConfig, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=DbrxConfig, d_model=37, is_decoder=True)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -342,6 +348,12 @@ class DbrxModelTest(ModelTesterMixin, unittest.TestCase):
         model_name = "databricks/dbrx-instruct"
         model = DbrxModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    # @is_flaky(max_attempts=3, description="flaky on some models.")
+    # @require_torch_sdpa
+    # @slow
+    # def test_eager_matches_sdpa_generate(self):
+    #     super().test_eager_matches_sdpa_generate()
 
 
 @require_torch
