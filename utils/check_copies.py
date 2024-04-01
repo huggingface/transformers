@@ -313,10 +313,10 @@ def split_code_into_blocks(
         target_block_name = re.search(
             rf"^{' ' * (indent - 4)}((class|def)\s+\S+)(\(|\:)", lines[start_index]
         ).groups()[0]
-    except ValueError:
+    except Exception:
         raise ValueError(
-            f"Tried to split a class or function. It did not work. Error comes from line {start_index}: ```\n"
-            + "".join(lines[start_index:end_index])
+            f"Tried to split a class or function. It did not work. Error comes from line {start_index}: \n```\n"
+            + "".join(lines[start_index - 10 : end_index + 10])
             + "```\n"
         )
 
@@ -602,8 +602,23 @@ def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int
     _re_func_match = re.compile(r"def\s+([^\(]+)\(")
     for re_pattern in [_re_class_match, _re_func_match]:
         if re_pattern.match(observed_code_header) is not None:
-            observed_obj_name = re_pattern.search(observed_code_header).groups()[0]
-            theoretical_name = re_pattern.search(theoretical_code_header).groups()[0]
+            try:
+                observed_obj_name = re_pattern.search(observed_code_header).groups()[0]
+            except Exception:
+                raise ValueError(
+                    "Tried to split a class or function. It did not work. Error comes from: \n```\n"
+                    + observed_code_header
+                    + "\n```\n"
+                )
+
+            try:
+                theoretical_name = re_pattern.search(theoretical_code_header).groups()[0]
+            except Exception:
+                raise ValueError(
+                    "Tried to split a class or function. It did not work. Error comes from: \n```\n"
+                    + observed_code_header
+                    + "\n```\n"
+                )
             theoretical_code_header = theoretical_code_header.replace(theoretical_name, observed_obj_name)
 
     # Find the first diff. Line 0 is special since we need to compare with the function/class names ignored.
