@@ -63,6 +63,7 @@ if is_tf_available():
         PreTrainedModel,
         PushToHubCallback,
         RagRetriever,
+        TFAutoModel,
         TFBertForMaskedLM,
         TFBertForSequenceClassification,
         TFBertModel,
@@ -434,6 +435,16 @@ class TFModelUtilsTest(unittest.TestCase):
 
                 for p1, p2 in zip(model.weights, new_model.weights):
                     self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
+    @is_pt_tf_cross_test
+    @require_safetensors
+    def test_bfloat16_torch_loading(self):
+        # Assert that neither of these raise an error - both repos contain bfloat16 tensors
+        model1 = TFAutoModel.from_pretrained("Rocketknight1/tiny-random-gpt2-bfloat16-pt", from_pt=True)
+        model2 = TFAutoModel.from_pretrained("Rocketknight1/tiny-random-gpt2-bfloat16")  # PT-format safetensors
+        # Check that PT and safetensors loading paths end up with the same values
+        for weight1, weight2 in zip(model1.weights, model2.weights):
+            self.assertTrue(tf.reduce_all(weight1 == weight2))
 
     @slow
     def test_save_pretrained_signatures(self):

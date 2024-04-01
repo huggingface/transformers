@@ -53,10 +53,7 @@ _IMAGE_CLASS_CHECKPOINT = "google/siglip-base-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_1"
 
 
-SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/siglip-base-patch16-224",
-    # See all SigLIP models at https://huggingface.co/models?filter=siglip
-]
+from ..deprecated._archive_maps import SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def _trunc_normal_(tensor, mean, std, a, b):

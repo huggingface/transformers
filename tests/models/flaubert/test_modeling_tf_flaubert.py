@@ -30,7 +30,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import (
-        TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         FlaubertConfig,
         TFFlaubertForMultipleChoice,
         TFFlaubertForQuestionAnsweringSimple,
@@ -357,9 +356,9 @@ class TFFlaubertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFFlaubertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "hf-internal-testing/tiny-random-flaubert"
+        model = TFFlaubertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_tf

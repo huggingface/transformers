@@ -31,7 +31,6 @@ if is_torch_available():
     import torch
 
     from transformers import CvtForImageClassification, CvtModel
-    from transformers.models.cvt.modeling_cvt import CVT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -236,9 +235,9 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CVT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CvtModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/cvt-13"
+        model = CvtModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -252,11 +251,11 @@ def prepare_img():
 class CvtModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained(CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        return AutoImageProcessor.from_pretrained("microsoft/cvt-13")
 
     @slow
     def test_inference_image_classification_head(self):
-        model = CvtForImageClassification.from_pretrained(CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
+        model = CvtForImageClassification.from_pretrained("microsoft/cvt-13").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

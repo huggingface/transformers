@@ -20,10 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "stabilityai/stablelm-3b-4e1t": "https://huggingface.co/stabilityai/stablelm-3b-4e1t/resolve/main/config.json",
-    # See all StableLM models at https://huggingface.co/models?filter=stablelm
-}
+
+from ..deprecated._archive_maps import STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class StableLmConfig(PretrainedConfig):
@@ -170,8 +168,7 @@ class StableLmConfig(PretrainedConfig):
 
         if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
             raise ValueError(
-                "`rope_scaling` must be a dictionary with with two fields, `type` and `factor`, "
-                f"got {self.rope_scaling}"
+                "`rope_scaling` must be a dictionary with two fields, `type` and `factor`, " f"got {self.rope_scaling}"
             )
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_factor = self.rope_scaling.get("factor", None)

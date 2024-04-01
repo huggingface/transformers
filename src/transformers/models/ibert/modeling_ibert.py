@@ -47,11 +47,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "kssteven/ibert-roberta-base"
 _CONFIG_FOR_DOC = "IBertConfig"
 
-IBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "kssteven/ibert-roberta-base",
-    "kssteven/ibert-roberta-large",
-    "kssteven/ibert-roberta-large-mnli",
-]
+
+from ..deprecated._archive_maps import IBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class IBertEmbeddings(nn.Module):

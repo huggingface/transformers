@@ -1064,7 +1064,7 @@ class LlamaModel(LlamaPreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        if hasattr(self.layers[0].self_attn, "past_key_value"):  # static cache
+        if hasattr(getattr(self.layers[0], "self_attn", {}), "past_key_value"):  # static cache
             target_length = self.config.max_position_embeddings
         else:  # dynamic cache
             target_length = (
@@ -1100,17 +1100,10 @@ class LlamaModel(LlamaPreTrainedModel):
             and attention_mask is not None
             and attention_mask.device.type == "cuda"
         ):
-            # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
-            is_tracing = (
-                torch.jit.is_tracing()
-                or isinstance(input_tensor, torch.fx.Proxy)
-                or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
-            )
-            if not is_tracing and torch.any(attention_mask != 1):
-                # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-                # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-                # Details: https://github.com/pytorch/pytorch/issues/110213
-                causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+            # Details: https://github.com/pytorch/pytorch/issues/110213
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
         return causal_mask
 
@@ -1247,7 +1240,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         # TODO joao: standardize interface for the different Cache classes and remove of this if
         has_static_cache = False
         if past_key_values is None:
-            past_key_values = getattr(self.model.layers[0].self_attn, "past_key_value", None)
+            past_key_values = getattr(getattr(self.model.layers[0], "self_attn", {}), "past_key_value", None)
             has_static_cache = past_key_values is not None
 
         past_length = 0

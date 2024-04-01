@@ -133,6 +133,13 @@ def is_mlflow_available():
     return importlib.util.find_spec("mlflow") is not None
 
 
+def get_mlflow_version():
+    try:
+        return importlib.metadata.version("mlflow")
+    except importlib.metadata.PackageNotFoundError:
+        return importlib.metadata.version("mlflow-skinny")
+
+
 def is_dagshub_available():
     return None not in [importlib.util.find_spec("dagshub"), importlib.util.find_spec("mlflow")]
 
@@ -1081,7 +1088,7 @@ class MLflowCallback(TrainerCallback):
         # "synchronous" flag is only available with mlflow version >= 2.8.0
         # https://github.com/mlflow/mlflow/pull/9705
         # https://github.com/mlflow/mlflow/releases/tag/v2.8.0
-        if packaging.version.parse(importlib.metadata.version("mlflow")) >= packaging.version.parse("2.8.0"):
+        if packaging.version.parse(get_mlflow_version()) >= packaging.version.parse("2.8.0"):
             self._async_log = True
         logger.debug(
             f"MLflow experiment_name={self._experiment_name}, run_name={args.run_name}, nested={self._nested_run},"

@@ -1888,14 +1888,12 @@ class UtilsFunctionsTest(unittest.TestCase):
             ]
         )
         last_assistant_token_is_eos = False
-        max_matches = 5
         validated_tokens, n_matches = _speculative_sampling(
             candidate_input_ids,
             candidate_logits,
             candidate_length,
             new_logits,
             last_assistant_token_is_eos,
-            max_matches,
         )
         self.assertTrue(n_matches.item() == 2)
         self.assertTrue(validated_tokens.tolist()[0] == [1, 4, 8])
@@ -2417,6 +2415,27 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         max_score_diff = (output_sequences_batched.scores[0][1] - output_sequences.scores[0][0]).abs().max()
         self.assertTrue(max_score_diff < 1e-5)
 
+    def test_logits_processor_not_inplace(self):
+        # PT-only test: TF fixes were not made
+        article = "Today a dragon flew over Paris."
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        out = model.generate(input_ids, output_logits=True, output_scores=True, return_dict_in_generate=True)
+        out_with_temp = model.generate(
+            input_ids,
+            temperature=0.5,
+            do_sample=True,
+            output_logits=True,
+            output_scores=True,
+            return_dict_in_generate=True,
+        )
+
+        # if no logits processor is used, scores == logits. Otherwise, the processor has to modify the scores
+        self.assertListEqual(out.logits[-1].tolist(), out.scores[-1].tolist())
+        self.assertNotEqual(out_with_temp.logits[-1].tolist(), out_with_temp.scores[-1].tolist())
+
     def test_eos_token_id_int_and_list_top_k_top_sampling(self):
         # Has TF equivalent: this test relies on random sampling
         generation_kwargs = {
@@ -2787,3 +2806,16 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         self.assertTrue(y_prob > 0.001 and n_prob > 0.001)
         self.assertTrue(y_prob <= 1.0 and n_prob <= 1.0)
+
+    def test_generate_from_inputs_embeds_with_bos_token_id_is_none(self):
+        article = "Today a dragon flew over Paris."
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+        inputs_embeds = model.get_input_embeddings()(input_ids)
+
+        model.generate(inputs_embeds=inputs_embeds, max_length=20, bos_token_id=None)
+
+        # bos_token_id is required when no input ids nor inputs_embeds is passed
+        with self.assertRaises(ValueError):
+            model.generate(max_length=20, bos_token_id=None)

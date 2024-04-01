@@ -47,7 +47,6 @@ if is_tf_available():
 
     from transformers import TFGroupViTModel, TFGroupViTTextModel, TFGroupViTVisionModel, TFSharedEmbeddings
     from transformers.modeling_tf_utils import keras
-    from transformers.models.groupvit.modeling_tf_groupvit import TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -314,9 +313,9 @@ class TFGroupViTVisionModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFGroupViTVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "nvidia/groupvit-gcc-yfcc"
+        model = TFGroupViTVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(
         "TFGroupViTVisionModel does not convert `hidden_states` and `attentions` to tensors as they are all of"
@@ -485,9 +484,9 @@ class TFGroupViTTextModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFGroupViTTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "nvidia/groupvit-gcc-yfcc"
+        model = TFGroupViTTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     def test_saved_model_creation_extended(self):
@@ -697,9 +696,9 @@ class TFGroupViTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFGroupViTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "nvidia/groupvit-gcc-yfcc"
+        model = TFGroupViTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="Currently `saved_model` doesn't work with nested outputs.")
     @slow
