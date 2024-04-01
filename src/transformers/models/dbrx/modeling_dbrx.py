@@ -34,22 +34,24 @@ from torch import nn
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import is_flash_attn_2_available, logging
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
 )
 from .configuration_dbrx import DbrxAttentionConfig, DbrxConfig, DbrxFFNConfig
 
+
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import pad_input  # noqa
-    from flash_attn.bert_padding import index_first_axis, unpad_input
+    from flash_attn.bert_padding import (
+        index_first_axis,
+        pad_input,  # noqa
+        unpad_input,
+    )
 
 logger = logging.get_logger(__name__)
 
@@ -1212,8 +1214,8 @@ class DbrxForCausalLM(DbrxPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, DbrxForCausalLM
 
-        >>> model = DbrxForCausalLM.from_pretrained("databricks/dbrx")
-        >>> tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx")
+        >>> model = DbrxForCausalLM.from_pretrained("databricks/dbrx-instruct")
+        >>> tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
