@@ -331,6 +331,7 @@ ZOEDEPTH_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 class ZoeDepthNeck(nn.Module):
     """
     ZoeDepthNeck. A neck is a module that is normally used between the backbone and the head. It takes a list of tensors as
@@ -568,7 +569,7 @@ class ZoeDepthSeedBinRegressorUnnormed(nn.Module):
 @torch.jit.script
 def inv_attractor(dx, alpha: float = 300, gamma: int = 2):
     """Inverse attractor: dc = dx / (1 + alpha*dx^gamma), where dx = a - c, a = attractor point, c = bin center, dc = shift in bin center
-    This is the default one according to the accompanying paper. 
+    This is the default one according to the accompanying paper.
 
     Args:
         dx (torch.Tensor): The difference tensor dx = Ai - Cj, where Ai is the attractor point and Cj is the bin center.
@@ -578,7 +579,7 @@ def inv_attractor(dx, alpha: float = 300, gamma: int = 2):
     Returns:
         torch.Tensor: Delta shifts - dc; New bin centers = Old bin centers + dc
     """
-    return dx.div(1+alpha*dx.pow(gamma))
+    return dx.div(1 + alpha * dx.pow(gamma))
 
 
 class ZoeDepthAttractorLayerUnnormed(nn.Module):
@@ -737,7 +738,7 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
         self.conditional_log_binomial = ZoeDepthConditionalLogBinomial(
             last_in, bin_embedding_dim, n_classes=n_bins, min_temp=min_temp, max_temp=max_temp
         )
-    
+
     def forward(self, out, rel_depth):
         outconv_activation = out[0]
         btlnck = out[1]
@@ -758,8 +759,7 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
         # unroll this loop for better performance
         for projector, attractor, x in zip(self.projectors, self.attractors, x_blocks):
             b_embedding = projector(x)
-            b, b_centers = attractor(
-                b_embedding, b_prev, prev_b_embedding, interpolate=True)
+            b, b_centers = attractor(b_embedding, b_prev, prev_b_embedding, interpolate=True)
             b_prev = b.clone()
             prev_b_embedding = b_embedding.clone()
 
@@ -767,17 +767,14 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
 
         # concatenative relative depth with last. First interpolate relative depth to last size
         rel_cond = rel_depth.unsqueeze(1)
-        rel_cond = nn.functional.interpolate(
-            rel_cond, size=last.shape[2:], mode='bilinear', align_corners=True)
+        rel_cond = nn.functional.interpolate(rel_cond, size=last.shape[2:], mode="bilinear", align_corners=True)
         last = torch.cat([last, rel_cond], dim=1)
 
-        b_embedding = nn.functional.interpolate(
-            b_embedding, last.shape[-2:], mode='bilinear', align_corners=True)
+        b_embedding = nn.functional.interpolate(b_embedding, last.shape[-2:], mode="bilinear", align_corners=True)
         x = self.conditional_log_binomial(last, b_embedding)
 
         # Now depth value is Sum px * cx , where cx are bin_centers from the last bin tensor
-        b_centers = nn.functional.interpolate(
-            b_centers, x.shape[-2:], mode='bilinear', align_corners=True)
+        b_centers = nn.functional.interpolate(b_centers, x.shape[-2:], mode="bilinear", align_corners=True)
         out = torch.sum(x * b_centers, dim=1, keepdim=True)
 
         return out
@@ -871,17 +868,11 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
 
         hidden_states, features = self.neck(hidden_states, patch_height, patch_width)
 
-        # here we already have 5
         out = [features] + hidden_states
 
         relative_depth, features = self.relative_head(hidden_states)
 
         out = [features] + out
-
-        print("Final number of features:", len(out))
-        for i in out:
-            print(i.shape)
-            print(i[0,0,:3,:3])
 
         metric_depth = self.metric_head(out, relative_depth)
 

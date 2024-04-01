@@ -83,19 +83,32 @@ class ZoeDepthConfig(PretrainedConfig):
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
         use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
             Whether to use pretrained weights for the backbone.
-        btlnck_features (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
-        n_bins (`<fill_type>`, *optional*, defaults to 64): <fill_docstring>
-        min_depth (`<fill_type>`, *optional*, defaults to 0.001): <fill_docstring>
-        max_depth (`<fill_type>`, *optional*, defaults to 10): <fill_docstring>
-        num_attractors (`<fill_type>`, *optional*, defaults to `[16, 8, 4, 1]`): <fill_docstring>
-        bin_embedding_dim (`<fill_type>`, *optional*, defaults to 128): <fill_docstring>
-        num_out_features (`<fill_type>`, *optional*, defaults to `[256, 256, 256, 256]`): <fill_docstring>
-        attractor_alpha (`<fill_type>`, *optional*, defaults to 1000): <fill_docstring>
-        attractor_gamma (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
-        attractor_kind (`<fill_type>`, *optional*, defaults to `"mean"`): <fill_docstring>
-        attractor_type (`<fill_type>`, *optional*, defaults to `"inv"`): <fill_docstring>
-        min_temp (`<fill_type>`, *optional*, defaults to 0.0212): <fill_docstring>
-        max_temp (`<fill_type>`, *optional*, defaults to 50.0): <fill_docstring>
+        btlnck_features (`int`, *optional*, defaults to 256):
+            The number of features in the bottleneck layer.
+        n_bins (`int`, *optional*, defaults to 64):
+            The number of bins to use in the metric depth estimation head.
+        min_depth (`float`, *optional*, defaults to 0.001):
+            The minimum depth value to consider.
+        max_depth (`float`, *optional*, defaults to 10):
+            The maximum depth value to consider.
+        num_attractors (`List[int], *optional*, defaults to `[16, 8, 4, 1]`):
+            The number of attractors to use in each stage.
+        bin_embedding_dim (`int`, *optional*, defaults to 128):
+            The dimension of the bin embeddings.
+        num_out_features (`List[int]`, *optional*, defaults to `[256, 256, 256, 256]`):
+            The number of output features for each stage.
+        attractor_alpha (`int`, *optional*, defaults to 1000):
+            The alpha value to use in the attractor.
+        attractor_gamma (`int`, *optional*, defaults to 2):
+            The gamma value to use in the attractor.
+        attractor_kind (`str`, *optional*, defaults to `"mean"`):
+            The kind of attractor to use. Can be one of [`"mean"`, `"sum"`].
+        attractor_type (`str`, *optional*, defaults to `"inv"`):
+            The type of attractor to use. Can be one of [`"inv"`, `"softmax"`].
+        min_temp (`float`, *optional*, defaults to 0.0212):
+            The minimum temperature value to consider.
+        max_temp (`float`, *optional*, defaults to 50.0):
+            The maximum temperature value to consider.
 
     Example:
 

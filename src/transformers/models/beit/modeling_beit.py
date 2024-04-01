@@ -196,10 +196,6 @@ class BeitPatchEmbeddings(nn.Module):
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, pixel_values: torch.Tensor, position_embedding: Optional[torch.Tensor] = None) -> torch.Tensor:
-        
-        print("Shape of pixel values:", pixel_values.shape)
-        print("Mean of pixel values:", pixel_values.mean())
-
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -220,9 +216,6 @@ class BeitPatchEmbeddings(nn.Module):
             embeddings = embeddings + position_embedding
 
         embeddings = embeddings.flatten(2).transpose(1, 2)
-
-        print("Shape of BEIT embeddings after flattening:", embeddings.shape)
-        print("First values of BEIT embeddings:", embeddings[0, :3, :3])
 
         return embeddings, (patch_height, patch_width)
 

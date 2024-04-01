@@ -32,6 +32,11 @@ The original code can be found [here](https://github.com/isl-org/ZoeDepth).
 
 [[autodoc]] ZoeDepthConfig
 
+## ZoeDepthImageProcessor
+
+[[autodoc]] ZoeDepthImageProcessor
+    - preprocess
+
 ## ZoeDepthForDepthEstimation
 
 [[autodoc]] ZoeDepthForDepthEstimation

@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_torch_available
+from ...file_utils import _LazyModule, is_torch_available, is_vision_available
 from ...utils import OptionalDependencyNotAvailable
 
 
@@ -30,6 +30,14 @@ else:
         "ZoeDepthPreTrainedModel",
     ]
 
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_zoedepth"] = ["ZoeDepthImageProcessor"]
+
 
 if TYPE_CHECKING:
     from .configuration_zoedepth import ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP, ZoeDepthConfig
@@ -45,6 +53,13 @@ if TYPE_CHECKING:
             ZoeDepthPreTrainedModel,
         )
 
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_zoedepth import ZoeDepthImageProcessor
 
 else:
     import sys
