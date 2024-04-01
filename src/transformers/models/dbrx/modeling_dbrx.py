@@ -38,20 +38,13 @@ from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    is_flash_attn_2_available,
-    logging,
-)
-from .configuration_dbrx import DbrxAttentionConfig, DbrxConfig, DbrxFFNConfig
-
+from ...utils import is_flash_attn_2_available, logging
+from .configuration_dbrx import DbrxAttentionConfig, DbrxConfig
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import (
-        index_first_axis,
-        pad_input,  # noqa
-        unpad_input,
-    )
+    from flash_attn.bert_padding import pad_input  # noqa
+    from flash_attn.bert_padding import index_first_axis, unpad_input
 
 logger = logging.get_logger(__name__)
 
@@ -755,11 +748,12 @@ class DbrxExperts(nn.Module):
 
 
 class DbrxFFN(nn.Module):
-    def __init__(self, hidden_size: int, ffn_config: DbrxFFNConfig):
+    def __init__(self, config: DbrxConfig):
         super().__init__()
 
+        ffn_config = config.ffn_config
         self.router = DbrxRouter(
-            hidden_size,
+            hidden_size=config.d_model,
             moe_num_experts=ffn_config.moe_num_experts,
             moe_top_k=ffn_config.moe_top_k,
             moe_jitter_eps=ffn_config.moe_jitter_eps,
@@ -768,7 +762,7 @@ class DbrxFFN(nn.Module):
         )
 
         self.experts = DbrxExperts(
-            hidden_size=hidden_size,
+            hidden_size=config.d_model,
             ffn_hidden_size=ffn_config.ffn_hidden_size,
             moe_num_experts=ffn_config.moe_num_experts,
             ffn_act_fn=ffn_config.ffn_act_fn,
@@ -795,7 +789,7 @@ class DbrxBlock(nn.Module):
             attn_config=config.attn_config,
             block_idx=block_idx,
         )
-        self.ffn = DbrxFFN(hidden_size=config.d_model, ffn_config=config.ffn_config)
+        self.ffn = DbrxFFN(config=config)
 
     def forward(
         self,
