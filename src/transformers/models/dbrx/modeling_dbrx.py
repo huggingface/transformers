@@ -35,10 +35,14 @@ from ...utils import (
 )
 from .configuration_dbrx import DbrxConfig
 
+
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import pad_input  # noqa
-    from flash_attn.bert_padding import index_first_axis, unpad_input
+    from flash_attn.bert_padding import (
+        index_first_axis,
+        pad_input,  # noqa
+        unpad_input,
+    )
 
 logger = logging.get_logger(__name__)
 
