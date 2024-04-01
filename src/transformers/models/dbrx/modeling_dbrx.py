@@ -229,10 +229,12 @@ class DbrxAttention(nn.Module):
         self,
         config: DbrxConfig,
         block_idx: Optional[int] = None,
+        is_decoder: bool = True,
     ):
         super().__init__()
         self.config = config
         self.hidden_size = config.d_model
+        self.is_decoder = is_decoder
         self.num_heads = config.n_heads
         self.head_dim = self.hidden_size // self.num_heads
         self.max_position_embeddings = config.max_seq_len
@@ -661,6 +663,7 @@ class DbrxNormAttentionNorm(nn.Module):
         self.attn = DBRX_ATTENTION_CLASSES[config._attn_implementation](
             config=config,
             block_idx=block_idx,
+            is_decoder=config.is_decoder,
         )
         self.norm_2 = nn.LayerNorm(config.d_model, bias=False)
 

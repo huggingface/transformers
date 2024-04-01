@@ -190,7 +190,7 @@ class DbrxConfig(PretrainedConfig):
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss. See [here]() for more details.
-        is_decoder (`bool`, defaults to `True`):  Whether the model is used as decoder or not (in which case
+        is_decoder (`bool`, defaults to `True`, *optional*, defaults to `True`):  Whether the model is used as decoder or not (in which case
             it’s used as an encoder).
 
 
