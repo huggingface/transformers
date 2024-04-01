@@ -19,7 +19,6 @@ import copy
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import CONFIG_MAPPING
-from ..bit import BitConfig
 
 
 logger = logging.get_logger(__name__)
@@ -31,7 +30,7 @@ ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ZoeDepthConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ZoeDepthModel`]. It is used to instantiate an ZoeDepth
+    This is the configuration class to store the configuration of a [`ZoeDepthForDepthEstimation`]. It is used to instantiate an ZoeDepth
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the ZoeDepth
     [Intel/zoedepth-base](https://huggingface.co/Intel/zoedepth-base) architecture.
@@ -41,37 +40,15 @@ class ZoeDepthConfig(PretrainedConfig):
 
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
         image_size (`int`, *optional*, defaults to 384):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        is_hybrid (`bool`, *optional*, defaults to `False`):
-            Whether to use a hybrid backbone. Useful in the context of loading ZoeDepth-Hybrid models.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        backbone_out_indices (`List[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
-            Indices of the intermediate hidden states to use from backbone.
         readout_type (`str`, *optional*, defaults to `"project"`):
             The readout type to use when processing the readout token (CLS token) of the intermediate hidden states of
             the ViT backbone. Can be one of [`"ignore"`, `"add"`, `"project"`].
@@ -95,8 +72,6 @@ class ZoeDepthConfig(PretrainedConfig):
             Whether to use bias in the pre-activate residual units of the fusion blocks.
         add_projection (`bool`, *optional*, defaults to `False`):
             Whether to add a projection layer before the depth estimation head.
-        backbone_featmap_shape (`List[int]`, *optional*, defaults to `[1, 1024, 24, 24]`):
-            Used only for the `hybrid` embedding type. The shape of the feature maps of the backbone.
         neck_ignore_stages (`List[int]`, *optional*, defaults to `[0, 1]`):
             Used only for the `hybrid` embedding type. The stages of the readout layers to ignore.
         backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
@@ -125,13 +100,13 @@ class ZoeDepthConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import ZoeDepthModel, ZoeDepthConfig
+    >>> from transformers import ZoeDepthConfig, ZoeDepthForDepthEstimation
 
     >>> # Initializing a ZoeDepth zoedepth-large style configuration
     >>> configuration = ZoeDepthConfig()
 
     >>> # Initializing a model from the zoedepth-large style configuration
-    >>> model = ZoeDepthModel(configuration)
+    >>> model = ZoeDepthForDepthEstimation(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -141,21 +116,10 @@ class ZoeDepthConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
         hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
         image_size=384,
         patch_size=16,
-        num_channels=3,
-        is_hybrid=False,
-        qkv_bias=True,
-        backbone_out_indices=[2, 5, 8, 11],
         readout_type="project",
         reassemble_factors=[4, 2, 1, 0.5],
         neck_hidden_sizes=[96, 192, 384, 768],
@@ -164,7 +128,6 @@ class ZoeDepthConfig(PretrainedConfig):
         use_batch_norm_in_fusion_residual=False,
         use_bias_in_fusion_residual=None,
         add_projection=False,
-        backbone_featmap_shape=[1, 1024, 24, 24],
         neck_ignore_stages=[0, 1],
         backbone_config=None,
         backbone=None,
@@ -186,9 +149,6 @@ class ZoeDepthConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        self.hidden_size = hidden_size
-        self.is_hybrid = is_hybrid
-
         if use_pretrained_backbone:
             raise ValueError("Pretrained backbones are not supported yet.")
 
@@ -196,34 +156,7 @@ class ZoeDepthConfig(PretrainedConfig):
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
         use_autobackbone = False
-        if self.is_hybrid:
-            if backbone_config is None and backbone is None:
-                logger.info("Initializing the config with a `BiT` backbone.")
-                backbone_config = {
-                    "global_padding": "same",
-                    "layer_type": "bottleneck",
-                    "depths": [3, 4, 9],
-                    "out_features": ["stage1", "stage2", "stage3"],
-                    "embedding_dynamic_padding": True,
-                }
-                self.backbone_config = BitConfig(**backbone_config)
-            elif isinstance(backbone_config, dict):
-                logger.info("Initializing the config with a `BiT` backbone.")
-                self.backbone_config = BitConfig(**backbone_config)
-            elif isinstance(backbone_config, PretrainedConfig):
-                self.backbone_config = backbone_config
-            else:
-                raise ValueError(
-                    f"backbone_config must be a dictionary or a `PretrainedConfig`, got {backbone_config.__class__}."
-                )
-
-            self.backbone_featmap_shape = backbone_featmap_shape
-            self.neck_ignore_stages = neck_ignore_stages
-
-            if readout_type != "project":
-                raise ValueError("Readout type must be 'project' when using `ZoeDepth-hybrid` mode.")
-
-        elif backbone_config is not None:
+        if backbone_config is not None:
             use_autobackbone = True
 
             if isinstance(backbone_config, dict):
@@ -232,31 +165,20 @@ class ZoeDepthConfig(PretrainedConfig):
                 backbone_config = config_class.from_dict(backbone_config)
 
             self.backbone_config = backbone_config
-            self.backbone_featmap_shape = None
             self.neck_ignore_stages = []
 
         else:
             self.backbone_config = backbone_config
-            self.backbone_featmap_shape = None
             self.neck_ignore_stages = []
 
         self.backbone = backbone
+        self.hidden_act = hidden_act
         self.use_pretrained_backbone = use_pretrained_backbone
-        self.num_hidden_layers = None if use_autobackbone else num_hidden_layers
-        self.num_attention_heads = None if use_autobackbone else num_attention_heads
-        self.intermediate_size = None if use_autobackbone else intermediate_size
-        self.hidden_dropout_prob = None if use_autobackbone else hidden_dropout_prob
-        self.attention_probs_dropout_prob = None if use_autobackbone else attention_probs_dropout_prob
-        self.layer_norm_eps = None if use_autobackbone else layer_norm_eps
         self.image_size = None if use_autobackbone else image_size
         self.patch_size = None if use_autobackbone else patch_size
-        self.num_channels = None if use_autobackbone else num_channels
-        self.qkv_bias = None if use_autobackbone else qkv_bias
-        self.backbone_out_indices = None if use_autobackbone else backbone_out_indices
 
         if readout_type not in ["ignore", "add", "project"]:
             raise ValueError("Readout_type must be one of ['ignore', 'add', 'project']")
-        self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.readout_type = readout_type
         self.reassemble_factors = reassemble_factors

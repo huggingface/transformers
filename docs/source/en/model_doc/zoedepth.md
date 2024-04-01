@@ -32,11 +32,6 @@ The original code can be found [here](https://github.com/isl-org/ZoeDepth).
 
 [[autodoc]] ZoeDepthConfig
 
-## ZoeDepthModel
-
-[[autodoc]] ZoeDepthModel
-    - forward
-
 ## ZoeDepthForDepthEstimation
 
 [[autodoc]] ZoeDepthForDepthEstimation

@@ -26,9 +26,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_zoedepth"] = [
-        "ZOEDEPTH_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ZoeDepthForDepthEstimation",
-        "ZoeDepthModel",
         "ZoeDepthPreTrainedModel",
     ]
 
@@ -43,9 +41,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_zoedepth import (
-            ZOEDEPTH_PRETRAINED_MODEL_ARCHIVE_LIST,
             ZoeDepthForDepthEstimation,
-            ZoeDepthModel,
             ZoeDepthPreTrainedModel,
         )
 

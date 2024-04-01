@@ -31,8 +31,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import MODEL_MAPPING, ZoeDepthForDepthEstimation, ZoeDepthModel
-    from transformers.models.zoedepth.modeling_zoedepth import ZOEDEPTH_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import MODEL_MAPPING, ZoeDepthForDepthEstimation
 
 
 if is_vision_available():
@@ -120,13 +119,6 @@ class ZoeDepthModelTester:
             neck_hidden_sizes=self.neck_hidden_sizes,
         )
 
-    def create_and_check_model(self, config, pixel_values, labels):
-        model = ZoeDepthModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
     def create_and_check_for_depth_estimation(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
         model = ZoeDepthForDepthEstimation(config)
@@ -149,14 +141,7 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (
-            ZoeDepthModel,
-            ZoeDepthForDepthEstimation,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (ZoeDepthForDepthEstimation,) if is_torch_available() else ()
 
     test_pruning = False
     test_resize_embeddings = False
@@ -268,9 +253,9 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ZOEDEPTH_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ZoeDepthModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_id = ""
+        model = ZoeDepthForDepthEstimation.from_pretrained(model_id)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

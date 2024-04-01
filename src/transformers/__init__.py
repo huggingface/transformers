@@ -3829,9 +3829,7 @@ else:
     )
     _import_structure["models.zoedepth"].extend(
         [
-            "ZOEDEPTH_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ZoeDepthForDepthEstimation",
-            "ZoeDepthModel",
             "ZoeDepthPreTrainedModel",
         ]
     )
@@ -8271,9 +8269,7 @@ if TYPE_CHECKING:
             YosoPreTrainedModel,
         )
         from .models.zoedepth import (
-            ZOEDEPTH_PRETRAINED_MODEL_ARCHIVE_LIST,
             ZoeDepthForDepthEstimation,
-            ZoeDepthModel,
             ZoeDepthPreTrainedModel,
         )
 

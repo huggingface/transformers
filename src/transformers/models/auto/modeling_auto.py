@@ -255,7 +255,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodModel"),
         ("yolos", "YolosModel"),
         ("yoso", "YosoModel"),
-        ("zoedepth", "ZoeDepthModel"),
     ]
 )
 
