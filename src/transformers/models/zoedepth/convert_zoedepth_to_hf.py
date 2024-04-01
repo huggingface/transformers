@@ -12,7 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert ZoeDepth checkpoints from the original repository. URL: https://github.com/isl-org/ZoeDepth"""
+"""Convert ZoeDepth checkpoints from the original repository. URL: https://github.com/isl-org/ZoeDepth.
+
+Original logits where obtained by running the following code:
+!git clone -b understanding_zoedepth https://github.com/NielsRogge/ZoeDepth
+!python inference.py
+"""
 
 
 import argparse
@@ -59,7 +64,10 @@ def get_zoedepth_config(model_name):
     )
 
     neck_hidden_sizes = [256, 512, 1024, 1024]
-    config = ZoeDepthConfig(backbone_config=backbone_config, neck_hidden_sizes=neck_hidden_sizes)
+    bin_centers_type = "softplus" if model_name == "ZoeD_N" else "normed"
+    config = ZoeDepthConfig(
+        backbone_config=backbone_config, neck_hidden_sizes=neck_hidden_sizes, bin_centers_type=bin_centers_type
+    )
 
     return config, image_size
 
@@ -266,42 +274,29 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
 
     image_processor = ZoeDepthImageProcessor(size={"height": image_size, "width": image_size})
     pixel_values = image_processor(image, return_tensors="pt").pixel_values
-    # TODO verify image processor
+    # TODO verify pixel values
     # filepath =  hf_hub_download(repo_id="nielsr/test-image", filename="zoedepth_pixel_values.pt", repo_type="dataset")
     # original_pixel_values = torch.load(filepath, map_location="cpu")
     print("Shape of HF pixel values:", pixel_values.shape)
 
-    # from torchvision.transforms import Compose, Normalize, Resize, ToTensor
-
-    # transform = Compose(
-    #     [
-    #         Resize((image_size, image_size)),
-    #         ToTensor(),
-    #         Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    #     ]
-    # )
-
-    # pixel_values = transform(image).unsqueeze(0)
-
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="zoedepth_pixel_values.pt", repo_type="dataset")
     pixel_values = torch.load(filepath)
-
-    print("Mean of what we need:", pixel_values.mean())
-
-    # forward pass original model
-    # out = original_model(pixel_values)
 
     # forward pass HF model
     depth = model(pixel_values).predicted_depth
 
-    print("Shape of metric depth:", depth.shape)
-    print("Mean of metric depth:", depth.mean())
-    print("First values of metric depth:", depth[0, 0, :3, :3])
-
-    # Assert logits
+    # Verify logits
     # These were obtained by inserting the pixel_values at the patch embeddings of BEiT
-    expected_shape = torch.Size([1, 1, 384, 384])
-    expected_slice = torch.tensor([[1.0328, 1.0604, 1.0747], [1.0816, 1.1293, 1.1456], [1.1117, 1.1629, 1.1766]])
+    if model_name == "ZoeD_N":
+        expected_shape = torch.Size([1, 1, 384, 384])
+        expected_slice = torch.tensor([[1.0328, 1.0604, 1.0747], [1.0816, 1.1293, 1.1456], [1.1117, 1.1629, 1.1766]])
+    elif model_name == "ZoeD_K":
+        expected_shape = torch.Size([1, 1, 384, 384])
+        expected_slice = torch.tensor([[1.6567, 1.6852, 1.7065], [1.6707, 1.6764, 1.6713], [1.7195, 1.7166, 1.7118]])
+
+    print("Shape of depth:", depth.shape)
+    print("First 3x3 slice of depth:", depth[0, 0, :3, :3])
+
     assert depth.shape == torch.Size(expected_shape)
     assert torch.allclose(depth[0, 0, :3, :3], expected_slice, atol=1e-4)
     print("Looks ok!")
@@ -324,7 +319,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_name",
         default="ZoeD_N",
-        choices=["ZoeD_N"],
+        choices=["ZoeD_N", "ZoeD_K"],
         type=str,
         help="Name of the original ZoeDepth checkpoint you'd like to convert.",
     )

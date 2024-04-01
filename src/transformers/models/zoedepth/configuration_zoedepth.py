@@ -83,7 +83,7 @@ class ZoeDepthConfig(PretrainedConfig):
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
         use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
             Whether to use pretrained weights for the backbone.
-        btlnck_features (`int`, *optional*, defaults to 256):
+        bottleneck_features (`int`, *optional*, defaults to 256):
             The number of features in the bottleneck layer.
         n_bins (`int`, *optional*, defaults to 64):
             The number of bins to use in the metric depth estimation head.
@@ -103,12 +103,13 @@ class ZoeDepthConfig(PretrainedConfig):
             The gamma value to use in the attractor.
         attractor_kind (`str`, *optional*, defaults to `"mean"`):
             The kind of attractor to use. Can be one of [`"mean"`, `"sum"`].
-        attractor_type (`str`, *optional*, defaults to `"inv"`):
-            The type of attractor to use. Can be one of [`"inv"`, `"softmax"`].
         min_temp (`float`, *optional*, defaults to 0.0212):
             The minimum temperature value to consider.
         max_temp (`float`, *optional*, defaults to 50.0):
             The maximum temperature value to consider.
+        bin_centers_type (`str`, *optional*, defaults to `"softplus"`):
+            Activation type used for bin centers. Can be "normed" or "softplus". For "normed" bin centers, linear normalization trick
+            is applied. This results in bounded bin centers. For "softplus", softplus activation is used and thus are unbounded.
 
     Example:
 
@@ -145,7 +146,7 @@ class ZoeDepthConfig(PretrainedConfig):
         backbone_config=None,
         backbone=None,
         use_pretrained_backbone=False,
-        btlnck_features=256,
+        bottleneck_features=256,
         n_bins=64,
         min_depth=0.001,
         max_depth=10,
@@ -155,9 +156,9 @@ class ZoeDepthConfig(PretrainedConfig):
         attractor_alpha=1000,
         attractor_gamma=2,
         attractor_kind="mean",
-        attractor_type="inv",
         min_temp=0.0212,
         max_temp=50.0,
+        bin_centers_type="softplus",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -202,7 +203,7 @@ class ZoeDepthConfig(PretrainedConfig):
         self.use_bias_in_fusion_residual = use_bias_in_fusion_residual
         self.add_projection = add_projection
 
-        self.btlnck_features = btlnck_features
+        self.bottleneck_features = bottleneck_features
         self.n_bins = n_bins
         self.min_depth = min_depth
         self.max_depth = max_depth
@@ -212,9 +213,9 @@ class ZoeDepthConfig(PretrainedConfig):
         self.attractor_alpha = attractor_alpha
         self.attractor_gamma = attractor_gamma
         self.attractor_kind = attractor_kind
-        self.attractor_type = attractor_type
         self.min_temp = min_temp
         self.max_temp = max_temp
+        self.bin_centers_type = bin_centers_type
 
     def to_dict(self):
         """

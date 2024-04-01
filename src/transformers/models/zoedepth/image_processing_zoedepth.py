@@ -241,7 +241,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         """
-        Center pad an image to be a multiple of `multiple`.
+        Pad an image as done in the original ZoeDepth implementation.
 
         Args:
             image (`np.ndarray`):
