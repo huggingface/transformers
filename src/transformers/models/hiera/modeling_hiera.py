@@ -67,7 +67,7 @@ HIERA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 @dataclass
 class HieraEncoderOutput(ModelOutput):
     """
-    Swin encoder's outputs, with potential hidden states and attentions.
+    Hiera encoder's outputs, with potential hidden states and attentions.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -100,7 +100,7 @@ class HieraEncoderOutput(ModelOutput):
 @dataclass
 class HieraModelOutput(ModelOutput):
     """
-    Swin model's outputs that also contains a pooling of the last hidden states.
+    Hiera model's outputs that also contains a pooling of the last hidden states.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -136,7 +136,7 @@ class HieraModelOutput(ModelOutput):
 @dataclass
 class HieraForImageClassificationOutput(ImageClassifierOutput):
     """
-    Output type of :class:`~transformers.HieraForImageClassification`.
+    Hiera image classification outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, `optional`):
@@ -172,7 +172,7 @@ class HieraForImageClassificationOutput(ImageClassifierOutput):
 @dataclass
 class HieraForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.HieraForPreTraining`.
+    Hiera model's pretraining outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, `optional`):
