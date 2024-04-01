@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Qwen2 model. """
+""" Testing suite for the PyTorch Qwen2MoE model. """
 
 
 import gc
@@ -21,7 +21,7 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, Qwen2Config, is_torch_available, set_seed
+from transformers import AutoTokenizer, Qwen2MoeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     backend_empty_cache,
     require_bitsandbytes,
@@ -43,13 +43,13 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Qwen2ForCausalLM,
-        Qwen2ForSequenceClassification,
-        Qwen2Model,
+        Qwen2MoeForCausalLM,
+        Qwen2MoeForSequenceClassification,
+        Qwen2MoeModel,
     )
 
 
-class Qwen2ModelTester:
+class Qwen2MoeModelTester:
     def __init__(
         self,
         parent,
@@ -72,6 +72,15 @@ class Qwen2ModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
+        expert_interval=1,
+        moe_intermediate_size=12,
+        shared_expert_intermediate_size=36,
+        shared_expert_gate=True,
+        num_experts_per_tok=2,
+        num_experts=8,
+        norm_topk_prob=False,
+        output_router_logits=False,
+        router_aux_loss_coef=0.001,
         type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,
@@ -109,6 +118,15 @@ class Qwen2ModelTester:
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.scope = scope
+        self.expert_interval = expert_interval
+        self.moe_intermediate_size = moe_intermediate_size
+        self.shared_expert_intermediate_size = shared_expert_intermediate_size
+        self.shared_expert_gate = shared_expert_gate
+        self.num_experts_per_tok = num_experts_per_tok
+        self.num_experts = num_experts
+        self.norm_topk_prob = norm_topk_prob
+        self.output_router_logits = output_router_logits
+        self.router_aux_loss_coef = router_aux_loss_coef
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
@@ -135,7 +153,7 @@ class Qwen2ModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return Qwen2Config(
+        return Qwen2MoeConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -149,6 +167,15 @@ class Qwen2ModelTester:
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
+            expert_interval=self.expert_interval,
+            moe_intermediate_size=self.moe_intermediate_size,
+            shared_expert_intermediate_size=self.shared_expert_intermediate_size,
+            shared_expert_gate=self.shared_expert_gate,
+            num_experts_per_tok=self.num_experts_per_tok,
+            num_experts=self.num_experts,
+            norm_topk_prob=self.norm_topk_prob,
+            output_router_logits=self.output_router_logits,
+            router_aux_loss_coef=self.router_aux_loss_coef,
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
@@ -156,18 +183,18 @@ class Qwen2ModelTester:
             bos_token_id=self.bos_token_id,
         )
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Qwen2
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Qwen2Moe
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = Qwen2Model(config=config)
+        model = Qwen2MoeModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->Qwen2
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->Qwen2Moe
     def create_and_check_model_as_decoder(
         self,
         config,
@@ -181,7 +208,7 @@ class Qwen2ModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = Qwen2Model(config)
+        model = Qwen2MoeModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -198,7 +225,7 @@ class Qwen2ModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->Qwen2
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->Qwen2Moe
     def create_and_check_for_causal_lm(
         self,
         config,
@@ -211,13 +238,13 @@ class Qwen2ModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = Qwen2ForCausalLM(config=config)
+        model = Qwen2MoeForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->Qwen2
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->Qwen2Moe
     def create_and_check_decoder_model_past_large_inputs(
         self,
         config,
@@ -232,7 +259,7 @@ class Qwen2ModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = Qwen2ForCausalLM(config=config)
+        model = Qwen2MoeForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -297,16 +324,18 @@ class Qwen2ModelTester:
 
 
 @require_torch
-# Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Qwen2
-class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (Qwen2Model, Qwen2ForCausalLM, Qwen2ForSequenceClassification) if is_torch_available() else ()
-    all_generative_model_classes = (Qwen2ForCausalLM,) if is_torch_available() else ()
+# Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Qwen2Moe
+class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (
+        (Qwen2MoeModel, Qwen2MoeForCausalLM, Qwen2MoeForSequenceClassification) if is_torch_available() else ()
+    )
+    all_generative_model_classes = (Qwen2MoeForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": Qwen2Model,
-            "text-classification": Qwen2ForSequenceClassification,
-            "text-generation": Qwen2ForCausalLM,
-            "zero-shot": Qwen2ForSequenceClassification,
+            "feature-extraction": Qwen2MoeModel,
+            "text-classification": Qwen2MoeForSequenceClassification,
+            "text-generation": Qwen2MoeForCausalLM,
+            "zero-shot": Qwen2MoeForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -321,16 +350,14 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         return True
 
     # Ignore copy
-    # TODO: @Fxmarty
     @require_torch_sdpa
     @slow
-    @unittest.skip(reason="Currently failing.")
     def test_eager_matches_sdpa_generate(self):
         super().test_eager_matches_sdpa_generate()
 
     def setUp(self):
-        self.model_tester = Qwen2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Qwen2Config, hidden_size=37)
+        self.model_tester = Qwen2MoeModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Qwen2MoeConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -345,33 +372,33 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_Qwen2_sequence_classification_model(self):
+    def test_Qwen2Moe_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         print(config)
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = Qwen2ForSequenceClassification(config)
+        model = Qwen2MoeForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_Qwen2_sequence_classification_model_for_single_label(self):
+    def test_Qwen2Moe_sequence_classification_model_for_single_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.problem_type = "single_label_classification"
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = Qwen2ForSequenceClassification(config)
+        model = Qwen2MoeForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_Qwen2_sequence_classification_model_for_multi_label(self):
+    def test_Qwen2Moe_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.problem_type = "multi_label_classification"
@@ -380,17 +407,17 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         sequence_labels = ids_tensor(
             [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
         ).to(torch.float)
-        model = Qwen2ForSequenceClassification(config)
+        model = Qwen2MoeForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    @unittest.skip("Qwen2 buffers include complex numbers, which breaks this test")
+    @unittest.skip("Qwen2Moe buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("Qwen2 uses GQA on all models so the KV cache is a non standard format")
+    @unittest.skip("Qwen2Moe uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
         pass
 
@@ -454,7 +481,7 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 model.save_pretrained(tmpdirname)
 
                 dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # NOTE: Qwen2 apparently does not support right padding + use_cache with FA2.
+                # NOTE: Qwen2Moe apparently does not support right padding + use_cache with FA2.
                 dummy_attention_mask[:, -1] = 1
 
                 model = model_class.from_pretrained(
@@ -478,23 +505,60 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest("Qwen2 flash attention does not support right padding")
+        self.skipTest("Qwen2Moe flash attention does not support right padding")
+
+    # Ignore copy
+    def test_load_balancing_loss(self):
+        r"""
+        Let's make sure we can actually compute the loss and do a backward on it.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.num_experts = 8
+        config.expert_interval = 2
+        config.output_router_logits = True
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        model = Qwen2MoeForCausalLM(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask)
+        self.assertEqual(result.router_logits[0].shape, (91, config.num_experts))
+        torch.testing.assert_close(result.aux_loss.cpu(), torch.tensor(2, dtype=torch.float32), rtol=1e-2, atol=1e-2)
+
+        # First, we make sure that adding padding tokens doesn't change the loss
+        # loss(input_ids, attention_mask=None) == loss(input_ids + padding, attention_mask=attention_mask_with_padding)
+        pad_length = 1000
+        # Add padding tokens (assume that pad_token_id=1) to input_ids
+        padding_block = torch.ones(input_ids.shape[0], pad_length, dtype=torch.int32).to(torch_device)
+        padded_input_ids = torch.cat((padding_block, input_ids), dim=1)  # this is to simulate padding to the left
+        padded_attention_mask = padded_input_ids.ne(1).to(torch_device)
+
+        padded_result = model(padded_input_ids, attention_mask=padded_attention_mask)
+        torch.testing.assert_close(result.aux_loss.cpu(), padded_result.aux_loss.cpu(), rtol=1e-4, atol=1e-4)
+
+        # We make sure that the loss of includding padding tokens != the loss without padding tokens
+        # if attention_mask=None --> we don't exclude padding tokens
+        include_padding_result = model(padded_input_ids, attention_mask=None)
+
+        # This is to mimic torch.testing.assert_not_close
+        self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
 
 @require_torch
-class Qwen2IntegrationTest(unittest.TestCase):
+class Qwen2MoeIntegrationTest(unittest.TestCase):
     @slow
-    def test_model_450m_logits(self):
+    def test_model_a2_7b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-450m-beta", device_map="auto")
+        model = Qwen2MoeForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", device_map="auto")
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
             out = model(input_ids).logits.cpu()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
+        EXPECTED_MEAN = torch.tensor([[-4.2125, -3.6416, -4.9136, -4.3005, -4.9938, -3.4393, -3.5195, -4.1621]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([-5.8781, -5.8616, -0.1052, -4.7200, -5.8781, -5.8774, -5.8773, -5.8777, -5.8781, -5.8780, -5.8781, -5.8779, -1.0787,  1.7583, -5.8779, -5.8780, -5.8783, -5.8778, -5.8776, -5.8781, -5.8784, -5.8778, -5.8778, -5.8777, -5.8779, -5.8778, -5.8776, -5.8780, -5.8779, -5.8781])  # fmt: skip
+        EXPECTED_SLICE = torch.tensor([2.3013, -0.6595, -0.1389, -1.4095, -1.7381, -1.7609, -2.0449, -2.4289, -3.0271, -2.1351, -0.6568, -4.6012, -1.9102, -0.7475, -3.1377, 4.6904, 7.1936, 7.0991, 6.4414, 6.1720, 6.2617, 5.8751, 5.6997, 5.6011, 5.5828, -3.9505, -0.5384, -0.3392, 1.2445, 2.0714])  # fmt: skip
         print(out[0, 0, :30])
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
 
@@ -503,11 +567,11 @@ class Qwen2IntegrationTest(unittest.TestCase):
         gc.collect()
 
     @slow
-    def test_model_450m_generation(self):
-        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
-        prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-450m-beta", use_fast=False)
-        model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-450m-beta", device_map="auto")
+    def test_model_a2_7b_generation(self):
+        EXPECTED_TEXT_COMPLETION = """To be or not to be, that is the question. This is the question that has been asked by many people over the"""
+        prompt = "To be or not to"
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
+        model = Qwen2MoeForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", device_map="auto")
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
@@ -522,12 +586,12 @@ class Qwen2IntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @slow
     @require_flash_attn
-    def test_model_450m_long_prompt(self):
+    def test_model_a2_7b_long_prompt(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
-        model = Qwen2ForCausalLM.from_pretrained(
-            "Qwen/Qwen2-450m-beta",
+        model = Qwen2MoeForCausalLM.from_pretrained(
+            "Qwen/Qwen1.5-MoE-A2.7B",
             device_map="auto",
             load_in_4bit=True,
             attn_implementation="flash_attention_2",
@@ -550,12 +614,12 @@ class Qwen2IntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_sdpa
-    def test_model_450m_long_prompt_sdpa(self):
+    def test_model_a2_7b_long_prompt_sdpa(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
-        model = Qwen2ForCausalLM.from_pretrained(
-            "Qwen/Qwen2-450m-beta",
+        model = Qwen2MoeForCausalLM.from_pretrained(
+            "Qwen/Qwen1.5-MoE-A2.7B",
             device_map="auto",
             attn_implementation="sdpa",
         )
@@ -575,9 +639,9 @@ class Qwen2IntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
-        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
-        prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-450m-beta", use_fast=False)
+        EXPECTED_TEXT_COMPLETION = """To be or not to be, that is the question. This is the question that has been asked by many people over the"""
+        prompt = "To be or not to"
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
 
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
@@ -589,13 +653,15 @@ class Qwen2IntegrationTest(unittest.TestCase):
     @slow
     def test_speculative_generation(self):
         EXPECTED_TEXT_COMPLETION = (
-            "My favourite condiment is 100% Sriracha. I love the heat, the tang and the fact costs"
+            "To be or not to be, that is the question.\nThe answer is to be, of course. But what does it"
         )
-        prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B-beta", use_fast=False)
-        model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-450m-beta", device_map="auto", torch_dtype=torch.float16)
-        assistant_model = Qwen2ForCausalLM.from_pretrained(
-            "Qwen/Qwen2-450m-beta", device_map="auto", torch_dtype=torch.float16
+        prompt = "To be or not to"
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
+        model = Qwen2MoeForCausalLM.from_pretrained(
+            "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", torch_dtype=torch.float16
+        )
+        assistant_model = Qwen2MoeForCausalLM.from_pretrained(
+            "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", torch_dtype=torch.float16
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
