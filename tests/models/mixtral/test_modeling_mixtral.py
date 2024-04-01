@@ -22,9 +22,11 @@ import pytest
 
 from transformers import MixtralConfig, is_torch_available
 from transformers.testing_utils import (
+    is_flaky,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -42,7 +44,6 @@ if is_torch_available():
 
 
 class MixtralModelTester:
-    # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTester.__init__
     def __init__(
         self,
         parent,
@@ -69,6 +70,7 @@ class MixtralModelTester:
         num_choices=4,
         pad_token_id=0,
         scope=None,
+        router_jitter_noise=0.1,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -94,6 +96,7 @@ class MixtralModelTester:
         self.num_choices = num_choices
         self.pad_token_id = pad_token_id
         self.scope = scope
+        self.router_jitter_noise = router_jitter_noise
 
     # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
@@ -137,6 +140,7 @@ class MixtralModelTester:
             pad_token_id=self.pad_token_id,
             num_experts_per_tok=2,
             num_local_experts=2,
+            router_jitter_noise=self.router_jitter_noise,
         )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Mixtral
@@ -305,6 +309,13 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     ):
         return True
 
+    # TODO: @Fxmarty
+    @is_flaky(max_attempts=3, description="flaky on some models.")
+    @require_torch_sdpa
+    @slow
+    def test_eager_matches_sdpa_generate(self):
+        super().test_eager_matches_sdpa_generate()
+
     def setUp(self):
         self.model_tester = MixtralModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MixtralConfig, hidden_size=37)
@@ -454,7 +465,7 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
-    def test_flash_attn_2_inference_padding_right(self):
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest("Mixtral flash attention does not support right padding")
 
     # Ignore copy
