@@ -618,7 +618,7 @@ def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int
             except Exception:
                 raise ValueError(
                     "Tried to split a class or function. It did not work. Error comes from: \n```\n"
-                    + observed_code_header
+                    + theoretical_code_header
                     + "\n```\n"
                 )
             theoretical_code_header = theoretical_code_header.replace(theoretical_name, observed_obj_name)
