@@ -432,7 +432,7 @@ class FlaubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_flaubert_model(*config_and_inputs)
 
-    # Copied from tests/models/distilbert/test_modeling_distilbert.py
+    # Copied from tests/models/distilbert/test_modeling_distilbert.py with Distilbert->Flaubert
     def test_flaubert_model_with_sinusoidal_encodings(self):
         config = FlaubertConfig(sinusoidal_embeddings=True)
         model = FlaubertModel(config=config)
