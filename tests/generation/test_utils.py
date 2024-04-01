@@ -720,7 +720,7 @@ class GenerationTesterMixin:
 
             input_embeds = model.get_input_embeddings()(input_ids)
             beam_kwargs.update({"inputs_embeds": input_embeds})
-            output_generate = self._beam_sample_generate(
+            output_generate2 = self._beam_sample_generate(
                 model=model,
                 input_ids=None,
                 attention_mask=attention_mask,
@@ -729,7 +729,7 @@ class GenerationTesterMixin:
                 logits_warper_kwargs=logits_warper_kwargs,
             )
 
-            self.assertTrue(output_generate.shape[-1] == max_length)
+            torch.testing.assert_close(output_generate[:,input_embeds.shape[1]:], output_generate2)
 
     def test_beam_sample_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
