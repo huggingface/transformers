@@ -284,6 +284,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("gpt2", "GPT2LMHeadModel"),
         ("gpt_bigcode", "GPTBigCodeForCausalLM"),
         ("gptsan-japanese", "GPTSanJapaneseForConditionalGeneration"),
+        ("hiera", "HieraForPreTraining"),
         ("ibert", "IBertForMaskedLM"),
         ("idefics", "IdeficsForVisionText2Text"),
         ("layoutlm", "LayoutLMForMaskedLM"),
@@ -549,7 +550,6 @@ MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
     [
         ("deit", "DeiTForMaskedImageModeling"),
         ("focalnet", "FocalNetForMaskedImageModeling"),
-        ("hiera", "HieraForMaskedImageModeling"),
         ("swin", "SwinForMaskedImageModeling"),
         ("swinv2", "Swinv2ForMaskedImageModeling"),
         ("vit", "ViTForMaskedImageModeling"),
@@ -1215,6 +1215,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("dinat", "DinatBackbone"),
         ("dinov2", "Dinov2Backbone"),
         ("focalnet", "FocalNetBackbone"),
+        ("hiera", "HieraBackbone"),
         ("maskformer-swin", "MaskFormerSwinBackbone"),
         ("nat", "NatBackbone"),
         ("pvt_v2", "PvtV2Backbone"),

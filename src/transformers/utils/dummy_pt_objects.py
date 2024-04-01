@@ -4270,6 +4270,13 @@ class GroupViTVisionModel(metaclass=DummyObject):
 HIERA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class HieraBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class HieraForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -4277,7 +4284,7 @@ class HieraForImageClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class HieraForMaskedImageModeling(metaclass=DummyObject):
+class HieraForPreTraining(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

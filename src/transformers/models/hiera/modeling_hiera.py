@@ -26,10 +26,10 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
+    BackboneOutput,
     BaseModelOutput,
     BaseModelOutputWithPooling,
     ImageClassifierOutput,
-    MaskedImageModelingOutput,
     ModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
@@ -40,6 +40,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.backbone_utils import BackboneMixin
 from .configuration_hiera import HieraConfig
 
 
@@ -132,6 +133,84 @@ class HieraModelOutput(ModelOutput):
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
+@dataclass
+class HieraForImageClassificationOutput(ImageClassifierOutput):
+    """
+    Output type of :class:`~transformers.HieraForImageClassification`.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, `optional`):
+            Classification loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
+            Prediction scores of the classification head (logits of the output layer).
+        hidden_states (`tuple(torch.FloatTensor)`, `optional`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, sequence_length, hidden_size)`. These are the unrolled hidden states of the model.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, `optional`):
+            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        reshaped_hidden_states (`tuple(torch.FloatTensor)`, `optional`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, hidden_size, height, width)`. These are the reshaped and re-rolled hidden states of the model.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+            include the spatial dimensions.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+
+
+@dataclass
+class HieraForPreTrainingOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.HieraForPreTraining`.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, `optional`):
+            Total loss as the sum of the contrastive loss and the classification loss.
+        contrastive_loss (`torch.FloatTensor` of shape `(1,)`, `optional`):
+            Contrastive loss.
+        classification_loss (`torch.FloatTensor` of shape `(1,)`, `optional`):
+            Classification loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
+            Prediction scores of the classification head (logits of the output layer).
+        hidden_states (`tuple(torch.FloatTensor)`, `optional`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, sequence_length, hidden_size)`. These are the unrolled hidden states of the model.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, `optional`):
+            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        reshaped_hidden_states (`tuple(torch.FloatTensor)`, `optional`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, hidden_size, height, width)`. These are the reshaped and re-rolled hidden states of the model.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+            include the spatial dimensions.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    contrastive_loss: Optional[torch.FloatTensor] = None
+    classification_loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+
+
 # Taken from https://github.com/facebookresearch/hiera/blob/main/hiera/hiera_utils.py#L73
 def conv_nd(n: int) -> nn.Module:
     """
@@ -168,7 +247,7 @@ class HieraPatchEmbeddings(nn.Module):
 
         self.projection = conv_nd(self.spatial_dims)(
             self.num_channels,
-            config.hidden_size,
+            config.embed_dim,
             kernel_size=config.patch_kernel,
             stride=config.patch_stride,
             padding=config.patch_padding,
@@ -241,14 +320,14 @@ class HieraEmbeddings(nn.Module):
                 torch.zeros(
                     1,
                     self.tokens_spatial_shape[1] * self.tokens_spatial_shape[2],
-                    config.hidden_size,
+                    config.embed_dim,
                 )
             )
             self.position_embeddings_temporal = nn.Parameter(
-                torch.zeros(1, self.tokens_spatial_shape[0], config.hidden_size)
+                torch.zeros(1, self.tokens_spatial_shape[0], config.embed_dim)
             )
         else:
-            self.position_embeddings = nn.Parameter(torch.zeros(1, self.num_tokens, config.hidden_size))
+            self.position_embeddings = nn.Parameter(torch.zeros(1, self.num_tokens, config.embed_dim))
 
     def interpolate_pos_encoding(
         self, embeddings: torch.Tensor, pos_embeds: torch.Tensor, height: int, width: int
@@ -1130,7 +1209,7 @@ class HieraMultiScaleHead(nn.Module):
 
 
 @add_start_docstrings(
-    """Hiera Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://arxiv.org/abs/2111.09886).
+    """The Hiera Model transformer with the decoder on top for self-supervised pre-training.
 
     <Tip>
 
@@ -1141,7 +1220,7 @@ class HieraMultiScaleHead(nn.Module):
     """,
     HIERA_START_DOCSTRING,
 )
-class HieraForMaskedImageModeling(HieraPreTrainedModel):
+class HieraForPreTraining(HieraPreTrainedModel):
     def __init__(self, config: HieraConfig) -> None:
         super().__init__(config)
         # Encoder
@@ -1156,7 +1235,7 @@ class HieraForMaskedImageModeling(HieraPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(HIERA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=HieraForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -1166,7 +1245,7 @@ class HieraForMaskedImageModeling(HieraPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, MaskedImageModelingOutput]:
+    ) -> Union[tuple, HieraForPreTrainingOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -1175,7 +1254,7 @@ class HieraForMaskedImageModeling(HieraPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import AutoImageProcessor, HieraForMaskedImageModeling
+        >>> from transformers import AutoImageProcessor, HieraForPreTraining
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -1183,8 +1262,8 @@ class HieraForMaskedImageModeling(HieraPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("google/hiera-base-patch16-224-in21k")
-        >>> model = HieraForMaskedImageModeling.from_pretrained("google/hiera-base-patch16-224-in21k")
+        >>> image_processor = AutoImageProcessor.from_pretrained("EduardoPacheco/hiera-mae-base")
+        >>> model = HieraForPreTraining.from_pretrained("EduardoPacheco/hiera-mae-base")
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
         >>> pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
@@ -1239,11 +1318,12 @@ class HieraForMaskedImageModeling(HieraPreTrainedModel):
             output = (reconstructed_pixel_values,) + outputs[1:]
             return ((masked_im_loss,) + output) if masked_im_loss is not None else output
 
-        return MaskedImageModelingOutput(
+        return HieraForPreTrainingOutput(
             loss=masked_im_loss,
             reconstruction=reconstructed_pixel_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            reshaped_hidden_states=outputs.reshaped_hidden_states,
         )
 
 
@@ -1280,7 +1360,7 @@ class HieraForImageClassification(HieraPreTrainedModel):
     @add_start_docstrings_to_model_forward(HIERA_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutput,
+        output_type=HieraForImageClassificationOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
@@ -1344,9 +1424,112 @@ class HieraForImageClassification(HieraPreTrainedModel):
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutput(
+        return HieraForImageClassificationOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            reshaped_hidden_states=outputs.reshaped_hidden_states,
+        )
+
+
+@add_start_docstrings(
+    """
+    Hiera backbone, to be used with frameworks like DETR and MaskFormer.
+    """,
+    HIERA_START_DOCSTRING,
+)
+class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
+    def __init__(self, config: HieraConfig):
+        super().__init__(config)
+        super()._init_backbone(config)
+
+        self.num_features = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
+        self.embeddings = HieraEmbeddings(config)
+        self.encoder = HieraEncoder(config)
+
+        # Add layer norms to hidden states of out_features
+        hidden_states_norms = {}
+        for stage, num_channels in zip(self._out_features, self.channels):
+            hidden_states_norms[stage] = nn.LayerNorm(num_channels)
+        self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embeddings.patch_embeddings
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> BackboneOutput:
+        """
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoBackbone
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> processor = AutoImageProcessor.from_pretrained("EduardoPacheco/hiera-tiny-224")
+        >>> model = AutoBackbone.from_pretrained(
+        ...     "EduardoPacheco/hiera-tiny-224", out_features=["stage1", "stage2", "stage3", "stage4"]
+        ... )
+
+        >>> inputs = processor(image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> feature_maps = outputs.feature_maps
+        >>> list(feature_maps[-1].shape)
+        [1, 768, 7, 7]
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
+        embedding_output, input_dimensions = self.embeddings(pixel_values)
+
+        outputs = self.encoder(
+            embedding_output,
+            input_dimensions,
+            head_mask=None,
+            output_attentions=output_attentions,
+            output_hidden_states=True,
+            return_dict=True,
+        )
+
+        hidden_states = outputs.reshaped_hidden_states
+
+        feature_maps = ()
+        for stage, hidden_state in zip(self.stage_names, hidden_states):
+            if stage in self.out_features:
+                batch_size, num_channels, height, width = hidden_state.shape
+                hidden_state = hidden_state.permute(0, 2, 3, 1).contiguous()
+                hidden_state = hidden_state.view(batch_size, height * width, num_channels)
+                hidden_state = self.hidden_states_norms[stage](hidden_state)
+                hidden_state = hidden_state.view(batch_size, height, width, num_channels)
+                hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
+                feature_maps += (hidden_state,)
+
+        if not return_dict:
+            output = (feature_maps,)
+            if output_hidden_states:
+                output += (outputs.hidden_states,)
+            return output
+
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )

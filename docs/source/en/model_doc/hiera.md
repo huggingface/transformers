@@ -39,11 +39,11 @@ This model was contributed by [EduardoPacheco](https://huggingface.co/EduardoPac
 [[autodoc]] HieraModel
     - forward
 
-## HieraForMaskedImageModeling
+## HieraForPreTraining
 
-[[autodoc]] HieraForMaskedImageModeling
+[[autodoc]] HieraForPreTraining
     - forward
-
+  
 ## HieraForImageClassification
 
 [[autodoc]] HieraForImageClassification

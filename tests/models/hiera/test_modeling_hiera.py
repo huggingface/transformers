@@ -30,6 +30,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -39,7 +40,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import HieraForImageClassification, HieraForMaskedImageModeling, HieraModel
+    from transformers import HieraBackbone, HieraForImageClassification, HieraForPreTraining, HieraModel
     from transformers.models.hiera.modeling_hiera import HIERA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -124,8 +125,35 @@ class HieraModelTester:
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, expected_dim))
 
-    def create_and_check_for_masked_image_modeling(self, config, pixel_values, labels):
-        model = HieraForMaskedImageModeling(config=config)
+    def create_and_check_backbone(self, config, pixel_values, labels):
+        model = HieraBackbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify hidden states
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], 16, 16])
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), len(config.out_features))
+
+        # verify backbone works with out_features=None
+        config.out_features = None
+        model = HieraBackbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify feature maps
+        self.parent.assertEqual(len(result.feature_maps), 1)
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, model.channels[-1], 4, 4])
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), 1)
+
+    def create_and_check_for_pretraining(self, config, pixel_values, labels):
+        model = HieraForPreTraining(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -135,7 +163,7 @@ class HieraModelTester:
 
         # test greyscale images
         config.num_channels = 1
-        model = HieraForMaskedImageModeling(config)
+        model = HieraForPreTraining(config)
         model.to(torch_device)
         model.eval()
 
@@ -182,8 +210,9 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             HieraModel,
+            HieraBackbone,
             HieraForImageClassification,
-            HieraForMaskedImageModeling,
+            HieraForPreTraining,
         )
         if is_torch_available()
         else ()
@@ -223,9 +252,13 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_masked_image_modeling(self):
+    def test_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
+        self.model_tester.create_and_check_backbone(*config_and_inputs)
+
+    def test_for_pretraining(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -330,3 +363,12 @@ class HieraModelIntegrationTest(unittest.TestCase):
         # forward pass to make sure inference works in fp16
         with torch.no_grad():
             _ = model(pixel_values)
+
+
+@require_torch
+class HieraBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (HieraBackbone,) if is_torch_available() else ()
+    config_class = HieraConfig
+
+    def setUp(self):
+        self.model_tester = HieraModelTester(self)

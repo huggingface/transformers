@@ -22,6 +22,7 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.backbone_utils import get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -36,7 +37,7 @@ class HieraConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`HieraModel`]. It is used to instantiate an Hiera
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Hiera
-    [google/hiera-base-patch16-224](https://huggingface.co/google/hiera-base-patch16-224) architecture.
+    [EduardoPacheco/hiera-base-224](https://huggingface.co/EduardoPacheco/hiera-base-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -89,6 +90,15 @@ class HieraConfig(PretrainedConfig):
             The initial weight value for layer normalization layers.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
+        decoder_embed_dim (`int`, *optional*):
+            Dimensionality of decoder embeddings for MAE pretraining.
+        decoder_depth (`int`, *optional*):
+            Depth of the decoder for MAE pretraining.
+        decoder_num_heads (`int`, *optional*):
+            Number of attention heads in each layer of the decoder for MAE pretraining.
+        out_features (`<fill_type>`, *optional*): <fill_docstring>
+        out_indices (`<fill_type>`, *optional*): <fill_docstring>
+
 
     Example:
 
@@ -130,6 +140,11 @@ class HieraConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_init=1.0,
         layer_norm_eps=1e-6,
+        decoder_embed_dim=None,
+        decoder_depth=None,
+        decoder_num_heads=None,
+        out_features=None,
+        out_indices=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -155,8 +170,13 @@ class HieraConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_init = layer_norm_init
         self.layer_norm_eps = layer_norm_eps
-
-        self.hidden_size = embed_dim
+        # we set the hidden_size attribute in order to make Hiera work with VisionEncoderDecoderModel
+        # this indicates the channel dimension after the last stage of the model
+        self.hidden_size = int(embed_dim * embed_dim_multiplier ** (len(depths) - 1))
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )
 
 
 class HieraOnnxConfig(OnnxConfig):

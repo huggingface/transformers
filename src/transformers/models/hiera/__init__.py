@@ -31,7 +31,8 @@ else:
     _import_structure["modeling_hiera"] = [
         "HIERA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "HieraForImageClassification",
-        "HieraForMaskedImageModeling",
+        "HieraForPreTraining",
+        "HieraBackbone",
         "HieraModel",
         "HieraPreTrainedModel",
     ]
@@ -47,8 +48,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_hiera import (
             HIERA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            HieraBackbone,
             HieraForImageClassification,
-            HieraForMaskedImageModeling,
+            HieraForPreTraining,
             HieraModel,
             HieraPreTrainedModel,
         )

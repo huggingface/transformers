@@ -2403,8 +2403,9 @@ else:
     _import_structure["models.hiera"].extend(
         [
             "HIERA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "HieraBackbone",
             "HieraForImageClassification",
-            "HieraForMaskedImageModeling",
+            "HieraForPreTraining",
             "HieraModel",
             "HieraPreTrainedModel",
         ]
@@ -7123,8 +7124,9 @@ if TYPE_CHECKING:
         )
         from .models.hiera import (
             HIERA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            HieraBackbone,
             HieraForImageClassification,
-            HieraForMaskedImageModeling,
+            HieraForPreTraining,
             HieraModel,
             HieraPreTrainedModel,
         )
