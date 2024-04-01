@@ -67,7 +67,7 @@ class DbrxModelTester:
         resid_pdrop=0.0,
         router_aux_loss_coef=0.05,
         tie_word_embeddings=False,
-        torch_dtype=torch.bfloat16,
+        torch_dtype="bfloat16",
         vocab_size=99,
     ):
         # Parameters unique to testing
