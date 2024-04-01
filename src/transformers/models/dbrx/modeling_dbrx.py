@@ -450,14 +450,7 @@ class DbrxFlashAttention2(DbrxAttention):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
-        self,
-        query_states: torch.Tensor,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        query_length: int,
-        dropout: float = 0.0,
-        softmax_scale: Optional[float] = None,
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -473,7 +466,6 @@ class DbrxFlashAttention2(DbrxAttention):
             attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
-            query_length (`int`): The length of the query sequence.
             dropout (`float`):
                 Attention dropout
             softmax_scale (`float`, *optional*):
@@ -517,14 +509,7 @@ class DbrxFlashAttention2(DbrxAttention):
         return attn_output
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
-    def _upad_input(
-        self,
-        query_layer: torch.Tensor,
-        key_layer: torch.Tensor,
-        value_layer: torch.Tensor,
-        attention_mask: torch.Tensor,
-        query_length: int,
-    ):
+    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
@@ -1113,6 +1098,17 @@ class DbrxModel(DbrxPreTrainedModel):
                     use_cache=use_cache,
                     cache_position=cache_position,
                 )
+                # block_outputs = self._gradient_checkpointing_func(
+                #     block.__call__,
+                #     hidden_states,
+                #     causal_mask,
+                #     position_ids,
+                #     past_key_values,
+                #     output_attentions,
+                #     output_router_logits,
+                #     use_cache,
+                #     cache_position,
+                # )
             else:
                 block_outputs = block(
                     hidden_states,
