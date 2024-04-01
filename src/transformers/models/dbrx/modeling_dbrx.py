@@ -25,24 +25,30 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers.modeling_utils import PreTrainedModel
-from transformers.utils import is_flash_attn_2_available, logging
-
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_flash_attn_2_available, logging
-from .configuration_dbrx import DbrxAttentionConfig, DbrxConfig
+from ...utils import (
+    is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
+    logging,
+)
+from .configuration_dbrx import DbrxConfig
+
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import pad_input  # noqa
-    from flash_attn.bert_padding import index_first_axis, unpad_input
+    from flash_attn.bert_padding import (
+        index_first_axis,
+        pad_input,  # noqa
+        unpad_input,
+    )
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DbrxConfig"
+
 
 # Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with Gemma->Dbrx
 class DbrxRotaryEmbedding(nn.Module):
@@ -74,12 +80,14 @@ class DbrxRotaryEmbedding(nn.Module):
             sin = emb.sin()
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
+
 # Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
+
 
 # Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -107,6 +115,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
+
 
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -226,6 +235,7 @@ def resolve_ffn_act_fn(ffn_act_fn: dict) -> Callable[[torch.Tensor], torch.Tenso
 #############################################################################
 # Copied from LLaMaAttention
 #############################################################################
+
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
@@ -362,6 +372,12 @@ class DbrxFlashAttention2(DbrxAttention):
             raise ImportError("Flash Attention 2 is not available. Please install it with `pip install flash-attn`.")
 
         super().__init__(*args, **kwargs)
+
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # This module inherits from `DbrxAttention` as the weights of the module stays
+        # From: https://github.com/huggingface/transformers/blob/3b8e2932ce743008f63585aae1e1b8b30dc8b3ac/src/transformers/models/gemma/modeling_gemma.py#L318
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
     def forward(
         self,
@@ -578,7 +594,6 @@ class DbrxSdpaAttention(DbrxAttention):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
@@ -666,23 +681,17 @@ class DbrxNormAttentionNorm(nn.Module):
     def __init__(
         self,
         config: DbrxConfig,
-        hidden_size: int,
-        num_heads: int,
-        max_position_embeddings: int,
-        resid_pdrop: float,
-        attn_implementation: str,
-        attn_config: DbrxAttentionConfig,
         block_idx: Optional[int] = None,
     ):
         super().__init__()
         self.block_idx = block_idx
-        self.resid_pdrop = resid_pdrop
-        self.norm_1 = nn.LayerNorm(hidden_size, bias=False)
+        self.resid_pdrop = config.resid_pdrop
+        self.norm_1 = nn.LayerNorm(config.d_model, bias=False)
         self.attn = DBRX_ATTENTION_CLASSES[config._attn_implementation](
             config=config,
             block_idx=block_idx,
         )
-        self.norm_2 = nn.LayerNorm(hidden_size, bias=False)
+        self.norm_2 = nn.LayerNorm(config.d_model, bias=False)
 
     def forward(
         self,
@@ -857,12 +866,6 @@ class DbrxBlock(nn.Module):
         self.block_idx = block_idx
         self.norm_attn_norm = DbrxNormAttentionNorm(
             config=config,
-            hidden_size=config.d_model,
-            num_heads=config.n_heads,
-            max_position_embeddings=config.max_seq_len,
-            resid_pdrop=config.resid_pdrop,
-            attn_implementation=config._attn_implementation,
-            attn_config=config.attn_config,
             block_idx=block_idx,
         )
         self.ffn = DbrxFFN(config=config)
