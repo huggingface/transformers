@@ -658,7 +658,6 @@ class DbrxNormAttentionNorm(nn.Module):
         self.block_idx = block_idx
         self.resid_pdrop = config.resid_pdrop
         self.norm_1 = nn.LayerNorm(config.d_model, bias=False)
-        print(f"config._attn_implementation={config._attn_implementation}")
         self.attn = DBRX_ATTENTION_CLASSES[config._attn_implementation](
             config=config,
             block_idx=block_idx,
