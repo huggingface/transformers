@@ -726,6 +726,7 @@ class GenerationTesterMixin:
                 attention_mask=attention_mask,
                 max_length=max_length,
                 beam_kwargs=beam_kwargs,
+                logits_warper_kwargs=logits_warper_kwargs,
             )
 
             self.assertTrue(output_generate.shape[-1] == max_length)
