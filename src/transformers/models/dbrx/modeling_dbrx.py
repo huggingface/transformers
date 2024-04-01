@@ -375,7 +375,7 @@ class DbrxFlashAttention2(DbrxAttention):
 
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # This module inherits from `DbrxAttention` as the weights of the module stays
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         # From: https://github.com/huggingface/transformers/blob/3b8e2932ce743008f63585aae1e1b8b30dc8b3ac/src/transformers/models/gemma/modeling_gemma.py#L318
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
@@ -747,17 +747,9 @@ class DbrxRouter(nn.Module):
 
         self.layer = nn.Linear(self.hidden_size, self.moe_num_experts, bias=False)
 
-    def jitter(self, x: torch.Tensor) -> torch.Tensor:
-        if self.moe_jitter_eps is None:
-            raise RuntimeError("The router does not have moe_jitter_eps set.")
-        low = 1.0 - self.moe_jitter_eps
-        high = 1.0 + self.moe_jitter_eps
-        noise = torch.rand(x.size(), dtype=x.dtype, device=x.device)
-        return low + noise * (high - low)
-
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]:
         if self.training and self.moe_jitter_eps is not None:
-            x = x * self.jitter(x)
+            x *= torch.empty_like(x).uniform_(1.0 - self.moe_jitter_eps, 1.0 + self.moe_jitter_eps)
 
         weights = self.layer(x.view(-1, x.shape[-1])).softmax(dim=-1, dtype=torch.float32)
         top_weights, top_experts = torch.topk(weights, self.moe_top_k, dim=-1)
