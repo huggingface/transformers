@@ -873,7 +873,6 @@ class TokenizerTesterMixin:
 
         tokenizers = self.get_tokenizers(do_lower_case=True)
         for tokenizer in tokenizers:
-            print("Tokenizer:", tokenizer)
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if hasattr(tokenizer, "do_lower_case") and tokenizer.do_lower_case:
                     continue
@@ -891,9 +890,6 @@ class TokenizerTesterMixin:
 
                 toks_after_adding = tokenizer.tokenize(text)
                 toks_after_adding2 = tokenizer.tokenize(text2)
-
-                print("Toks after adding:", toks_after_adding)
-                print("Toks after adding2:", toks_after_adding2)
 
                 self.assertEqual(len(toks_after_adding), len(toks_after_adding2))  # Length should still be the same
                 self.assertNotEqual(
