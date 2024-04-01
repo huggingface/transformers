@@ -18,11 +18,7 @@
 import unittest
 
 from transformers import DbrxConfig, is_torch_available
-from transformers.testing_utils import (
-    require_torch,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -328,7 +324,7 @@ class DbrxModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = DbrxModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DbrxConfig, d_model=37, is_decoder=True)
+        self.config_tester = ConfigTester(self, config_class=DbrxConfig, d_model=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
