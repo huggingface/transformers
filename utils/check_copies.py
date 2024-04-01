@@ -314,8 +314,8 @@ def split_code_into_blocks(
             rf"^{' ' * (indent - 4)}((class|def)\s+\S+)(\(|\:)", lines[start_index]
         ).groups()[0]
     except Exception:
-        start_context = min(start_index-10, 0)
-        end_context = min(end_index+10, len(lines))
+        start_context = min(start_index - 10, 0)
+        end_context = min(end_index + 10, len(lines))
         raise ValueError(
             f"Tried to split a class or function. It did not work. Error comes from line {start_index}: \n```\n"
             + "".join(lines[start_context:end_context])
