@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team.
+# Copyright 2024 Meta and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,14 +16,13 @@
 
 
 import argparse
-from dataclasses import dataclass
 
 import requests
 import torch
 from PIL import Image
 from torchvision import transforms
 
-from transformers import BeitImageProcessor, HieraConfig, HieraForImageClassification, HieraModel
+from transformers import BitImageProcessor, HieraConfig, HieraForImageClassification, HieraModel
 from transformers.utils import logging
 
 
@@ -92,8 +91,8 @@ def create_rename_keys(config, base_model=False):
         # layernorm + classification head
         rename_keys.extend(
             [
-                ("norm.weight", "hiera.layernorm.weight"),
-                ("norm.bias", "hiera.layernorm.bias"),
+                ("norm.weight", "hiera.pooler.layernorm.weight"),
+                ("norm.bias", "hiera.pooler.layernorm.bias"),
                 ("head.projection.weight", "classifier.weight"),
                 ("head.projection.bias", "classifier.bias"),
             ]
@@ -120,14 +119,7 @@ def prepare_img():
     return im
 
 
-@dataclass
-class HieraInfo:
-    base_checkpoint_url: str
-    checkpoint_url: str
-    config: HieraConfig
-
-
-def get_hiera_config(model_name: str, base_model: bool) -> HieraInfo:
+def get_hiera_config(model_name: str, base_model: bool) -> HieraConfig:
     kwargs = {} if base_model else {"num_labels": 400 if model_name.endswith("16x224") else 1000}
 
     if model_name == "hiera-tiny-224":
@@ -257,7 +249,9 @@ def convert_hiera_checkpoint(args):
             ]
         )
 
-    image_processor = BeitImageProcessor(image_mean=IMAGENET_DEFAULT_MEAN, image_std=IMAGENET_DEFAULT_STD)
+    image_processor = BitImageProcessor(
+        image_mean=IMAGENET_DEFAULT_MEAN, image_std=IMAGENET_DEFAULT_STD, size={"shortest_edge": 256}
+    )
     inputs = image_processor(images=input_image, return_tensors="pt")
 
     expected_pixel_values = original_image_preprocessor(input_image).unsqueeze(0)

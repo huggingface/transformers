@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Google AI, Ross Wightman, The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 Meta and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -48,10 +48,10 @@ _CONFIG_FOR_DOC = "HieraConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "EduardoPacheco/hiera-tiny-224"
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+_EXPECTED_OUTPUT_SHAPE = [1, 49, 768]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "google/hiera-base-patch16-224"
+_IMAGE_CLASS_CHECKPOINT = "Eduardo/hiera-tiny-224-ink1"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
@@ -93,7 +93,7 @@ class HieraPatchEmbeddings(nn.Module):
                 f"The number of dimensions of the input image should be 2 or 3, but got {self.spatial_dims}."
             )
         self.num_channels = config.num_channels
-        self.image_size = config.input_size
+        self.image_size = config.input_size[-2:]
 
         self.projection = conv_nd(self.spatial_dims)(
             self.num_channels,
@@ -122,13 +122,27 @@ class HieraPatchEmbeddings(nn.Module):
 
         return self.projection(pixel_values * mask.bool())
 
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
-        _, num_channels, _, _ = pixel_values.shape
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        bool_masked_pos: Optional[torch.Tensor] = None,
+        interpolate_pos_encoding: bool = False,
+    ) -> torch.Tensor:
+        num_channels = pixel_values.shape[1]
+        height, width = pixel_values.shape[-2:]
+
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
                 f" Expected {self.num_channels} but got {num_channels}."
             )
+
+        if not interpolate_pos_encoding:
+            if height != self.image_size[0] or width != self.image_size[1]:
+                raise ValueError(
+                    f"Input image size ({height}*{width}) doesn't match model"
+                    f" ({self.image_size[0]}*{self.image_size[1]})."
+                )
 
         embeddings = self.masked_conv(pixel_values, bool_masked_pos)
         embeddings = embeddings.reshape(embeddings.shape[0], embeddings.shape[1], -1).transpose(2, 1)
@@ -143,7 +157,7 @@ class HieraEmbeddings(nn.Module):
 
     def __init__(self, config: HieraConfig, use_mask_token: bool = False) -> None:
         super().__init__()
-
+        self.patch_stride = config.patch_stride
         self.tokens_spatial_shape = [i // s for i, s in zip(config.input_size, config.patch_stride)]
         self.num_tokens = math.prod(self.tokens_spatial_shape)
         self.sep_pos_embed = config.sep_pos_embed
@@ -167,19 +181,74 @@ class HieraEmbeddings(nn.Module):
         else:
             self.position_embeddings = nn.Parameter(torch.zeros(1, self.num_tokens, config.hidden_size))
 
-    def get_position_embedding(self) -> torch.Tensor:
+    def interpolate_pos_encoding(
+        self, embeddings: torch.Tensor, pos_embeds: torch.Tensor, height: int, width: int
+    ) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
+        resolution images.
+
+        Adapted from:
+        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+        """
+
+        num_patches = embeddings.shape[1]
+        num_positions = pos_embeds.shape[1]
+        if num_patches == num_positions and height == width:
+            return pos_embeds
+        dim = embeddings.shape[-1]
+        h0 = height // self.patch_stride[0] if not self.sep_pos_embed else height // self.patch_stride[1]
+        w0 = width // self.patch_stride[1] if not self.sep_pos_embed else width // self.patch_stride[2]
+        # we add a small number to avoid floating point error in the interpolation
+        # see discussion at https://github.com/facebookresearch/dino/issues/8
+        h0, w0 = h0 + 0.1, w0 + 0.1
+        pos_embeds = pos_embeds.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+        pos_embeds = pos_embeds.permute(0, 3, 1, 2)
+        pos_embeds = nn.functional.interpolate(
+            pos_embeds,
+            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
+            mode="bicubic",
+            align_corners=False,
+        )
+        if int(h0) != pos_embeds.shape[-2] or int(w0) != pos_embeds.shape[-1]:
+            raise ValueError("The interpolated position encoding does not have the right size")
+        pos_embeds = pos_embeds.permute(0, 2, 3, 1).view(1, -1, dim)
+        return pos_embeds
+
+    def get_position_embedding(
+        self, embeddings: torch.Tensor, height: int, width: int, interpolate_pos_encoding: bool
+    ) -> torch.Tensor:
         if self.sep_pos_embed:
-            return self.position_embeddings_spatial.repeat(
-                1, self.tokens_spatial_shape[0], 1
-            ) + torch.repeat_interleave(
+            spatial = self.position_embeddings_spatial
+            spatial = (
+                self.interpolate_pos_encoding(embeddings, spatial, height, width)
+                if interpolate_pos_encoding
+                else spatial
+            )
+            spatial = spatial.repeat(1, self.tokens_spatial_shape[0], 1)
+
+            temporal = torch.repeat_interleave(
                 self.position_embeddings_temporal,
                 self.tokens_spatial_shape[1] * self.tokens_spatial_shape[2],
                 dim=1,
             )
-        else:
-            return self.position_embeddings
 
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.BoolTensor] = None) -> torch.Tensor:
+            return spatial + temporal
+        else:
+            position_embeddings = self.position_embeddings
+            position_embeddings = (
+                self.interpolate_pos_encoding(embeddings, position_embeddings, height, width)
+                if interpolate_pos_encoding
+                else position_embeddings
+            )
+            return position_embeddings
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        interpolate_pos_encoding: bool = False,
+    ) -> torch.Tensor:
         if len(self.mask_spatial_shape) == 2:
             batch_size, num_channels, height, width = pixel_values.shape
         else:
@@ -188,9 +257,11 @@ class HieraEmbeddings(nn.Module):
         if bool_masked_pos is not None:
             bool_masked_pos = bool_masked_pos.view(batch_size, 1, *self.mask_spatial_shape)
 
-        embeddings = self.patch_embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
+        embeddings = self.patch_embeddings(
+            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
+        )
 
-        embeddings = embeddings + self.get_position_embedding()
+        embeddings = embeddings + self.get_position_embedding(embeddings, height, width, interpolate_pos_encoding)
 
         return embeddings
 
@@ -502,10 +573,10 @@ class HieraEncoder(nn.Module):
 class HieraUnroll(nn.Module):
     """
     Reorders the tokens such that patches are contiguous in memory.
-    E.g., given [B, (H, W), C] and stride of (Sy, Sx), this will re-order the tokens as
-                           [B, (Sy, Sx, H // Sy, W // Sx), C]
+    E.g., given [batch_size, (height, width), hidden_size] and stride of (stride, stride), this will re-order the tokens as
+    [batch_size, (stride, stride, height // stride, width // stride), hidden_size]
 
-    This allows operations like Max2d to be computed as x.view(B, Sx*Sy, -1, C).max(dim=1).
+    This allows operations like Max2d to be computed as x.view(batch_size, stride*stride, -1, hidden_size).max(dim=1).
     Not only is this faster, but it also makes it easy to support inputs of arbitrary
     dimensions in addition to patch-wise sparsity.
 
@@ -514,8 +585,8 @@ class HieraUnroll(nn.Module):
     size 8x8 would be contiguous in memory, allowing operations like mask unit attention
     computed easily and efficiently, while also allowing max to be applied sequentially.
 
-    Note: This means that intermediate values of the model are not in HxW order, so they
-    need to be re-rolled if you want to use the intermediate values as a HxW feature map.
+    Note: This means that intermediate values of the model are not in height x width order, so they
+    need to be re-rolled if you want to use the intermediate values as a height x width feature map.
     The last block of the network is fine though, since by then the strides are all consumed.
     """
 
@@ -524,37 +595,41 @@ class HieraUnroll(nn.Module):
         self.size = [i // s for i, s in zip(config.input_size, config.patch_stride)]
         self.schedule = [config.query_stride] * len(config.depths[:-1])
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
-        Input: Flattened patch embeddings [B, N, C]
-        Output: Patch embeddings [B, N, C] permuted such that [B, 4, N//4, C].max(1) etc. performs MaxPoolNd
+        Input: Flattened patch embeddings [batch_size, seq_len, hidden_size]
+        Output: Patch embeddings [batch_size, seq_len, hidden_size] permuted such
+            that [batch_size, 4, seq_len//4, hidden_size].max(1) etc. performs MaxPoolNd
         """
-        B, _, C = x.shape
+        batch_size, _, hidden_size = hidden_states.shape
 
-        cur_size = self.size
-        x = x.view(*([B] + cur_size + [C]))
+        current_size = self.size
+        hidden_states = hidden_states.view(*([batch_size] + current_size + [hidden_size]))
 
         for strides in self.schedule:
             # Move patches with the given strides to the batch dimension
 
             # Create a view of the tensor with the patch stride as separate dims
-            # For example in 2d: [B, H // Sy, Sy, W // Sx, Sx, C]
-            cur_size = [i // s for i, s in zip(cur_size, strides)]
-            new_shape = [B] + sum([[i, s] for i, s in zip(cur_size, strides)], []) + [C]
-            x = x.view(new_shape)
+            # For example in 2d: [batch_size, height // stride, stride, width // stride, stride, C]
+            current_size = [i // s for i, s in zip(current_size, strides)]
+            # initialize new_shape with [height // stride, stride, width // stride, stride]
+            new_shape = [item for pair in zip(current_size, strides) for item in pair]
+            # add batch_size and hidden_size to new_shape
+            new_shape = [batch_size] + new_shape + [hidden_size]
+            hidden_states = hidden_states.view(new_shape)
 
             # Move the patch stride into the batch dimension
-            # For example in 2d: [B, Sy, Sx, H // Sy, W // Sx, C]
-            L = len(new_shape)
-            permute = [0] + list(range(2, L - 1, 2)) + list(range(1, L - 1, 2)) + [L - 1]
-            x = x.permute(permute)
+            # For example in 2d: [batch_size, stride, stride, height // stride, width // stride, hidden_size]
+            num_dims = len(new_shape)
+            permute = [0] + list(range(2, num_dims - 1, 2)) + list(range(1, num_dims - 1, 2)) + [num_dims - 1]
+            hidden_states = hidden_states.permute(permute)
 
             # Now finally flatten the relevant dims into the batch dimension
-            x = x.flatten(0, len(strides))
-            B *= math.prod(strides)
+            hidden_states = hidden_states.flatten(0, len(strides))
+            batch_size *= math.prod(strides)
 
-        x = x.reshape(-1, math.prod(self.size), C)
-        return x
+        hidden_states = hidden_states.reshape(-1, math.prod(self.size), hidden_size)
+        return hidden_states
 
 
 def undo_windowing(x: torch.Tensor, shape: List[int], mu_shape: List[int]) -> torch.Tensor:
@@ -737,6 +812,21 @@ HIERA_INPUTS_DOCSTRING = r"""
 """
 
 
+class HieraPooler(nn.Module):
+    def __init__(self, config: HieraConfig):
+        super().__init__()
+        num_features = int(config.embed_dim * config.embed_dim_multiplier ** (len(config.depths) - 1))
+        self.layernorm = nn.LayerNorm(num_features, eps=config.layer_norm_eps)
+        self.pooler = nn.AdaptiveAvgPool1d(1)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = hidden_states.transpose(1, 2)
+        pooled_output = self.pooler(hidden_states)
+        pooled_output = torch.flatten(pooled_output, 1)
+        pooled_output = self.layernorm(pooled_output)
+        return pooled_output
+
+
 @add_start_docstrings(
     "The bare Hiera Model transformer outputting raw hidden-states without any specific head on top.",
     HIERA_START_DOCSTRING,
@@ -744,16 +834,13 @@ HIERA_INPUTS_DOCSTRING = r"""
 class HieraModel(HieraPreTrainedModel):
     def __init__(self, config: HieraConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
         super().__init__(config)
-        self.config = config
-        self.num_layers = len(config.depths)
-        self.num_features = int(config.embed_dim * config.embed_dim_multiplier ** (self.num_layers - 1))
+        self.num_features = int(config.embed_dim * config.embed_dim_multiplier ** (len(config.depths) - 1))
 
         self.embeddings = HieraEmbeddings(config, use_mask_token=use_mask_token)
         self.unroll = HieraUnroll(config)
         self.encoder = HieraEncoder(config)
 
-        self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
-        self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
+        self.pooler = HieraPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -780,8 +867,8 @@ class HieraModel(HieraPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
+        bool_masked_pos: Optional[torch.BoolTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
@@ -826,9 +913,7 @@ class HieraModel(HieraPreTrainedModel):
         sequence_output = encoder_outputs[0]
         pooled_output = None
         if self.pooler is not None:
-            pooled_output = self.pooler(sequence_output.transpose(1, 2))
-            pooled_output = torch.flatten(pooled_output, 1)
-            pooled_output = self.layernorm(pooled_output)
+            pooled_output = self.pooler(sequence_output)
 
         if not return_dict:
             head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
@@ -971,8 +1056,8 @@ class HieraForMaskedImageModeling(HieraPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Hiera Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.
+    Hiera Model transformer with an image classification head on top (a linear layer on top of the final hidden state with
+    average pooling) e.g. for ImageNet.
 
     <Tip>
 
