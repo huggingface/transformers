@@ -16,15 +16,14 @@
 
 import math
 import warnings
-from copy import deepcopy
-from functools import partial
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -208,33 +207,6 @@ def load_balancing_loss_func(
 
     overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
     return overall_loss * num_experts
-
-
-#############################################################################
-
-
-def resolve_ffn_act_fn(ffn_act_fn: dict) -> Callable[[torch.Tensor], torch.Tensor]:
-    """Resolve the activation function for the feed-forward network.
-
-    Args:
-        ffn_act_fn (dict): The configuration dictionary for the activation function.
-            The dict config must specify the 'name' of a torch.nn.functional activation
-            function. All of other key values pairs are bound to the function as a partial.
-
-    Returns:
-        Callable[[torch.Tensor], torch.Tensor]: The activation function.
-    """
-    config = deepcopy(ffn_act_fn)
-    name = config.pop("name")
-    if not hasattr(nn.functional, name):
-        raise ValueError(f"Unrecognised activation function name ({name}).")
-    act = getattr(nn.functional, name)
-    return partial(act, **config)
-
-
-#############################################################################
-# Copied from LLaMaAttention
-#############################################################################
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
@@ -600,7 +572,6 @@ class DbrxSdpaAttention(DbrxAttention):
                 "GemmaModel is using GemmaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
                 'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
-
             return super().forward(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
@@ -687,6 +658,7 @@ class DbrxNormAttentionNorm(nn.Module):
         self.block_idx = block_idx
         self.resid_pdrop = config.resid_pdrop
         self.norm_1 = nn.LayerNorm(config.d_model, bias=False)
+        print(f"config._attn_implementation={config._attn_implementation}")
         self.attn = DBRX_ATTENTION_CLASSES[config._attn_implementation](
             config=config,
             block_idx=block_idx,
@@ -774,28 +746,43 @@ class DbrxRouter(nn.Module):
 
 
 class DbrxExpertGLU(nn.Module):
-    def __init__(self, hidden_size: int, ffn_hidden_size: int, ffn_act_fn: dict):
+    def __init__(self, hidden_size: int, ffn_hidden_size: int, moe_num_experts: int, ffn_act_fn: dict):
         super().__init__()
-        self.w1 = nn.Linear(hidden_size, ffn_hidden_size, bias=False)
-        self.v1 = nn.Linear(hidden_size, ffn_hidden_size, bias=False)
-        self.w2 = nn.Linear(ffn_hidden_size, hidden_size, bias=False)
-        self.activation_fn = resolve_ffn_act_fn(ffn_act_fn)
+        self.hidden_size = hidden_size
+        self.ffn_hidden_size = ffn_hidden_size
+        self.moe_num_experts = moe_num_experts
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x1 = self.w1(x)
-        x2 = self.v1(x)
-        x1 = self.activation_fn(x1)
-        x1 = x1 * x2
-        x1 = self.w2(x1)
-        return x1
+        self.w1 = nn.Parameter(torch.empty(moe_num_experts * ffn_hidden_size, hidden_size))
+        self.v1 = nn.Parameter(torch.empty(moe_num_experts * ffn_hidden_size, hidden_size))
+        self.w2 = nn.Parameter(torch.empty(moe_num_experts * ffn_hidden_size, hidden_size))
+
+        act_fn_name = ffn_act_fn.pop("name", "silu")
+        if len(ffn_act_fn) != 0:
+            raise ValueError(f"FFN activation function has unhandled kwargs {ffn_act_fn=}")
+        self.activation_fn = ACT2FN[act_fn_name]
+
+    def forward(self, x: torch.Tensor, expert_idx: int) -> torch.Tensor:
+        expert_w1 = self.w1.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx]
+        expert_v1 = self.v1.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx]
+        expert_w2 = self.w2.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx]
+
+        gate_proj = x.matmul(expert_w1.t())
+        up_proj = x.matmul(expert_v1.t())
+        gate_proj = self.activation_fn(gate_proj)
+        intermediate_states = gate_proj * up_proj
+        down_proj = intermediate_states.matmul(expert_w2)
+        return down_proj
 
 
 class DbrxExperts(nn.Module):
     def __init__(self, hidden_size: int, ffn_hidden_size: int, moe_num_experts: int, ffn_act_fn: dict):
         super().__init__()
         self.moe_num_experts = moe_num_experts
-        self.mlp_experts = nn.ModuleList(
-            [DbrxExpertGLU(hidden_size, ffn_hidden_size, ffn_act_fn) for _ in range(moe_num_experts)]
+        self.mlp = DbrxExpertGLU(
+            hidden_size=hidden_size,
+            ffn_hidden_size=ffn_hidden_size,
+            moe_num_experts=moe_num_experts,
+            ffn_act_fn=ffn_act_fn,
         )
 
     def forward(
@@ -815,7 +802,7 @@ class DbrxExperts(nn.Module):
             topk_list = topk_idx.tolist()
 
             expert_tokens = x[None, token_list].reshape(-1, hidden_size)
-            expert_out = self.mlp_experts[expert_idx](expert_tokens) * top_weights[token_list, topk_list, None]
+            expert_out = self.mlp(expert_tokens, expert_idx) * top_weights[token_list, topk_list, None]
 
             out.index_add_(0, token_idx, expert_out)
 
@@ -958,6 +945,10 @@ class DbrxPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, DbrxExpertGLU):
+            module.w1.data.normal_(mean=0.0, std=std)
+            module.v1.data.normal_(mean=0.0, std=std)
+            module.w2.data.normal_(mean=0.0, std=std)
 
     def _setup_cache(
         self, cache_cls: Any, max_batch_size: int, max_cache_len: int
@@ -1097,6 +1088,17 @@ class DbrxModel(DbrxPreTrainedModel):
                 all_hidden_states += (hidden_states,)  # type: ignore
 
             if self.gradient_checkpointing and self.training:
+                # block_outputs = self._gradient_checkpointing_func(
+                #     block.__call__,
+                #     hidden_states,
+                #     attention_mask=causal_mask,
+                #     position_ids=position_ids,
+                #     past_key_values=past_key_values,
+                #     output_attentions=output_attentions,
+                #     output_router_logits=output_router_logits,
+                #     use_cache=use_cache,
+                #     cache_position=cache_position,
+                # )
                 block_outputs = self._gradient_checkpointing_func(
                     block.__call__,
                     hidden_states,
