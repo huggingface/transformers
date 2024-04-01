@@ -23,7 +23,6 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
-
 if is_torch_available():
     import torch
 
@@ -34,50 +33,102 @@ class DbrxModelTester:
     def __init__(
         self,
         parent,
+        hidden_size=32,
+        ffn_hidden_size=32,
+        num_attention_heads=4,
+        kv_n_heads=4,
+        num_hidden_layers=5,
+        max_position_embeddings=512,
+        type_vocab_size=16,
         batch_size=13,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
         use_token_type_ids=False,
         use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
+        use_cache=True,
         type_sequence_label_size=2,
-        initializer_range=0.02,
         num_labels=3,
         num_choices=4,
         scope=None,
+        clip_qkv=8,
+        rope_theta=500000,
+        attn_config_model_type="",
+        emb_pdrop=0.0,
+        moe_jitter_eps=0,
+        moe_loss_weight=0.05,
+        moe_num_experts=16,
+        moe_top_k=4,
+        fnn_config_model_type="",
+        ffn_act_fn_name="gelu",
+        initializer_range=0.02,
+        output_router_logits=False,
+        resid_pdrop=0.0,
+        router_aux_loss_coef=0.05,
+        tie_word_embeddings=False,
+        torch_dtype=torch.bfloat16,
+        vocab_size=99,
     ):
-        self.parent = parent
+        # Parameters unique to testing
         self.batch_size = batch_size
         self.seq_length = seq_length
+        self.type_vocab_size = type_vocab_size
+        self.type_sequence_label_size = type_sequence_label_size
+        self.num_labels = num_labels
+        self.num_choices = num_choices
+        self.scope = scope
+        self.parent = parent
         self.is_training = is_training
         self.use_input_mask = use_input_mask
         self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
-        self.vocab_size = vocab_size
+
+        # attn_config params
+        self.clip_qkv = clip_qkv
+        self.kv_n_heads = kv_n_heads
+        self.rope_theta = rope_theta
+        self.attn_config_model_type = attn_config_model_type
+
+        # fnn_config params
+        self.ffn_hidden_size = ffn_hidden_size
+        self.moe_jitter_eps = moe_jitter_eps
+        self.moe_loss_weight = moe_loss_weight
+        self.moe_num_experts = moe_num_experts
+        self.moe_top_k = moe_top_k
+        self.fnn_config_model_type = fnn_config_model_type
+        self.ffn_act_fn_name = ffn_act_fn_name
+
+        # Other params
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
+        self.vocab_size = vocab_size
+        self.use_cache = use_cache
         self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
+        self.emb_pdrop = emb_pdrop
+        self.output_router_logits = output_router_logits
+        self.resid_pdrop = resid_pdrop
+        self.router_aux_loss_coef = router_aux_loss_coef
+        self.tie_word_embeddings = tie_word_embeddings
+        self.torch_dtype = torch_dtype
+
+        # Make the dictionaries
+        self.ffn_config = {
+            "ffn_hidden_size": self.ffn_hidden_size,
+            "moe_jitter_eps": self.moe_jitter_eps,
+            "moe_loss_weight": self.moe_loss_weight,
+            "moe_num_experts": self.moe_num_experts,
+            "moe_top_k": self.moe_top_k,
+            "model_type": self.fnn_config_model_type,
+            "ffn_act_fn": {"name": self.ffn_act_fn_name},
+        }
+        self.attn_config = {
+            "clip_qkv": self.clip_qkv,
+            "kv_n_heads": self.kv_n_heads,
+            "model_type": self.attn_config_model_type,
+            "rope_theta": self.rope_theta,
+        }
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -103,20 +154,27 @@ class DbrxModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return DbrxConfig(
+        # Behind the scenes, `DbrxConfig` maps the parameters `hidden_size`, `num_hidden_layers`,
+        # `num_attention_heads`, `max_position_embeddings` to the parameters `d_model`, `n_layers`,
+        # `n_heads`, `max_seq_len` respectively. We use the first group of parameters because
+        # other tests expect every model to have these parameters with these specific names.
+        config = DbrxConfig(
             vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
+            hidden_size=self.hidden_size,  # mapped to `d_model`
+            num_hidden_layers=self.num_hidden_layers,  # mapped to `n_layers`
+            num_attention_heads=self.num_attention_heads,  # mapped to `n_heads`
+            max_position_embeddings=self.max_position_embeddings,  # mapped to `max_seq_len`
+            attn_config=self.attn_config,
+            ffn_config=self.ffn_config,
+            resid_pdrop=self.resid_pdrop,
+            emb_pdrop=self.emb_pdrop,
+            use_cache=self.use_cache,
             initializer_range=self.initializer_range,
+            output_router_logits=self.output_router_logits,
+            router_aux_loss_coef=self.router_aux_loss_coef,
+            is_decoder=False,
         )
+        return config
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Dbrx
     def create_and_check_model(
