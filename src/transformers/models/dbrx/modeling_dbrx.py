@@ -932,7 +932,9 @@ class DbrxModel(DbrxPreTrainedModel):
     [`DbrxBlock`] layers.
 
     Args:
-        config: DbrxConfig
+        config ([`DbrxConfig`]): Model configuration class with all parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
     """
 
     def __init__(self, config: DbrxConfig):
