@@ -51,7 +51,7 @@ _CHECKPOINT_FOR_DOC = "EduardoPacheco/hiera-tiny-224"
 _EXPECTED_OUTPUT_SHAPE = [1, 49, 768]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "Eduardo/hiera-tiny-224-ink1"
+_IMAGE_CLASS_CHECKPOINT = "EduardoPacheco/hiera-tiny-224-ink1"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
@@ -491,6 +491,106 @@ class HieraStage(nn.Module):
         return hidden_states, attn_weights
 
 
+def undo_windowing(hidden_states: torch.Tensor, shape: List[int], mask_unit_shape: List[int]) -> torch.Tensor:
+    """
+    Restore spatial organization by undoing windowed organization of mask units.
+    """
+    num_dims = len(shape)
+    batch_size, hidden_size = hidden_states.shape[0], hidden_states.shape[-1]
+    # From: [batch_size, num_mask_unit_height*num_#mask_unit_wdith, mask_unit_height, mask_unit_width, hidden_size]
+    # To: [batch_size, num_mask_unit_height, num_mask_unit_width, mask_unit_height, mask_unit_width, hidden_size]
+    num_mask_units = [s // mu for s, mu in zip(shape, mask_unit_shape)]
+    hidden_states = hidden_states.view(batch_size, *num_mask_units, *mask_unit_shape, hidden_size)
+
+    # From: [batch_size, num_mask_unit_height, num_mask_unit_width, mask_unit_height, mask_unit_width, hidden_size]
+    # To: [batch_size, num_mask_unit_height*mask_unit_height, num_mask_unit_width*mask_unit_width, hidden_size]
+    permute = (
+        [0]
+        + sum(
+            [list(p) for p in zip(range(1, 1 + num_dims), range(1 + num_dims, 1 + 2 * num_dims))],
+            [],
+        )
+        + [len(hidden_states.shape) - 1]
+    )
+    hidden_states = hidden_states.permute(permute).reshape(batch_size, *shape, hidden_size)
+
+    return hidden_states
+
+
+class HieraReroll(nn.Module):
+    """
+    Undos the "unroll" operation so that you can use intermediate features.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        size = [i // s for i, s in zip(config.input_size, config.patch_stride)]
+        unroll_schedule = [config.query_stride] * len(config.depths[:-1])
+
+        # The first stage has to reverse everything
+        # The next stage has to reverse all but the first unroll, etc.
+        self.schedule = {}
+        for idx_stage in range(len(config.depths)):
+            stage_size = [i // (s**idx_stage) for i, s in zip(size, config.query_stride)]
+            schedule = unroll_schedule[idx_stage:]
+            self.schedule[idx_stage] = schedule, stage_size
+
+    def forward(self, hidden_states: torch.Tensor, stage_idx: int, bool_mask_pos: torch.Tensor = None) -> torch.Tensor:
+        """
+        Roll the given tensor back up to spatial order assuming it's from the given block.
+
+        If no mask is provided returns:
+            - [batch_size, height, width, hidden_size] for 2d
+            - [batch_size, frames, height, width, hidden_size] for 3d
+        If a mask is provided returns:
+            - [batch_size, num_mask_units, mask_unit_height, mask_unit_width, hidden_size] for 2d
+        """
+        schedule, size = self.schedule[stage_idx]
+        batch_size, seq_len, hidden_size = hidden_states.shape
+
+        num_dim = len(size)
+        mask_unit_shape = [1] * num_dim
+
+        for strides in schedule:
+            # Extract the current patch from seq_len
+            hidden_states = hidden_states.view(
+                batch_size, *strides, seq_len // math.prod(strides), *mask_unit_shape, hidden_size
+            )
+
+            # Move that patch into the current MU
+            # Example in 2d:
+            # Input: [batch_size, stride, stride, seq_len//(stride*stride), mask_unit_height, mask_unit_width, hidden_size]
+            # Output: [batch_size, seq_len//(stride*stride), stride, mask_unit_height, stride, mask_unit_width, hidden_size]
+            L = len(hidden_states.shape)
+            permute = (
+                [0, 1 + num_dim]
+                + sum(
+                    [list(p) for p in zip(range(1, 1 + num_dim), range(1 + num_dim + 1, L - 1))],
+                    [],
+                )
+                + [L - 1]
+            )
+            hidden_states = hidden_states.permute(permute)
+
+            # Reshape to [batch_size, seq_len//(stride*stride), *mask_units, hidden_size]
+            for i in range(num_dim):
+                mask_unit_shape[i] *= strides[i]
+            hidden_states = hidden_states.reshape(batch_size, -1, *mask_unit_shape, hidden_size)
+            seq_len = hidden_states.shape[1]
+
+        # Current shape (e.g., 2d: [B, #MUy*#MUx, MUy, MUx, C])
+        hidden_states = hidden_states.view(batch_size, seq_len, *mask_unit_shape, hidden_size)
+
+        # If masked, return [B, #MUs, MUy, MUx, C]
+        if bool_mask_pos is not None:
+            return hidden_states
+
+        # If not masked, we can return [B, H, W, C]
+        hidden_states = undo_windowing(hidden_states, size, mask_unit_shape)
+
+        return hidden_states
+
+
 class HieraEncoder(nn.Module):
     def __init__(self, config: HieraConfig) -> None:
         super().__init__()
@@ -528,23 +628,29 @@ class HieraEncoder(nn.Module):
             embed_dim = dim_out
             self.stages.append(stage)
 
+        self.reroll = HieraReroll(config)
         self.gradient_checkpointing = False
 
     def forward(
         self,
         hidden_states: torch.Tensor,
+        bool_masked_pos: Optional[torch.BoolTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
+        all_reshaped_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+            reshaped_hidden_states = self.reroll(hidden_states, stage_idx=0, bool_masked_pos=bool_masked_pos)
+            all_reshaped_hidden_states = all_reshaped_hidden_states + (reshaped_hidden_states,)
 
         for i, stage_module in enumerate(self.stages):
             layer_head_mask = head_mask[i] if head_mask is not None else None
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
@@ -558,8 +664,10 @@ class HieraEncoder(nn.Module):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+                reshaped_hidden_states = self.reroll(hidden_states, stage_idx=i, bool_masked_pos=bool_masked_pos)
+                all_reshaped_hidden_states = all_reshaped_hidden_states + (reshaped_hidden_states,)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
@@ -632,117 +740,6 @@ class HieraUnroll(nn.Module):
         return hidden_states
 
 
-def undo_windowing(x: torch.Tensor, shape: List[int], mu_shape: List[int]) -> torch.Tensor:
-    """
-    Restore spatial organization by undoing windowed organization of mask units.
-
-    Args:
-        x: organized by mask units windows, e.g. in 2d [B, #MUy*#MUx, MUy, MUx, C]
-        shape: current spatial shape, if it were not organized into mask unit
-            windows, e.g. in 2d [B, #MUy*MUy, #MUx*MUx, C].
-        mu_shape: current mask unit shape, e.g. in 2d [MUy, MUx]
-    Returns:
-        x: e.g. in 2d, [B, #MUy*MUy, #MUx*MUx, C]
-    """
-    D = len(shape)
-    B, C = x.shape[0], x.shape[-1]
-    # [B, #MUy*#MUx, MUy, MUx, C] -> [B, #MUy, #MUx, MUy, MUx, C]
-    num_MUs = [s // mu for s, mu in zip(shape, mu_shape)]
-    x = x.view(B, *num_MUs, *mu_shape, C)
-
-    # [B, #MUy, #MUx, MUy, MUx, C] -> [B, #MUy*MUy, #MUx*MUx, C]
-    permute = (
-        [0]
-        + sum(
-            [list(p) for p in zip(range(1, 1 + D), range(1 + D, 1 + 2 * D))],
-            [],
-        )
-        + [len(x.shape) - 1]
-    )
-    x = x.permute(permute).reshape(B, *shape, C)
-
-    return x
-
-
-class HieraReroll(nn.Module):
-    """
-    Undos the "unroll" operation so that you can use intermediate features.
-    """
-
-    def __init__(
-        self,
-        input_size: Tuple[int, ...],
-        patch_stride: Tuple[int, ...],
-        unroll_schedule: List[Tuple[int, ...]],
-        stage_ends: List[int],
-        q_pool: int,
-    ):
-        super().__init__()
-        self.size = [i // s for i, s in zip(input_size, patch_stride)]
-
-        # The first stage has to reverse everything
-        # The next stage has to reverse all but the first unroll, etc.
-        self.schedule = {}
-        size = self.size
-        for i in range(stage_ends[-1] + 1):
-            self.schedule[i] = unroll_schedule, size
-            # schedule unchanged if no pooling at a stage end
-            if i in stage_ends[:q_pool]:
-                if len(unroll_schedule) > 0:
-                    size = [n // s for n, s in zip(size, unroll_schedule[0])]
-                unroll_schedule = unroll_schedule[1:]
-
-    def forward(self, x: torch.Tensor, block_idx: int, mask: torch.Tensor = None) -> torch.Tensor:
-        """
-        Roll the given tensor back up to spatial order assuming it's from the given block.
-
-        If no mask is provided:
-            - Returns [B, H, W, C] for 2d, [B, T, H, W, C] for 3d, etc.
-        If a mask is provided:
-            - Returns [B, #MUs, MUy, MUx, C] for 2d, etc.
-        """
-        schedule, size = self.schedule[block_idx]
-        B, N, C = x.shape
-
-        D = len(size)
-        cur_mu_shape = [1] * D
-
-        for strides in schedule:
-            # Extract the current patch from N
-            x = x.view(B, *strides, N // math.prod(strides), *cur_mu_shape, C)
-
-            # Move that patch into the current MU
-            # Example in 2d: [B, Sy, Sx, N//(Sy*Sx), MUy, MUx, C] -> [B, N//(Sy*Sx), Sy, MUy, Sx, MUx, C]
-            L = len(x.shape)
-            permute = (
-                [0, 1 + D]
-                + sum(
-                    [list(p) for p in zip(range(1, 1 + D), range(1 + D + 1, L - 1))],
-                    [],
-                )
-                + [L - 1]
-            )
-            x = x.permute(permute)
-
-            # Reshape to [B, N//(Sy*Sx), *MU, C]
-            for i in range(D):
-                cur_mu_shape[i] *= strides[i]
-            x = x.reshape(B, -1, *cur_mu_shape, C)
-            N = x.shape[1]
-
-        # Current shape (e.g., 2d: [B, #MUy*#MUx, MUy, MUx, C])
-        x = x.view(B, N, *cur_mu_shape, C)
-
-        # If masked, return [B, #MUs, MUy, MUx, C]
-        if mask is not None:
-            return x
-
-        # If not masked, we can return [B, H, W, C]
-        x = undo_windowing(x, size, cur_mu_shape)
-
-        return x
-
-
 class HieraPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -790,7 +787,7 @@ HIERA_START_DOCSTRING = r"""
 HIERA_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`BitImageProcessor.__call__`]
             for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
@@ -905,6 +902,7 @@ class HieraModel(HieraPreTrainedModel):
 
         encoder_outputs = self.encoder(
             hidden_states,
+            bool_masked_pos=bool_masked_pos,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -939,7 +937,6 @@ class HieraModel(HieraPreTrainedModel):
     """,
     HIERA_START_DOCSTRING,
 )
-# Copied from transformers.models.vit.modeling_vit.ViTForMaskedImageModeling with VIT->HIERA,ViT->Hiera,vit->hiera,google/vit-base-patch16-224-in21k->EduardoPacheco/hiera-tiny-224
 class HieraForMaskedImageModeling(HieraPreTrainedModel):
     def __init__(self, config: HieraConfig) -> None:
         super().__init__(config)

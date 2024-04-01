@@ -46,7 +46,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTImageProcessor
+    from transformers import AutoImageProcessor
 
 
 class HieraModelTester:
@@ -67,6 +67,7 @@ class HieraModelTester:
         hidden_act="gelu",
         initializer_range=0.02,
         scope=None,
+        type_sequence_label_size=10,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -82,7 +83,8 @@ class HieraModelTester:
         self.embed_dim = embed_dim
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.scope
+        self.scope = scope
+        self.type_sequence_label_size = type_sequence_label_size
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.input_size[0], self.input_size[1]])
@@ -248,12 +250,12 @@ class HieraModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            ViTImageProcessor.from_pretrained("EduardoPacheco/hiera-tiny-224-ink1") if is_vision_available() else None
+            AutoImageProcessor.from_pretrained("EduardoPacheco/hiera-tiny-224-in1k") if is_vision_available() else None
         )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = HieraForImageClassification.from_pretrained("EduardoPacheco/hiera-tiny-224-ink1").to(torch_device)
+        model = HieraForImageClassification.from_pretrained("EduardoPacheco/hiera-tiny-224-in1k").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -289,7 +291,7 @@ class HieraModelIntegrationTest(unittest.TestCase):
         # to visualize self-attention on higher resolution images.
         model = HieraModel.from_pretrained("facebook/dino-hieras8").to(torch_device)
 
-        image_processor = ViTImageProcessor.from_pretrained("facebook/dino-hieras8", size=480)
+        image_processor = AutoImageProcessor.from_pretrained("facebook/dino-hieras8", size=480)
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
