@@ -83,10 +83,10 @@ def create_rename_keys(config, base_model=False):
 
     if base_model:
         # layernorm + pooler
-        rename_keys.extend([("norm.weight", "layernorm.weight"), ("norm.bias", "layernorm.bias")])
+        rename_keys.extend([("norm.weight", "pooler.layernorm.weight"), ("norm.bias", "pooler.layernorm.bias")])
 
         # if just the base model, we should remove "hiera" from all keys that start with "hiera"
-        rename_keys = [(pair[0], pair[1][4:]) if pair[1].startswith("hiera") else pair for pair in rename_keys]
+        rename_keys = [(pair[0], pair[1][6:]) if pair[1].startswith("hiera") else pair for pair in rename_keys]
     else:
         # layernorm + classification head
         rename_keys.extend(
@@ -263,6 +263,7 @@ def convert_hiera_checkpoint(args):
         expected_pixel_values = original_image_preprocessor(input_image).unsqueeze(0)
         assert torch.allclose(inputs.pixel_values, expected_pixel_values, atol=1e-4)
         print("Pixel values look good!")
+        print(f"{inputs.pixel_values[0, :3, :3, :3]=}")
     else:
         print("Converted without verifying pixel values")
         inputs = {"pixel_values": torch.rand((1, 3, 224, 224))}
@@ -270,12 +271,20 @@ def convert_hiera_checkpoint(args):
 
     outputs = model(**inputs)
     # original implementation returns logits.softmax(dim=-1)
-    expected_prob = original_model(expected_pixel_values)
+    expected_prob, expected_intermediates = original_model(expected_pixel_values, return_intermediates=True)
 
-    if verify_logits and not base_model:
-        output_prob = outputs.logits.softmax(dim=-1)
-        assert torch.allclose(output_prob, expected_prob, atol=1e-4)
-        print("Logits look good!")
+    if verify_logits:
+        if not base_model:
+            assert torch.allclose(outputs.logits.softmax(dim=-1), expected_prob, atol=1e-4)
+            print("Logits look good!")
+            print(f"{outputs.logits[:, :5]=}")
+        else:
+            expected_last_hidden = expected_intermediates[-1]
+            batch_size, _, _, hidden_dim = expected_last_hidden.shape
+            expected_last_hidden = expected_last_hidden.reshape(batch_size, -1, hidden_dim)
+            assert torch.allclose(outputs.last_hidden_state, expected_last_hidden, atol=1e-4)
+            print("Logits look good!")
+            print(f"{outputs.last_hidden_state[0, :3, :3]=}")
     else:
         print("Converted without verifying logits")
 
