@@ -46,7 +46,7 @@ agent.run("Read the following text out loud", text=text)
 Here you will learn:
 
 - what an agent is,
-- how to build one using `transformers`
+- how to build one using `transformers` ,
 - and how to use it.
 
 ## Quickstart
@@ -342,13 +342,26 @@ Name: 'image_transformer'
 
 The name and description are accurate and fit the style of the [curated set of tools](./transformers_agents#a-curated-set-of-tools).
 
-Next, let's instantiate an agent with `controlnet_transformer`, `image_transformer` and `upscaler`:
+Next, let's instantiate an agent with an empty toolbox, then update the toolbox directly with `controlnet_transformer` and `upscaler`:
 
 ```python
-tools = [controlnet_transformer, image_transformer, upscaler]
-agent = CodeAgent(llm_callable, tools=tools)
+agent = CodeAgent(llm_callable)
+agent.toolbox.update_tool(controlnet_transformer)
+agent.toolbox.add_tool(upscaler)
 ```
 
+The set of curated tools already has a tool with name `image_transformer` (like our `controlnet_transformer`) which is hereby replaced with our custom `controlnet_transformer` tool.
+
+<Tip>
+
+Overwriting existing tools can be beneficial if we want to use a custom tool exactly for the same task as an existing tool 
+because the agent is well-versed in using the specific task. Beware that the custom tool should follow the exact same API 
+as the overwritten tool in this case, or you should adapt the prompt template to make sure all examples using that
+tool are updated.
+
+</Tip>
+
+The upscaler tool was given the name `image_upscaler` which is not yet present in the default toolbox and is therefore simply added to the list of tools.
 You can always have a look at the toolbox that is currently available to the agent via the `agent.toolbox` attribute:
 
 ```python
@@ -356,14 +369,26 @@ print("\n".join([f"- {a}" for a in agent.toolbox.tools.keys()]))
 ```
 
 ```python
-- controlnet_transformer
+- document_qa
+- image_captioner
+- image_qa
+- image_segmenter
+- transcriber
+- summarizer
+- text_classifier
+- text_qa
+- text_reader
+- translator
 - image_transformer
+- text_downloader
+- image_generator
+- video_generator
 - image_upscaler
 ```
 
 Note how `image_upscaler` is now part of the agents' toolbox.
 
-Let's now try out these tools! We will re-use the image we generated in [Transformers Agents Quickstart](./transformers_agents#single-execution-run).
+Let's now try out the new tools! We will re-use the image we generated in [Transformers Agents Quickstart](./transformers_agents#single-execution-run).
 
 from diffusers.utils import load_image
 
