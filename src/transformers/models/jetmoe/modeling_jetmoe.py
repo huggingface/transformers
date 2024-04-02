@@ -926,7 +926,7 @@ MODULEFORMER_INPUTS_DOCSTRING = r"""
 )
 class JetMoEModel(JetMoEPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`JetMoEBlock`]
+    Transformer decoder consisting of *config.num_layers* layers. Each layer is a [`JetMoEBlock`]
 
     Args:
         config: JetMoEConfig
@@ -939,7 +939,7 @@ class JetMoEModel(JetMoEPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [JetMoEBlock(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [JetMoEBlock(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
         self._attn_implementation = config._attn_implementation
         self.norm = JetMoERMSNorm(config.hidden_size, eps=config.rms_norm_eps)
