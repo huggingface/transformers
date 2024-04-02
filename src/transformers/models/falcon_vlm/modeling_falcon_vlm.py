@@ -565,7 +565,7 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
                     inputs_embeds,
                     labels,
                 ) = self.prepare_inputs_labels_for_multimodal(
-                    input_ids, position_ids, attention_mask, past_key_values, labels, pixel_values, image_sizes
+                    input_ids, position_ids, attention_mask, past_key_values, labels, pixel_values
                 )
 
             # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
@@ -654,7 +654,7 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
         position_ids = kwargs.pop("position_ids", None)
         if "inputs_embeds" in kwargs:
             raise NotImplementedError("`inputs_embeds` is not supported")
-        
+
         (input_ids, position_ids, attention_mask, _, inputs_embeds, _) = self.prepare_inputs_labels_for_multimodal(
             input_ids,
             position_ids,
