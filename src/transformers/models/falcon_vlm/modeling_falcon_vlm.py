@@ -648,13 +648,13 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         pixel_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        max_length: Optional[int] = 128,
+        max_new_tokens: Optional[int] = 128,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         position_ids = kwargs.pop("position_ids", None)
         if "inputs_embeds" in kwargs:
             raise NotImplementedError("`inputs_embeds` is not supported")
-
+        
         (input_ids, position_ids, attention_mask, _, inputs_embeds, _) = self.prepare_inputs_labels_for_multimodal(
             input_ids,
             position_ids,
@@ -669,7 +669,7 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             pad_token_id=11,
-            max_new_tokens=max_length,
+            max_new_tokens=max_new_tokens,
             **kwargs,
         )
 
