@@ -345,7 +345,9 @@ TensorFlow에서 모델을 파인튜닝하려면 우선 optimizer 함수, 학습
 
 ```py
 >>> from transformers import pipeline
-# Change `xx` to the language of the input and `yy` to the language of the desired output.
+
+# Change `xx` to the language of the input and `yy` to the language of the desired output. 
+# Examples: "en" for English, "fr" for French, "de" for German, "es" for Spanish, "zh" for Chinese, etc; translation_en_to_fr translates English to French
 >>> translator = pipeline("translation_xx_to_yy", model="my_awesome_opus_books_model")
 >>> translator(text)
 [{'translation_text': 'Legumes partagent des ressources avec des bactéries azotantes.'}]
