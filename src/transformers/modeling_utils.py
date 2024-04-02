@@ -46,7 +46,6 @@ from .integrations import (
     PeftAdapterMixin,
     deepspeed_config,
     is_deepspeed_zero3_enabled,
-    is_deepspeed_zero3_enabled_accelerate,
 )
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
@@ -1318,12 +1317,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         )
 
         if is_deepspeed_zero3_enabled():
-            if not is_deepspeed_zero3_enabled_accelerate():
-                raise ValueError(
-                    "Detected that you want to use `zero-3` Init, but the environment "
-                    "has not been setup yet. Please create `TrainingArguments` before "
-                    "initializing the model."
-                )
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
@@ -3398,12 +3391,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         init_contexts = [no_init_weights(_enable=_fast_init)]
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
-            if not is_deepspeed_zero3_enabled_accelerate():
-                raise ValueError(
-                    "Detected that you want to use `zero-3` Init, but the environment "
-                    "has not been setup yet. Please create `TrainingArguments` before "
-                    "initializing the model."
-                )
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
