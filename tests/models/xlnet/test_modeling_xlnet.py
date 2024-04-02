@@ -37,7 +37,6 @@ if is_torch_available():
         XLNetLMHeadModel,
         XLNetModel,
     )
-    from transformers.models.xlnet.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class XLNetModelTester:
@@ -685,9 +684,9 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in XLNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = XLNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "xlnet/xlnet-base-cased"
+        model = XLNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

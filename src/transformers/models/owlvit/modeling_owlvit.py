@@ -47,11 +47,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "google/owlvit-base-patch32"
 
 # See all OwlViT models at https://huggingface.co/models?filter=owlvit
-OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/owlvit-base-patch32",
-    "google/owlvit-base-patch16",
-    "google/owlvit-large-patch14",
-]
+
+from ..deprecated._archive_maps import OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss with clip->owlvit

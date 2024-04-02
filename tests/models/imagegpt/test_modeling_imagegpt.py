@@ -40,7 +40,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         ImageGPTForCausalImageModeling,
         ImageGPTForImageClassification,
         ImageGPTModel,
@@ -336,9 +335,9 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ImageGPTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openai/imagegpt-small"
+        model = ImageGPTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

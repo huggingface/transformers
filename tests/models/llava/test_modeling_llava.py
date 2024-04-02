@@ -22,12 +22,20 @@ import requests
 
 from transformers import (
     AutoProcessor,
+    AutoTokenizer,
     LlavaConfig,
     LlavaForConditionalGeneration,
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    require_bitsandbytes,
+    require_torch,
+    require_torch_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -470,9 +478,44 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this serene location, one should be cautious about the weather conditions and potential', 'USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.']  # fmt: skip
+        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a body of water', 'USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.']  # fmt: skip
 
         self.assertEqual(processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
+
+    @slow
+    @require_torch
+    @require_vision
+    def test_batched_generation(self):
+        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf").to(torch_device)
+
+        processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+
+        prompt1 = "<image>\n<image>\nUSER: What's the the difference of two images?\nASSISTANT:"
+        prompt2 = "<image>\nUSER: Describe the image.\nASSISTANT:"
+        prompt3 = "<image>\nUSER: Describe the image.\nASSISTANT:"
+        url1 = "https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=3062&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+        url2 = "https://images.unsplash.com/photo-1617258683320-61900b281ced?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+        image1 = Image.open(requests.get(url1, stream=True).raw)
+        image2 = Image.open(requests.get(url2, stream=True).raw)
+
+        inputs = processor(
+            text=[prompt1, prompt2, prompt3],
+            images=[image1, image2, image1, image2],
+            return_tensors="pt",
+            padding=True,
+        ).to(torch_device)
+
+        model = model.eval()
+
+        EXPECTED_OUTPUT = [
+            "\n \nUSER: What's the the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a small dog holding a flower in one",
+            "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
+            "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
+        ]
+
+        generate_ids = model.generate(**inputs, max_new_tokens=20)
+        outputs = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        self.assertEqual(outputs, EXPECTED_OUTPUT)
 
     @slow
     @require_bitsandbytes
@@ -533,3 +576,29 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             labels=input_ids,
         ).loss
         loss.backward()
+
+    def test_tokenizer_integration(self):
+        slow_tokenizer = AutoTokenizer.from_pretrained("liuhaotian/llava-v1.6-34b", use_fast=False)
+        slow_tokenizer.add_tokens("<image>", True)
+
+        fast_tokenizer = AutoTokenizer.from_pretrained(
+            "liuhaotian/llava-v1.6-34b",
+            bos_token="<|startoftext|>",
+            eos_token="<|endoftext|>",
+            from_slow=True,
+            legacy=False,
+        )
+        fast_tokenizer.add_tokens("<image>", True)
+
+        prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
+        # If the token is added as special, it's not normalized, and the only diff is the extra space after special tokens.
+        # https://github.com/huggingface/transformers/pull/28881 is the fix for this.
+        self.assertEqual(
+            slow_tokenizer.tokenize(prompt),
+            ['<|im_start|>', 'system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', 'user', '\n', '<image>', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', 'ass', 'istant', '\n']
+        )  # fmt: skip
+
+        self.assertEqual(
+            fast_tokenizer.tokenize(prompt),
+            ['<|im_start|>', '▁system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', '▁user', '\n', '<image>', '▁', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', '▁assistant', '\n']
+        )  # fmt: skip

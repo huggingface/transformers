@@ -31,7 +31,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import DonutSwinModel
-    from transformers.models.donut.modeling_donut_swin import DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class DonutSwinModelTester:
@@ -334,9 +333,9 @@ class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DonutSwinModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "naver-clova-ix/donut-base"
+        model = DonutSwinModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

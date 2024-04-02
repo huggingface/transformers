@@ -719,10 +719,6 @@ class GemmaPreTrainedModel(PreTrainedModel):
                 "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
             )
 
-        if max_cache_len > self.model.causal_mask.shape[-1] or self.device != self.model.causal_mask.device:
-            causal_mask = torch.full((max_cache_len, max_cache_len), fill_value=1, device=self.device)
-            self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
-
         for layer in self.model.layers:
             weights = layer.self_attn.o_proj.weight
             layer.self_attn.past_key_value = cache_cls(
@@ -975,7 +971,7 @@ class GemmaModel(GemmaPreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        if hasattr(self.layers[0].self_attn, "past_key_value"):  # static cache
+        if hasattr(getattr(self.layers[0], "self_attn", {}), "past_key_value"):  # static cache
             target_length = self.config.max_position_embeddings
         else:  # dynamic cache
             target_length = (
@@ -1147,7 +1143,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         # TODO joao: standardize interface for the different Cache classes and remove of this if
         has_static_cache = False
         if past_key_values is None:
-            past_key_values = getattr(self.model.layers[0].self_attn, "past_key_value", None)
+            past_key_values = getattr(getattr(self.model.layers[0], "self_attn", {}), "past_key_value", None)
             has_static_cache = past_key_values is not None
 
         past_length = 0

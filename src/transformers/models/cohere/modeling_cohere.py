@@ -825,12 +825,6 @@ class CohereModel(CoherePreTrainedModel):
         self.norm = CohereLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
-        # Register a causal mask to separate causal and padding mask creation. Merging happens in the attention class.
-        # NOTE: This is not friendly with TorchScript, ONNX, ExportedProgram serialization for very large `max_position_embeddings`.
-        causal_mask = torch.full(
-            (config.max_position_embeddings, config.max_position_embeddings), fill_value=True, dtype=torch.bool
-        )
-        self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -969,7 +963,7 @@ class CohereModel(CoherePreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        if hasattr(self.layers[0].self_attn, "past_key_value"):  # static cache
+        if hasattr(getattr(self.layers[0], "self_attn", {}), "past_key_value"):  # static cache
             target_length = self.config.max_position_embeddings
         else:  # dynamic cache
             target_length = (
@@ -1145,7 +1139,7 @@ class CohereForCausalLM(CoherePreTrainedModel):
         # TODO joao: standardize interface for the different Cache classes and remove of this if
         has_static_cache = False
         if past_key_values is None:
-            past_key_values = getattr(self.model.layers[0].self_attn, "past_key_value", None)
+            past_key_values = getattr(getattr(self.model.layers[0], "self_attn", {}), "past_key_value", None)
             has_static_cache = past_key_values is not None
 
         past_length = 0

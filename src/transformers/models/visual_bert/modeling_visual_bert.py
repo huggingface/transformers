@@ -48,18 +48,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "VisualBertConfig"
 _CHECKPOINT_FOR_DOC = "uclanlp/visualbert-vqa-coco-pre"
 
-VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "uclanlp/visualbert-vqa",
-    "uclanlp/visualbert-vqa-pre",
-    "uclanlp/visualbert-vqa-coco-pre",
-    "uclanlp/visualbert-vcr",
-    "uclanlp/visualbert-vcr-pre",
-    "uclanlp/visualbert-vcr-coco-pre",
-    "uclanlp/visualbert-nlvr2",
-    "uclanlp/visualbert-nlvr2-pre",
-    "uclanlp/visualbert-nlvr2-coco-pre",
-    # See all VisualBERT models at https://huggingface.co/models?filter=visual_bert
-]
+
+from ..deprecated._archive_maps import VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class VisualBertEmbeddings(nn.Module):
