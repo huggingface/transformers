@@ -44,47 +44,37 @@ class JetMoEConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the JetMoE model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`JetMoEModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
+        hidden_size (`int`, *optional*, defaults to 5632):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 14336):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
+        num_layers (`<fill_type>`, *optional*, defaults to 24): <fill_docstring>
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 8):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `8`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to `4096*32`):
+        kv_channels (`<fill_type>`, *optional*, defaults to 128): <fill_docstring>
+        ffn_hidden_size (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
+        max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model might ever be used with. JetMoE's sliding window attention
             allows sequence of up to 4096*32 tokens.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
+        rotary_percent (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
+        activation_function (`<fill_type>`, *optional*, defaults to `"silu"`): <fill_docstring>
+        glu (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        moe_num_experts (`<fill_type>`, *optional*, defaults to 8): <fill_docstring>
+        moe_top_k (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*):
-            The id of the padding token.
         bos_token_id (`int`, *optional*, defaults to 1):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 2):
             The id of the "end-of-sequence" token.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied.
+        bias (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention window size. If not specified, will default to `4096`.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the rms normalization layers.
+        initializer_range (`float`, *optional*, defaults to 0.01):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     ```python
     >>> from transformers import JetMoEModel, JetMoEConfig
@@ -109,12 +99,12 @@ class JetMoEConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50295,
-        hidden_size=1024,
+        vocab_size=32000,
+        hidden_size=2048,
         num_layers=24,
         num_attention_heads=16,
         kv_channels = 128,
-        ffn_hidden_size=2048,
+        ffn_hidden_size=5632,
         max_position_embeddings=4096,
         rotary_percent=1.0,
         activation_function="silu",
@@ -165,7 +155,7 @@ class JetMoEConfig(PretrainedConfig):
 
     def to_json_string(self, use_diff=False):
         """Serializes this instance to a JSON string, excluding non-serializable attributes.
-        
+
         Args:
             use_diff (bool): Whether to use differences with the default config. This argument is
                              accepted for compatibility with the transformers library but is not

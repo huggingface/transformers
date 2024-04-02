@@ -10,7 +10,6 @@ from .parallel_experts import ParallelExperts, compute_gating
 class MoE(nn.Module):
     """
     A Sparsely gated mixture of experts layer with 1-layer Feed-Forward networks as experts.
-    
 
     Args:
         input_size: integer - size of the input
@@ -184,7 +183,7 @@ class MoE(nn.Module):
 
     def batch_map(self, x):
         """
-        
+
         Args:
             x: tensor shape [batch_size, input_size]
             train: a boolean scalar.
