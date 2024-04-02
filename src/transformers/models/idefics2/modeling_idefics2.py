@@ -19,7 +19,6 @@ import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
-import einops
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -488,6 +487,24 @@ class Idefics2VisionMLP(nn.Module):
         return hidden_states
 
 
+class Idefics2MLP(nn.Module):
+    def __init__(
+        self,
+        hidden_size: int,
+        intermediate_size: int,
+        output_size: int,
+        hidden_act: str,
+    ):
+        super().__init__()
+        self.gate_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
+        self.up_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
+        self.down_proj = nn.Linear(intermediate_size, output_size, bias=False)
+        self.act_fn = ACT2FN[hidden_act]
+
+    def forward(self, x):
+        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+
+
 # Copied from transformers.models.siglip.modeling_siglip.SiglipMultiheadAttentionPoolingHead with Siglip->Idefics2
 class Idefics2MultiheadAttentionPoolingHead(nn.Module):
     """Multihead Attention Pooling."""
@@ -735,24 +752,6 @@ class Idefics2VisionTransformer(nn.Module):
         )
 
 
-class Idefics2MLP(nn.Module):
-    def __init__(
-        self,
-        hidden_size: int,
-        intermediate_size: int,
-        output_size: int,
-        hidden_act: str,
-    ):
-        super().__init__()
-        self.gate_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
-        self.up_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
-        self.down_proj = nn.Linear(intermediate_size, output_size, bias=False)
-        self.act_fn = ACT2FN[hidden_act]
-
-    def forward(self, x):
-        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-
-
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -777,6 +776,24 @@ def _get_unpad_data(attention_mask):
         cu_seqlens,
         max_seqlen_in_batch,
     )
+
+
+# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Idefics2
+class Idefics2RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        Idefics2RMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
 
 
 class Idefics2PerceiverAttention(nn.Module):
@@ -1268,7 +1285,8 @@ class Idefics2PerceiverResampler(nn.Module):
         context: torch.Tensor,
         attention_mask,
     ) -> torch.Tensor:
-        latents = einops.repeat(self.latents, "seq embed -> bsz seq embed", bsz=context.shape[0])
+        # seq embed -> bsz seq embed
+        latents = self.latents.repeat((context.shape[0], 1, 1))
 
         latent_attention_mask = torch.ones(
             (attention_mask.size(0), latents.size(1)), dtype=attention_mask.dtype, device=attention_mask.device
@@ -1295,24 +1313,6 @@ class Idefics2PerceiverResampler(nn.Module):
         latents = self.norm(latents)
 
         return latents
-
-
-# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Idefics2
-class Idefics2RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        Idefics2RMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
 
 
 IDEFICS2_START_DOCSTRING = r"""
@@ -1492,8 +1492,12 @@ class Idefics2Model(Idefics2PreTrainedModel):
 
     def enable_input_require_grads(self):
         """
-        Enables the gradients for the input embeddings. This is useful for fine-tuning adapter weights while keeping
-        the model weights fixed.
+        Enables the gradients for the input embeddings.
+
+        This is useful for lora when using gradient checkpointing.
+        c.f. https://github.com/huggingface/peft/issues/1402#issuecomment-1913675032
+
+        Override to set output.requires_grad = True for both the decoder's and vision model's embeddings.
         """
 
         def get_lowest_module(module):
