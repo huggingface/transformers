@@ -1818,11 +1818,8 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     @slow
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_eager_matches_sdpa_inference
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        """
-        Model requires `decoder_input_ids` but `is_encoder_decoder=False`. Additionnally, decoder's input batch size must be
-        `num_codebooks*batch_size`.
-        """
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
@@ -1939,7 +1936,9 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                             else:
                                 dummy_attention_mask = inputs_dict.get("attention_mask", None)
                                 if dummy_attention_mask is None:
+                                    # Ignore copy
                                     seqlen = inputs_dict.get("decoder_input_ids", dummy_input).shape[-1]
+                                    # Ignore copy
                                     dummy_attention_mask = (
                                         torch.ones(batch_size, seqlen).to(torch.int64).to(torch_device)
                                     )
@@ -1965,11 +1964,15 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
                             for enable_kernels in [False, True]:
                                 failcase = f"padding_side={padding_side}, use_mask={use_mask}, batch_size={batch_size}, enable_kernels={enable_kernels}"
+                                # Ignore copy
                                 batch_size_input_ids = self.model_tester.num_codebooks * batch_size
+                                # Ignore copy
                                 decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[
                                     :batch_size_input_ids
                                 ]
+                                # Ignore copy
                                 if decoder_input_ids.shape[0] != batch_size_input_ids:
+                                    # Ignore copy
                                     extension = torch.ones(
                                         batch_size_input_ids - decoder_input_ids.shape[0],
                                         *decoder_input_ids.shape[1:],
@@ -1980,6 +1983,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                                     decoder_input_ids = decoder_input_ids.to(torch_device)
 
                                 # TODO: never an `attention_mask` arg here?
+                                # Ignore copy
                                 other_inputs = {
                                     "decoder_input_ids": decoder_input_ids,
                                     "decoder_attention_mask": dummy_attention_mask,
@@ -1987,6 +1991,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                                 }
 
                                 # TODO: test gradients as well (& for FA2 as well!)
+                                # Ignore copy
                                 with torch.no_grad():
                                     with torch.backends.cuda.sdp_kernel(
                                         enable_flash=enable_kernels,
@@ -2067,12 +2072,11 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @require_torch_sdpa
     @slow
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_eager_matches_sdpa_generate
     def test_eager_matches_sdpa_generate(self):
-        """
-        Overwrite generative model classes with greedy sample model classes.
-        """
         max_new_tokens = 30
 
+        # Ignore copy
         for model_class in self.greedy_sample_model_classes:
             if not model_class._supports_sdpa:
                 self.skipTest(f"{model_class.__name__} does not support SDPA")
