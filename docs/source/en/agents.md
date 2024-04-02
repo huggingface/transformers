@@ -173,9 +173,49 @@ Note that your agent is powered by a LLM, so small variations in your prompt mig
 
 Every [`~Agent.run`] operation is independent, so you can run it several times in a row with different tasks.
 
-Here is an example of how powerful the agent setup can be:
+Here is an example of how powerful the agent setup can be: here is an example of Mixtral-8x7b solving a GAIA task with proper uses of the search tool.
 
-[(show agent run to solve a GAIA task)]
+```
+Task: How many more blocks (also denoted as layers) in BERT base encoder than the encoder from the architecture proposed in Attention is All You Need?
+
+Thought: To begin, I need to find the number of layers in the encoder of BERT base and the architecture proposed in Attention is All You Need. I will start by searching for the number of layers in BERT base.
+
+Action:
+{
+   "action": "search",
+ "action_input": "number of layers in BERT base encoder"
+}
+
+Observation: 12 layers
+Thought: I need to search for the number of layers in the encoder of the architecture proposed in Attention is All You Need.
+
+Action:
+{
+   "action": "search",
+ "action_input": "number of layers in the encoder of the architecture proposed in Attention is All You Need"
+}
+
+Observation: Encoder: The encoder is composed of a stack of N = 6 identical layers. Each layer has two sub-layers.
+Thought: Now that I have the number of layers for both BERT base and the architecture proposed in Attention is All You Need, I can calculate the difference.
+
+Action:
+{
+   "action": "calculator",
+ "action_input": "12 - 6"
+}
+
+
+Observation: 6
+Thought: Now that I have the calculated difference, I need to provide the final answer.
+
+Action:
+{
+   "action": "final_answer",
+ "action_input": "BERT base encoder has 6 more layers than the encoder from the architecture proposed in Attention is All You Need"
+}'
+
+```
+
 
 ## Implementation of agents
 
@@ -187,7 +227,7 @@ This is the go-to agent to solve reasoning tasks, since the ReAct framework make
 
 This class is the one to use when trying to execute multimodal tasks, since it natively handles different input and output types for its tools. It has a planning step, then generates python code to execute all actions at once.
 
-### #### Code execution?!
+#### Code execution?!
 
 This code is then executed with our small Python interpreter on the set of inputs passed along with your tools. We hear you screaming "Arbitrary code execution!" in the back, but let us explain why that is not the case.
 

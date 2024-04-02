@@ -23,7 +23,7 @@
     title: Load and train adapters with 🤗 PEFT
   - local: model_sharing
     title: Share your model
-  - local: transformers_agents
+  - local: agents
     title: Agents
   - local: llm_tutorial
     title: Generation with LLMs
@@ -224,7 +224,7 @@
   title: Conceptual guides
 - sections:
   - sections:
-    - local: main_classes/agent
+    - local: main_classes/agents
       title: Agents and Tools
     - local: model_doc/auto
       title: Auto Classes
