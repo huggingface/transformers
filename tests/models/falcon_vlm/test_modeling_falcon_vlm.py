@@ -449,4 +449,4 @@ class FalconVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20)
 
         EXPECTED_DECODED_TEXT = ['\n\nThis image shows two cats lying on a pink blanket on a couch.']
-        self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True)[0], EXPECTED_DECODED_TEXT)
+        self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
