@@ -16,27 +16,24 @@ rendered properly in your Markdown viewer.
 
 # Instantiate a big model
 
-A barrier to accessing very large pretrained models is the amount of memory the require. When you load a pretrained PyTorch model, you usually:
+A barrier to accessing very large pretrained models is the amount of memory required. When loading a pretrained PyTorch model, you usually:
 
 1. Create a model with random weights.
 2. Load your pretrained weights.
-3. Put those pretrained weights in your random model.
+3. Put those pretrained weights in the model.
 
-The first two steps both require a full version of the model in memory and if your model starts weighing several GBs, you may not have enough memory for two copies of the model. This problem is amplified in distributed training environments because each process loads the pretrained model and stores two copies in memory.
+The first two steps both require a full version of the model in memory and if the model weighs several GBs, you may not have enough memory for two copies of it. This problem is amplified in distributed training environments because each process loads a pretrained model and stores two copies in memory.
 
-<Tip>
+> [!TIP]
+> The randomly created model is initialized with "empty" tensors, which take space in memory without filling it. The random values are whatever was in this chunk of memory at the time. To improve loading speed, the [`_fast_init`](https://github.com/huggingface/transformers/blob/c9f6e5e35156e068b227dd9b15521767f6afd4d2/src/transformers/modeling_utils.py#L2710) parameter is set to `True` by default to skip the random initialization for all weights that are correctly loaded.
 
-The randomly created model is initialized with "empty" tensors, which take space in memory without filling it. The random values are whatever was in this chunk of memory at the time. To improve loading speed, the random initialization of the weights from the appropriate distribution (such as a normal distribution for instance) is performed *after* the pretrained weights have been loaded in the model.
-
-</Tip>
-
-This guide will show you how Transformers can help you load large pretrained models despite their heavy memory requirements.
+This guide will show you how Transformers can help you load large pretrained models despite their memory requirements.
 
 ## Sharded checkpoints
 
-From Transformers v4.18.0, model checkpoints larger than 10GB are automatically sharded. This means if a single checkpoint larger than 10GB is saved with the [`~PreTrainedModel.save_pretrained`] method, it is split into several partial checkpoints (each shard is less than 10GB) and it creates an index file that maps parameter names to the files they're stored in.
+From Transformers v4.18.0, a checkpoint larger than 10GB is automatically sharded by the [`~PreTrainedModel.save_pretrained`] method. It is split into several smaller partial checkpoints and creates an index file that maps parameter names to the files they're stored in.
 
-The maximum shard size is controlled with the `max_shard_size` parameter, but by default it is 5GB because it is easier to run on free-tier GPU instances without running out of memory.
+The maximum shard size is controlled with the `max_shard_size` parameter, but by default it is 5GB, because it is easier to run on free-tier GPU instances without running out of memory.
 
 For example, let's shard [BioMistral/BioMistral-7B](https://hf.co/BioMistral/BioMistral-7B).
 
@@ -47,7 +44,7 @@ For example, let's shard [BioMistral/BioMistral-7B](https://hf.co/BioMistral/Bio
 ['config.json', 'generation_config.json', 'model-00001-of-00006.safetensors', 'model-00002-of-00006.safetensors', 'model-00003-of-00006.safetensors', 'model-00004-of-00006.safetensors', 'model-00005-of-00006.safetensors', 'model-00006-of-00006.safetensors', 'model.safetensors.index.json']
 ```
 
-The sharded checkpoint is fully reloaded with the [`~PreTrainedModel.from_pretrained`] method.
+The sharded checkpoint is reloaded with the [`~PreTrainedModel.from_pretrained`] method.
 
 ```py
 >>> with tempfile.TemporaryDirectory() as tmp_dir:
@@ -55,9 +52,9 @@ The sharded checkpoint is fully reloaded with the [`~PreTrainedModel.from_pretra
 ...     new_model = AutoModel.from_pretrained(tmp_dir)
 ```
 
-The main advantage of sharded checkpoints is that for big models, each shard is loaded after the previous one which caps the memory usage to only the model size and the largest shard size.
+The main advantage of sharded checkpoints for big models is that each shard is loaded after the previous one, which caps the memory usage to only the model size and the largest shard size.
 
-You could also directly load a sharded checkpoint inside a model without the [`~PreTrainedModel.from_pretrained`] method (similar to PyTorch's `load_state_dict()` method for a full checkpoint). In this case, use [`~modeling_utils.load_sharded_checkpoint`] method.
+You could also directly load a sharded checkpoint inside a model without the [`~PreTrainedModel.from_pretrained`] method (similar to PyTorch's `load_state_dict()` method for a full checkpoint). In this case, use the [`~modeling_utils.load_sharded_checkpoint`] method.
 
 ```py
 >>> from transformers.modeling_utils import load_sharded_checkpoint
@@ -69,7 +66,7 @@ You could also directly load a sharded checkpoint inside a model without the [`~
 
 ### Shard metadata
 
-The index file determines which keys are in the checkpoint and where the corresponding weights are stored. The index is loaded like any other json file and you can get a dictionary from it.
+The index file determines which keys are in the checkpoint and where the corresponding weights are stored. This file is loaded like any other JSON file and you can get a dictionary from it.
 
 ```py
 >>> import json
@@ -83,14 +80,14 @@ The index file determines which keys are in the checkpoint and where the corresp
 dict_keys(['metadata', 'weight_map'])
 ```
 
-The `metadata` provides the total model size.
+The `metadata` key provides the total model size.
 
 ```py
 >>> index["metadata"]
 {'total_size': 28966928384}
 ```
 
-The `weight_map` maps each parameter name (typically `state_dict` in a PyTorch model) to the shard it's stored in.
+The `weight_map` key maps each parameter name (typically `state_dict` in a PyTorch model) to the shard it's stored in.
 
 ```py
 >>> index["weight_map"]
@@ -107,7 +104,7 @@ The `weight_map` maps each parameter name (typically `state_dict` in a PyTorch m
 > [!TIP]
 > Make sure you have Accelerate v0.9.0 or later and PyTorch v1.9.0 or later installed.
 
-From Transformers v4.20.0, the [`~PreTrainedModel.from_pretrained`] method has been supercharged with Accelerate's [Big Model Inference](https://hf.co/docs/accelerate/usage_guides/big_modeling) feature to efficiently handle really big models! Big Model Inference creates a *model skeleton* on PyTorch's [**meta**](https://pytorch.org/docs/main/meta.html) device. The randomly initialized parameters are only created when the pretrained weights are loaded. This way, you aren't keeping two copies of the model in memory at the same time (one for the randomly initialized model and one for the pretrained weights), and the maximum memory consumed is only the full model size.
+From Transformers v4.20.0, the [`~PreTrainedModel.from_pretrained`] method is supercharged with Accelerate's [Big Model Inference](https://hf.co/docs/accelerate/usage_guides/big_modeling) feature to efficiently handle really big models! Big Model Inference creates a *model skeleton* on PyTorch's [**meta**](https://pytorch.org/docs/main/meta.html) device. The randomly initialized parameters are only created when the pretrained weights are loaded. This way, you aren't keeping two copies of the model in memory at the same time (one for the randomly initialized model and one for the pretrained weights), and the maximum memory consumed is only the full model size.
 
 To enable Big Model Inference in Transformers, set `low_cpu_mem_usage=True` in the [`~PreTrainedModel.from_pretrained`] method.
 
@@ -127,7 +124,7 @@ gemma = AutoModelForCausalLM.from_pretrained("google/gemma-7b", device_map="auto
 gemma = AutoModelForCausalLM.from_pretrained("google/gemma-7b", device_map="auto", low_cpu_mem_usage=True)
 ```
 
-You can also write your own `device_map` by mapping each layer to a device. It should map all model parameters to a device, but you don't have to detail where all the submodules of a layer go if that layer is entirely on the same device.
+You can also write your own `device_map` by mapping each layer to a device. It should map all model parameters to a device, but you don't have to detail where all the submodules of a layer go if the entire layer is on the same device.
 
 ```python
 device_map = {"model.layers.1": 0, "model.layers.14": 1, "model.layers.31": "cpu", "lm_head": "disk"}
