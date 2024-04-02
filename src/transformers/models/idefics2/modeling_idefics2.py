@@ -1262,7 +1262,8 @@ class Idefics2PerceiverResampler(nn.Module):
         """
         Instantiates a Perceiver Resampler that operates over a sequence of embeddings (say from a ResNet or ViT or
         MAE) of a given dimension, performs `depth` blocks of cross-attention with a fixed `n_latents` inputs, then
-        returns a Tensor of shape [bsz, n_latents, embed_dim].
+        returns a Tensor of shape [bsz, n_latents, embed_dim]. The Resampler acts as a form of learned pooling and 
+        is derived from [Perceiver: General Perception with Iterative Attention](https://arxiv.org/abs/2103.03206).
         """
         super().__init__()
         self.hidden_size = config.text_config.hidden_size
