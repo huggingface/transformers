@@ -883,6 +883,12 @@ FALCON_PRETRAINED_MODEL_ARCHIVE_LIST = DeprecatedList(
     ]
 )
 
+FALCON_VLM_PRETRAINED_MODEL_ARCHIVE_LIST = DeprecatedList(
+    [
+        "tiiuae/falcon-10B-vlm",
+    ]
+)
+
 FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP = DeprecatedDict(
     {
         "espnet/fastspeech2_conformer_hifigan": "https://huggingface.co/espnet/fastspeech2_conformer_hifigan/raw/main/config.json"
