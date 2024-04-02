@@ -382,6 +382,8 @@
         title: HerBERT
       - local: model_doc/ibert
         title: I-BERT
+      - local: model_doc/jetmoe
+        title: JetMoE
       - local: model_doc/jukebox
         title: Jukebox
       - local: model_doc/led

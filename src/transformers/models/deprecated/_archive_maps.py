@@ -1356,6 +1356,12 @@ MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP = DeprecatedDict(
     {"mistral-ai/Mixtral-8x7B": "https://huggingface.co/mistral-ai/Mixtral-8x7B/resolve/main/config.json"}
 )
 
+JETMOE_PRETRAINED_CONFIG_ARCHIVE_MAP = DeprecatedDict(
+    {
+        "jetmoe/jetmoe-8b": "https://huggingface.co/jetmoe/jetmoe-8b/blob/main/config.json",
+    }
+)
+
 MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = DeprecatedDict(
     {"google/mobilebert-uncased": "https://huggingface.co/google/mobilebert-uncased/resolve/main/config.json"}
 )

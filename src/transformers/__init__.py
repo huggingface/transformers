@@ -612,6 +612,7 @@ _import_structure = {
         "MgpstrTokenizer",
     ],
     "models.mistral": ["MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MistralConfig"],
+    "models.jetmoe": ["JETMOE_PRETRAINED_CONFIG_ARCHIVE_MAP", "JetMoEConfig"],
     "models.mixtral": ["MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MixtralConfig"],
     "models.mluke": [],
     "models.mobilebert": [
@@ -2700,6 +2701,14 @@ else:
             "MistralForSequenceClassification",
             "MistralModel",
             "MistralPreTrainedModel",
+        ]
+    )
+    _import_structure["models.jetmoe"].extend(
+        [
+            "JetMoEForCausalLM",
+            "JetMoEForSequenceClassification",
+            "JetMoEModel",
+            "JetMoEPreTrainedModel",
         ]
     )
     _import_structure["models.mixtral"].extend(
@@ -4836,6 +4845,13 @@ else:
             "FlaxMistralPreTrainedModel",
         ]
     )
+    _import_structure["models.jetmoe"].extend(
+        [
+            "FlaxJetMoEForCausalLM",
+            "FlaxJetMoEModel",
+            "FlaxJetMoEPreTrainedModel",
+        ]
+    )
     _import_structure["models.mt5"].extend(["FlaxMT5EncoderModel", "FlaxMT5ForConditionalGeneration", "FlaxMT5Model"])
     _import_structure["models.opt"].extend(
         [
@@ -5494,6 +5510,7 @@ if TYPE_CHECKING:
         MgpstrTokenizer,
     )
     from .models.mistral import MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MistralConfig
+    from .models.jetmoe import JETMOE_PRETRAINED_CONFIG_ARCHIVE_MAP, JetMoEConfig
     from .models.mixtral import MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MixtralConfig
     from .models.mobilebert import (
         MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -7351,6 +7368,12 @@ if TYPE_CHECKING:
             MistralModel,
             MistralPreTrainedModel,
         )
+        from .models.jetmoe import (
+            JetMoEForCausalLM,
+            JetMoEForSequenceClassification,
+            JetMoEModel,
+            JetMoEPreTrainedModel,
+        )
         from .models.mixtral import (
             MixtralForCausalLM,
             MixtralForSequenceClassification,
@@ -9117,6 +9140,11 @@ if TYPE_CHECKING:
             FlaxMistralForCausalLM,
             FlaxMistralModel,
             FlaxMistralPreTrainedModel,
+        )
+        from .models.jetmoe import (
+            FlaxJetMoEForCausalLM,
+            FlaxJetMoEModel,
+            FlaxJetMoEPreTrainedModel,
         )
         from .models.mt5 import (
             FlaxMT5EncoderModel,

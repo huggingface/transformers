@@ -142,6 +142,7 @@ from . import (
     megatron_gpt2,
     mgp_str,
     mistral,
+    jetmoe,
     mixtral,
     mluke,
     mobilebert,
