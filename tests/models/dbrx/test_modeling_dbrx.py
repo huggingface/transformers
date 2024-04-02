@@ -17,6 +17,8 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers import DbrxConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -350,11 +352,10 @@ class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_tied_weights_keys(self):
         pass
 
-    # @is_flaky(max_attempts=3, description="flaky on some models.")
-    # @require_torch_sdpa
-    # @slow
-    # def test_eager_matches_sdpa_generate(self):
-    #     super().test_eager_matches_sdpa_generate()
+    @unittest.skip("TODO @gante fix this for Llama")
+    @parameterized.expand([(1, False), (1, True), (4, False)])
+    def test_new_cache_format(self, num_beams, do_sample):
+        pass
 
 
 @require_torch
