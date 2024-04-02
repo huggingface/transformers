@@ -601,14 +601,15 @@ class SpmConverter(Converter):
         if hasattr(self.original_tokenizer, "legacy") and not self.original_tokenizer.legacy:
             prepend_scheme = "first"
         return pre_tokenizers.Metaspace(
-            replacement=replacement, add_prefix_space=add_prefix_space, prepend_scheme=prepend_scheme
+            replacement=replacement, prepend_scheme=prepend_scheme
         )
 
     def post_processor(self):
         return None
 
     def decoder(self, replacement, add_prefix_space):
-        return decoders.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
+        prepend_scheme = "always" if add_prefix_space else "never"
+        return decoders.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme)
 
     def converted(self) -> Tokenizer:
         tokenizer = self.tokenizer(self.proto)
@@ -722,7 +723,8 @@ class DebertaV2Converter(SpmConverter):
         list_pretokenizers = []
         if self.original_tokenizer.split_by_punct:
             list_pretokenizers.append(pre_tokenizers.Punctuation(behavior="isolated"))
-        list_pretokenizers.append(pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space))
+        prepend_scheme = "always" if add_prefix_space else "never"
+        list_pretokenizers.append(pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme))
         return pre_tokenizers.Sequence(list_pretokenizers)
 
     def normalizer(self, proto):
@@ -1007,10 +1009,11 @@ class PegasusConverter(SpmConverter):
         return proto.trainer_spec.unk_id + self.original_tokenizer.offset
 
     def pre_tokenizer(self, replacement, add_prefix_space):
+        prepend_scheme = "always" if add_prefix_space else "never"
         return pre_tokenizers.Sequence(
             [
                 pre_tokenizers.WhitespaceSplit(),
-                pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space),
+                pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme),
             ]
         )
 
