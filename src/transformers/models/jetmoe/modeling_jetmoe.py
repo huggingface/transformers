@@ -15,7 +15,8 @@
 """ PyTorch JetMoE model."""
 
 from typing import List, Optional, Tuple, Union
-import warnings, math
+import warnings
+import math
 
 import torch
 import torch.utils.checkpoint
