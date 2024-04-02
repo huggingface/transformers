@@ -47,20 +47,20 @@ class RecurrentGemmaConfig(PretrainedConfig):
             Vocabulary size of the RecurrentGemma model. Defines the number of
             different tokens that can be represented by the
             `inputs_ids` passed when calling [`RecurrentGemmaModel`]
-        width (`int`, *optional*, defaults to 2560):
+        hidden_size (`int`, *optional*, defaults to 2560):
             Dimension of the hidden representations.
-        mlp_expnaded_width (`int`, *optional*, defaults to 24576):
+        intermediate_size (`int`, *optional*, defaults to 24576):
             Dimension of the MLP representations.
         num_heads (`int`, *optional*, defaults to 10):
             The number of heads for the attention block and the number of
             heads/blocks for the block-diagonal layers used in the RG-LRU gates.
-            This number must divide `width` and `lru_width`.
+            This number must divide `hidden_size` and `lru_width`.
         lru_width (`int` or `None`, *optional*, defaults to None):
             Dimension of the hidden representations of the RG-LRU. If `None`
-            this will be set to `width`.
+            this will be set to `hidden_size`.
         embeddings_scale_by_sqrt_dim (`bool`, defaults to `True`, *optional*,
         defaults to `True`):
-            Whether to scale the output of the embeddings by `sqrt(width)`.
+            Whether to scale the output of the embeddings by `sqrt(hidden_size)`.
         attention_window_size (`int`, *optional*, defaults to 2048)
             The size of the attention window used in the attention block.
         logits_soft_cap: (`float`, *optional*, defaults to 30.0)
@@ -102,8 +102,8 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self,
         num_hidden_layers=26,
         vocab_size=256000,
-        width=2560,
-        mlp_expanded_width=3 * 2560,
+        hidden_size=2560,
+        intermediate_size=3 * 2560,
         num_heads=10,
         lru_width=None,
         embeddings_scale_by_sqrt_dim=True,
@@ -117,16 +117,17 @@ class RecurrentGemmaConfig(PretrainedConfig):
         bos_token_id=2,
         tie_word_embeddings=True,
         rope_theta=10000.0,
+        block_types=_PATTERN,
         **kwargs,
     ):
         self.num_hidden_layers = num_hidden_layers
         self.vocab_size = vocab_size
-        self.width = width
-        self.mlp_expanded_width = mlp_expanded_width
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
         self.num_heads = num_heads
         self.num_attention_heads = num_heads
-        self.head_dim = self.width // self.num_heads
-        self.lru_width = lru_width if lru_width is not None else width
+        self.head_dim = self.hidden_size // self.num_heads
+        self.lru_width = lru_width if lru_width is not None else hidden_size
         self.embeddings_scale_by_sqrt_dim = embeddings_scale_by_sqrt_dim
         self.attention_window_size = attention_window_size
         self.conv1d_width = conv1d_width
@@ -134,6 +135,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
+        self._block_types = block_types
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -145,4 +147,4 @@ class RecurrentGemmaConfig(PretrainedConfig):
 
     @property
     def block_types(self) -> tuple[str, ...]:
-        return (_PATTERN * 100)[:self.num_hidden_layers]
+        return (self._block_types * 100)[:self.num_hidden_layers]

@@ -1558,7 +1558,7 @@ class GriffinCache:
         for block_type in config.block_types:
             self.states.append(ResidualBlock.init_cache(
                 batch_size=batch_size,
-                width=config.width,
+                width=config.hidden_size,
                 num_heads=config.num_heads,
                 attention_window_size=config.attention_window_size,
                 temporal_block_type=block_type,
@@ -1788,12 +1788,12 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         # TODO(lberrada, botev): fix device and dtype
         device = dtype = None
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.width, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
 
         self.blocks = nn.ModuleList([
             ResidualBlock(
-                width=self.config.width,
-                mlp_expanded_width=self.config.mlp_expanded_width,
+                width=self.config.hidden_size,
+                mlp_expanded_width=self.config.intermediate_size,
                 num_heads=self.config.num_heads,
                 attention_window_size=self.config.attention_window_size,
                 temporal_block_type=block_type,
@@ -1805,7 +1805,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             for block_type in self.config.block_types
         ])
         self.final_norm = RMSNorm(
-            width=self.config.width, device=device, dtype=dtype
+            width=self.config.hidden_size, device=device, dtype=dtype
         )
         self.gradient_checkpointing = False
 
@@ -1858,7 +1858,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
         # normalized
         if self.config.embeddings_scale_by_sqrt_dim:
-            normalizer = torch.tensor(self.config.width ** 0.5)
+            normalizer = torch.tensor(self.config.hidden_size ** 0.5)
             hidden_states = hidden_states * normalizer.type(torch.bfloat16)
 
         # decoder layers
