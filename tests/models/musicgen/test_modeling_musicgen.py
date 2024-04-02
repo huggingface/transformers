@@ -287,7 +287,8 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    def test_flash_attn_2_inference(self):
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_inference_equivalence
+    def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
@@ -305,6 +306,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
                 model.to(torch_device)
 
+                # Ignore copy
                 dummy_input = inputs_dict[model.main_input_name]
                 if dummy_input.dtype in [torch.float32, torch.float16]:
                     dummy_input = dummy_input.to(torch.bfloat16)
@@ -312,10 +314,13 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 dummy_attention_mask = inputs_dict.get("attention_mask", None)
 
                 if dummy_attention_mask is not None:
+                    # Ignore copy
                     dummy_attention_mask[:, 1:] = 1
                     dummy_attention_mask[:, :1] = 0
 
+                # Ignore copy
                 outputs = model(dummy_input, output_hidden_states=True)
+                # Ignore copy
                 outputs_fa = model_fa(dummy_input, output_hidden_states=True)
 
                 logits = (
@@ -331,6 +336,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
                 assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
 
+                # Ignore copy
                 other_inputs = {
                     "output_hidden_states": True,
                 }
@@ -361,10 +367,8 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    def test_flash_attn_2_inference_padding_right(self):
-        """
-        Decoder's input batch size must be `num_codebooks*batch_size`.
-        """
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_inference_equivalence_right_padding
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
@@ -382,6 +386,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
                 model.to(torch_device)
 
+                # Ignore copy
                 dummy_input = inputs_dict[model.main_input_name]
                 if dummy_input.dtype in [torch.float32, torch.float16]:
                     dummy_input = dummy_input.to(torch.bfloat16)
@@ -389,6 +394,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 dummy_attention_mask = inputs_dict.get("attention_mask", None)
 
                 if dummy_attention_mask is not None:
+                    # Ignore copy
                     dummy_attention_mask[:, :-1] = 1
                     dummy_attention_mask[:, -1:] = 0
 
@@ -413,7 +419,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 )
 
                 assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
-
+                # Ignore copy
                 other_inputs = {
                     "output_hidden_states": True,
                 }
@@ -1554,11 +1560,8 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    def test_flash_attn_2_inference(self):
-        """
-        Model requires `decoder_input_ids` but `is_encoder_decoder=False`. Additionnally, decoder's input batch size must be
-        `num_codebooks*batch_size`.
-        """
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_inference_equivalence
+    def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
@@ -1576,6 +1579,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
                 model.to(torch_device)
 
+                # Ignore copy
                 dummy_input = inputs_dict[model.main_input_name]
                 if dummy_input.dtype in [torch.float32, torch.float16]:
                     dummy_input = dummy_input.to(torch.bfloat16)
@@ -1583,12 +1587,15 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 dummy_attention_mask = inputs_dict.get("attention_mask", None)
 
                 if dummy_attention_mask is not None:
+                    # Ignore copy
                     dummy_attention_mask[:, 1:] = 1
                     dummy_attention_mask[:, :1] = 0
 
+                # Ignore copy
                 decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)
-
+                # Ignore copy
                 outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                # Ignore copy
                 outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
 
                 logits = (
@@ -1603,16 +1610,18 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 )
 
                 assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
-
+                # Ignore copy
                 other_inputs = {
                     "decoder_input_ids": decoder_input_ids,
                     "decoder_attention_mask": dummy_attention_mask,
                     "output_hidden_states": True,
                 }
+                # Ignore copy
                 if dummy_attention_mask is not None:
                     other_inputs["attention_mask"] = dummy_attention_mask
-
+                # Ignore copy
                 outputs = model(dummy_input, **other_inputs)
+                # Ignore copy
                 outputs_fa = model_fa(dummy_input, **other_inputs)
 
                 logits = (
@@ -1636,11 +1645,8 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    def test_flash_attn_2_inference_padding_right(self):
-        """
-        Model requires `decoder_input_ids` but `is_encoder_decoder=False`. Additionnally, decoder's input batch size must be
-        `num_codebooks*batch_size`.
-        """
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_inference_equivalence_right_padding
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
@@ -1658,6 +1664,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
                 model.to(torch_device)
 
+                # Ignore copy
                 dummy_input = inputs_dict[model.main_input_name]
                 if dummy_input.dtype in [torch.float32, torch.float16]:
                     dummy_input = dummy_input.to(torch.bfloat16)
@@ -1665,12 +1672,15 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 dummy_attention_mask = inputs_dict.get("attention_mask", None)
 
                 if dummy_attention_mask is not None:
+                    # Ignore copy
                     dummy_attention_mask[:, :-1] = 1
                     dummy_attention_mask[:, -1:] = 0
 
+                # Ignore copy
                 decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)
-
+                # Ignore copy
                 outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                # Ignore copy
                 outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
 
                 logits = (
@@ -1686,15 +1696,18 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
                 assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
 
+                # Ignore copy
                 other_inputs = {
                     "decoder_input_ids": decoder_input_ids,
                     "decoder_attention_mask": dummy_attention_mask,
                     "output_hidden_states": True,
                 }
+                # Ignore copy
                 if dummy_attention_mask is not None:
                     other_inputs["attention_mask"] = dummy_attention_mask
-
+                # Ignore copy
                 outputs = model(dummy_input, **other_inputs)
+                # Ignore copy
                 outputs_fa = model_fa(dummy_input, **other_inputs)
 
                 logits = (
