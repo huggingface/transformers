@@ -1832,7 +1832,9 @@ class TrainingArguments:
             os.environ[f"{prefix}BACKWARD_PREFETCH"] = prefetch_policy.upper()
             os.environ[f"{prefix}FORWARD_PREFETCH"] = self.fsdp_config.get("forward_prefetch", "false")
             os.environ[f"{prefix}SYNC_MODULE_STATES"] = self.fsdp_config.get("sync_module_states", "true")
-            os.environ[f"{prefix}CPU_RAM_EFFICIENT_LOADING"] = self.fsdp_config.get("cpu_ram_efficient_loading", "false")
+            os.environ[f"{prefix}CPU_RAM_EFFICIENT_LOADING"] = self.fsdp_config.get(
+                "cpu_ram_efficient_loading", "false"
+            )
             os.environ[f"{prefix}USE_ORIG_PARAMS"] = self.fsdp_config.get("use_orig_params", "true")
 
         if is_accelerate_available():
