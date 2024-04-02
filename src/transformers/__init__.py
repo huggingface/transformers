@@ -4845,13 +4845,6 @@ else:
             "FlaxMistralPreTrainedModel",
         ]
     )
-    _import_structure["models.jetmoe"].extend(
-        [
-            "FlaxJetMoEForCausalLM",
-            "FlaxJetMoEModel",
-            "FlaxJetMoEPreTrainedModel",
-        ]
-    )
     _import_structure["models.mt5"].extend(["FlaxMT5EncoderModel", "FlaxMT5ForConditionalGeneration", "FlaxMT5Model"])
     _import_structure["models.opt"].extend(
         [
@@ -9140,11 +9133,6 @@ if TYPE_CHECKING:
             FlaxMistralForCausalLM,
             FlaxMistralModel,
             FlaxMistralPreTrainedModel,
-        )
-        from .models.jetmoe import (
-            FlaxJetMoEForCausalLM,
-            FlaxJetMoEModel,
-            FlaxJetMoEPreTrainedModel,
         )
         from .models.mt5 import (
             FlaxMT5EncoderModel,
