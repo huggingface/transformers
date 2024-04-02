@@ -505,16 +505,19 @@ Finally, load the metrics and run the evaluation.
 >>> import evaluate
 >>> from tqdm import tqdm
 
->>> model = AutoModelForObjectDetection.from_pretrained("devonho/detr-resnet-50_finetuned_cppe5").to("cuda:0")
+>>> model = AutoModelForObjectDetection.from_pretrained("devonho/detr-resnet-50_finetuned_cppe5")
 >>> module = evaluate.load("ybelkada/cocoevaluate", coco=test_ds_coco_format.coco)
 >>> val_dataloader = torch.utils.data.DataLoader(
 ...     test_ds_coco_format, batch_size=8, shuffle=False, num_workers=4, collate_fn=collate_fn
 ... )
 
+>>> device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
+>>> model.to(device)
+
 >>> with torch.no_grad():
 ...     for idx, batch in enumerate(tqdm(val_dataloader)):
-...         pixel_values = batch["pixel_values"].to("cuda:0")
-...         pixel_mask = batch["pixel_mask"].to("cuda:0")
+...         pixel_values = batch["pixel_values"].to(device)
+...         pixel_mask = batch["pixel_mask"].to(device)
 
 ...         labels = [
 ...             {k: v for k, v in t.items()} for t in batch["labels"]
