@@ -2121,7 +2121,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
                 self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
 
-
     @require_torch_sdpa
     @slow
     # Copied from tests.test_modeling_common.ModelTesterMixin.test_eager_matches_sdpa_generate
