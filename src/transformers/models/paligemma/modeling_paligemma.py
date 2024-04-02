@@ -236,10 +236,10 @@ PALIGEMMA_INPUTS_DOCSTRING = r"""
 class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
     def __init__(self, config: PaLIGemmaConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config=config.vision_config) #PaLIGemmaSiglipVisionTransformer(config=config.vision_config)
+        self.vision_tower = AutoModel.from_config(config=config.vision_config)
         self.multi_modal_projector = PaLIGemmaMultiModalProjector(config)
         self.vocab_size = config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(config=config.text_config) #PaLIGemmaLanguageForCausalLM(config=config.text_config)
+        self.language_model = AutoModelForCausalLM.from_config(config=config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
@@ -273,47 +273,39 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
         return model_embeds
 
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
-
-        # TODO add scaling division for image tokens to use gemma modelin
-        # TODO output 4D attention mask here directly
-
         _, num_image_tokens, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
 
-        left_padding = attention_mask[:, 0].sum() == 0
-
         full_sequence_length = num_image_tokens + sequence_length
-
         final_embedding = torch.zeros(batch_size, full_sequence_length, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device)
         final_attention_mask_4d = torch.zeros(batch_size, 1, full_sequence_length, full_sequence_length, dtype=torch.float32, device=inputs_embeds.device)
+        position_ids = torch.ones(batch_size, full_sequence_length, dtype=torch.long, device=inputs_embeds.device) # Reflect padding tokens
+
         if labels is not None:
             final_labels = torch.full((batch_size, full_sequence_length), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device)
         else:
             final_labels = None
-        if left_padding:
-            for i in range(batch_size):
-                text_tokens_mask = attention_mask[i] > 0
-                num_text_tokens = text_tokens_mask.sum().item()
-                text_embeds = inputs_embeds[i][text_tokens_mask] 
-                total_initial_tokens = num_image_tokens + num_text_tokens
 
-                start_text_idx = full_sequence_length - num_text_tokens
-                start_image_idx = start_text_idx - num_image_tokens
+        pad_token_id = self.pad_token_id
+        batch_is_left_padded = (input_ids[:, 0] == pad_token_id).any()
 
-                final_embedding[i, start_image_idx:start_text_idx] = image_features[i] / (self.config.hidden_size ** 0.5)
-                final_embedding[i, start_text_idx:start_text_idx + num_text_tokens] =  text_embeds
-                final_attention_mask_4d[i, :, start_image_idx:start_image_idx + total_initial_tokens, start_image_idx:start_image_idx + total_initial_tokens] = 1
-
-        else:
-            for i in range(batch_size):
-                text_tokens_mask = attention_mask[i] > 0
-                num_text_tokens = text_tokens_mask.sum().item()
-                text_embeds = inputs_embeds[i][text_tokens_mask]
-
-                final_embedding[i, :num_image_tokens] = image_features[i] / (self.config.hidden_size ** 0.5)
-                final_embedding[i, num_image_tokens:num_image_tokens + num_text_tokens] = text_embeds
-                final_attention_mask_4d[i, :, :total_initial_tokens, :total_initial_tokens] = 1
-        position_ids = torch.arange(full_sequence_length, device=inputs_embeds.device).expand(batch_size, -1)
+        for i in range(batch_size):
+            text_tokens_mask = attention_mask[i] > 0
+            num_text_tokens = text_tokens_mask.sum().item()
+            scaled_image_features = image_features[i] / (self.config.hidden_size ** 0.5)
+            if batch_is_left_padded:
+                num_padding_tokens = sequence_length - num_text_tokens
+                text_start_index = num_image_tokens + num_padding_tokens
+                final_embedding[i, num_padding_tokens:num_padding_tokens + num_image_tokens] = scaled_image_features
+                final_embedding[i, text_start_index:text_start_index + num_text_tokens] = inputs_embeds[i][text_tokens_mask]
+                position_ids[i, num_padding_tokens:num_padding_tokens + num_image_tokens + num_text_tokens] = torch.arange(1, num_image_tokens + num_text_tokens + 1, device=inputs_embeds.device)
+                final_attention_mask_4d[i, :, num_padding_tokens:num_image_tokens +num_text_tokens +num_padding_tokens, num_padding_tokens:num_padding_tokens + num_image_tokens + num_text_tokens] = 1
+            else:
+                final_embedding[i, :num_image_tokens] = scaled_image_features
+                final_embedding[i, num_image_tokens:num_image_tokens + num_text_tokens] = inputs_embeds[i][text_tokens_mask]
+                position_ids[i, :num_image_tokens + num_text_tokens] = torch.arange(1, num_image_tokens + num_text_tokens + 1, device=inputs_embeds.device)
+                #final_attention_mask_4d[i, :, :num_image_tokens, :num_image_tokens + num_text_tokens] = 1
+                final_attention_mask_4d[i, :, :num_image_tokens + num_text_tokens, :num_image_tokens + num_text_tokens] = 1
         return final_embedding, final_attention_mask_4d, final_labels, position_ids
 
     @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
@@ -427,14 +419,37 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
             return_dict=return_dict,
         )
         # we do not pass labels so output[0] correspond to logits
+        # however in the case of right-padding and 4d attn mask outputs need to be sliced
+        # in order to recover token-to-predict logits. 
+
         logits = outputs[0]
         loss = None
+
+        # ----- slice logits -----
+
+        left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
+        # we know if the batch is left padded or not
+        # logits and labels need to be sliced/padding logits need to be ignored
+        # could be something like that?
+        # assume first row is enough/OK
+        if attention_mask.dim() == 4:
+            # this is to identify input phase
+            # else, we are in the cached situation and don't need to slice
+            masked_logits = logits[attention_mask[:, :, 0].squeeze(1).bool()]
+        # -----  end slice   -----      
+
+        
         if labels is not None:
+            #breakpoint()
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :] 
             shift_labels = labels[..., 1:]
             if attention_mask is not None:
-                validity_mask = attention_mask[:, 0, -1, :-1].squeeze(1).bool()
+                if not left_padding:
+                    # Use input first or last row of attention mask to remove unwanted logits
+                    validity_mask = attention_mask[:, 0, 0, :-1].squeeze(1).bool()
+                else:
+                    validity_mask = attention_mask[:, 0, -1, :-1].squeeze(1).bool()
                 shift_logits = shift_logits[validity_mask].contiguous()
                 shift_labels = shift_labels[validity_mask].contiguous()
             else:
@@ -448,7 +463,6 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
             loss = loss_fct(
                 flat_logits, flat_labels
             )
-
         if not return_dict:
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
