@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Llava-NeXT model configuration"""
+""" FalconVLM model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -28,7 +28,7 @@ FALCON_VLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class FalconVLMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FalconVLMForConditionalGeneration`]. It is used to instantiate an
-    Llava-NeXT model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    FalconVLM model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the [tiiuae/falcon-10B-vlm](https://huggingface.co/tiiuae/falcon-10B-vlm)
     model.
 
@@ -56,7 +56,7 @@ class FalconVLMConfig(PretrainedConfig):
     >>> # Initializing a Llama config
     >>> text_config = LlamaConfig()
 
-    >>> # Initializing a Llava-Next tiiuae/falcon-10B-vlm style configuration
+    >>> # Initializing a FalconVLM tiiuae/falcon-10B-vlm style configuration
     >>> configuration = FalconVLMConfig(vision_config, text_config)
 
     >>> # Initializing a model from the tiiuae/falcon-10B-vlm style configuration
