@@ -580,10 +580,8 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
     @slow
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_eager_matches_sdpa_inference
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        """
-        Decoder's input batch size must be `num_codebooks*batch_size`.
-        """
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
@@ -671,15 +669,19 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 for padding_side in ["left", "right"]:
                     for use_mask in [False, True]:
                         for batch_size in [1, 5]:
+                            # Ignore copy
                             batch_size_input_ids = self.model_tester.num_codebooks * batch_size
                             dummy_input = inputs_dict[model.main_input_name]
 
                             if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
                                 dummy_input = dummy_input.to(torch_dtype)
 
+                            # Ignore copy
                             dummy_input = dummy_input[:batch_size_input_ids]
+                            # Ignore copy
                             if dummy_input.shape[0] != batch_size_input_ids:
                                 if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
+                                    # Ignore copy
                                     extension = torch.rand(
                                         batch_size_input_ids - dummy_input.shape[0],
                                         *dummy_input.shape[1:],
@@ -688,6 +690,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                                     )
                                     dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
                                 else:
+                                    # Ignore copy
                                     extension = torch.randint(
                                         high=5,
                                         size=(batch_size_input_ids - dummy_input.shape[0], *dummy_input.shape[1:]),
@@ -820,12 +823,11 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     @require_torch_sdpa
     @slow
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_eager_matches_sdpa_generate
     def test_eager_matches_sdpa_generate(self):
-        """
-        Overwrite generative model classes with greedy sample model classes.
-        """
         max_new_tokens = 30
 
+        # Ignore copy
         for model_class in self.greedy_sample_model_classes:
             if not model_class._supports_sdpa:
                 self.skipTest(f"{model_class.__name__} does not support SDPA")
