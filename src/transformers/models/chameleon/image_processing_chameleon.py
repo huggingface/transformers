@@ -14,7 +14,6 @@
 # limitations under the License.
 """Image processor class for Chameleon."""
 
-from functools import cached_property
 from typing import Dict
 
 import numpy as np
@@ -22,70 +21,6 @@ import PIL
 import torch
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from .modeling_chameleon import VQModel
-
-
-class _VocabInfo:
-    def __init__(self, vocab_map: dict[str, int]):
-        self.name2val = vocab_map
-
-        self.bos_id = vocab_map.get("<s>")
-        self.eos_id = vocab_map.get("</s>")
-        self.pad_id = vocab_map.get("<pad>")
-        self.image_start_id = vocab_map.get("<racm3:break>")
-        self.image_end_id = vocab_map.get("<eoss>")
-        self.eot_id = vocab_map.get("<reserved08706>")
-
-    @cached_property
-    def val2name(self) -> dict[int, str]:
-        return {v: k for k, v in self.name2val.items()}
-
-    @cached_property
-    def all_tokens(self) -> list[int]:
-        return sorted(self.name2val.values())
-
-    @cached_property
-    def image_tokens(self) -> list[int]:
-        return sorted([val for name, val in self.name2val.items() if name.startswith("IMGIMG")])
-
-    @cached_property
-    def special_tokens(self) -> list[int]:
-        return sorted([val for name, val in self.name2val.items() if name.startswith("<") and name != "<"])
-
-    @cached_property
-    def text_tokens(self) -> list[int]:
-        return sorted(set(self.all_tokens) - set(self.image_tokens) - set(self.special_tokens))
-
-    @cached_property
-    def bpe2img(self) -> dict[int, int]:
-        img_tkn_chr_mapping = {chr(ord("A") + i): str(i) for i in range(10)}
-
-        def remap(old_name: str) -> str:
-            return "".join(img_tkn_chr_mapping.get(c, c) for c in old_name[len("IMGIMG") : -1])
-
-        return {tok: int(remap(self.val2name[tok])) for tok in self.image_tokens}
-
-    @cached_property
-    def img2bpe(self) -> dict[int, int]:
-        return {v: k for k, v in self.bpe2img.items()}
-
-    @cached_property
-    def bpe2img_search_tensors(self) -> tuple[torch.Tensor, torch.Tensor]:
-        return torch.tensor(sorted(self.bpe2img.keys())), torch.tensor(sorted(self.bpe2img.values()))
-
-    @cached_property
-    def img2bpe_mapping_tensor(self) -> tuple[torch.Tensor, torch.Tensor]:
-        mapping = torch.zeros(max(self.img2bpe.keys()) + 1, dtype=torch.int)
-        for k, v in self.img2bpe.items():
-            mapping[k] = v
-        return mapping
-
-    def convert_bpe2img(self, bpe_batch: torch.Tensor) -> torch.Tensor:
-        bpe_tok, img_tok = self.bpe2img_search_tensors
-        return img_tok[torch.searchsorted(bpe_tok, bpe_batch)]
-
-    def convert_img2bp2(self, img_batch: torch.Tensor) -> torch.Tensor:
-        return self.img2bpe_mapping_tensor[img_batch]
 
 
 class ChameleonImageProcessor(BaseImageProcessor):

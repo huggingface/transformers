@@ -89,6 +89,11 @@ class ChameleonConfig(PretrainedConfig):
             Whether to use query-key normalization.
         swin_norm (`bool`, *optional*, defaults to `False`):
             Use Swin Transformer normalization.
+        vq_config (`dict`, *optional*):
+            Dictionary containing the configuration for the VQ-VAE model.
+        vocabulary_map(`dict`, *optional*):
+            A dictionary containing the vocabulary map from the tokenizer. Used to obtain tokens from the image inputs.
+
     ```python
     >>> from transformers import ChameleonModel, ChameleonConfig
 
@@ -128,6 +133,8 @@ class ChameleonConfig(PretrainedConfig):
         attention_dropout=0.0,
         qk_layernorm=False,
         swin_norm=False,
+        vq_config=None,
+        vocabulary_map=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -153,6 +160,8 @@ class ChameleonConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.qk_layernorm = qk_layernorm
         self.swin_norm = swin_norm
+        self.vq_config = vq_config
+        self.vocabulary_map = vocabulary_map
 
         super().__init__(
             pad_token_id=pad_token_id,
