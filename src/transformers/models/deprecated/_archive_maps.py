@@ -1358,7 +1358,6 @@ MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP = DeprecatedDict(
 
 JETMOE_PRETRAINED_CONFIG_ARCHIVE_MAP = DeprecatedDict(
     {
-        "jetmoe/jetmoe-8b": "https://huggingface.co/jetmoe/jetmoe-8b/blob/main/config.json",
     }
 )
 
