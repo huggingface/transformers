@@ -173,13 +173,14 @@ class GemmaMLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         if config.hidden_activation is None:
-            logger.warning_once(
-                "Gemma's activation function should be approximate GeLU and not exact GeLU.\n"
-                "Changing the activation function to `gelu_pytorch_tanh`."
-                f"if you want to use the legacy `{config.hidden_act}`, "
-                f"edit the `model.config` to set `hidden_activation={config.hidden_act}` "
-                "  instead of `hidden_act`. See https://github.com/huggingface/transformers/pull/29402 for more details."
-            )
+            if config.hidden_act != "gelu_pytorch_tanh":
+                logger.warning_once(
+                    "Gemma's activation function should be approximate GeLU and not exact GeLU.\n"
+                    "Changing the activation function to `gelu_pytorch_tanh`."
+                    f"if you want to use the legacy `{config.hidden_act}`, "
+                    f"edit the `model.config` to set `hidden_activation={config.hidden_act}` "
+                    "  instead of `hidden_act`. See https://github.com/huggingface/transformers/pull/29402 for more details."
+                )
             hidden_activation = "gelu_pytorch_tanh"
         else:
             hidden_activation = config.hidden_activation
