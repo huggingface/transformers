@@ -14,10 +14,12 @@
 # limitations under the License.
 """ JetMoE model configuration"""
 
+import json
+
+import torch.nn.init as init
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-import torch.nn.init as init
-import json
 
 
 logger = logging.get_logger(__name__)

@@ -1,12 +1,10 @@
-from typing import List
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .parallel_experts import ParallelExperts, compute_gating
-
 from .gate import top_k_gating
+from .parallel_experts import ParallelExperts, compute_gating
 
 
 class MoE(nn.Module):
@@ -31,13 +29,13 @@ class MoE(nn.Module):
     """
 
     def __init__(
-        self, 
-        input_size, 
-        hidden_size, 
-        num_experts, 
+        self,
+        input_size,
+        hidden_size,
+        num_experts,
         top_k,
-        bias=True, 
-        activation=None, 
+        bias=True,
+        activation=None,
         glu=True,
         ):
         super(MoE, self).__init__()
@@ -59,9 +57,9 @@ class MoE(nn.Module):
         self.activation = activation
 
         self.router = top_k_gating(
-            input_size=input_size, 
-            num_experts=num_experts, 
-            top_k=top_k, 
+            input_size=input_size,
+            num_experts=num_experts,
+            top_k=top_k,
             )
 
     def extra_repr(self):
@@ -77,7 +75,7 @@ class MoE(nn.Module):
         """
 
         return self.gate.get_aux_loss_and_clear()
-    
+
     def compute_gate(self, x):
         top_k_indices, self.top_k_gates = self.router(x)
 
@@ -86,7 +84,7 @@ class MoE(nn.Module):
         self.expert_size = expert_size.tolist()
 
         return self.router.loss
-    
+
     def batch_forward(self, x):
         """
         Forward pass of the mixture of experts layer.
@@ -124,7 +122,7 @@ class MoE(nn.Module):
         if self.bias is not None:
             y = y + self.bias
         return y, loss
-    
+
     def single_forward(self, x):
         bsz, length, emb_size = x.size()
 
@@ -145,13 +143,13 @@ class MoE(nn.Module):
             y = F.linear(h, self.output_linear.weight[expert_idx]) * top_k_gates[0,i]
 
             y_list.append(y)
-        
+
         y = sum(y_list)
         y = y.view(bsz, length, self.input_size)
         if self.bias is not None:
             y = y + self.bias
         return y, loss
-    
+
     def forward(self, x):
         """
         Forward pass of the mixture of experts layer.
@@ -167,7 +165,7 @@ class MoE(nn.Module):
             return self.single_forward(x)
         else:
             return self.batch_forward(x)
-    
+
     def single_map(self, x):
         bsz, length, emb_size = x.size()
 
@@ -183,7 +181,7 @@ class MoE(nn.Module):
         y = torch.cat(y_list, dim=0)
         y = y.view(bsz, length, self.top_k, -1)
         return y, loss
-    
+
     def batch_map(self, x):
         """
         
@@ -218,12 +216,12 @@ class MoE(nn.Module):
         expert_inputs = x[self.batch_index]
         expert_outputs = self.input_linear(expert_inputs, self.expert_size)
 
-        zeros = torch.zeros((bsz * length * self.top_k, self.hidden_size), 
+        zeros = torch.zeros((bsz * length * self.top_k, self.hidden_size),
             dtype=expert_outputs.dtype, device=expert_outputs.device)
         y = zeros.index_add(0, self.index_sorted_experts, expert_outputs)
         y = y.view(bsz, length, self.top_k, -1)
         return y, loss
-    
+
     def map(self, x):
         """
         Map input through the mixture of experts layer.
@@ -265,7 +263,7 @@ class MoE(nn.Module):
         Returns:
             Tensor: Reduced output tensor.
         """
-        
+
         bsz, length, k, emb_size = x.size()
         x = x.reshape(-1, emb_size)
 
@@ -274,12 +272,12 @@ class MoE(nn.Module):
 
         expert_outputs = expert_outputs * self.batch_gates[:, None]
 
-        zeros = torch.zeros((bsz * length, self.input_size), 
+        zeros = torch.zeros((bsz * length, self.input_size),
             dtype=expert_outputs.dtype, device=expert_outputs.device)
         y = zeros.index_add(0, self.batch_index, expert_outputs)
         y = y.view(bsz, length, self.input_size)
         return y
-    
+
     def reduce(self, x):
         """
         Reduce the mapped output.

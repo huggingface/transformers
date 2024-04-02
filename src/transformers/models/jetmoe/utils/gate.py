@@ -2,11 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class top_k_gating(nn.Module):
     def __init__(
         self,
-        input_size, 
-        num_experts, 
+        input_size,
+        num_experts,
         top_k,
     ):
         """

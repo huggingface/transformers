@@ -14,35 +14,40 @@
 # limitations under the License.
 """ PyTorch JetMoE model."""
 
-from typing import List, Optional, Tuple, Union
-import warnings
 import math
+import warnings
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss, BCEWithLogitsLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
+from transformers.cache_utils import Cache, DynamicCache
+from transformers.modeling_attn_mask_utils import (
+    _prepare_4d_causal_attention_mask,
+    _prepare_4d_causal_attention_mask_for_sdpa,
+)
 from transformers.modeling_outputs import (
-    BaseModelOutputWithPast, 
+    BaseModelOutputWithPast,
     CausalLMOutputWithPast,
     SequenceClassifierOutputWithPast,
-    dataclass
+    dataclass,
 )
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import (
-    add_start_docstrings, 
+    add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
-    replace_return_docstrings, 
-    logging
+    logging,
+    replace_return_docstrings,
 )
-from transformers.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
-from transformers.cache_utils import Cache, DynamicCache
+
 from .configuration_jetmoe import JetMoEConfig
 from .utils import moe
+
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -312,7 +317,7 @@ class JetMoEAttention(nn.Module):
         self.kv_proj = torch.nn.Linear(
             config.hidden_size, self.kv_projection_size * 2, bias=False
             )
-        
+
         self.rotary_emb = JetMoERotaryEmbedding(
             config.kv_channels,
             max_position_embeddings=config.max_position_embeddings,
@@ -402,7 +407,7 @@ class JetMoEAttention(nn.Module):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value, aux_loss
-    
+
 
 # copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->JetMoE
 class JetMoESdpaAttention(JetMoEAttention):
@@ -532,7 +537,7 @@ class JetMoEFlashAttention2(JetMoEAttention):
 
         B, T, C = hidden_states.size() # batch size, sequence length, embedding dimensionality (hidden_size)
 
-        # calculate query, key, values 
+        # calculate query, key, values
         query_layer, aux_loss = self.experts.map(hidden_states)
         key_layer, value_layer = self.kv_proj(hidden_states).chunk(2, dim=-1)
 
@@ -572,7 +577,7 @@ class JetMoEFlashAttention2(JetMoEAttention):
             value_layer,
             attention_mask,
             T,
-        ) 
+        )
 
         # output projection
         y = self.experts.reduce(context_layer.reshape(T, B, self.top_k, self.kv_projection_size))
