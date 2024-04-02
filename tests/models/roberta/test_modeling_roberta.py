@@ -38,7 +38,6 @@ if is_torch_available():
         RobertaModel,
     )
     from transformers.models.roberta.modeling_roberta import (
-        ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         RobertaEmbeddings,
         create_position_ids_from_input_ids,
     )
@@ -477,9 +476,9 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = RobertaModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "FacebookAI/roberta-base"
+        model = RobertaModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
         """Ensure that the default position ids only assign a sequential . This is a regression

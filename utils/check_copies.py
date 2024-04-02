@@ -119,12 +119,52 @@ LOCALIZED_READMES = {
             "अनुसंधान पत्र {paper_title_link} के साथ जारी किया गया"
         ),
     },
+    "README_ru.md": {
+        "start_prompt": "🤗 В настоящее время Transformers предоставляет следующие архитектуры",
+        "end_prompt": "1. Хотите внести новую модель?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
+    "README_pt-br.md": {
+        "start_prompt": "🤗 Transformers atualmente fornece as seguintes arquiteturas",
+        "end_prompt": "1. Quer contribuir com um novo modelo?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
+    "README_te.md": {
+        "start_prompt": "🤗 ట్రాన్స్‌ఫార్మర్లు ప్రస్తుతం కింది ఆర్కిటెక్చర్‌లను అందజేస్తున్నాయి",
+        "end_prompt": "1. కొత్త మోడల్‌ను అందించాలనుకుంటున్నారా?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
     "README_fr.md": {
         "start_prompt": "🤗 Transformers fournit actuellement les architectures suivantes",
         "end_prompt": "1. Vous souhaitez contribuer avec un nouveau modèle ?",
         "format_model_list": (
             "**[{title}]({model_link})** (de {paper_affiliations}) publié dans l'article {paper_title_link} par"
             "{paper_authors}.{supplements}"
+        ),
+    },
+    "README_de.md": {
+        "start_prompt": "🤗 Transformers bietet derzeit die folgenden Architekturen an",
+        "end_prompt": "1. Möchten Sie ein neues Modell beitragen?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
+    "README_vi.md": {
+        "start_prompt": "🤗 Transformers hiện đang cung cấp các kiến trúc sau đây",
+        "end_prompt": "1. Muốn đóng góp một mô hình mới?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (từ {paper_affiliations}) được phát hành với bài báo {paper_title_link} by"
+            " {paper_authors}.{supplements}"
         ),
     },
 }
@@ -269,7 +309,18 @@ def split_code_into_blocks(
     """
     splits = []
     # `indent - 4` is the indent level of the target class/func header
-    target_block_name = re.search(rf"^{' ' * (indent - 4)}((class|def)\s+\S+)(\(|\:)", lines[start_index]).groups()[0]
+    try:
+        target_block_name = re.search(
+            rf"^{' ' * (indent - 4)}((class|def)\s+\S+)(\(|\:)", lines[start_index]
+        ).groups()[0]
+    except Exception:
+        start_context = min(start_index - 10, 0)
+        end_context = min(end_index + 10, len(lines))
+        raise ValueError(
+            f"Tried to split a class or function. It did not work. Error comes from line {start_index}: \n```\n"
+            + "".join(lines[start_context:end_context])
+            + "```\n"
+        )
 
     # from now on, the `block` means inner blocks unless explicitly specified
     indent_str = " " * indent
@@ -553,8 +604,23 @@ def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int
     _re_func_match = re.compile(r"def\s+([^\(]+)\(")
     for re_pattern in [_re_class_match, _re_func_match]:
         if re_pattern.match(observed_code_header) is not None:
-            observed_obj_name = re_pattern.search(observed_code_header).groups()[0]
-            theoretical_name = re_pattern.search(theoretical_code_header).groups()[0]
+            try:
+                observed_obj_name = re_pattern.search(observed_code_header).groups()[0]
+            except Exception:
+                raise ValueError(
+                    "Tried to split a class or function. It did not work. Error comes from: \n```\n"
+                    + observed_code_header
+                    + "\n```\n"
+                )
+
+            try:
+                theoretical_name = re_pattern.search(theoretical_code_header).groups()[0]
+            except Exception:
+                raise ValueError(
+                    "Tried to split a class or function. It did not work. Error comes from: \n```\n"
+                    + theoretical_code_header
+                    + "\n```\n"
+                )
             theoretical_code_header = theoretical_code_header.replace(theoretical_name, observed_obj_name)
 
     # Find the first diff. Line 0 is special since we need to compare with the function/class names ignored.
@@ -898,8 +964,10 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
     _re_capture_meta = re.compile(
         r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\* \(from ([^)]*)\)[^\[]*([^\)]*\)).*?by (.*?[A-Za-z\*]{2,}?)\. (.*)$"
     )
-    # This regex is used to synchronize link.
+    # This regex is used to synchronize title link.
     _re_capture_title_link = re.compile(r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\*")
+    # This regex is used to synchronize paper title and link.
+    _re_capture_paper_link = re.compile(r" \[([^\]]*)\]\(([^\)]*)\)")
 
     if len(localized_model_list) == 0:
         localized_model_index = {}
@@ -931,10 +999,22 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
                 readmes_match = False
                 localized_model_index[title] = update
         else:
-            # Synchronize link
-            localized_model_index[title] = _re_capture_title_link.sub(
+            # Synchronize title link
+            converted_model = _re_capture_title_link.sub(
                 f"**[{title}]({model_link})**", localized_model_index[title], count=1
             )
+
+            # Synchronize paper title and its link (if found)
+            paper_title_link = _re_capture_paper_link.search(model)
+            if paper_title_link is not None:
+                paper_title, paper_link = paper_title_link.groups()
+                converted_model = _re_capture_paper_link.sub(
+                    f" [{paper_title}]({paper_link})", converted_model, count=1
+                )
+
+            if converted_model != localized_model_index[title]:
+                readmes_match = False
+                localized_model_index[title] = converted_model
 
     sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
 

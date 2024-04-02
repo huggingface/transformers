@@ -24,10 +24,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "EleutherAI/gpt-j-6B": "https://huggingface.co/EleutherAI/gpt-j-6B/resolve/main/config.json",
-    # See all GPT-J models at https://huggingface.co/models?filter=gpt_j
-}
+
+from ..deprecated._archive_maps import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class GPTJConfig(PretrainedConfig):

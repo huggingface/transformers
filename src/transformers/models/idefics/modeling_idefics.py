@@ -48,11 +48,8 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "IdeficsConfig"
 
-IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "HuggingFaceM4/idefics-9b",
-    "HuggingFaceM4/idefics-80b",
-    # See all Idefics models at https://huggingface.co/models?filter=idefics
-]
+
+from ..deprecated._archive_maps import IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -1557,10 +1554,12 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
         model_kwargs: Dict[str, Any],
         is_encoder_decoder: bool = False,
         standardize_cache_format: bool = False,
-        model_inputs: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         model_kwargs = super()._update_model_kwargs_for_generation(
-            outputs, model_kwargs, is_encoder_decoder, standardize_cache_format, model_inputs
+            outputs,
+            model_kwargs,
+            is_encoder_decoder,
+            standardize_cache_format,
         )
 
         if "image_attention_mask" in model_kwargs:

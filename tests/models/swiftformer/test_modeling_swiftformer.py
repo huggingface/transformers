@@ -37,7 +37,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SwiftFormerForImageClassification, SwiftFormerModel
-    from transformers.models.swiftformer.modeling_swiftformer import SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -186,9 +185,9 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SwiftFormerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "MBZUAI/swiftformer-xs"
+        model = SwiftFormerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="SwiftFormer does not output attentions")
     def test_attention_outputs(self):

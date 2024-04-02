@@ -40,24 +40,20 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "EncodecConfig"
 
 
-ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/encodec_24khz",
-    "facebook/encodec_48khz",
-    # See all EnCodec models at https://huggingface.co/models?filter=encodec
-]
+from ..deprecated._archive_maps import ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
 class EncodecOutput(ModelOutput):
     """
     Args:
-        audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
             Discret code embeddings computed using `model.encode`.
         audio_values (`torch.FlaotTensor` of shape `(batch_size, sequence_length)`, *optional*)
             Decoded audio values, obtained using the decoder part of Encodec.
     """
 
-    audio_codes: torch.FloatTensor = None
+    audio_codes: torch.LongTensor = None
     audio_values: torch.FloatTensor = None
 
 
@@ -65,13 +61,13 @@ class EncodecOutput(ModelOutput):
 class EncodecEncoderOutput(ModelOutput):
     """
     Args:
-        audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
             Discret code embeddings computed using `model.encode`.
         audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
             Scaling factor for each `audio_codes` input. This is used to unscale each chunk of audio when decoding.
     """
 
-    audio_codes: torch.FloatTensor = None
+    audio_codes: torch.LongTensor = None
     audio_scales: torch.FloatTensor = None
 
 
@@ -514,7 +510,7 @@ ENCODEC_INPUTS_DOCSTRING = r"""
             The target bandwidth. Must be one of `config.target_bandwidths`. If `None`, uses the smallest possible
             bandwidth. bandwidth is represented as a thousandth of what it is, e.g. 6kbps bandwidth is represented as
             `bandwidth == 6.0`
-        audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
             Discret code embeddings computed using `model.encode`.
         audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
             Scaling factor for each `audio_codes` input.
@@ -718,7 +714,7 @@ class EncodecModel(EncodecPreTrainedModel):
         trimmed.
 
         Args:
-            audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+            audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
                 Discret code embeddings computed using `model.encode`.
             audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
                 Scaling factor for each `audio_codes` input.

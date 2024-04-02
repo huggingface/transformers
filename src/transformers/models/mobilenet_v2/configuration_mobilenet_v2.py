@@ -26,13 +26,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/mobilenet_v2_1.4_224": "https://huggingface.co/google/mobilenet_v2_1.4_224/resolve/main/config.json",
-    "google/mobilenet_v2_1.0_224": "https://huggingface.co/google/mobilenet_v2_1.0_224/resolve/main/config.json",
-    "google/mobilenet_v2_0.75_160": "https://huggingface.co/google/mobilenet_v2_0.75_160/resolve/main/config.json",
-    "google/mobilenet_v2_0.35_96": "https://huggingface.co/google/mobilenet_v2_0.35_96/resolve/main/config.json",
-    # See all MobileNetV2 models at https://huggingface.co/models?filter=mobilenet_v2
-}
+
+from ..deprecated._archive_maps import MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class MobileNetV2Config(PretrainedConfig):

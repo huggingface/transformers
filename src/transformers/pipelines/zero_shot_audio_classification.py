@@ -35,6 +35,12 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
     Zero shot audio classification pipeline using `ClapModel`. This pipeline predicts the class of an audio when you
     provide an audio and a set of `candidate_labels`.
 
+    <Tip warning={true}>
+
+    The default `hypothesis_template` is : `"This is a sound of {}."`. Make sure you update it for your usage.
+
+    </Tip>
+
     Example:
     ```python
     >>> from transformers import pipeline

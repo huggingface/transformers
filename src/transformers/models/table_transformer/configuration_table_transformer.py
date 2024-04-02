@@ -26,11 +26,8 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/table-transformer-detection": (
-        "https://huggingface.co/microsoft/table-transformer-detection/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class TableTransformerConfig(PretrainedConfig):

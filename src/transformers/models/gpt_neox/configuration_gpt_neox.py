@@ -20,10 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "EleutherAI/gpt-neox-20b": "https://huggingface.co/EleutherAI/gpt-neox-20b/resolve/main/config.json",
-    # See all GPTNeoX models at https://huggingface.co/models?filter=gpt_neox
-}
+
+from ..deprecated._archive_maps import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class GPTNeoXConfig(PretrainedConfig):
@@ -105,6 +103,7 @@ class GPTNeoXConfig(PretrainedConfig):
     ```"""
 
     model_type = "gpt_neox"
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
@@ -168,8 +167,7 @@ class GPTNeoXConfig(PretrainedConfig):
 
         if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
             raise ValueError(
-                "`rope_scaling` must be a dictionary with with two fields, `type` and `factor`, "
-                f"got {self.rope_scaling}"
+                "`rope_scaling` must be a dictionary with two fields, `type` and `factor`, " f"got {self.rope_scaling}"
             )
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_factor = self.rope_scaling.get("factor", None)
