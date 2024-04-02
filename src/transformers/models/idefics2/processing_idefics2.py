@@ -180,15 +180,17 @@ class Idefics2Processor(ProcessorMixin):
         inputs.update(text_inputs)
 
         # Extract the images from the prompts, loading them if necessary
-        images = []
+        prompt_images = []
         for prompt in prompts:
+            images = []
             for elem in prompt:
                 if is_valid_image(elem):
                     images.append(elem)
                 elif is_url(elem):
                     images.append(load_image(elem))
+            prompt_images.append(images)
 
-        image_inputs = self.image_processor(images, return_tensors=return_tensors)
+        image_inputs = self.image_processor(prompt_images, return_tensors=return_tensors)
         inputs.update(image_inputs)
 
         return inputs
