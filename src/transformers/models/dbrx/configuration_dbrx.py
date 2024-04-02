@@ -199,7 +199,7 @@ class DbrxConfig(PretrainedConfig):
     >>> from transformers import DbrxConfig, DbrxModel
 
     >>> # Initializing a Dbrx configuration
-    >>> configuration = DbrxConfig()
+    >>> configuration = DbrxConfig(n_layers=2, d_model=256, n_heads=8, vocab_size=128)
 
     >>> # Initializing a model (with random weights) from the configuration
     >>> model = DbrxModel(configuration)
