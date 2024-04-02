@@ -1778,7 +1778,7 @@ class TrainingArguments:
                     self.accelerator_config = AcceleratorConfig(**self.accelerator_config)
                 # Check that a user didn't pass in the class instantiator
                 # such as `accelerator_config = AcceleratorConfig`
-                elif callable(self.accelerator_config):
+                elif isinstance(self.accelerator_config, type):
                     raise NotImplementedError(
                         "Tried passing in a callable to `accelerator_config`, but this is not supported. "
                         "Please pass in a fully constructed `AcceleratorConfig` object instead."
