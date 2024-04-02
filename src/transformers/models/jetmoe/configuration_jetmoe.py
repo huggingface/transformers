@@ -16,8 +16,6 @@
 
 import json
 
-import torch.nn.init as init
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -139,8 +137,6 @@ class JetMoEConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
-        self.init_method = init.xavier_uniform_
-        self.output_layer_init_method = init.xavier_uniform_
         self.bias = bias
         self.rope_theta = rope_theta
         self.rms_norm_eps = rms_norm_eps
@@ -151,7 +147,7 @@ class JetMoEConfig(PretrainedConfig):
 
     def to_dict(self):
         """Returns a dictionary representation of the config, excluding non-serializable attributes."""
-        return {k: v for k, v in self.__dict__.items() if k not in ['init_method', 'output_layer_init_method', 'torch_dtype', '_pre_quantization_dtype', 'quantization_config']}
+        return {k: v for k, v in self.__dict__.items() if k not in ['torch_dtype', '_pre_quantization_dtype', 'quantization_config']}
 
     def to_json_string(self, use_diff=False):
         """Serializes this instance to a JSON string, excluding non-serializable attributes.
