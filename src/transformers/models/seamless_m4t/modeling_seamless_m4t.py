@@ -3499,7 +3499,6 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
             self.device
         )
         kwargs_speech["decoder_input_ids"] = t2u_decoder_input_ids
-
         # second generation
         unit_ids = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
         output_unit_ids = unit_ids.detach().clone()
