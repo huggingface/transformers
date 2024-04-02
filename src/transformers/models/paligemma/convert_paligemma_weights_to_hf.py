@@ -219,7 +219,6 @@ def flatten_nested_dict(params, parent_key="", sep="/"):
     items = []
 
     for k, v in params.items():
-        print(k)
         new_key = parent_key + sep + k if parent_key else k
 
         if isinstance(v, collections.abc.MutableMapping):
@@ -238,26 +237,8 @@ def verify_logits(model, processor):
     model_inputs = processor(text=prompt, images=list_images, max_length=16, padding="max_length", return_tensors="pt")
     image_captioning_inputs = processor(text="\n", images=list_images[0], max_length=16, padding="max_length", return_tensors="pt")
     
-    with torch.inference_mode():
-        outputs = model(**model_inputs)
-
-        manual_probs = torch.nn.functional.softmax(outputs.logits[:, -1, :], dim=-1)
-        next_token_id = torch.argmax(manual_probs, dim=-1)
-        if processor.decode(next_token_id[0]) != "beach":
-            raise ValueError("Next token prediction is wrong.")
-        else:
-            print("It seems that the forward pass predicts a correct next token. Go to .generate()!")
-        
-        # Test image captioning generation
-        captioning_generation = model.generate(**image_captioning_inputs, max_new_tokens=10)
-        captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
-        if captioning_output[0] != "\ncow standing on the beach":
-            raise ValueError(f"Image captioning should match, got {captioning_output[0]}.")
-        else:
-            print("Image captioning works.")
-
+    with torch.inference_mode():        
         raw_generation = model.generate(**model_inputs, max_new_tokens=10)
-
         generated_output = processor.batch_decode(raw_generation, skip_special_tokens=True)
 
         if generated_output[0] != "answer en Where is the cow standing?\nbeach":
@@ -266,6 +247,22 @@ def verify_logits(model, processor):
             raise ValueError("Image captioning does not match.")
         else:
             print("Generation matches. You're almost done!")
+
+        # Test image captioning generation
+        captioning_generation = model.generate(**image_captioning_inputs, max_new_tokens=10)
+        captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
+        if captioning_output[0] != "\ncow standing on the beach":
+            raise ValueError(fr"Image captioning should match, got {captioning_output[0]}.")
+        else:
+            print("Image captioning works.")
+        outputs = model(**model_inputs)
+
+        manual_probs = torch.nn.functional.softmax(outputs.logits[:, -1, :], dim=-1)
+        next_token_id = torch.argmax(manual_probs, dim=-1)
+        if processor.decode(next_token_id[0]) != "beach":
+            raise ValueError("Next token prediction is wrong.")
+        else:
+            print("It seems that the forward pass predicts a correct next token. Go to .generate()!")
     
 
 
@@ -280,15 +277,13 @@ def convert_paligemma_checkpoint(
     if variant == "2b":
         tokenizer_id = "google/gemma-2b"
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
-    # tokenizer.padding_side = 'right'
-    # TODO do we keep left-padding here? It seems to work alright.
+    tokenizer.padding_side = 'right'
 
     image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
     if variant == "2b":
         image_processor.size = {"width": 224, "height": 224}
 
     processor = PaLIGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
-
     if do_convert_weights:
         data = load(checkpoint_path)
         state_dict = flatten_nested_dict(data)
