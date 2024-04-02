@@ -193,6 +193,8 @@ class DbrxConfig(PretrainedConfig):
             allow the model to output the auxiliary loss. See [here]() for more details.
         is_decoder (`bool`, defaults to `True`, *optional*, defaults to `True`):  Whether the model is used as decoder or not (in which case
             it’s used as an encoder).
+        pad_token_id (`int`, *optional*):
+            Padding token id.
 
 
     Example:
@@ -233,6 +235,7 @@ class DbrxConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         output_router_logits: bool = False,
         is_decoder: bool = True,
+        pad_token_id: Optional[int] = None,
         **kwargs: Any,
     ):
         if attn_config is None:
@@ -259,7 +262,6 @@ class DbrxConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.initializer_range = initializer_range
         self.output_router_logits = output_router_logits
-        self.is_decoder = is_decoder
 
         tie_word_embeddings = kwargs.pop("tie_word_embeddings", False)
         if tie_word_embeddings:
@@ -267,6 +269,7 @@ class DbrxConfig(PretrainedConfig):
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
-            is_decoder=self.is_decoder,
+            is_decoder=is_decoder,
+            pad_token_id=pad_token_id,
             **kwargs,
         )

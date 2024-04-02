@@ -72,6 +72,7 @@ class DbrxModelTester:
         torch_dtype="bfloat16",
         vocab_size=99,
         is_decoder=True,
+        pad_token_id=0,
     ):
         # Parameters unique to testing
         self.batch_size = batch_size
@@ -116,6 +117,7 @@ class DbrxModelTester:
         self.tie_word_embeddings = tie_word_embeddings
         self.torch_dtype = torch_dtype
         self.is_decoder = is_decoder
+        self.pad_token_id = pad_token_id
 
         # Make the dictionaries
         self.ffn_config = {
@@ -176,6 +178,7 @@ class DbrxModelTester:
             initializer_range=self.initializer_range,
             output_router_logits=self.output_router_logits,
             is_decoder=self.is_decoder,
+            pad_token_id=self.pad_token_id,
         )
         return config
 
