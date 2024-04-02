@@ -104,7 +104,6 @@ class JetMoEConfig(PretrainedConfig):
         kv_channels = 128,
         ffn_hidden_size=5632,
         max_position_embeddings=4096,
-        rotary_percent=1.0,
         activation_function="silu",
         glu=True,
         moe_num_experts=8,
@@ -126,7 +125,6 @@ class JetMoEConfig(PretrainedConfig):
         self.kv_channels = kv_channels
         self.ffn_hidden_size = ffn_hidden_size
         self.max_position_embeddings = max_position_embeddings
-        self.rotary_percent = rotary_percent
         self.activation_function = activation_function
         self.glu = glu
         self.moe_num_experts = moe_num_experts

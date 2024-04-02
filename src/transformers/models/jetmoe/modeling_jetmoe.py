@@ -24,19 +24,20 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
-from transformers.cache_utils import Cache, DynamicCache
-from transformers.modeling_attn_mask_utils import (
+from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache
+from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask,
     _prepare_4d_causal_attention_mask_for_sdpa,
 )
-from transformers.modeling_outputs import (
+from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
     SequenceClassifierOutputWithPast,
     dataclass,
 )
-from transformers.modeling_utils import PreTrainedModel
-from transformers.utils import (
+from ...modeling_utils import PreTrainedModel
+from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
@@ -472,6 +473,8 @@ class MoE(nn.Module):
             y_list.append(y)
         y = sum(y_list)
         y = y.view(bsz, length, self.input_size)
+        if self.bias is not None:
+            y = y + self.bias
         return y
 
     def batch_reduce(self, x):
@@ -498,6 +501,8 @@ class MoE(nn.Module):
             dtype=expert_outputs.dtype, device=expert_outputs.device)
         y = zeros.index_add(0, self.batch_index, expert_outputs)
         y = y.view(bsz, length, self.input_size)
+        if self.bias is not None:
+            y = y + self.bias
         return y
 
     def reduce(self, x):
@@ -1174,7 +1179,6 @@ class JetMoEBlock(nn.Module):
         """
         super().__init__()
         self.input_layernorm = JetMoERMSNorm(config.hidden_size)
-        #self.self_attention = JetMoEAttention(config, layer_idx)
         self.self_attention = JETMOE_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
         self.post_attention_layernorm = JetMoERMSNorm(config.hidden_size)
 
@@ -1182,8 +1186,9 @@ class JetMoEBlock(nn.Module):
             input_size=config.hidden_size,
             hidden_size=config.ffn_hidden_size,
             num_experts=config.moe_num_experts,
-            activation=F.silu,
+            activation=ACT2FN[config.activation_function],
             top_k=config.moe_top_k,
+            bias=config.bias,
             glu=config.glu
         )
 
@@ -1581,6 +1586,7 @@ class JetMoEForCausalLM(JetMoEPreTrainedModel):
         self.vocab_size = config.vocab_size
         self.aux_loss_coef = getattr(config, 'aux_loss_coef', 0.01)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.tie_word_embeddings = config.tie_word_embeddings
 
         # Initialize weights and apply final processing
         self.post_init()
