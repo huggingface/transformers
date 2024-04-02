@@ -25,9 +25,8 @@ from ....utils import logging
 
 logger = logging.get_logger(__name__)
 
-OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "s-JoL/Open-Llama-V1": "https://huggingface.co/s-JoL/Open-Llama-V1/blob/main/config.json",
-}
+
+from .._archive_maps import OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class OpenLlamaConfig(PretrainedConfig):
@@ -155,8 +154,7 @@ class OpenLlamaConfig(PretrainedConfig):
 
         if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
             raise ValueError(
-                "`rope_scaling` must be a dictionary with with two fields, `type` and `factor`, "
-                f"got {self.rope_scaling}"
+                "`rope_scaling` must be a dictionary with two fields, `type` and `factor`, " f"got {self.rope_scaling}"
             )
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_factor = self.rope_scaling.get("factor", None)

@@ -49,7 +49,6 @@ if is_torch_available():
         ClapTextModel,
         ClapTextModelWithProjection,
     )
-    from transformers.models.clap.modeling_clap import CLAP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class ClapAudioModelTester:
@@ -275,16 +274,16 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ClapAudioModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "laion/clap-htsat-fused"
+        model = ClapAudioModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ClapAudioModelWithProjection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertTrue(hasattr(model, "audio_projection"))
+        model_name = "laion/clap-htsat-fused"
+        model = ClapAudioModelWithProjection.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+        self.assertTrue(hasattr(model, "audio_projection"))
 
 
 class ClapTextModelTester:
@@ -444,16 +443,16 @@ class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ClapTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "laion/clap-htsat-fused"
+        model = ClapTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ClapTextModelWithProjection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertTrue(hasattr(model, "text_projection"))
+        model_name = "laion/clap-htsat-fused"
+        model = ClapTextModelWithProjection.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+        self.assertTrue(hasattr(model, "text_projection"))
 
 
 class ClapModelTester:
@@ -466,6 +465,7 @@ class ClapModelTester:
         self.parent = parent
         self.text_model_tester = ClapTextModelTester(parent, **text_kwargs)
         self.audio_model_tester = ClapAudioModelTester(parent, **audio_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -649,9 +649,9 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ClapModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "laion/clap-htsat-fused"
+        model = ClapModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @slow

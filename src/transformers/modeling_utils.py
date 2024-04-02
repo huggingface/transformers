@@ -29,6 +29,7 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial, wraps
+from threading import Thread
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from zipfile import is_zipfile
 
@@ -54,6 +55,7 @@ from .pytorch_utils import (  # noqa: F401
     prune_linear_layer,
 )
 from .quantizers import AutoHfQuantizer, HfQuantizer
+from .quantizers.quantizers_utils import get_module_from_name
 from .safetensors_conversion import auto_conversion
 from .utils import (
     ADAPTER_SAFE_WEIGHTS_NAME,
@@ -84,7 +86,7 @@ from .utils import (
     is_remote_url,
     is_safetensors_available,
     is_torch_sdpa_available,
-    is_torch_tpu_available,
+    is_torch_xla_available,
     logging,
     replace_return_docstrings,
     strtobool,
@@ -246,10 +248,10 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
             # Adding fix for https://github.com/pytorch/xla/issues/4152
             # Fixes issue where the model code passes a value that is out of range for XLA_USE_BF16=1
             # and XLA_DOWNCAST_BF16=1 so the conversion would cast it to -inf
-            # NOTE: `is_torch_tpu_available()` is checked last as it induces a graph break in torch dynamo
-            if XLA_USE_BF16 in ENV_VARS_TRUE_VALUES and is_torch_tpu_available():
+            # NOTE: `is_torch_xla_available()` is checked last as it induces a graph break in torch dynamo
+            if XLA_USE_BF16 in ENV_VARS_TRUE_VALUES and is_torch_xla_available():
                 return torch.bfloat16
-            if XLA_DOWNCAST_BF16 in ENV_VARS_TRUE_VALUES and is_torch_tpu_available():
+            if XLA_DOWNCAST_BF16 in ENV_VARS_TRUE_VALUES and is_torch_xla_available():
                 if t.dtype == torch.float:
                     return torch.bfloat16
                 if t.dtype == torch.double:
@@ -496,7 +498,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)
 
 
-def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
+def load_state_dict(checkpoint_file: Union[str, os.PathLike], is_quantized: bool = False):
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
     """
@@ -504,7 +506,7 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
         # Check format of the archive
         with safe_open(checkpoint_file, framework="pt") as f:
             metadata = f.metadata()
-        if metadata.get("format") not in ["pt", "tf", "flax"]:
+        if metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
             raise OSError(
                 f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
                 "you save your model with the `save_pretrained` method."
@@ -512,8 +514,9 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
         return safe_load_file(checkpoint_file)
     try:
         if (
-            is_deepspeed_zero3_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0
-        ) or (is_fsdp_enabled() and not is_local_dist_rank_0()):
+            (is_deepspeed_zero3_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0)
+            or (is_fsdp_enabled() and not is_local_dist_rank_0())
+        ) and not is_quantized:
             map_location = "meta"
         else:
             map_location = "cpu"
@@ -718,6 +721,7 @@ def _load_state_dict_into_meta_model(
 
     old_keys = []
     new_keys = []
+    is_quantized = hf_quantizer is not None
     for key in state_dict.keys():
         new_key = None
         if "gamma" in key:
@@ -795,16 +799,28 @@ def _load_state_dict_into_meta_model(
             if not is_safetensors:
                 offload_index = offload_weight(param, param_name, offload_folder, offload_index)
         elif param_device == "cpu" and state_dict_index is not None:
-            state_dict_index = offload_weight(param, param_name, model, state_dict_folder, state_dict_index)
+            state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
         elif (
-            hf_quantizer is None
+            not is_quantized
             or (not hf_quantizer.requires_parameters_quantization)
-            or (not hf_quantizer.check_quantized_param(model, param, param_name, state_dict))
+            or (
+                not hf_quantizer.check_quantized_param(
+                    model, param, param_name, state_dict, param_device=param_device, device_map=device_map
+                )
+            )
         ):
             # For backward compatibility with older versions of `accelerate` and for non-quantized params
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
             hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
+            # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
+            # and then cast it to CPU to avoid excessive memory usage on each GPU
+            # in comparison to the sharded model across GPUs.
+            if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
+                module, tensor_name = get_module_from_name(model, param_name)
+                value = getattr(module, tensor_name)
+                value = type(value)(value.data.to("cpu"), **value.__dict__)
+                setattr(module, tensor_name, value)
             # TODO: consider removing used param_parts from state_dict before return
 
     return error_msgs, offload_index, state_dict_index
@@ -1070,7 +1086,9 @@ class ModuleUtilsMixin:
                 # For 4bit models, we need to multiply the number of parameters by 2 as half of the parameters are
                 # used for the 4bit quantization (uint8 tensors are stored)
                 if is_loaded_in_4bit and isinstance(param, bnb.nn.Params4bit):
-                    total_numel.append(param.numel() * 2)
+                    total_numel.append(
+                        param.numel() * 2 * self.hf_quantizer.quantization_config.bnb_4bit_quant_storage.itemsize
+                    )
                 else:
                     total_numel.append(param.numel())
 
@@ -1364,7 +1382,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 hard_check_only=False,
                 check_device_map=check_device_map,
             )
-        elif requested_attn_implementation in [None, "sdpa"]:
+        elif requested_attn_implementation in [None, "sdpa"] and not is_torch_xla_available():
             # use_flash_attention_2 takes priority over SDPA, hence SDPA treated in this elif.
             config = cls._check_and_enable_sdpa(
                 config,
@@ -1805,10 +1823,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         old_embeddings_requires_grad = old_embeddings.weight.requires_grad
         new_embeddings.requires_grad_(old_embeddings_requires_grad)
         self.set_input_embeddings(new_embeddings)
+        is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
 
         # Update new_num_tokens with the actual size of new_embeddings
         if pad_to_multiple_of is not None:
-            if is_deepspeed_zero3_enabled():
+            if is_deepspeed_zero3_enabled() and not is_quantized:
                 import deepspeed
 
                 with deepspeed.zero.GatheredParameters(new_embeddings.weight, modifier_rank=None):
@@ -1882,7 +1901,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if new_num_tokens is None:
             return old_embeddings
 
-        if is_deepspeed_zero3_enabled():
+        is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
+        if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
             with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=None):
@@ -1921,7 +1941,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # numbers of tokens to copy
         n = min(old_num_tokens, new_num_tokens)
 
-        if is_deepspeed_zero3_enabled():
+        if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
             params = [old_embeddings.weight, new_embeddings.weight]
@@ -1958,7 +1978,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if new_num_tokens is None:
             return old_lm_head
 
-        if is_deepspeed_zero3_enabled():
+        is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
+        if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
             with deepspeed.zero.GatheredParameters(old_lm_head.weight, modifier_rank=None):
@@ -2000,7 +2021,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
 
-        if is_deepspeed_zero3_enabled():
+        if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
             params = [old_lm_head.weight, old_lm_head.bias, new_lm_head.weight, new_lm_head.bias]
@@ -3036,6 +3057,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if low_cpu_mem_usage is None:
                 low_cpu_mem_usage = True
                 logger.warning("`low_cpu_mem_usage` was None, now set to True since model is quantized.")
+        is_quantized = hf_quantizer is not None
 
         # This variable will flag if we're loading a sharded checkpoint. In this case the archive file is just the
         # index of the files.
@@ -3207,9 +3229,39 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                         if resolved_archive_file is not None:
                             is_sharded = True
-                    if resolved_archive_file is None:
-                        # Otherwise, maybe there is a TF or Flax model file.  We try those to give a helpful error
-                        # message.
+
+                    if resolved_archive_file is not None:
+                        if filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]:
+                            # If the PyTorch file was found, check if there is a safetensors file on the repository
+                            # If there is no safetensors file on the repositories, start an auto conversion
+                            safe_weights_name = SAFE_WEIGHTS_INDEX_NAME if is_sharded else SAFE_WEIGHTS_NAME
+                            has_file_kwargs = {
+                                "revision": revision,
+                                "proxies": proxies,
+                                "token": token,
+                            }
+                            cached_file_kwargs = {
+                                "cache_dir": cache_dir,
+                                "force_download": force_download,
+                                "resume_download": resume_download,
+                                "local_files_only": local_files_only,
+                                "user_agent": user_agent,
+                                "subfolder": subfolder,
+                                "_raise_exceptions_for_gated_repo": False,
+                                "_raise_exceptions_for_missing_entries": False,
+                                "_commit_hash": commit_hash,
+                                **has_file_kwargs,
+                            }
+                            if not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs):
+                                Thread(
+                                    target=auto_conversion,
+                                    args=(pretrained_model_name_or_path,),
+                                    kwargs={"ignore_errors_during_conversion": True, **cached_file_kwargs},
+                                    name="Thread-autoconversion",
+                                ).start()
+                    else:
+                        # Otherwise, no PyTorch file was found, maybe there is a TF or Flax model file.
+                        # We try those to give a helpful error message.
                         has_file_kwargs = {
                             "revision": revision,
                             "proxies": proxies,
@@ -3297,9 +3349,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             elif metadata.get("format") == "flax":
                 from_flax = True
                 logger.info("A Flax safetensors file is being loaded in a PyTorch model.")
+            elif metadata.get("format") == "mlx":
+                # This is a mlx file, we assume weights are compatible with pt
+                pass
             else:
                 raise ValueError(
-                    f"Incompatible safetensors file. File metadata is not ['pt', 'tf', 'flax'] but {metadata.get('format')}"
+                    f"Incompatible safetensors file. File metadata is not ['pt', 'tf', 'flax', 'mlx'] but {metadata.get('format')}"
                 )
 
         from_pt = not (from_tf | from_flax)
@@ -3362,7 +3417,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Instantiate model.
         init_contexts = [no_init_weights(_enable=_fast_init)]
 
-        if is_deepspeed_zero3_enabled():
+        if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
@@ -3561,7 +3616,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             }
             if "skip_keys" in inspect.signature(dispatch_model).parameters:
                 device_map_kwargs["skip_keys"] = model._skip_keys_device_placement
-            dispatch_model(model, **device_map_kwargs)
+            if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
+                dispatch_model(model, **device_map_kwargs)
 
         if hf_quantizer is not None:
             hf_quantizer.postprocess_model(model)
@@ -3607,6 +3663,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         keep_in_fp32_modules=None,
     ):
         is_safetensors = False
+        is_quantized = hf_quantizer is not None
 
         if device_map is not None and "disk" in device_map.values():
             archive_file = (
@@ -3706,6 +3763,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for pat in cls._keys_to_ignore_on_load_unexpected:
                 unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
+        if hf_quantizer is not None:
+            missing_keys = hf_quantizer.update_missing_keys(model, missing_keys, prefix)
+
         # retrieve weights on meta device and put them back on CPU.
         # This is not ideal in terms of memory, but if we don't do that not, we can't initialize them in the next step
         if low_cpu_mem_usage:
@@ -3732,7 +3792,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if param.device == torch.device("meta"):
                     value = torch.empty(*param.size(), dtype=target_dtype)
                     if (
-                        hf_quantizer is None
+                        not is_quantized
                         or getattr(hf_quantizer, "requires_parameters_quantization", False)
                         or not hf_quantizer.check_quantized_param(
                             model, param_value=value, param_name=key, state_dict={}
@@ -3740,7 +3800,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ):
                         set_module_tensor_to_device(model, key, "cpu", value)
                     else:
-                        hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict)
+                        hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict, unexpected_keys)
 
         # retrieve uninitialized modules and initialize before maybe overriding that with the pretrained weights.
         if _fast_init:
@@ -3762,7 +3822,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             else:
                 not_initialized_submodules = dict(model.named_modules())
             # This will only initialize submodules that are not marked as initialized by the line above.
-            if is_deepspeed_zero3_enabled():
+            if is_deepspeed_zero3_enabled() and not is_quantized:
                 import deepspeed
 
                 not_initialized_parameters = list(
@@ -3906,7 +3966,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
                     continue
-                state_dict = load_state_dict(shard_file)
+                state_dict = load_state_dict(shard_file, is_quantized=is_quantized)
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
@@ -3919,15 +3979,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ignore_mismatched_sizes,
                 )
                 if low_cpu_mem_usage:
-                    if is_fsdp_enabled() and not is_local_dist_rank_0():
+                    if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
                         for key, param in model_to_load.state_dict().items():
                             if param.device == torch.device("meta"):
-                                if hf_quantizer is None:
-                                    set_module_tensor_to_device(
-                                        model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
-                                    )
-                                else:
-                                    hf_quantizer.create_quantized_param(model, param, key, "cpu", state_dict)
+                                set_module_tensor_to_device(
+                                    model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
+                                )
                     else:
                         new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                             model_to_load,

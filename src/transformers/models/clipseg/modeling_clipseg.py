@@ -42,10 +42,8 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "CIDAS/clipseg-rd64-refined"
 
-CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "CIDAS/clipseg-rd64-refined",
-    # See all CLIPSeg models at https://huggingface.co/models?filter=clipseg
-]
+
+from ..deprecated._archive_maps import CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # contrastive loss function, adapted from
@@ -1292,7 +1290,7 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         batch_size = conditional_embeddings.shape[0]
         output = output.view(batch_size, output.shape[1], size, size)
 
-        logits = self.transposed_convolution(output).squeeze()
+        logits = self.transposed_convolution(output).squeeze(1)
 
         if not return_dict:
             return tuple(v for v in [logits, all_hidden_states, all_attentions] if v is not None)

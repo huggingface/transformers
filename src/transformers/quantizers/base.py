@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from ..utils import is_torch_available
 from ..utils.quantization_config import QuantizationConfigMixin
@@ -99,6 +99,16 @@ class HfQuantizer(ABC):
         """
         return torch_dtype
 
+    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+        """
+        Override this method if you want to adjust the `missing_keys`.
+
+        Args:
+            missing_keys (`List[str]`, *optional*):
+                The list of missing keys in the checkpoint compared to the state dict of the model
+        """
+        return missing_keys
+
     def get_special_dtypes_update(self, model, torch_dtype: "torch.dtype") -> Dict[str, "torch.dtype"]:
         """
         returns dtypes for modules that are not quantized - used for the computation of the device_map in case
@@ -111,6 +121,7 @@ class HfQuantizer(ABC):
             torch_dtype (`torch.dtype`):
                 The dtype passed in `from_pretrained` method.
         """
+
         return {
             name: torch_dtype
             for name, _ in model.named_parameters()
@@ -122,7 +133,12 @@ class HfQuantizer(ABC):
         return max_memory
 
     def check_quantized_param(
-        self, model: "PreTrainedModel", param_value: "torch.Tensor", param_name: str, state_dict: Dict[str, Any]
+        self,
+        model: "PreTrainedModel",
+        param_value: "torch.Tensor",
+        param_name: str,
+        state_dict: Dict[str, Any],
+        **kwargs,
     ) -> bool:
         """
         checks if a loaded state_dict component is part of quantized param + some validation; only defined if

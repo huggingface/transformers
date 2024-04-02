@@ -29,6 +29,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class GPTSanJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "Tanrei/GPTSAN-japanese"
     tokenizer_class = GPTSanJapaneseTokenizer
     test_rust_tokenizer = False
     from_pretrained_kwargs = {"do_clean_text": False, "add_prefix_space": False}

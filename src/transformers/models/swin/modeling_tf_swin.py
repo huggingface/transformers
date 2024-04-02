@@ -61,10 +61,8 @@ _IMAGE_CLASS_CHECKPOINT = "microsoft/swin-tiny-patch4-window7-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/swin-tiny-patch4-window7-224",
-    # See all Swin models at https://huggingface.co/models?filter=swin
-]
+from ..deprecated._archive_maps import TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
 
 # drop_path, TFSwinPatchEmbeddings, TFSwinPatchMerging and TFSwinDropPath are tensorflow
 # implementations of PyTorch functionalities in the timm library.

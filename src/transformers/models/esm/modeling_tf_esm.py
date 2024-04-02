@@ -52,13 +52,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "facebook/esm2_t6_8M_UR50D"
 _CONFIG_FOR_DOC = "EsmConfig"
 
-TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/esm2_t6_8M_UR50D",
-    "facebook/esm2_t12_35M_UR50D",
-    # This is not a complete list of all ESM models!
-    # See all ESM models at https://huggingface.co/models?filter=esm
-]
-
 
 def rotate_half(x):
     x1, x2 = tf.split(x, 2, axis=-1)

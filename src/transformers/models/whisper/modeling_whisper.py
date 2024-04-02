@@ -59,10 +59,7 @@ _CONFIG_FOR_DOC = "WhisperConfig"
 _CHECKPOINT_FOR_DOC = "openai/whisper-tiny"
 
 
-WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai/whisper-base",
-    # See all Whisper models at https://huggingface.co/models?filter=whisper
-]
+from ..deprecated._archive_maps import WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
@@ -536,7 +533,7 @@ class WhisperFlashAttention2(WhisperAttention):
             attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
+            dropout (`float`):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
@@ -1864,7 +1861,7 @@ class WhisperDecoderWrapper(WhisperPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Whisper decoder with with a language modeling head on top (linear layer with weights tied to the input embeddings).
+    Whisper decoder with a language modeling head on top (linear layer with weights tied to the input embeddings).
     """,
     WHISPER_START_DOCSTRING,
 )

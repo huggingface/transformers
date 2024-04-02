@@ -2,7 +2,7 @@ import time
 import warnings
 from abc import ABC
 from copy import deepcopy
-from typing import Optional
+from typing import List, Optional, Union
 
 import torch
 
@@ -73,7 +73,7 @@ class MaxLengthCriteria(StoppingCriteria):
                 f"maximum length ({self.max_position_embeddings}). Depending on the model, you may observe "
                 "exceptions, performance degradation, or nothing at all."
             )
-        return torch.full((input_ids.shape[0],), is_done, device=input_ids.device)
+        return torch.full((input_ids.shape[0],), is_done, device=input_ids.device, dtype=torch.bool)
 
 
 class MaxNewTokensCriteria(StoppingCriteria):
@@ -103,7 +103,7 @@ class MaxNewTokensCriteria(StoppingCriteria):
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
         is_done = input_ids.shape[-1] >= self.max_length
-        return torch.full((input_ids.shape[0],), is_done, device=input_ids.device)
+        return torch.full((input_ids.shape[0],), is_done, device=input_ids.device, dtype=torch.bool)
 
 
 class MaxTimeCriteria(StoppingCriteria):
@@ -126,7 +126,28 @@ class MaxTimeCriteria(StoppingCriteria):
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
         is_done = time.time() - self.initial_timestamp > self.max_time
-        return torch.full((input_ids.shape[0],), is_done, device=input_ids.device)
+        return torch.full((input_ids.shape[0],), is_done, device=input_ids.device, dtype=torch.bool)
+
+
+class EosTokenCriteria(StoppingCriteria):
+    """
+    This class can be used to stop generation whenever the "end-of-sequence" token is generated.
+    By default, it uses the `model.generation_config.eos_token_id`.
+
+    Args:
+        eos_token_id (`Union[int, List[int]]`):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+    """
+
+    def __init__(self, eos_token_id: Union[int, List[int]]):
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
+        self.eos_token_id = torch.tensor(eos_token_id)
+
+    @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+        is_done = torch.isin(input_ids[:, -1], self.eos_token_id.to(input_ids.device))
+        return is_done
 
 
 class StoppingCriteriaList(list):

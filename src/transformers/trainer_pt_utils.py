@@ -39,14 +39,29 @@ from torch.utils.data.distributed import DistributedSampler
 
 from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .tokenization_utils_base import BatchEncoding
-from .utils import is_sagemaker_mp_enabled, is_torch_tpu_available, is_training_run_on_sagemaker, logging
+from .utils import (
+    is_sagemaker_mp_enabled,
+    is_torch_available,
+    is_torch_xla_available,
+    is_training_run_on_sagemaker,
+    logging,
+)
 
 
 if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))
 
-if is_torch_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
+
+if is_torch_available():
+    from .pytorch_utils import is_torch_greater_or_equal_than_2_0
+
+    if is_torch_greater_or_equal_than_2_0:
+        from torch.optim.lr_scheduler import LRScheduler
+    else:
+        from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
+
 
 # this is used to suppress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
 try:
@@ -179,7 +194,7 @@ def nested_detach(tensors):
 
 
 def nested_xla_mesh_reduce(tensors, name):
-    if is_torch_tpu_available():
+    if is_torch_xla_available():
         import torch_xla.core.xla_model as xm
 
         if isinstance(tensors, (list, tuple)):
@@ -1170,6 +1185,15 @@ class AcceleratorConfig:
             training results are fully reproducable using a different sampling technique. While seed-to-seed results
             may differ, on average the differences are neglible when using multiple different seeds to compare. Should
             also be ran with [`~utils.set_seed`] for the best results.
+        gradient_accumulation_kwargs (`dict`, *optional*):
+            Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`].
+            Any of the following (optional) keys are acceptable:
+              num_steps (`int`): Will take precedence over [`~.TrainingArguments.gradient_accumulation_steps`] if
+                the latter is set to 1, otherwise an exception will be raised.
+              adjust_scheduler (`bool`): Whether to adjust the scheduler steps to account for [`~.TrainingArguments.gradient_accumulation_steps`].
+                The [`accelerate.utils.GradientAccumulationPlugin`] default is `True`.
+              sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch.
+                The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`.
 
     """
 
@@ -1208,6 +1232,19 @@ class AcceleratorConfig:
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
         },
     )
+    gradient_accumulation_kwargs: Optional[Dict] = field(
+        default=None,
+        metadata={
+            "help": "Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`]. "
+            "Any of the following (optional) keys are acceptable: "
+            "  num_steps (`int`): Will take precedence over [`~.TrainingArguments.gradient_accumulation_steps`] if "
+            "    the latter is set to 1, otherwise an exception will be raised. "
+            "  adjust_scheduler (`bool`): Whether to adjust the scheduler steps to account for [`~.TrainingArguments.gradient_accumulation_steps`]. "
+            "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `True`. "
+            "  sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch. "
+            "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`."
+        },
+    )
 
     @classmethod
     def from_json_file(cls, json_file):
@@ -1226,3 +1263,47 @@ class AcceleratorConfig:
 
     def to_dict(self):
         return copy.deepcopy(self.__dict__)
+
+
+class LayerWiseDummyOptimizer(torch.optim.Optimizer):
+    """
+    For Layer-wise optimizers such as GaLoRE optimizer, the optimization
+    step is already done through the post gradient hooks. Therefore
+    the trick is to create a dummy optimizer that can take arbitrary
+    args and kwargs and return a no-op during training.
+
+    Initial idea from @hiyouga in LLaMA-Factory:
+    https://github.com/hiyouga/LLaMA-Factory/commit/8664262cde3919e10eaecbd66e8c5d356856362e#diff-ebe08ab14496dfb9e06075f0fdd36799ef6d1535cc4dd4715b74c4e3e06fe3ba
+    """
+
+    def __init__(self, optimizer_dict=None, *args, **kwargs):
+        dummy_tensor = torch.randn(1, 1)
+        self.optimizer_dict = optimizer_dict
+        super().__init__([dummy_tensor], {"lr": 1e-03})
+
+    def zero_grad(self, set_to_none: bool = True) -> None:
+        pass
+
+    def step(self, closure=None) -> Optional[float]:
+        pass
+
+
+class LayerWiseDummyScheduler(LRScheduler):
+    """
+    For Layer-wise optimizers such as GaLoRE optimizer, the optimization and scheduling step
+    are already done through the post gradient hooks. Therefore
+    the trick is to create a dummy scheduler that can take arbitrary
+    args and kwargs and return a no-op during training.
+    """
+
+    def __init__(self, *args, **kwargs):
+        optimizer = LayerWiseDummyOptimizer()
+        last_epoch = -1
+        verbose = False
+        super().__init__(optimizer, last_epoch, verbose)
+
+    def get_lr(self):
+        return [group["lr"] for group in self.optimizer.param_groups]
+
+    def _get_closed_form_lr(self):
+        return self.base_lrs
