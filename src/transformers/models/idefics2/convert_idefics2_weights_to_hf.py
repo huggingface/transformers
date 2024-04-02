@@ -41,12 +41,12 @@ KEYS_TO_MODIFY_MAPPING = {
 
 
 WEIGHTS_TO_MERGE_MAPPING = (
-    # (weights to merge), (new weight name)
+    # (weights to merge in merging order), (new weight name)
     (
         ("model.embed_tokens.weight", "model.embed_tokens.additional_embedding.weight"),
         "model.text_model.embed_tokens.weight",
     ),
-    (("lm_head.linear.weight", "lm_head.additional_fc.weight"), "lm_head.weight"),
+    (("lm_head.linear.weight", "additional_fc.weight"), "lm_head.weight"),
 )
 
 
@@ -65,15 +65,21 @@ def convert_state_dict_to_hf(state_dict):
 
 def merge_weights(state_dict):
     new_state_dict = {}
+
+    # Add empty list we can insert the weights in the correct order
+    for weights_to_merge, new_weight_name in WEIGHTS_TO_MERGE_MAPPING:
+        new_state_dict[new_weight_name] = [None] * len(weights_to_merge)
+
     for key, value in state_dict.items():
         for weights_to_merge, new_weight_name in WEIGHTS_TO_MERGE_MAPPING:
             if key in weights_to_merge:
-                if new_weight_name not in new_state_dict:
-                    new_state_dict[new_weight_name] = value
-                else:
-                    new_state_dict[new_weight_name] = torch.cat((new_state_dict[new_weight_name], value), dim=0)
+                new_state_dict[new_weight_name][weights_to_merge.index(key)] = value
             else:
                 new_state_dict[key] = value
+
+    # Concatenate the weights
+    for weights_to_merge, new_weight_name in WEIGHTS_TO_MERGE_MAPPING:
+        new_state_dict[new_weight_name] = torch.cat(new_state_dict[new_weight_name], dim=0)
 
     # Remove the weights that were merged
     for weights_to_merge, new_weight_name in WEIGHTS_TO_MERGE_MAPPING:
