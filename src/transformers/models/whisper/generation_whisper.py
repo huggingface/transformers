@@ -1141,12 +1141,12 @@ class WhisperGenerationMixin:
         if isinstance(language, (list, tuple)):
             if any(l is None for l in language):
                 raise TypeError(
-                    "Expected `language` to be `None`, a single string or a list of strings. Got a list containing `None`"
+                    "Expected `language` to be `None`, a single string (e.g. `'en'`), or a list of strings with length equal to the batch size (e.g. `('en', 'fr')` for a batch size of 2). Got a list containing `None`."
                 )
             if len(language) != batch_size:
                 raise ValueError(
                     "When passing a list of languages, the length of the list must match the batch size. "
-                    f"Expected length of {batch_size}, but got {len(language)}"
+                    f"Expected length of {batch_size}, but got {len(language)} languages."
                 )
         else:
             language = [language]  # Use a length-1 list now, broadcast later
