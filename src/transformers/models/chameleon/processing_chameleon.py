@@ -19,73 +19,121 @@ Processor class for Chameleon.
 
 from typing import List, Optional, Union
 
-import numpy as np
-import PIL
-import torch
-
+from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
-from ...utils import PaddingStrategy, TensorType
+from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...utils import TensorType
 
 
 class ChameleonProcessor(ProcessorMixin):
+    r"""
+    Constructs a Chameleon processor which wraps a Chameleon image processor and a Chameleon tokenizer into a single
+    processor.
+
+    [`ChameleonProcessor`] offers all the functionalities of [`ChameleonImageProcessor`] and [`LlamaTokenizerFast`].
+    See the [`~ChameleonProcessor.__call__`] and [`~ChameleonProcessor.decode`] for more information.
+
+    Args:
+        image_processor ([`ChameleonImageProcessor`], *optional*):
+            The image processor is a required input.
+        tokenizer ([`LlamaTokenizerFast`], *optional*):
+            The tokenizer is a required input.
+    """
+
     attributes = ["tokenizer", "image_processor"]
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
     image_processor_class = "ChameleonImageProcessor"
 
-    def __init__(self, tokenizer=None, image_processor=None):
-        super().__init__(tokenizer, image_processor)
+    # Copied from transformers.models.llava.processing_llava.LlavaProcessor.__init__
+    def __init__(self, image_processor=None, tokenizer=None):
+        super().__init__(image_processor, tokenizer)
 
-        image_processor.set_vocab(tokenizer.vocab)
-
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-
-    def _as_pil_image(self, image: ImageInput):
-        # Convert image to PIL.Image.Image if not already.
-        if isinstance(image, PIL.Image.Image):
-            return image
-        elif isinstance(image, np.ndarray):
-            return PIL.Image.fromarray(image)
-        elif isinstance(image, torch.Tensor):
-            return PIL.Image.fromarray(image.numpy())
-        raise ValueError(f"Unsupported input type: {type(image)}")
-
+    # Copied from transformers.models.llava.processing_llava.LlavaProcessor.__call__
     def __call__(
         self,
-        inputs: List[List[Union[TextInput, ImageInput, PreTokenizedInput]]] = None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        images: ImageInput = None,
         padding: Union[bool, str, PaddingStrategy] = False,
-        max_length: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-    ) -> BatchEncoding:
-        encoding = BatchEncoding({"input_ids": []})
-        for batch in inputs:
-            encoding.input_ids.append([self.tokenizer.bos_token_id])
-            for elem in batch:
-                if isinstance(elem, (PIL.Image.Image, np.ndarray, torch.Tensor)):
-                    elem_toks = self.image_processor(self._as_pil_image(elem)).tokens
-                else:
-                    elem_toks = self.tokenizer(elem).input_ids
+        truncation: Union[bool, str, TruncationStrategy] = None,
+        max_length=None,
+        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+    ) -> BatchFeature:
+        """
+        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
+        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
+        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        of the above two methods for more information.
 
-                if elem_toks[0] == self.tokenizer.bos_token_id:
-                    elem_toks = elem_toks[1:]
+        Args:
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
+                number of channels, H and W are image height and width.
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
+                Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                index) among:
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
+            max_length (`int`, *optional*):
+                Maximum length of the returned list and optionally padding length (see above).
+            truncation (`bool`, *optional*):
+                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
 
-                encoding.input_ids[-1].extend(elem_toks)
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
-        encoding = self.tokenizer.pad(
-            encoding,
-            padding=padding,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=return_attention_mask,
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+        """
+        if images is not None:
+            pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
+        else:
+            pixel_values = None
+        text_inputs = self.tokenizer(
+            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
-        return encoding.convert_to_tensors(return_tensors)
 
+        return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
+
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        refer to the docstring of this method for more information.
+        """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Llama
     def decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        the docstring of this method for more information.
+        """
         return self.tokenizer.decode(*args, **kwargs)
+
+    @property
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))

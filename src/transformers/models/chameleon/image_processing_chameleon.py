@@ -14,88 +14,41 @@
 # limitations under the License.
 """Image processor class for Chameleon."""
 
-from typing import Dict
+from typing import Optional, Union
 
 import numpy as np
-import PIL
-import torch
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_utils import ImageInput
+from ...utils import TensorType, is_vision_available
 
 
+if is_vision_available():
+    import PIL
+
+
+# TODO: support batch? Rewrite code, use existing functionality to resize, ...
 class ChameleonImageProcessor(BaseImageProcessor):
     r"""
     Constructs an Chameleon image processor.
 
     Args:
-        ddconfig (`dict`):
-            TODO
-        n_embed (`int`):
-            TODO
-        embed_dim (`int`):
-            TODO
-        ckpt_path (`str`, *optional*):
-            TODO
-        ignore_keys (`list`, *optional*, defaults to `[]`):
-            TODO
-        image_key (`str`, *optional*, defaults to `"image"`):
-            TODO
-        colorize_nlabels (`int`, *optional*):
-            TODO
-        remap (`dict`, *optional*):
-            TODO
-        sane_index_shape (`bool`, *optional*, defaults to `False`):
-            TODO
+        kwargs (Dict, *optional*):
+            foo bar
     """
 
-    def __init__(
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def preprocess(
         self,
-        ddconfig: Dict,
-        n_embed: int,
-        embed_dim,
-        ckpt_path=None,
-        ignore_keys=[],
-        image_key="image",
-        colorize_nlabels=None,
-        remap=None,
-        sane_index_shape=False,
-    ):
-        self._vq_model = VQModel(
-            ddconfig=ddconfig,
-            n_embed=n_embed,
-            embed_dim=embed_dim,
-            ckpt_path=ckpt_path,
-            ignore_keys=ignore_keys,
-            image_key=image_key,
-            colorize_nlabels=colorize_nlabels,
-            remap=remap,
-            sane_index_shape=sane_index_shape,
-        )
-        self._vq_model.eval()
-
-        self._vocab = None
-
-        devices = {p.device for p in self._vq_model.parameters()}
-        assert len(devices) == 1
-        self._device = devices.pop()
-
-        dtypes = {p.dtype for p in self._vq_model.parameters()}
-        assert len(dtypes) == 1
-        self._dtype = dtypes.pop()
-
-    def preprocess(self, image: PIL.Image) -> BatchFeature:
-        assert self._vocab is not None
-
-        image = self._whiten_transparency(image)
-        vqgan_input = self._vqgan_input_from(image).to(self._device).to(self._dtype)
-        _, _, [_, _, img_toks] = self._vq_model.encode(vqgan_input)
-        bpe_toks = (
-            [self._vocab.image_start_id] + self._vocab.convert_img2bp2(img_toks).tolist() + [self._vocab.image_end_id]
-        )
-        return BatchFeature(data={"tokens": bpe_toks})
-
-    def set_vocab(self, vocab_map: dict[str, int]):
-        self._vocab = _VocabInfo(vocab_map)
+        images: ImageInput,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+    ) -> BatchFeature:
+        images = self._whiten_transparency(images)
+        images = self._vqgan_input_from(images)
+        data = {"pixel_values": images}
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     def _whiten_transparency(self, img: PIL.Image) -> PIL.Image:
         # Check if it's already in RGB format.
@@ -116,7 +69,7 @@ class ChameleonImageProcessor(BaseImageProcessor):
         vals_rgb = (1 - alpha[:, :, np.newaxis]) * 255 + alpha[:, :, np.newaxis] * vals_rgba[:, :, :3]
         return PIL.Image.fromarray(vals_rgb.astype("uint8"), "RGB")
 
-    def _vqgan_input_from(self, img: PIL.Image, target_image_size=512) -> torch.Tensor:
+    def _vqgan_input_from(self, img: PIL.Image, target_image_size=512) -> np.array:
         # Resize with aspect ratio preservation.
         s = min(img.size)
         scale = target_image_size / s
@@ -131,20 +84,5 @@ class ChameleonImageProcessor(BaseImageProcessor):
         # Convert to tensor.
         np_img = np.array(img) / 255.0  # Normalize to [0, 1]
         np_img = np_img * 2 - 1  # Scale to [-1, 1]
-        tensor_img = torch.from_numpy(np_img).permute(2, 0, 1).float()  # CHW format.
-
-        # Add batch dimension.
-        return tensor_img.unsqueeze(0)
-
-    def decode(self, x: torch.Tensor) -> PIL.Image:
-        pass
-        # The below is left intentionally commented out.
-        # x = x.detach().cpu()
-        # x = torch.clamp(x, -1.0, 1.0)
-        # x = (x + 1.0) / 2.0
-        # x = x.permute(1, 2, 0).numpy()
-        # x = (255 * x).astype(np.uint8)
-        # x = Image.fromarray(x)
-        # if not x.mode == "RGB":
-        #     x = x.convert("RGB")
-        # return x
+        np_img = np.transpose(np_img, (2, 0, 1))  # CHW format.
+        return np_img

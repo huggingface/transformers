@@ -91,7 +91,7 @@ class ChameleonConfig(PretrainedConfig):
             Use Swin Transformer normalization.
         vq_config (`dict`, *optional*):
             Dictionary containing the configuration for the VQ-VAE model.
-        vocabulary_map(`dict`, *optional*):
+        vocabulary_map (`dict`, *optional*):
             A dictionary containing the vocabulary map from the tokenizer. Used to obtain tokens from the image inputs.
 
     ```python
