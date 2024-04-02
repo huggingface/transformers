@@ -1646,6 +1646,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     )
     def test_save_load_fast_init_from_base(self):
         pass
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
