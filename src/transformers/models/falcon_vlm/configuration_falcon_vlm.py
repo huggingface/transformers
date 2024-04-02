@@ -79,8 +79,6 @@ class FalconVLMConfig(PretrainedConfig):
     ):
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
-        self.vocab_size = text_config['vocab_size']
-        self.hidden_size = text_config['hidden_size']
 
         if isinstance(vision_config, dict):
             vision_config["model_type"] = (
@@ -108,5 +106,8 @@ class FalconVLMConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["falcon"]()
 
         self.text_config = text_config
+
+        self.vocab_size = text_config.vocab_size
+        self.hidden_size = text_config.hidden_size
 
         super().__init__(**kwargs)
