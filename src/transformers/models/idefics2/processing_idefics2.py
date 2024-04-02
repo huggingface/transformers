@@ -390,6 +390,7 @@ class Idefics2Processor(ProcessorMixin):
         )
         # fmt: off
         return (
+            "{{ bos_token }}"
             "{% for message in messages %}"
                 "{% if message is iterable and message is not string %}"
                     "{{message['role'].capitalize() + ':'}}"
@@ -406,7 +407,7 @@ class Idefics2Processor(ProcessorMixin):
                 "{% endif %}"
             "{% endfor %}"
             "{% if add_generation_prompt %}"
-                "{{ 'Assistant:\n' }}"
+                "{{ 'Assistant:' }}"
             "{% endif %}"
         )
         # fmt: on
