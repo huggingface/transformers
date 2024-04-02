@@ -16,9 +16,11 @@
 
 
 import argparse
+import json
 
 import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
@@ -120,20 +122,18 @@ def prepare_img():
 
 
 def get_hiera_config(model_name: str, base_model: bool) -> HieraConfig:
-    kwargs = {} if base_model else {"num_labels": 400 if model_name.endswith("16x224") else 1000}
-
     if model_name == "hiera-tiny-224":
-        config = HieraConfig(depths=[1, 2, 7, 2], **kwargs)
+        config = HieraConfig(depths=[1, 2, 7, 2])
     elif model_name == "hiera-small-224":
-        HieraConfig(depths=[1, 2, 11, 2], **kwargs)
+        HieraConfig(depths=[1, 2, 11, 2])
     elif model_name == "hiera-base-224":
-        config = HieraConfig(**kwargs)
+        config = HieraConfig()
     elif model_name == "hiera-base-plus-224":
-        config = HieraConfig(embed_dim=112, initial_num_heads=2, **kwargs)
+        config = HieraConfig(embed_dim=112, initial_num_heads=2)
     elif model_name == "hiera-large-224":
-        config = HieraConfig(embed_dim=144, initial_num_heads=2, depths=[2, 6, 36, 4], **kwargs)
+        config = HieraConfig(embed_dim=144, initial_num_heads=2, depths=[2, 6, 36, 4])
     elif model_name == "hiera-huge-224":
-        config = HieraConfig(embed_dim=256, initial_num_heads=4, depths=[2, 6, 36, 4], **kwargs)
+        config = HieraConfig(embed_dim=256, initial_num_heads=4, depths=[2, 6, 36, 4])
     elif model_name == "hiera-base-16x224":
         config = HieraConfig(
             input_size=(16, 224, 224),
@@ -143,7 +143,6 @@ def get_hiera_config(model_name: str, base_model: bool) -> HieraConfig:
             patch_stride=(2, 4, 4),
             patch_padding=(1, 3, 3),
             sep_pos_embed=True,
-            **kwargs,
         )
     elif model_name == "hiera-base-plus-16x224":
         config = HieraConfig(
@@ -156,7 +155,6 @@ def get_hiera_config(model_name: str, base_model: bool) -> HieraConfig:
             sep_pos_embed=True,
             embed_dim=112,
             initial_num_heads=2,
-            **kwargs,
         )
     elif model_name == "hiera-large-16x224":
         config = HieraConfig(
@@ -170,7 +168,6 @@ def get_hiera_config(model_name: str, base_model: bool) -> HieraConfig:
             embed_dim=144,
             initial_num_heads=2,
             depths=[2, 6, 36, 4],
-            **kwargs,
         )
     elif model_name == "hiera-huge-16x224":
         config = HieraConfig(
@@ -184,10 +181,29 @@ def get_hiera_config(model_name: str, base_model: bool) -> HieraConfig:
             embed_dim=256,
             initial_num_heads=4,
             depths=[2, 6, 36, 4],
-            **kwargs,
         )
     else:
         raise ValueError(f"Unrecognized model name: {model_name}")
+
+    repo_id = "huggingface/label-files"
+
+    if not model_name.endswith("16x224") and not base_model:
+        filename = "imagenet-1k-id2label.json"
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = {int(k): v for k, v in id2label.items()}
+        config.id2label = id2label
+        config.label2id = {v: k for k, v in id2label.items()}
+        config.num_labels = len(id2label)
+
+    if model_name.endswith("16x224") and not base_model:
+        filename = "kinetics400-id2label.json"
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = {int(k): v for k, v in id2label.items()}
+        config.id2label = id2label
+        config.label2id = {v: k for k, v in id2label.items()}
+        config.num_labels = len(id2label)
+
+        config.num_labels = 400
 
     return config
 

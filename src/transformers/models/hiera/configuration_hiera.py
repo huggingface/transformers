@@ -22,7 +22,7 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
-from ...utils.backbone_utils import get_aligned_output_features_output_indices
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -32,7 +32,7 @@ HIERA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class HieraConfig(PretrainedConfig):
+class HieraConfig(PretrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`HieraModel`]. It is used to instantiate an Hiera
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -96,6 +96,8 @@ class HieraConfig(PretrainedConfig):
             Depth of the decoder for MAE pretraining.
         decoder_num_heads (`int`, *optional*):
             Number of attention heads in each layer of the decoder for MAE pretraining.
+        norm_pix_loss (`bool`, *optional*, defaults to `True`):
+
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
@@ -151,6 +153,7 @@ class HieraConfig(PretrainedConfig):
         decoder_embed_dim=None,
         decoder_depth=None,
         decoder_num_heads=None,
+        norm_pix_loss=True,
         out_features=None,
         out_indices=None,
         **kwargs,
@@ -178,6 +181,9 @@ class HieraConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_init = layer_norm_init
         self.layer_norm_eps = layer_norm_eps
+        self.decoder_embed_dim = decoder_embed_dim
+        self.decoder_depth = decoder_depth
+        self.decoder_num_heads = decoder_num_heads
         # we set the hidden_size attribute in order to make Hiera work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * embed_dim_multiplier ** (len(depths) - 1))
