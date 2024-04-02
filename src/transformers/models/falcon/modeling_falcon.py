@@ -1237,6 +1237,11 @@ class FalconForCausalLM(FalconPreTrainedModel):
 
             input_ids = input_ids[:, remove_prefix_length:]
 
+        if inputs_embeds is not None and past_key_values is None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids}
+
         # Note: versions of Falcon with alibi do not use position_ids. It is used with RoPE.
         if not self.transformer.use_alibi and attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation

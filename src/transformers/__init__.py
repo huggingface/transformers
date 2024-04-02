@@ -374,10 +374,18 @@ _import_structure = {
         "EncodecFeatureExtractor",
     ],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
-    "models.ernie": ["ErnieConfig"],
-    "models.ernie_m": ["ErnieMConfig"],
-    "models.esm": ["EsmConfig", "EsmTokenizer"],
-    "models.falcon": ["FalconConfig"],
+    "models.ernie": [
+        "ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ErnieConfig",
+    ],
+    "models.ernie_m": ["ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP", "ErnieMConfig"],
+    "models.esm": ["ESM_PRETRAINED_CONFIG_ARCHIVE_MAP", "EsmConfig", "EsmTokenizer"],
+    "models.falcon": ["FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP", "FalconConfig"],
+    "models.falcon_vlm": [
+        "FALCON_VLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FalconVLMConfig",
+        "FalconVLProcessor",
+    ],
     "models.fastspeech2_conformer": [
         "FastSpeech2ConformerConfig",
         "FastSpeech2ConformerHifiGanConfig",
@@ -1128,6 +1136,7 @@ else:
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.efficientformer"].append("EfficientFormerImageProcessor")
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
+    _import_structure["models.falcon_vlm"].append("FalconImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
@@ -1954,6 +1963,14 @@ else:
             "FalconForTokenClassification",
             "FalconModel",
             "FalconPreTrainedModel",
+        ]
+    )
+
+    _import_structure["models.falcon_vlm"].extend(
+        [
+            "FALCON_VLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FalconVLMForConditionalGeneration",
+            "FalconVLMPreTrainedModel",
         ]
     )
     _import_structure["models.fastspeech2_conformer"].extend(
@@ -4920,10 +4937,15 @@ if TYPE_CHECKING:
         EncodecFeatureExtractor,
     )
     from .models.encoder_decoder import EncoderDecoderConfig
-    from .models.ernie import ErnieConfig
-    from .models.ernie_m import ErnieMConfig
-    from .models.esm import EsmConfig, EsmTokenizer
-    from .models.falcon import FalconConfig
+    from .models.ernie import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieConfig
+    from .models.ernie_m import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieMConfig
+    from .models.esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig, EsmTokenizer
+    from .models.falcon import FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP, FalconConfig
+    from .models.falcon_vlm import (
+        FALCON_VLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FalconVLMConfig,
+        FalconVLProcessor,
+    )
     from .models.fastspeech2_conformer import (
         FastSpeech2ConformerConfig,
         FastSpeech2ConformerHifiGanConfig,
@@ -5705,6 +5727,7 @@ if TYPE_CHECKING:
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientformer import EfficientFormerImageProcessor
         from .models.efficientnet import EfficientNetImageProcessor
+        from .models.falcon_vlm import FalconImageProcessor
         from .models.flava import (
             FlavaFeatureExtractor,
             FlavaImageProcessor,
@@ -6419,6 +6442,11 @@ if TYPE_CHECKING:
             FalconForTokenClassification,
             FalconModel,
             FalconPreTrainedModel,
+        )
+        from .models.falcon_vlm import (
+            FALCON_VLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FalconVLMForConditionalGeneration,
+            FalconVLMPreTrainedModel,
         )
         from .models.fastspeech2_conformer import (
             FastSpeech2ConformerHifiGan,
