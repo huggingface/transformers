@@ -442,11 +442,9 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenDecoderTest.test_flash_attn_2_generate_left_padding
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_left_padding
     def test_flash_attn_2_generate_left_padding(self):
-        """
-        Overwrite generative model classes with greedy sample model classes.
-        """
+        # Ignore copy
         for model_class in self.greedy_sample_model_classes:
             if not model_class._supports_flash_attn_2:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
@@ -490,11 +488,9 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenDecoderTest.test_flash_attn_2_generate_padding_right
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_padding_right
     def test_flash_attn_2_generate_padding_right(self):
-        """
-        Overwrite generative model classes with greedy sample model classes.
-        """
+        # Ignore copy
         for model_class in self.greedy_sample_model_classes:
             if not model_class._supports_flash_attn_2:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
@@ -540,11 +536,9 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
     @slow
     # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenDecoderTest.test_flash_attn_2_generate_use_cache
     def test_flash_attn_2_generate_use_cache(self):
-        """
-        Overwrite generative model classes with greedy sample model classes.
-        """
         max_new_tokens = 30
 
+        # Ignore copy
         for model_class in self.greedy_sample_model_classes:
             if not model_class._supports_flash_attn_2:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
@@ -1673,10 +1667,9 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_left_padding
     def test_flash_attn_2_generate_left_padding(self):
-        """
-        Overwrite generative model classes with greedy sample model classes.
-        """
+        # Ignore copy
         for model_class in self.greedy_sample_model_classes:
             if not model_class._supports_flash_attn_2:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
@@ -1723,10 +1716,9 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_padding_right
     def test_flash_attn_2_generate_padding_right(self):
-        """
-        Overwrite generative model classes with greedy sample model classes.
-        """
+        # Ignore copy
         for model_class in self.greedy_sample_model_classes:
             if not model_class._supports_flash_attn_2:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
@@ -1772,12 +1764,11 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_use_cache
     def test_flash_attn_2_generate_use_cache(self):
-        """
-        Overwrite generative model classes with greedy sample model classes.
-        """
         max_new_tokens = 30
 
+        # Ignore copy
         for model_class in self.greedy_sample_model_classes:
             if not model_class._supports_flash_attn_2:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
