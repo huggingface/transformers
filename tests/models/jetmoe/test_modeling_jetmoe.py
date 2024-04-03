@@ -137,7 +137,6 @@ class JetMoEModelTester:
             kv_channels=self.kv_channels,
             ffn_hidden_size=self.intermediate_size,
             activation_function=self.hidden_act,
-            glu=self.glu,
             moe_num_experts=self.moe_num_experts,
             moe_top_k=self.moe_top_k,
             max_position_embeddings=self.max_position_embeddings,
