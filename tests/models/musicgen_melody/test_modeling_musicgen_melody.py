@@ -1302,6 +1302,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         sequence_length = input_ids.shape[-1]
         input_ids = input_ids[:batch_size, :]
         attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long)
+
         return config, input_ids, attention_mask
 
     # override since the `input_ids` cannot be used as the `decoder_input_ids` for musicgen_melody (input / outputs are
@@ -1321,6 +1322,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             input_ids,
             do_sample=False,
             num_beams=1,
+            max_new_tokens=self.max_new_tokens,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             output_scores=output_scores,
@@ -1367,7 +1369,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         input_length,
         forced_bos_token_id=None,
         forced_eos_token_id=None,
-        max_new_tokens=None,
     ):
         process_kwargs = {}
         warper_kwargs = {}
