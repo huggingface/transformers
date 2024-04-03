@@ -78,6 +78,9 @@ def load_wkv5_cuda_kernel(head_size):
     )
     rwkv5_cuda_kernel.head_size = head_size
 
+    logger.info(f"Kernels successfully loaded.")
+
+
 
 class Rwkv5LinearAttention(torch.autograd.Function):
     @staticmethod
