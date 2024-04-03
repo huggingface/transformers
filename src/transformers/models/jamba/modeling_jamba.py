@@ -572,6 +572,7 @@ class JambaFlashAttention2(JambaAttention):
 
         return attn_output
 
+    # Copied from transformers.models.mixtral.modeling_mixtral.MixtralFlashAttention2._upad_input
     def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
         batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
 
@@ -1361,7 +1362,6 @@ JAMBA_START_DOCSTRING = r"""
     "The bare Jamba Model outputting raw hidden-states without any specific head on top.",
     JAMBA_START_DOCSTRING,
 )
-# Adapted from transformers.models.mistral.modeling_mistral.MistralPreTrainedModel with Mistral->Jamba
 class JambaPreTrainedModel(PreTrainedModel):
     config_class = JambaConfig
     base_model_prefix = "model"
