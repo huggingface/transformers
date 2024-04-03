@@ -93,7 +93,7 @@ class JetMoEConfig(PretrainedConfig):
         self,
         vocab_size=32000,
         hidden_size=2048,
-        num_hidden_layers=24,
+        num_hidden_layers=8,
         num_attention_heads=32,
         num_key_value_heads=16,
         kv_channels=128,
