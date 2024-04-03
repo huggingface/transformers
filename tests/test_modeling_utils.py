@@ -756,7 +756,7 @@ class ModelUtilsTest(TestCasePlus):
 
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         inputs = tokenizer("Hello, my name is", return_tensors="pt")
-        output = model.generate(inputs["input_ids"].to(0))
+        output = model.generate(inputs["input_ids"].to(f"{torch_device}:0"))
 
         text_output = tokenizer.decode(output[0].tolist())
         self.assertEqual(text_output, "Hello, my name is John. I'm a writer, and I'm a writer. I'm")
