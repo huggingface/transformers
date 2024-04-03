@@ -401,6 +401,7 @@ class LocalAttentionBlock(nn.Module):
         queries = _apply_rope(queries, segment_pos)
         keys = _apply_rope(keys, segment_pos)
 
+        cache = getattr(self, "cache", cache)
         if cache is not None:
             assert t == 1, f"When cache is provided only `t=1` is supported, not {t=}"
 
@@ -1200,7 +1201,7 @@ class RGLRU(nn.Module):
         """
 
         bs, l, _ = x.shape
-        assert segment_pos.shape == (bs, l)
+        assert segment_pos.shape == (bs, l), segment_pos.shape
         reset = segment_pos == 0
 
         # Gates for x and a.
@@ -1838,7 +1839,9 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, GriffinOutput]:
+        print(kwargs)
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -2001,7 +2004,9 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         super().__init__(config)
         self.model = RecurrentGemmaModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.width, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(
+            config.hidden_size, config.vocab_size, bias=False
+        )
 
         # Initialize weights and apply final processing
         self.post_init()

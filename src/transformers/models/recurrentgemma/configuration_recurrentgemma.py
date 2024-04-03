@@ -125,7 +125,6 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_heads = num_heads
-        self.num_attention_heads = num_heads
         self.head_dim = self.hidden_size // self.num_heads
         self.lru_width = lru_width if lru_width is not None else hidden_size
         self.embeddings_scale_by_sqrt_dim = embeddings_scale_by_sqrt_dim
