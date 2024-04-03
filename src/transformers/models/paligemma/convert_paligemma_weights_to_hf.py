@@ -234,9 +234,41 @@ def verify_logits(model, processor):
     list_images = [Image.open(cow_on_beach_path), Image.open(cow_on_beach_path)]
     prompt = ["answer en Where is the cow standing?\n", "\n"]
 
-    model_inputs = processor(text=prompt, images=list_images, max_length=16, padding="max_length", return_tensors="pt")
+    model_inputs = processor(text=prompt, images=list_images, max_length=16, padding="longest", return_tensors="pt")
+    image_captioning_inputs_unpad = processor(text="\n", images=list_images[0], max_length=16, padding="longest", return_tensors="pt")
+    
+
+
+    # Test image captioning generation
+    captioning_generation = model.generate(**image_captioning_inputs_unpad, max_new_tokens=10)
+    captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
+    if captioning_output[0] != "\ncow standing on the beach":
+        raise ValueError(fr"Image captioning should match, got {captioning_output[0]}.")
+    else:
+        print("Image captioning works without padding.")
+
+
     image_captioning_inputs = processor(text="\n", images=list_images[0], max_length=16, padding="max_length", return_tensors="pt")
     
+
+
+    # Test image captioning generation
+    captioning_generation = model.generate(**image_captioning_inputs, max_new_tokens=10)
+    captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
+    if captioning_output[0] != "\ncow standing on the beach":
+        raise ValueError(fr"Image captioning should match, got {captioning_output[0]}.")
+    else:
+        print("Image captioning works with padding.")
+    outputs = model(**model_inputs)
+
+
+    manual_probs = torch.nn.functional.softmax(outputs.logits[:, -1, :], dim=-1)
+    next_token_id = torch.argmax(manual_probs, dim=-1)
+    if processor.decode(next_token_id[0]) != "beach":
+        raise ValueError("Next token prediction is wrong.")
+    else:
+        print("It seems that the forward pass predicts a correct next token. Go to .generate()!")
+        
     with torch.inference_mode():        
         raw_generation = model.generate(**model_inputs, max_new_tokens=10)
         generated_output = processor.batch_decode(raw_generation, skip_special_tokens=True)
@@ -248,21 +280,6 @@ def verify_logits(model, processor):
         else:
             print("Generation matches. You're almost done!")
 
-        # Test image captioning generation
-        captioning_generation = model.generate(**image_captioning_inputs, max_new_tokens=10)
-        captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
-        if captioning_output[0] != "\ncow standing on the beach":
-            raise ValueError(fr"Image captioning should match, got {captioning_output[0]}.")
-        else:
-            print("Image captioning works.")
-        outputs = model(**model_inputs)
-
-        manual_probs = torch.nn.functional.softmax(outputs.logits[:, -1, :], dim=-1)
-        next_token_id = torch.argmax(manual_probs, dim=-1)
-        if processor.decode(next_token_id[0]) != "beach":
-            raise ValueError("Next token prediction is wrong.")
-        else:
-            print("It seems that the forward pass predicts a correct next token. Go to .generate()!")
     
 
 
@@ -277,7 +294,7 @@ def convert_paligemma_checkpoint(
     if variant == "2b":
         tokenizer_id = "google/gemma-2b"
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
-    tokenizer.padding_side = 'right'
+    # tokenizer.padding_side = 'right'
 
     image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
     if variant == "2b":
@@ -297,10 +314,11 @@ def convert_paligemma_checkpoint(
 
     else:
         model = PaLIGemmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path).eval()
+    model.config._attn_implementation = 'eager'
     if do_verify_logits:
         print("Verifying logits...")
         verify_logits(model, processor)
-        # model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
+        model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
 
 
 if __name__ == "__main__":

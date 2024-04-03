@@ -290,6 +290,7 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
         batch_is_left_padded = (input_ids[:, 0] == pad_token_id).any()
 
         for i in range(batch_size):
+            # TODO vectorize the ugliness below, lest in drags you in the abyss whence it came from
             text_tokens_mask = attention_mask[i] > 0
             num_text_tokens = text_tokens_mask.sum().item()
             scaled_image_features = image_features[i] / (self.config.hidden_size ** 0.5)
@@ -300,12 +301,15 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
                 final_embedding[i, text_start_index:text_start_index + num_text_tokens] = inputs_embeds[i][text_tokens_mask]
                 position_ids[i, num_padding_tokens:num_padding_tokens + num_image_tokens + num_text_tokens] = torch.arange(1, num_image_tokens + num_text_tokens + 1, device=inputs_embeds.device)
                 final_attention_mask_4d[i, :, num_padding_tokens:num_image_tokens +num_text_tokens +num_padding_tokens, num_padding_tokens:num_padding_tokens + num_image_tokens + num_text_tokens] = 1
+                if labels is not None:
+                    final_labels[i, num_padding_tokens + num_image_tokens:] = labels
             else:
                 final_embedding[i, :num_image_tokens] = scaled_image_features
                 final_embedding[i, num_image_tokens:num_image_tokens + num_text_tokens] = inputs_embeds[i][text_tokens_mask]
                 position_ids[i, :num_image_tokens + num_text_tokens] = torch.arange(1, num_image_tokens + num_text_tokens + 1, device=inputs_embeds.device)
-                #final_attention_mask_4d[i, :, :num_image_tokens, :num_image_tokens + num_text_tokens] = 1
                 final_attention_mask_4d[i, :, :num_image_tokens + num_text_tokens, :num_image_tokens + num_text_tokens] = 1
+                if labels is not None:
+                    final_labels[i, num_image_tokens:num_image_tokens + num_text_tokens] = labels
         return final_embedding, final_attention_mask_4d, final_labels, position_ids
 
     @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
@@ -421,26 +425,31 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
         # we do not pass labels so output[0] correspond to logits
         # however in the case of right-padding and 4d attn mask outputs need to be sliced
         # in order to recover token-to-predict logits. 
-
         logits = outputs[0]
         loss = None
 
-        # ----- slice logits -----
+        # ----- slice / repeat logits -----
 
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
         # we know if the batch is left padded or not
         # logits and labels need to be sliced/padding logits need to be ignored
-        # could be something like that?
-        # assume first row is enough/OK
-        if attention_mask.dim() == 4:
+        # rather, last logit should be repeated last valid logit, not pad token logit over and over
+        """if attention_mask.dim() == 4:
             # this is to identify input phase
-            # else, we are in the cached situation and don't need to slice
-            masked_logits = logits[attention_mask[:, :, 0].squeeze(1).bool()]
+            # else, we are in the cached situation and don't need to slice 
+            attention_mask_2d = attention_mask[:, 0, -1] if left_padding else attention_mask[:, 0, 0]
+            last_valid_indices = attention_mask_2d.sum(dim=1).int() -1
+            batch_indices = torch.arange(logits.size(0), device=logits.device)
+            last_valid_logits = logits[batch_indices, last_valid_indices]
+            expanded_selected_logits = last_valid_logits.unsqueeze(1).expand(-1, logits.size(1), -1)
+            padding_mask = attention_mask_2d == 0
+            updated_logits = torch.where(padding_mask.unsqueeze(-1), expanded_selected_logits, logits)       
+            logits = updated_logits
+        """
         # -----  end slice   -----      
 
         
         if labels is not None:
-            #breakpoint()
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :] 
             shift_labels = labels[..., 1:]
