@@ -103,9 +103,9 @@ def _apply_rope(
     Returns:
       Rotated keys or queries in first half (along with original in second half).
     """
-    batch_size, sequence_length = positions.shape
+    batch_size, sequence_length, *_ = inputs.shape
     x_rope, x = torch.chunk(inputs, 2, dim=-1)
-    positions = positions.reshape(batch_size, sequence_length, 1, 1)
+    positions = positions.reshape(1, sequence_length, 1, 1)
 
     freq = torch.arange(x_rope.shape[-1] // 2, device=x.device)
     freq_exponents = 2 * freq / x_rope.shape[-1]
@@ -163,7 +163,7 @@ def _compute_causal_mask(
     return mask
 
 
-def _compute_forward_pass_mask(
+def compute_forward_pass_mask(
     segment_pos: torch.Tensor,
     window_size: int,
 ) -> torch.Tensor:
@@ -179,12 +179,7 @@ def _compute_forward_pass_mask(
     """
     segment_ids = torch.cumsum(segment_pos == 0, dim=-1)
     positions = torch.arange(segment_pos.shape[-1], device=segment_pos.device)
-    positions = torch.repeat_interleave(
-        positions[None], segment_pos.shape[0], dim=0
-    )
-    return _compute_causal_mask(
-        positions, positions, window_size, segment_ids, segment_ids
-    )
+    return _compute_causal_mask(positions, positions, window_size, segment_ids, segment_ids)
 
 
 def _compute_cache_mask(
@@ -202,14 +197,11 @@ def _compute_cache_mask(
       inference step with a KV-cache of the local attention.
     """
     device = num_tokens.device
-    q_positions = num_tokens[:, None]
+    q_positions = num_tokens[None]
     k_positions = torch.arange(window_size + 1, device=device) - window_size
-    k_positions = torch.repeat_interleave(
-        k_positions[None], q_positions.shape[0], dim=0
-    )
-    k_positions = k_positions + num_tokens[:, None]
-    return _compute_causal_mask(q_positions, k_positions, window_size, None,
-                                None)
+    k_positions = k_positions + num_tokens
+    # Add batch dimension
+    return _compute_causal_mask(q_positions, k_positions, window_size, None, None)
 
 
 def _update_attention_cache(
@@ -271,7 +263,7 @@ def _attention_cache_from_prompt(
     return dict(
         keys=torch.concatenate([k_padding, keys[:, -w:]], dim=1),
         values=torch.concatenate([v_padding, values[:, -w:]], dim=1),
-        num_tokens=segment_pos[:, -1] + 1,
+        num_tokens=segment_pos[-1] + 1,
     )
 
 
@@ -385,7 +377,7 @@ class LocalAttentionBlock(nn.Module):
           the input sequence.
         """
         b, t, _ = x.shape
-        assert segment_pos.shape == (b, t), segment_pos.shape
+        assert segment_pos.shape == (t,), f"{segment_pos.shape} != {(t,)}"
 
         # Generate keys, values and queries.
         queries = self.proj_q(x)
@@ -410,16 +402,22 @@ class LocalAttentionBlock(nn.Module):
             keys = torch.concatenate([cache["keys"], keys], dim=-3)
             values = torch.concatenate([cache["values"], values], dim=-3)
 
+            if attention_mask is None:
+                attention_mask = _compute_cache_mask(segment_pos, self.window_size)
         else:
             new_cache = _attention_cache_from_prompt(
                 keys, values, segment_pos, self.window_size
             )
 
+            if attention_mask is None:
+                attention_mask = compute_forward_pass_mask(segment_pos, self.window_size)
+
         # Compute attention.
         logits = einops.einsum(queries, keys, "b t n h, b s n h -> b n t s")
         logits = logits * (self.head_dim ** -0.5)
-        # Expand for heads axis.
-        attn_mask = torch.unsqueeze(attention_mask, dim=1)
+
+        # Expand for batch and heads axis.
+        attn_mask = attention_mask[None, None].type(torch.bool)
 
         masked_logits = torch.where(attn_mask, logits, _MIN_LOGITS_VALUE)
         masked_logits = masked_logits.type(torch.float32)
@@ -447,8 +445,7 @@ class LocalAttentionBlock(nn.Module):
         return dict(
             keys=torch.zeros(shape, device=device, dtype=dtype),
             values=torch.zeros(shape, device=device, dtype=dtype),
-            num_tokens=torch.zeros([batch_size], dtype=torch.int32,
-                                   device=device),
+            num_tokens=torch.zeros([], dtype=torch.int32, device=device),
         )
 
 
@@ -810,6 +807,7 @@ class ResidualBlock(nn.Module):
           than the returned updated cache is empty initialized and filled in from
           the input sequence.
         """
+        assert segment_pos.shape == (x.shape[1],), f"{segment_pos.shape} != {(x.shape[1],)}"
         raw_x = x
 
         inputs_normalized = self.temporal_pre_norm(raw_x)
@@ -1057,7 +1055,7 @@ def rnn_scan(
     assert h0 is None or h0.dtype == acc_dtype
 
     # Multiply `a` by the reset.
-    a = a * ~reset[..., None]
+    a = a * ~reset
 
     if x.shape[1] == 1:
         # Using scan in sampling mode.
@@ -1201,8 +1199,8 @@ class RGLRU(nn.Module):
         """
 
         bs, l, _ = x.shape
-        assert segment_pos.shape == (bs, l), segment_pos.shape
-        reset = segment_pos == 0
+        assert segment_pos.shape == (l,), f"{segment_pos.shape} != {(l,)}"
+        reset = segment_pos[None, :, None] == 0
 
         # Gates for x and a.
         gate_x = torch.sigmoid(self.input_gate(x))
@@ -1219,7 +1217,7 @@ class RGLRU(nn.Module):
         # Apply gamma normalization to the input. We need to clip the derivatives of
         # `sqrt` in order to prevent NaNs during training in bfloat16.
         multiplier = SqrtBoundDerivative.apply(1 - a_square)
-        multiplier = reset[..., None] + ~reset[..., None] * multiplier
+        multiplier = reset + ~reset * multiplier
         normalized_x = gated_x * multiplier.type(x.dtype)
 
         y, last_h = rnn_scan(
@@ -1308,6 +1306,8 @@ class Conv1D(nn.Module):
         Returns:
           The output of the convolution and the updated state.
         """
+        assert segment_pos.shape == (x.shape[1],)
+
         if state is not None:
             # 1. Decoding mode:
             # - We have access to the previous `self.temporal_width - 1` inputs.
@@ -1350,8 +1350,7 @@ class Conv1D(nn.Module):
                     end_idx=end_idx,
                     max_look_ahead=temporal_shift,
                 )
-                x_window *= window_mask[:, :, None].type(x.dtype).to(
-                    device=x.device)
+                x_window *= window_mask[None, :, None].type(x.dtype).to(device=x.device)
 
             x_window = self._pad_window(x_window, output_len)
 
@@ -1426,8 +1425,8 @@ class Conv1D(nn.Module):
         """Creates a mask to prevent mixing of information between documents.
 
         Args:
-            segment_pos: Position of each token in the sequence. In particular, a
-              zero indicates the start of a new document.
+            segment_pos: Position of each token in the sequence. In particular,
+              a zero indicates the start of a new document.
             start_idx: The starting index of the convolution window.
             end_idx: The ending index of the convolution window.
             max_look_ahead: How much to look ahead at most to detect a document
@@ -1437,17 +1436,12 @@ class Conv1D(nn.Module):
             An integer mask where `1` indicates a position that should be
             included in the convolution, and `0` a position that should be excluded.
         """
-        batch_size = segment_pos.shape[0]
         not_a_document_boundary = (segment_pos != 0).type(torch.int32)
-        mask = torch.ones(
-            (batch_size, end_idx - start_idx),
-            device=segment_pos.device,
-        )
+        mask = torch.ones((end_idx - start_idx), device=segment_pos.device)
         for shift in range(1, max_look_ahead + 1):
             # At each position, look ahead by `shift` tokens to see if a
             # document boundary is present there.
-            mask *= not_a_document_boundary[:,
-                    start_idx + shift: end_idx + shift]
+            mask *= not_a_document_boundary[start_idx + shift: end_idx + shift]
         return mask
 
     def _pad_window(
@@ -1568,7 +1562,7 @@ class GriffinCache:
             self.states.append(ResidualBlock.init_cache(
                 batch_size=batch_size,
                 width=config.hidden_size,
-                num_heads=config.num_heads,
+                num_heads=config.num_attention_heads,
                 attention_window_size=config.attention_window_size,
                 temporal_block_type=block_type,
                 lru_width=config.lru_width,
@@ -1599,7 +1593,7 @@ class GriffinOutput(ModelOutput):
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
-    state: Optional[GriffinCache] = None
+    past_key_values: Optional[GriffinCache] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -1613,7 +1607,7 @@ class GriffinCausalLMOutput(ModelOutput):
             Language modeling loss (for next-token prediction).
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        state (`GriffinCache`):
+        past_key_values (`GriffinCache`):
             The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
             avoid providing the old `input_ids`.
 
@@ -1627,8 +1621,9 @@ class GriffinCausalLMOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    state: Optional[GriffinCache] = None
+    past_key_values: Optional[GriffinCache] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: tuple | None = None
 
 
 # END: adapted from mamba.
@@ -1803,7 +1798,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             ResidualBlock(
                 width=self.config.hidden_size,
                 mlp_expanded_width=self.config.intermediate_size,
-                num_heads=self.config.num_heads,
+                num_heads=self.config.num_attention_heads,
                 attention_window_size=self.config.attention_window_size,
                 temporal_block_type=block_type,
                 lru_width=self.config.lru_width,
@@ -1834,14 +1829,13 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        cache: Optional[GriffinCache] = None,
+        past_key_values: Optional[GriffinCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple, GriffinOutput]:
-        print(kwargs)
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1854,7 +1848,10 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             )
 
         if cache_position is None:
-            raise ValueError("You must provide a `cache_position`.")
+            if input_ids is not None:
+                cache_position = torch.arange(input_ids.shape[1], device=input_ids.device)
+            else:
+                cache_position = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -1877,6 +1874,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
 
         new_cache = None
+        cache = past_key_values
 
         for i, residual_block in enumerate(self.blocks):
             if output_hidden_states:
@@ -1885,14 +1883,14 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     residual_block.__call__,
                     hidden_states,
-                    cache_position[None],
+                    cache_position,
                     attention_mask,
                     None if cache is None else cache.states[i],
                 )
             else:
                 layer_outputs = residual_block(
                     hidden_states,
-                    cache_position[None],
+                    cache_position,
                     attention_mask,
                     None if cache is None else cache.states[i],
                 )
@@ -1920,7 +1918,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
         return GriffinOutput(
             last_hidden_state=hidden_states,
-            state=new_cache,
+            past_key_values=new_cache,
             hidden_states=all_hidden_states,
         )
 
@@ -2039,7 +2037,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        cache: Optional[GriffinCache] = None,
+        past_key_values: Optional[GriffinCache] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -2081,7 +2079,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
             input_ids=input_ids,
             cache_position=cache_position,
             attention_mask=attention_mask,
-            cache=cache,
+            past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_hidden_states=output_hidden_states,
@@ -2117,41 +2115,41 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         return GriffinCausalLMOutput(
             loss=loss,
             logits=logits,
-            state=outputs.state,
+            past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
+            attentions=(),
         )
 
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        state: Optional[GriffinCache] = None,
+        past_key_values: Optional[GriffinCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds=None,
         attention_mask=None,
         **kwargs,
     ):
-        if state is not None:
+        if past_key_values is not None or cache_position.shape[0] == 1:
             input_ids = input_ids[:, -1].unsqueeze(-1)
+            if cache_position is not None:
+                cache_position = cache_position[-1:]
 
-        if inputs_embeds is not None and state is None:
+        if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
 
-        model_inputs["state"] = state
+        model_inputs["past_key_values"] = past_key_values
         model_inputs["cache_position"] = cache_position
 
-        batch_size = input_ids.shape[0]
-        num_tokens = torch.zeros([batch_size], dtype=torch.int32,)
-
-        if state is not None:
+        if past_key_values is not None:
             attn_mask = _compute_cache_mask(
-                num_tokens,
+                torch.zeros([], dtype=torch.int32, device=input_ids.device),
                 self.config.attention_window_size,
             )
         else:
-            attn_mask = _compute_forward_pass_mask(
-                cache_position[None],
+            attn_mask = compute_forward_pass_mask(
+                cache_position,
                 self.config.attention_window_size,
             )
 
