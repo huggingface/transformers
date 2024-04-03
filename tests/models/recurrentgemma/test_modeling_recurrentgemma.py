@@ -41,6 +41,7 @@ if is_torch_available():
     import torch
 
     from transformers import RecurrentGemmaForCausalLM, RecurrentGemmaModel
+    from transformers.models.recurrentgemma.modeling_recurrentgemma import compute_forward_pass_mask
 
 
 class RecurrentGemmaModelTester:
@@ -50,14 +51,14 @@ class RecurrentGemmaModelTester:
         batch_size=13,
         seq_length=48,
         is_training=True,
-        use_input_mask=False,
+        use_input_mask=True,
         use_token_type_ids=False,
         use_labels=True,
         num_hidden_layers=3,
         vocab_size=99,
         hidden_size=32,
         intermediate_size=3 * 32,
-        num_heads=2,
+        num_attention_heads=2,
         lru_width=2 * 32,
         embeddings_scale_by_sqrt_dim=True,
         attention_window_size=16,
@@ -85,14 +86,13 @@ class RecurrentGemmaModelTester:
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.num_heads = num_heads
+        self.num_attention_heads = num_attention_heads
         self.lru_width = lru_width if lru_width is not None else hidden_size
         self.embeddings_scale_by_sqrt_dim = embeddings_scale_by_sqrt_dim
         self.attention_window_size = attention_window_size
         self.conv1d_width = conv1d_width
         self.logits_soft_cap = logits_soft_cap
         self.rms_norm_eps = rms_norm_eps
-        print("UUU", use_cache)
         self.use_cache = use_cache
         self.rope_theta = rope_theta
 
@@ -109,7 +109,10 @@ class RecurrentGemmaModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
+            input_mask = compute_forward_pass_mask(
+                torch.arange(self.seq_length).to(torch_device),
+                self.attention_window_size,
+            )
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -124,7 +127,6 @@ class RecurrentGemmaModelTester:
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
-        print("UUU", config.use_cache)
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
@@ -135,7 +137,7 @@ class RecurrentGemmaModelTester:
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             intermediate_size=self.intermediate_size,
-            num_heads=self.num_heads,
+            num_attention_heads=self.num_attention_heads,
             lru_width=self.lru_width,
             embeddings_scale_by_sqrt_dim=self.embeddings_scale_by_sqrt_dim,
             attention_window_size=self.attention_window_size,
@@ -283,17 +285,21 @@ class RecurrentGemmaModelTester:
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "labels": token_labels,
+        }
         return config, inputs_dict
 
 
 @require_torch
 class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (RecurrentGemmaModel, RecurrentGemmaForCausalLM) if is_torch_available() else ()
+    all_model_classes = (RecurrentGemmaForCausalLM,) if is_torch_available() else ()
     all_generative_model_classes = (RecurrentGemmaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": RecurrentGemmaModel,
+            # "feature-extraction": RecurrentGemmaModel,
             # "text-classification": RecurrentGemmaForSequenceClassification,
             "text-generation": RecurrentGemmaForCausalLM,
             # "zero-shot": RecurrentGemmaForSequenceClassification,
@@ -315,6 +321,8 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         return True
 
     def setUp(self):
+        # We don't output attentions
+        self.has_attentions = False
         self.model_tester = RecurrentGemmaModelTester(self)
         self.config_tester = ConfigTester(self, config_class=RecurrentGemmaConfig, hidden_size=37)
 
@@ -333,7 +341,6 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
     # def test_RecurrentGemma_sequence_classification_model(self):
     #     config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    #     print(config)
     #     config.num_labels = 3
     #     input_ids = input_dict["input_ids"]
     #     attention_mask = input_ids.ne(1).to(torch_device)

@@ -163,7 +163,7 @@ def _compute_causal_mask(
     return mask
 
 
-def _compute_forward_pass_mask(
+def compute_forward_pass_mask(
     segment_pos: torch.Tensor,
     window_size: int,
 ) -> torch.Tensor:
@@ -402,16 +402,23 @@ class LocalAttentionBlock(nn.Module):
             keys = torch.concatenate([cache["keys"], keys], dim=-3)
             values = torch.concatenate([cache["values"], values], dim=-3)
 
+            if attention_mask is None:
+                attention_mask = _compute_cache_mask(segment_pos, self.window_size)
         else:
             new_cache = _attention_cache_from_prompt(
                 keys, values, segment_pos, self.window_size
             )
 
+            if attention_mask is None:
+                attention_mask = compute_forward_pass_mask(segment_pos, self.window_size)
+
         # Compute attention.
         logits = einops.einsum(queries, keys, "b t n h, b s n h -> b n t s")
         logits = logits * (self.head_dim ** -0.5)
+
         # Expand for batch and heads axis.
-        attn_mask = attention_mask[None, None]
+        attn_mask = attention_mask[None, None].type(torch.bool)
+        print(attn_mask.shape, logits.shape)
 
         masked_logits = torch.where(attn_mask, logits, _MIN_LOGITS_VALUE)
         masked_logits = masked_logits.type(torch.float32)
@@ -1327,16 +1334,12 @@ class Conv1D(nn.Module):
 
         # - The convolution is implemented as a manual loop so that we can
         #   incorporate the window masking further below.
-        # print("---")
-        # print(x.shape)
-        # print(prompt_len, output_len, temporal_width)
         for temporal_shift in range(temporal_width):
             start_idx, end_idx = self._convolution_window_indices(
                 prompt_len=prompt_len,
                 shift_back=temporal_shift,
                 output_len=output_len,
             )
-            # print(temporal_shift, start_idx, end_idx)
             x_window = x[:, start_idx:end_idx]
 
             if state is None:
@@ -1366,7 +1369,6 @@ class Conv1D(nn.Module):
         new_state = x[:, 1 - self.temporal_width:].type(state_dtype)
         new_state = self._pad_state(new_state)
 
-        # print("=======")
         return convolution_output, new_state
 
     def _concatenate_with_state(
@@ -1561,7 +1563,7 @@ class GriffinCache:
             self.states.append(ResidualBlock.init_cache(
                 batch_size=batch_size,
                 width=config.hidden_size,
-                num_heads=config.num_heads,
+                num_heads=config.num_attention_heads,
                 attention_window_size=config.attention_window_size,
                 temporal_block_type=block_type,
                 lru_width=config.lru_width,
@@ -1797,7 +1799,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             ResidualBlock(
                 width=self.config.hidden_size,
                 mlp_expanded_width=self.config.intermediate_size,
-                num_heads=self.config.num_heads,
+                num_heads=self.config.num_attention_heads,
                 attention_window_size=self.config.attention_window_size,
                 temporal_block_type=block_type,
                 lru_width=self.config.lru_width,
@@ -1847,7 +1849,10 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             )
 
         if cache_position is None:
-            raise ValueError("You must provide a `cache_position`.")
+            if input_ids is not None:
+                cache_position = torch.arange(input_ids.shape[1], device=input_ids.device)
+            else:
+                cache_position = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -2124,8 +2129,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         attention_mask=None,
         **kwargs,
     ):
-        print(input_ids.shape, cache_position.shape, past_key_values is None)
-        if past_key_values is not None:
+        if past_key_values is not None or cache_position.shape[0] == 1:
             input_ids = input_ids[:, -1].unsqueeze(-1)
 
         if inputs_embeds is not None and past_key_values is None:
@@ -2138,11 +2142,11 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
 
         if past_key_values is not None:
             attn_mask = _compute_cache_mask(
-                torch.zeros([], dtype=torch.int32),
+                torch.zeros([], dtype=torch.int32, device=input_ids.device),
                 self.config.attention_window_size,
             )
         else:
-            attn_mask = _compute_forward_pass_mask(
+            attn_mask = compute_forward_pass_mask(
                 cache_position,
                 self.config.attention_window_size,
             )

@@ -1398,7 +1398,6 @@ class GenerationMixin:
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
                 inputs_tensor, model_kwargs, model_input_name
             )
-            print(-2)
 
         # 5. Prepare `input_ids` which will be used for auto-regressive generation
         if self.config.is_encoder_decoder:
@@ -1410,10 +1409,8 @@ class GenerationMixin:
                 bos_token_id=generation_config.bos_token_id,
                 device=inputs_tensor.device,
             )
-            print(-3)
         else:
             input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
-            print(-4)
 
         if streamer is not None:
             streamer.put(input_ids.cpu())
@@ -1441,7 +1438,6 @@ class GenerationMixin:
             generation_config.min_length = max(generation_config.min_length - inputs_tensor.shape[1], 0)
 
         if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
-            print(-5)
             if generation_config.cache_implementation == "static":
                 if model_kwargs.get("past_key_values", False) is not False:
                     raise ValueError(
@@ -1494,7 +1490,6 @@ class GenerationMixin:
         )
         # 10. go into different generation modes
         if generation_mode == GenerationMode.ASSISTED_GENERATION:
-            print(-1)
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     "num_return_sequences has to be 1 when doing assisted generate, "
@@ -1571,7 +1566,6 @@ class GenerationMixin:
             logits_warper = self._get_logits_warper(generation_config)
 
             # 12. expand input_ids with `num_return_sequences` additional sequences per batch
-            print(1, model_kwargs.keys())
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
                 expand_size=generation_config.num_return_sequences,
@@ -1579,7 +1573,6 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-            print(2, model_kwargs.keys())
             # 13. run sample
             result = self._sample(
                 input_ids,
@@ -1594,7 +1587,6 @@ class GenerationMixin:
                 streamer=streamer,
                 **model_kwargs,
             )
-            print(3)
 
         elif generation_mode == GenerationMode.BEAM_SEARCH:
             # 11. prepare beam search scorer
@@ -1982,10 +1974,8 @@ class GenerationMixin:
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # if the first step in the loop, encode all the prefix and obtain: (1) past_key_values;
             # (2) last_hidden_states; (3) logit_for_next_step; (4) update model kwargs for the next step
-            print("AA")
             if model_kwargs.get("past_key_values") is None:
                 # prepare inputs
-                print("BB")
                 model_kwargs["use_cache"] = True
                 model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
@@ -2005,14 +1995,12 @@ class GenerationMixin:
                 # next logit for contrastive search to select top-k candidate tokens
                 logit_for_next_step = outputs.logits[:, -1, :]
 
-                print("!!!!!!!!!!!!!", self.use_cache)
                 model_kwargs = self._update_model_kwargs_for_generation(
                     outputs,
                     model_kwargs,
                     is_encoder_decoder=self.config.is_encoder_decoder,
                     standardize_cache_format=True,
                 )
-                print(model_kwargs.keys())
                 if not sequential:
                     # Expands model inputs top_k times, for batched forward passes (akin to beam search).
                     _, model_kwargs = self._expand_inputs_for_generation(
@@ -2081,7 +2069,6 @@ class GenerationMixin:
                 for i in range(top_k):
                     # compute the candidate tokens by the language model and collect their hidden_states
                     next_model_inputs = self.prepare_inputs_for_generation(top_k_ids[:, i].view(-1, 1), **model_kwargs)
-                    print("SSS", self.config.use_cache)
                     outputs = self(
                         **next_model_inputs,
                         return_dict=True,
@@ -2668,7 +2655,6 @@ class GenerationMixin:
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ['Today is a beautiful day, and we must do everything possible to make it a day of celebration.']
         ```"""
-        print("11", model_kwargs.get("use_cache"), self.config.use_cache)
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
@@ -2740,7 +2726,6 @@ class GenerationMixin:
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
-            print("6", model_kwargs["use_cache"], self.config.use_cache)
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             # forward pass to get next token
@@ -2794,13 +2779,11 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
-            print("5", outputs.past_key_values is None)
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,
                 model_kwargs,
                 is_encoder_decoder=self.config.is_encoder_decoder,
             )
-            print(model_kwargs["past_key_values"] is None)
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
             this_peer_finished = unfinished_sequences.max() == 0
