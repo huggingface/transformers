@@ -30,7 +30,7 @@ if is_mamba_ssm_available():
     from mamba_ssm.models.config_mamba import MambaConfig as MambaConfigSSM
     from mamba_ssm.models.mixer_seq_simple import MambaLMHeadModel
 
-    def convert_ssm_config_to_hf_config(config_ssm: MambaConfig_ssm) -> MambaConfig:
+    def convert_ssm_config_to_hf_config(config_ssm: MambaConfigSSM) -> MambaConfig:
         """Convert a MambaConfig from mamba_ssm to a MambaConfig from transformers."""
         hf_config = MambaConfig()
         # Set config hidden size, num hidden layers, and vocab size directly from the original config
@@ -58,7 +58,7 @@ def convert_mamba_ssm_checkpoint_to_huggingface_model(
         raise ImportError(
             "Calling convert_mamba_ssm_checkpoint_to_huggingface_model requires the mamba_ssm library to be installed. Please install it with `pip install mamba_ssm`."
         )
-    original_ssm_config = MambaConfig_ssm(**original_ssm_config_dict)
+    original_ssm_config = MambaConfigSSM(**original_ssm_config_dict)
 
     # Convert mamba_ssm config to huggingface MambaConfig
     hf_config = convert_ssm_config_to_hf_config(original_ssm_config)
@@ -77,17 +77,9 @@ def validate_converted_model(
     original_state_dict: dict, original_ssm_config_dict: dict, hf_model: MambaForCausalLM, tokenizer: AutoTokenizer
 ) -> None:
     """Validate the converted model returns the same output as the original model."""
-    if not is_mamba_ssm_available():
-        raise ImportError(
-            "Calling validate_converted_model requires the mamba_ssm library to be installed. Please install it with `pip install mamba_ssm`."
-        )
-    if not torch.cuda.is_available():
-        raise ValueError(
-            "This script is to be run with a CUDA device, as the original mamba_ssm model does not support cpu."
-        )
     torch_device = "cuda"
 
-    original_config = MambaConfig_ssm(**original_ssm_config_dict)
+    original_config = MambaConfigSSM(**original_ssm_config_dict)
     original_model = MambaLMHeadModel(original_config).to(torch_device)
     original_model.load_state_dict(original_state_dict)
 
@@ -106,6 +98,14 @@ def validate_converted_model(
 def convert_mamba_checkpoint_file_to_huggingface_model_file(
     mamba_checkpoint_path: str, config_json_file: str, output_dir: str
 ) -> None:
+    if not is_mamba_ssm_available():
+        raise ImportError(
+            "Calling convert_mamba_checkpoint_file_to_huggingface_model_file requires the mamba_ssm library to be installed. Please install it with `pip install mamba_ssm`."
+        )
+    if not torch.cuda.is_available():
+        raise ValueError(
+            "This script is to be run with a CUDA device, as the original mamba_ssm model does not support cpu."
+        )
     logger.info(f"Loading model from {mamba_checkpoint_path} based on config from {config_json_file}")
     # Load weights and config from paths
     original_state_dict = torch.load(mamba_checkpoint_path, map_location="cpu")
