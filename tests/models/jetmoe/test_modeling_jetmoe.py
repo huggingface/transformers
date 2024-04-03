@@ -67,7 +67,7 @@ class JetMoEModelTester:
         num_key_value_heads=2,
         intermediate_size=37,
         hidden_act="silu",
-        moe_num_experts=8,
+        moe_num_experts=4,
         moe_top_k=2,
         max_position_embeddings=512,
         type_vocab_size=16,
