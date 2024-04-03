@@ -44,18 +44,18 @@ class JetMoEConfig(PretrainedConfig):
             `inputs_ids` passed when calling [`JetMoEModel`]
         hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
-        num_layers (`<fill_type>`, *optional*, defaults to 24): <fill_docstring>
+        num_layers (`int`, *optional*, defaults to 24): Defines the number of blocks.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        kv_channels (`<fill_type>`, *optional*, defaults to 128): <fill_docstring>
-        ffn_hidden_size (`<fill_type>`, *optional*, defaults to 5632): <fill_docstring>
+        kv_channels (`int`, *optional*, defaults to 128): Defines the number of channels for the key and value tensors.
+        ffn_hidden_size (`int`, *optional*, defaults to 5632): Defines the hidden size of the feed-forward layer.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model might ever be used with. JetMoE's sliding window attention
             allows sequence of up to 4096*32 tokens.
-        activation_function (`<fill_type>`, *optional*, defaults to `"silu"`): <fill_docstring>
-        glu (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        moe_num_experts (`<fill_type>`, *optional*, defaults to 8): <fill_docstring>
-        moe_top_k (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+        activation_function (`string`, *optional*, defaults to `"silu"`): Defines the activation function for MLP experts.
+        glu (`bool`, *optional*, defaults to `True`): Whether to use Gated Linear Units in the MLP experts.
+        moe_num_experts (`int`, *optional*, defaults to 8): Defines the number of experts in the mixture of experts.
+        moe_top_k (`int, *optional*, defaults to 2): Defines the number of experts to use for each token.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -65,7 +65,7 @@ class JetMoEConfig(PretrainedConfig):
             The id of the "end-of-sequence" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied.
-        bias (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        bias (`bool`, *optional*, defaults to `True`): Whether to use bias in the feed-forward and attention layer.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
