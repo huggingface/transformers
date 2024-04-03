@@ -557,7 +557,6 @@ class DbrxSdpaAttention(DbrxAttention):
     SDPA API.
     """
 
-    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
