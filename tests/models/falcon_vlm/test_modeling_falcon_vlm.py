@@ -19,7 +19,6 @@ import gc
 import unittest
 
 import requests
-from huggingface_hub import hf_hub_download
 
 from transformers import (
     AutoProcessor,
@@ -57,7 +56,7 @@ class FalconVLMVisionText2TextModelTester:
         text_config={
             "model_type": "falcon",
             "seq_length": 7,
-            "is_training": True,
+            "is_training": False,
             "use_input_mask": True,
             "use_token_type_ids": False,
             "use_labels": True,
@@ -259,7 +258,7 @@ class FalconVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         gc.collect()
         torch.cuda.empty_cache()
- 
+
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
@@ -267,11 +266,9 @@ class FalconVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         cats_image = Image.open(requests.get(url, stream=True).raw)
 
-        inputs = self.processor(
-            self.prompt, images=cats_image, return_tensors="pt", padding=True
-        ).to(torch_device)
+        inputs = self.processor(self.prompt, images=cats_image, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['\n\nThis image shows two cats lying on a pink blanket on a couch.']
+        EXPECTED_DECODED_TEXT = ["\n\nThis image shows two cats lying on a pink blanket on a couch."]
         self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
