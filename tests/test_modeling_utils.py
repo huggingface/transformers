@@ -937,7 +937,7 @@ class ModelUtilsTest(TestCasePlus):
             postsaved_memory = psutil.virtual_memory().used
             postsaved_output = saved_model(input_tokens)[0]
 
-        self.assertTrue(postsaved_memory - presaved_memory < 6e5)  # memory plus shard size plus buff
+        self.assertTrue(postsaved_memory - presaved_memory < 6e5)  # memory plus shard size plus buffer
         self.assertTrue(torch.allclose(cpu_output, presaved_output, atol=1e-4))
         self.assertTrue(torch.allclose(presaved_output, postsaved_output))
 

@@ -372,6 +372,7 @@ def shard_checkpoint(
 
         # If a `weight` shares the same underlying storage as another tensor, we put `weight` in the same `block`
         # unless if is a 'meta' parameter tensor
+        # TODO: find_tied_parameters() check to replace meta device workaround
         if storage_id in storage_id_to_block and weight.device != torch.device("meta"):
             block_id = storage_id_to_block[storage_id]
             sharded_state_dicts[block_id][key] = weight
@@ -2357,15 +2358,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Save the model
         if state_dict is None:
-            # if any model parameters are offloaded, make module map
-            if any(
-                hasattr(module, "_hf_hook")
-                and isinstance(module._hf_hook, AlignDevicesHook)
-                and module._hf_hook.offload
-                for module in model_to_save.modules()
-            ):
+            # if any model parameters are offloaded to the disk, make module map
+            if hasattr(self, "hf_device_map") and "disk" in self.hf_device_map:
                 warnings.warn(
-                    "Attempting to save a model with disk-offloaded modules. Ensure that unallocated CPU memory exceeds the `shard_size` (5GB default)"
+                    "Attempting to save a model with disk-offloaded modules. Ensure that unallocated execution device (GPU if available, else CPU) memory exceeds the `shard_size` (5GB default)"
                 )
                 for name, module in model_to_save.named_modules():
                     if name == "":
@@ -2400,10 +2396,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     # In the non-tensor case, fall back to the pointer of the object itself
                     ptrs[id(tensor)].append(name)
 
-            # These are all the pointers of shared tensors, excluding disk offloaded tensors in the meta device
-            shared_ptrs = {
-                ptr: names for ptr, names in ptrs.items() if len(names) > 1 and ptr[0] != torch.device("meta")
-            }
+            # These are all the pointers of shared tensors
+            if hasattr(self, "device_map"):
+                tied_params = find_tied_parameters(self)
+                shared_ptrs = {ptr: names for ptr, names in ptrs.items() if names in tied_params}
+            else:
+                shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
             warn_names = set()
             for names in shared_ptrs.values():
                 # Removing the keys which are declared as known duplicates on
@@ -2467,12 +2465,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         for shard_file, shard in shards.items():
             # remake shard with onloaded parameters if necessary
             if module_map:
-                original_values = {}
                 # init state_dict for this shard
                 state_dict = {name: "" for name in shard}
                 # extract data for shard state dict
                 for key in state_dict.keys():
-                    original_values[key] = state_dict[key]
                     module = module_map[key]
                     root = key[: key.rfind(".")]  # module without .weight or .bias
                     preforward = False
@@ -2492,12 +2488,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     if preforward:
                         module._hf_hook.post_forward(module, torch.tensor([]))
 
-                # transform shard's state dict back to single shard
-                shard = {name: state_dict}  # will be ({name: tensor}, None)
-                name = list(shard.keys())[0]  # will have one name
-                shard = shard[name]
-                del state_dict
-                gc.collect()
+                # assign shard to be state dict with onloaded parameters
+                shard = state_dict
 
             if safe_serialization:
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
