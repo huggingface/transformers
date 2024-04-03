@@ -84,7 +84,7 @@ class JambaConfig(PretrainedConfig):
             The id of the "end-of-sequence" token.
         sliding_window (`int`, *optional*):
             Sliding window attention window size. If not specified, will default to `None`.
-        n_ctx (`int`, *optional*, defaults to 262144):
+        max_position_embeddings (`int`, *optional*, defaults to 262144):
             This value doesn't have any real effect. The maximum sequence length that this model is intended to be
             used with. It can be used with longer sequences, but performance may degrade.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -146,7 +146,7 @@ class JambaConfig(PretrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         sliding_window=None,
-        n_ctx=262144,
+        max_position_embeddings=262144,
         attention_dropout=0.0,
         num_experts_per_tok=2,
         num_experts=16,
@@ -171,7 +171,7 @@ class JambaConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.sliding_window = sliding_window
-        self.n_ctx = n_ctx
+        self.max_position_embeddings = max_position_embeddings
         self.attention_dropout = attention_dropout
 
         # for backward compatibility
