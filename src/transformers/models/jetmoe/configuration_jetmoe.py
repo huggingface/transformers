@@ -44,7 +44,7 @@ class JetMoEConfig(PretrainedConfig):
             `inputs_ids` passed when calling [`JetMoEModel`]
         hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
-        num_layers (`int`, *optional*, defaults to 24): Defines the number of blocks.
+        num_hidden_layers (`int`, *optional*, defaults to 24): Defines the number of blocks.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_key_value_heads (`int`, *optional*, defaults to 16):
@@ -93,14 +93,14 @@ class JetMoEConfig(PretrainedConfig):
         "max_position_embeddings": "n_positions",
         "hidden_size": "n_embd",
         "num_attention_heads": "n_head",
-        "num_layers": "n_layer",
+        "num_hidden_layers": "n_layer",
     }
 
     def __init__(
         self,
         vocab_size=32000,
         hidden_size=2048,
-        num_layers=24,
+        num_hidden_layers=24,
         num_attention_heads=32,
         num_key_value_heads=16,
         kv_channels=128,
@@ -122,7 +122,7 @@ class JetMoEConfig(PretrainedConfig):
     ):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.num_layers = num_layers
+        self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.kv_channels = kv_channels

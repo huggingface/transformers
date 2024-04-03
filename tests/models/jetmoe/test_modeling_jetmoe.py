@@ -131,7 +131,7 @@ class JetMoEModelTester:
         return JetMoEConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
-            num_layers=self.num_hidden_layers,
+            num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
             kv_channels=self.kv_channels,
