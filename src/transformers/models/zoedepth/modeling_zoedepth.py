@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Intel Labs, OpenMMLab and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 Intel Labs and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,11 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ZoeDepth (Dense Prediction Transformers) model.
-
-This implementation is heavily inspired by OpenMMLab's implementation, found here:
-https://github.com/open-mmlab/mmsegmentation/blob/master/mmseg/models/decode_heads/zoedepth_head.py.
-
+""" PyTorch ZoeDepth model.
 """
 
 
@@ -443,7 +439,10 @@ class LogBinomial(nn.Module):
         """Compute log binomial distribution for n_classes
 
         Args:
-            n_classes (int, optional): number of output classes. Defaults to 256.
+            n_classes (`int`, *optional*, defaults to 256):
+                Number of output classes.
+            act (`torch.nn.Module`, *optional*, defaults to `torch.softmax`):
+                Activation function to apply to the output.
         """
         super().__init__()
         self.K = n_classes
@@ -451,28 +450,32 @@ class LogBinomial(nn.Module):
         self.register_buffer("k_idx", torch.arange(0, n_classes).view(1, -1, 1, 1))
         self.register_buffer("K_minus_1", torch.Tensor([self.K - 1]).view(1, -1, 1, 1))
 
-    def forward(self, x, t=1.0, eps=1e-4):
-        """Compute log binomial distribution for x
+    def forward(self, probabilities, temperature=1.0, eps=1e-4):
+        """Compute the log binomial distribution for probabilities.
 
         Args:
-            x (torch.Tensor - NCHW): probabilities
-            t (float, torch.Tensor - NCHW, optional): Temperature of distribution. Defaults to 1..
-            eps (float, optional): Small number for numerical stability. Defaults to 1e-4.
+            probabilities (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
+                Tensor containing probabilities of each class.
+            temperature (`float` or `torch.Tensor` of shape `(batch_size, num_channels, height, width)`, *optional*, defaults to 1):
+                Temperature of distribution.
+            eps (`float`, *optional*, defaults to 1e-4):
+                Small number for numerical stability.
 
         Returns:
-            torch.Tensor -NCHW: log binomial distribution logbinomial(p;t)
+            `torch.Tensor` of shape `(batch_size, num_channels, height, width)`:
+                Log binomial distribution logbinomial(p;t).
         """
-        if x.ndim == 3:
-            x = x.unsqueeze(1)  # make it nchw
+        if probabilities.ndim == 3:
+            probabilities = probabilities.unsqueeze(1)  # make it (batch_size, num_channels, height, width)
 
-        one_minus_x = torch.clamp(1 - x, eps, 1)
-        x = torch.clamp(x, eps, 1)
+        one_minus_probabilities = torch.clamp(1 - probabilities, eps, 1)
+        probabilities = torch.clamp(probabilities, eps, 1)
         y = (
             log_binom(self.K_minus_1, self.k_idx)
-            + self.k_idx * torch.log(x)
-            + (self.K - 1 - self.k_idx) * torch.log(one_minus_x)
+            + self.k_idx * torch.log(probabilities)
+            + (self.K - 1 - self.k_idx) * torch.log(one_minus_probabilities)
         )
-        return self.act(y / t, dim=1)
+        return self.act(y / temperature, dim=1)
 
 
 class ZoeDepthConditionalLogBinomial(nn.Module):
@@ -487,16 +490,26 @@ class ZoeDepthConditionalLogBinomial(nn.Module):
         min_temp=1e-7,
         act=torch.softmax,
     ):
-        """Conditional Log Binomial distribution
+        """Conditional Log Binomial distribution.
 
         Args:
-            in_features (int): number of input channels in main feature
-            condition_dim (int): number of input channels in condition feature
-            n_classes (int, optional): Number of classes. Defaults to 256.
-            bottleneck_factor (int, optional): Hidden dim factor. Defaults to 2.
-            p_eps (float, optional): small eps value. Defaults to 1e-4.
-            max_temp (float, optional): Maximum temperature of output distribution. Defaults to 50.
-            min_temp (float, optional): Minimum temperature of output distribution. Defaults to 1e-7.
+            in_features (`int`):
+                Number of input channels in the main feature.
+            condition_dim (`int`):
+                Number of input channels in the condition feature.
+            n_classes (`int`, *optional*, defaults to 256):
+                Number of classes.
+            bottleneck_factor (`int`, *optional*, defaults to 2):
+                Hidden dim factor.
+            p_eps (`float`, *optional*, defaults to 1e-4):
+                Small eps value. 
+            max_temp (`float`, *optional*, defaults to 50):
+                Maximum temperature of output distribution.
+            min_temp (`float`, *optional*, defaults to 1e-7):
+                Minimum temperature of output distribution.
+            act (`torch.nn.Module`, *optional*, defaults to `torch.softmax`):
+                Activation function to apply to the output.
+
         """
         super().__init__()
         self.p_eps = p_eps
@@ -507,33 +520,35 @@ class ZoeDepthConditionalLogBinomial(nn.Module):
         self.mlp = nn.Sequential(
             nn.Conv2d(in_features + condition_dim, bottleneck, kernel_size=1, stride=1, padding=0),
             nn.GELU(),
-            # 2 for p linear norm, 2 for t linear norm
+            # 2 for probabilities linear norm, 2 for temperature linear norm
             nn.Conv2d(bottleneck, 2 + 2, kernel_size=1, stride=1, padding=0),
             nn.Softplus(),
         )
 
-    def forward(self, x, cond):
-        """Forward pass
-
+    def forward(self, main_feature, condition_feature):
+        """
         Args:
-            x (torch.Tensor - NCHW): Main feature
-            cond (torch.Tensor - NCHW): condition feature
+            main_feature (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
+                Main feature.
+            condition_feature (torch.Tensor of shape `(batch_size, num_channels, height, width)`):
+                Condition feature.
 
         Returns:
-            torch.Tensor: Output log binomial distribution
+            `torch.Tensor`:
+                Output log binomial distribution
         """
-        pt = self.mlp(torch.concat((x, cond), dim=1))
-        p, t = pt[:, :2, ...], pt[:, 2:, ...]
+        pt = self.mlp(torch.concat((main_feature, condition_feature), dim=1))
+        probabilities, temperature = pt[:, :2, ...], pt[:, 2:, ...]
 
-        p = p + self.p_eps
-        p = p[:, 0, ...] / (p[:, 0, ...] + p[:, 1, ...])
+        probabilities = probabilities + self.p_eps
+        probabilities = probabilities[:, 0, ...] / (probabilities[:, 0, ...] + probabilities[:, 1, ...])
 
-        t = t + self.p_eps
-        t = t[:, 0, ...] / (t[:, 0, ...] + t[:, 1, ...])
-        t = t.unsqueeze(1)
-        t = (self.max_temp - self.min_temp) * t + self.min_temp
+        temperature = temperature + self.p_eps
+        temperature = temperature[:, 0, ...] / (temperature[:, 0, ...] + temperature[:, 1, ...])
+        temperature = temperature.unsqueeze(1)
+        temperature = (self.max_temp - self.min_temp) * temperature + self.min_temp
 
-        return self.log_binomial_transform(p, t)
+        return self.log_binomial_transform(probabilities, temperature)
 
 
 class ZoeDepthSeedBinRegressor(nn.Module):
@@ -541,14 +556,18 @@ class ZoeDepthSeedBinRegressor(nn.Module):
         """Bin center regressor network. Bin centers are bounded on (min_depth, max_depth) interval.
 
         Args:
-            in_features (int): input channels
-            n_bins (int, optional): Number of bin centers. Defaults to 16.
-            mlp_dim (int, optional): Hidden dimension. Defaults to 256.
-            min_depth (float, optional): Min depth value. Defaults to 1e-3.
-            max_depth (float, optional): Max depth value. Defaults to 10.
+            in_features (`int`):
+                Number of input channels.
+            n_bins (`int`, *optional*, defaults to 16):
+                Number of bin centers.
+            mlp_dim (`int`, *optional*, defaults to 256):
+                Hidden dimension.
+            min_depth (`float`, *optional*, defaults to 1e-3):
+                Min depth value.
+            max_depth (`float`, *optional*, defaults to 10):
+                Max depth value.
         """
         super().__init__()
-        self.version = "1_1"
         self.min_depth = min_depth
         self.max_depth = max_depth
 
@@ -563,17 +582,17 @@ class ZoeDepthSeedBinRegressor(nn.Module):
         """
         Returns tensor of bin_width vectors (centers). One vector b for every pixel
         """
-        B = self._net(x)
+        bins = self._net(x)
         eps = 1e-3
-        B = B + eps
-        B_widths_normed = B / B.sum(dim=1, keepdim=True)
-        B_widths = (self.max_depth - self.min_depth) * B_widths_normed  # .shape NCHW
+        bins = bins + eps
+        bin_widths_normed = bins / bins.sum(dim=1, keepdim=True)
+        bin_widths = (self.max_depth - self.min_depth) * bin_widths_normed  # shape (batch_size, num_channels, height, width)
         # pad has the form (left, right, top, bottom, front, back)
-        B_widths = nn.functional.pad(B_widths, (0, 0, 0, 0, 1, 0), mode="constant", value=self.min_depth)
-        B_edges = torch.cumsum(B_widths, dim=1)  # .shape NCHW
+        bin_widths = nn.functional.pad(bin_widths, (0, 0, 0, 0, 1, 0), mode="constant", value=self.min_depth)
+        bin_edges = torch.cumsum(bin_widths, dim=1)  # shape (batch_size, num_channels, height, width)
 
-        B_centers = 0.5 * (B_edges[:, :-1, ...] + B_edges[:, 1:, ...])
-        return B_widths_normed, B_centers
+        bin_centers = 0.5 * (bin_edges[:, :-1, ...] + bin_edges[:, 1:, ...])
+        return bin_widths_normed, bin_centers
 
 
 class ZoeDepthSeedBinRegressorUnnormed(nn.Module):
@@ -581,14 +600,18 @@ class ZoeDepthSeedBinRegressorUnnormed(nn.Module):
         """Bin center regressor network. Bin centers are unbounded
 
         Args:
-            in_features (int): input channels
-            n_bins (int, optional): Number of bin centers. Defaults to 16.
-            mlp_dim (int, optional): Hidden dimension. Defaults to 256.
-            min_depth (float, optional): Not used. (for compatibility with SeedBinRegressor)
-            max_depth (float, optional): Not used. (for compatibility with SeedBinRegressor)
+            in_features (`int`):
+                Number of input channels.
+            n_bins (`int`, *optional*, defaults to 16):
+                Number of bin centers.
+            mlp_dim (`int`, *optional*, defaults to 256):
+                Hidden dimension.
+            min_depth (`float`, *optional*):
+                Not used. (for compatibility with SeedBinRegressor)
+            max_depth (`float`, *optional*):
+                Not used. (for compatibility with SeedBinRegressor)
         """
         super().__init__()
-        self.version = "1_1"
         self._net = nn.Sequential(
             nn.Conv2d(in_features, mlp_dim, 1, 1, 0),
             nn.ReLU(inplace=True),
@@ -600,8 +623,8 @@ class ZoeDepthSeedBinRegressorUnnormed(nn.Module):
         """
         Returns tensor of bin_width vectors (centers). One vector b for every pixel
         """
-        B_centers = self._net(x)
-        return B_centers, B_centers
+        bin_centers = self._net(x)
+        return bin_centers, bin_centers
 
 
 @torch.jit.script
@@ -610,9 +633,13 @@ def inv_attractor(dx, alpha: float = 300, gamma: int = 2):
     This is the default one according to the accompanying paper.
 
     Args:
-        dx (torch.Tensor): The difference tensor dx = Ai - Cj, where Ai is the attractor point and Cj is the bin center.
-        alpha (float, optional): Proportional Attractor strength. Determines the absolute strength. Lower alpha = greater attraction. Defaults to 300.
-        gamma (int, optional): Exponential Attractor strength. Determines the "region of influence" and indirectly number of bin centers affected. Lower gamma = farther reach. Defaults to 2.
+        dx (`torch.Tensor`):
+            The difference tensor dx = Ai - Cj, where Ai is the attractor point and Cj is the bin center.
+        alpha (`float`, *optional*, defaults to 300):
+            Proportional Attractor strength. Determines the absolute strength. Lower alpha = greater attraction.
+        gamma (`int`, *optional*, defaults to 2):
+            Exponential Attractor strength. Determines the "region of influence" and indirectly number of bin centers affected.
+            Lower gamma = farther reach.
 
     Returns:
         torch.Tensor: Delta shifts - dc; New bin centers = Old bin centers + dc
@@ -655,54 +682,61 @@ class ZoeDepthAttractorLayer(nn.Module):
             nn.ReLU(inplace=True),
         )
 
-    def forward(self, x, b_prev, prev_b_embedding=None, interpolate=True, is_for_query=False):
+    def forward(self, x, prev_bin, prev_bin_embedding=None, interpolate=True):
         """
         Args:
-            x (torch.Tensor) : feature block; shape - n, c, h, w
-            b_prev (torch.Tensor) : previous bin centers normed; shape - n, prev_nbins, h, w
+            x (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
+                Feature block.
+            prev_bin (`torch.Tensor` of shape `(batch_size, prev_number_of_bins, height, width)`):
+                Previous bin centers normed.
+            prev_bin_embedding (`torch.Tensor`, *optional*):
+                Optional previous bin embeddings.
+            interpolate (`bool`, *optional*, defaults to `True`):
+                Whether to interpolate the previous bin embeddings to the size of the input features.
 
         Returns:
-            tuple(torch.Tensor,torch.Tensor) : new bin centers normed and scaled; shape - n, nbins, h, w
+            `Tuple[`torch.Tensor`, `torch.Tensor`]:
+                New bin centers normed and scaled.
         """
-        if prev_b_embedding is not None:
+        if prev_bin_embedding is not None:
             if interpolate:
-                prev_b_embedding = nn.functional.interpolate(
-                    prev_b_embedding, x.shape[-2:], mode="bilinear", align_corners=True
+                prev_bin_embedding = nn.functional.interpolate(
+                    prev_bin_embedding, x.shape[-2:], mode="bilinear", align_corners=True
                 )
-            x = x + prev_b_embedding
+            x = x + prev_bin_embedding
 
-        A = self._net(x)
+        attractors = self._net(x)
         eps = 1e-3
-        A = A + eps
-        n, c, h, w = A.shape
-        A = A.view(n, self.n_attractors, 2, h, w)
-        A_normed = A / A.sum(dim=2, keepdim=True)  # n, a, 2, h, w
-        A_normed = A[:, :, 0, ...]  # n, na, h, w
+        attractors = attractors + eps
+        batch_size, _, height, width = attractors.shape
+        attractors = attractors.view(batch_size, self.n_attractors, 2, height, width)
+        attractors_normed = attractors / attractors.sum(dim=2, keepdim=True)  # batch_size, num_attractors, 2, height, width
+        attractors_normed = attractors[:, :, 0, ...]  # batch_size, batch_size*num_attractors, height, width
 
-        b_prev = nn.functional.interpolate(b_prev, (h, w), mode="bilinear", align_corners=True)
-        b_centers = b_prev
+        prev_bin = nn.functional.interpolate(prev_bin, (height, width), mode="bilinear", align_corners=True)
+        b_centers = prev_bin
 
         # note: only attractor_type = "exp" is supported here, since no checkpoints were released with other attractor types
         distribution = inv_attractor
 
         if not self.memory_efficient:
             func = {"mean": torch.mean, "sum": torch.sum}[self.kind]
-            # shape (N, nbins, height, width)
-            delta_c = func(distribution(A_normed.unsqueeze(2) - b_centers.unsqueeze(1)), dim=1)
+            # shape (batch_size, num_bins, height, width)
+            delta_c = func(distribution(attractors_normed.unsqueeze(2) - b_centers.unsqueeze(1)), dim=1)
         else:
             delta_c = torch.zeros_like(b_centers, device=b_centers.device)
             for i in range(self.n_attractors):
-                # shape (N, nbins, height, width)
-                delta_c += distribution(A_normed[:, i, ...].unsqueeze(1) - b_centers)
+                # shape (batch_size, num_bins, height, width)
+                delta_c += distribution(attractors_normed[:, i, ...].unsqueeze(1) - b_centers)
 
             if self.kind == "mean":
                 delta_c = delta_c / self.n_attractors
 
-        b_new_centers = b_centers + delta_c
-        B_centers = (self.max_depth - self.min_depth) * b_new_centers + self.min_depth
-        B_centers, _ = torch.sort(B_centers, dim=1)
-        B_centers = torch.clip(B_centers, self.min_depth, self.max_depth)
-        return b_new_centers, B_centers
+        bin_new_centers = b_centers + delta_c
+        bin_centers = (self.max_depth - self.min_depth) * bin_new_centers + self.min_depth
+        bin_centers, _ = torch.sort(bin_centers, dim=1)
+        bin_centers = torch.clip(bin_centers, self.min_depth, self.max_depth)
+        return bin_new_centers, bin_centers
 
 
 class ZoeDepthAttractorLayerUnnormed(nn.Module):
@@ -740,58 +774,66 @@ class ZoeDepthAttractorLayerUnnormed(nn.Module):
             nn.Softplus(),
         )
 
-    def forward(self, x, b_prev, prev_b_embedding=None, interpolate=True):
+    def forward(self, x, prev_bin, prev_bin_embedding=None, interpolate=True):
         """
         Args:
-            x (torch.Tensor):
-                Feature block; shape - n, c, h, w
-            b_prev (torch.Tensor) :
-                Previous bin centers normed; shape - n, prev_nbins, h, w
+            x (`torch.Tensor` of shape (batch_size, num_channels, height, width)`):
+                Feature block.
+            prev_bin (`torch.Tensor` of shape (batch_size, prev_num_bins, height, width)`):
+                Previous bin centers normed.
+            prev_bin_embedding (`torch.Tensor`, *optional*):
+                Optional previous bin embeddings.
+            interpolate (`bool`, *optional*, defaults to `True`):
+                Whether to interpolate the previous bin embeddings to the size of the input features.
 
         Returns:
-            tuple(torch.Tensor,torch.Tensor) : new bin centers unbounded; shape - n, nbins, h, w. Two outputs just to keep the API consistent with the normed version
+            `Tuple[`torch.Tensor`, `torch.Tensor`]:
+                New bin centers unbounded. Two outputs just to keep the API consistent with the normed version.
         """
-        if prev_b_embedding is not None:
+        if prev_bin_embedding is not None:
             if interpolate:
-                prev_b_embedding = nn.functional.interpolate(
-                    prev_b_embedding, x.shape[-2:], mode="bilinear", align_corners=True
+                prev_bin_embedding = nn.functional.interpolate(
+                    prev_bin_embedding, x.shape[-2:], mode="bilinear", align_corners=True
                 )
-            x = x + prev_b_embedding
+            x = x + prev_bin_embedding
 
-        A = self._net(x)
-        n, c, h, w = A.shape
+        attractors = self._net(x)
+        height, width = attractors.shape[-2:]
 
-        b_prev = nn.functional.interpolate(b_prev, (h, w), mode="bilinear", align_corners=True)
-        b_centers = b_prev
+        prev_bin = nn.functional.interpolate(prev_bin, (height, width), mode="bilinear", align_corners=True)
+        bin_centers = prev_bin
 
         dist = inv_attractor
 
         if not self.memory_efficient:
             func = {"mean": torch.mean, "sum": torch.sum}[self.kind]
             # .shape N, nbins, h, w
-            delta_c = func(dist(A.unsqueeze(2) - b_centers.unsqueeze(1)), dim=1)
+            delta_c = func(dist(attractors.unsqueeze(2) - bin_centers.unsqueeze(1)), dim=1)
         else:
-            delta_c = torch.zeros_like(b_centers, device=b_centers.device)
+            delta_c = torch.zeros_like(bin_centers, device=bin_centers.device)
             for i in range(self.n_attractors):
-                delta_c += dist(A[:, i, ...].unsqueeze(1) - b_centers)  # .shape N, nbins, h, w
+                delta_c += dist(attractors[:, i, ...].unsqueeze(1) - bin_centers)  # shape batch_size, num_bins, height, width
 
             if self.kind == "mean":
                 delta_c = delta_c / self.n_attractors
 
-        b_new_centers = b_centers + delta_c
-        B_centers = b_new_centers
+        bin_new_centers = bin_centers + delta_c
+        bin_centers = bin_new_centers
 
-        return b_new_centers, B_centers
+        return bin_new_centers, bin_centers
 
 
 class ZoeDepthProjector(nn.Module):
     def __init__(self, in_features, out_features, mlp_dim=128):
-        """Projector MLP
+        """Projector MLP.
 
         Args:
-            in_features (int): input channels
-            out_features (int): output channels
-            mlp_dim (int, optional): hidden dimension. Defaults to 128.
+            in_features (`int`):
+                Number of input channels.
+            out_features (`int`):
+                Number of output channels.
+            mlp_dim (`int`, *optional*, defaults to 128):
+                Hidden dimension.
         """
         super().__init__()
 
@@ -870,7 +912,6 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
     """
 
     def __init__(self, config):
-        n_bins = config.n_bins
         bin_embedding_dim = config.bin_embedding_dim
         min_depth = config.min_depth
         max_depth = config.max_depth
@@ -879,8 +920,6 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         attractor_alpha = config.attractor_alpha
         attractor_gamma = config.attractor_gamma
         attractor_kind = config.attractor_kind
-        min_temp = config.min_temp
-        max_temp = config.max_temp
         bin_centers_type = config.bin_centers_type
 
         self.min_depth = min_depth
@@ -992,17 +1031,17 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         seed_bin_regressor = self.seed_bin_regressors[bin_conf_name]
         _, seed_b_centers = seed_bin_regressor(x)
         if self.bin_centers_type == "normed" or self.bin_centers_type == "hybrid2":
-            b_prev = (seed_b_centers - min_depth) / (max_depth - min_depth)
+            prev_bin = (seed_b_centers - min_depth) / (max_depth - min_depth)
         else:
-            b_prev = seed_b_centers
-        prev_b_embedding = self.seed_projector(x)
+            prev_bin = seed_b_centers
+        prev_bin_embedding = self.seed_projector(x)
 
         attractors = self.attractors[bin_conf_name]
         for projector, attractor, x in zip(self.projectors, attractors, x_blocks):
             b_embedding = projector(x)
-            b, b_centers = attractor(b_embedding, b_prev, prev_b_embedding, interpolate=True)
-            b_prev = b
-            prev_b_embedding = b_embedding
+            b, b_centers = attractor(b_embedding, prev_bin, prev_bin_embedding, interpolate=True)
+            prev_bin = b
+            prev_bin_embedding = b_embedding
 
         last = outconv_activation
 
@@ -1093,18 +1132,18 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
         _, seed_b_centers = self.seed_bin_regressor(x)
 
         if self.bin_centers_type == "normed" or self.bin_centers_type == "hybrid2":
-            b_prev = (seed_b_centers - self.min_depth) / (self.max_depth - self.min_depth)
+            prev_bin = (seed_b_centers - self.min_depth) / (self.max_depth - self.min_depth)
         else:
-            b_prev = seed_b_centers
+            prev_bin = seed_b_centers
 
-        prev_b_embedding = self.seed_projector(x)
+        prev_bin_embedding = self.seed_projector(x)
 
         # unroll this loop for better performance
         for projector, attractor, x in zip(self.projectors, self.attractors, x_blocks):
             b_embedding = projector(x)
-            b, b_centers = attractor(b_embedding, b_prev, prev_b_embedding, interpolate=True)
-            b_prev = b.clone()
-            prev_b_embedding = b_embedding.clone()
+            b, b_centers = attractor(b_embedding, prev_bin, prev_bin_embedding, interpolate=True)
+            prev_bin = b.clone()
+            prev_bin_embedding = b_embedding.clone()
 
         last = outconv_activation
 
