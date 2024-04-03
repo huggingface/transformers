@@ -253,7 +253,7 @@ class Rwkv5SelfAttention(nn.Module):
             try:
                 load_wkv5_cuda_kernel(config.head_size)
             except Exception as e:
-                logger.info(f"Could not load the custom CUDA kernel for RWKV5 attention due to:{e}")
+                logger.warning(f"Could not load the custom CUDA kernel for RWKV5 attention due to:{e}")
         self.layer_id = layer_id
         hidden_size = config.hidden_size
         self.head_size_divisor = config.head_size_divisor
