@@ -91,13 +91,7 @@ jobs:
     if: always()
     needs: [
       setup,
-      run_tests_gpu,
-      run_examples_gpu,
-      run_pipelines_tf_gpu,
-      run_pipelines_torch_gpu,
-      run_all_tests_torch_cuda_extensions_gpu,
-      run_tests_quantization_torch_gpu,
-      run_extract_warnings
+      run_tests_gpu
     ]
     steps:
       - name: Preliminary job status
