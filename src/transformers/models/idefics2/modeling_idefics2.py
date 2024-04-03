@@ -1794,8 +1794,38 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
         Returns:
-        """
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, Idefics2ForConditionalGeneration
+
+        >>> checkpoint = "HuggingFaceM4/idefic2"
+
+        >>> model = Idefics2ForConditionalGeneration.from_pretrained(checkpoint)
+        >>> processor = AutoProcessor.from_pretrained(checkpoint)
+
+        >>> dogs_image_url_1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_nlvr2/raw/main/image1.jpeg"
+        >>> dogs_image_url_2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_nlvr2/raw/main/image2.jpeg"
+
+        >>> prompts = [
+        ...     [
+        ...         "User:",
+        ...         dogs_image_url_1,
+        ...         "Describe this image.\nAssistant: An image of two dogs.\n",
+        ...         "User:",
+        ...         dogs_image_url_2,
+        ...         "Describe this image.\nAssistant:",
+        ...     ]
+        ... ]
+        >>> inputs = processor(prompts, return_tensors="pt")
+
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=6)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True)[0]
+        'User: Describe this image.\nAssistant: An image of two dogs.\nUser: Describe this image.\nAssistant: A brown dog is in a'
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

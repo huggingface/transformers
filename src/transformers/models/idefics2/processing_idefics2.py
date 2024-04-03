@@ -76,7 +76,7 @@ def build_string_from_input(prompt, image_seq_len, bos_token, image_token, fake_
     input_strings.append(f"{bos_token}")
     open_image_tag = False
     for elem in prompt:
-        if is_valid_image(elem):
+        if is_image_or_image_url(elem):
             input_strings.append(f"{fake_image_token}{image_token * image_seq_len}")
             open_image_tag = True
         else:
