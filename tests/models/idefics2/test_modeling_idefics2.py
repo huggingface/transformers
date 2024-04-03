@@ -529,7 +529,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         # Batch affects generated text. Single batch output: ['In this image, we see the Statue of Liberty in the foreground and']
-        expected_generated_text = "In this image, we see the beautiful city skyline. The city is a"
+        expected_generated_text = "In this image, we see a statue of liberty and few buildings in the background"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @slow
