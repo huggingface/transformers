@@ -43,3 +43,6 @@ RUN python3 -m pip install --no-cache-dir ./transformers[accelerate,testing,sent
 RUN cd transformers && python3 setup.py develop
 
 RUN python3 -c "from deepspeed.launcher.runner import main"
+
+# Remove nvml as it is not compatible with ROCm
+RUN python3 -m pip uninstall py3nvml pynvml -y
