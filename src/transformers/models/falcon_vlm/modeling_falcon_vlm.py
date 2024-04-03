@@ -26,7 +26,6 @@ from transformers.generation.utils import GenerateOutput
 from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...image_processing_utils import select_best_resolution
 from ...modeling_outputs import ModelOutput
 from ...utils import (
     add_start_docstrings,
@@ -51,63 +50,8 @@ IGNORE_INDEX = -100
 IMAGE_TOKEN_INDEX = -200
 
 
-def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
-    """
-    Calculate the shape of the image patch grid after the preprocessing for images of any resolution.
-
-    Args:
-        image_size (`tuple`):
-            The size of the input image in the format (width, height).
-        grid_pinpoints (`List`):
-            A list containing possible resolutions. Each item in the list should be a tuple or list
-            of the form `(height, width)`.
-        patch_size (`int`):
-            The size of each image patch.
-
-    Returns:
-        tuple: The shape of the image patch grid in the format (width, height).
-    """
-    if not isinstance(grid_pinpoints, list):
-        raise ValueError("grid_pinpoints should be a list of tuples or lists")
-
-    height, width = select_best_resolution(image_size, grid_pinpoints)
-    return height // patch_size, width // patch_size
-
-
-def unpad_image(tensor, original_size):
-    """
-    Unpads a PyTorch tensor of a padded and resized image.
-
-    Args:
-        tensor (`torch.Tensor`):
-            The image tensor, assumed to be of shape (num_channels, height, width).
-        original_size (`tuple`):
-            The original size of the image (height, width).
-
-    Returns:
-        `torch.Tensor`: The unpadded image tensor.
-    """
-    original_height, original_width = original_size
-    current_height, current_width = tensor.shape[1:]
-
-    original_aspect_ratio = original_width / original_height
-    current_aspect_ratio = current_width / current_height
-
-    if original_aspect_ratio > current_aspect_ratio:
-        scale_factor = current_width / original_width
-        new_height = int(original_height * scale_factor)
-        padding = (current_height - new_height) // 2
-        unpadded_tensor = tensor[:, padding : current_height - padding, :]
-    else:
-        scale_factor = current_height / original_height
-        new_width = int(original_width * scale_factor)
-        padding = (current_width - new_width) // 2
-        unpadded_tensor = tensor[:, :, padding : current_width - padding]
-
-    return unpadded_tensor
-
-
 @dataclass
+# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->FalconVLM
 class FalconVLMCausalLMOutputWithPast(ModelOutput):
     """
     Base class for FalconVLM causal language model (or autoregressive) outputs.
@@ -149,6 +93,7 @@ class FalconVLMCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
+# Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->FalconVLM
 class FalconVLMMultiModalProjector(nn.Module):
     def __init__(self, config: FalconVLMConfig):
         super().__init__()
@@ -185,18 +130,20 @@ FALCON_VLM_START_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     FALCON_VLM_START_DOCSTRING,
 )
+# Copied from transformers.models.llava.modeling_llava.LlavaPreTrainedModel with Llava->FalconVLM,llava->falcon_vlm
 class FalconVLMPreTrainedModel(PreTrainedModel):
     config_class = FalconVLMConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["FalconVLMVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
+    # Ignore copy
     _supports_flash_attn_2 = False
 
     def _init_weights(self, module):
         # important: this ported version of FalconVLM isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/ should serve for that purpose
+        # https://github.com/haotian-liu/LLaVA/tree/main/falcon_vlm should serve for that purpose
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
@@ -302,6 +249,7 @@ FALCON_VLM_INPUTS_DOCSTRING = r"""
     FALCON_VLM_START_DOCSTRING,
 )
 class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
+    # Ignore copy
     def __init__(self, config: FalconVLMConfig):
         super().__init__(config)
 
@@ -318,24 +266,31 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_input_embeddings
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_input_embeddings
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_output_embeddings
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.language_model.set_output_embeddings(new_embeddings)
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_decoder
     def set_decoder(self, decoder):
         self.language_model.set_decoder(decoder)
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_decoder
     def get_decoder(self):
         return self.language_model.get_decoder()
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.tie_weights
     def tie_weights(self):
         return self.language_model.tie_weights()
 
@@ -498,6 +453,7 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FALCON_VLM_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=FalconVLMCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -653,12 +609,14 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
             **kwargs,
         )
 
+    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,
         input_ids,
         past_key_values=None,
         inputs_embeds=None,
         pixel_values=None,
+        image_sizes=None,
         attention_mask=None,
         **kwargs,
     ):
@@ -708,9 +666,11 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
                 "pixel_values": pixel_values,
+                "image_sizes": image_sizes,
             }
         )
         return model_inputs
 
+    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration._reorder_cache
     def _reorder_cache(self, *args, **kwargs):
         return self.language_model._reorder_cache(*args, **kwargs)
