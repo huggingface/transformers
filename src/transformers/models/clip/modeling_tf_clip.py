@@ -1376,7 +1376,7 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
                 self.clip.build(None)
 
 
-class TFCLIPVisionProjectionModel(TFCLIPPreTrainedModel):
+class TFCLIPVisionModelWithProjection(TFCLIPPreTrainedModel):
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
 
@@ -1386,7 +1386,7 @@ class TFCLIPVisionProjectionModel(TFCLIPPreTrainedModel):
         self.clip = TFCLIPVisionProjectionLayer(config, name="clip")
 
     
-    #@add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
     #@replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=CLIPVisionConfig)
     @unpack_inputs
     def call(
@@ -1397,6 +1397,28 @@ class TFCLIPVisionProjectionModel(TFCLIPPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
     ) -> tf.Tensor:
+        r"""
+        Returns:
+            image_features (`tf.Tensor` of shape `(batch_size, output_dim`): The image embeddings obtained by applying
+            the projection layer to the pooled output of [`TFCLIPVisionModel`].
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, TFCLIPVisionModelWithProjection
+
+        >>> model = TFCLIPVisionModelWithProjection.from_pretrained("openai/clip-vit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="tf")
+
+        >>> outputs = model(**inputs)
+        ```"""
 
         outputs = self.clip(
             pixel_values=pixel_values,
