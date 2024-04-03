@@ -514,6 +514,7 @@ _import_structure = {
         "InstructBlipQFormerConfig",
         "InstructBlipVisionConfig",
     ],
+    "models.jetmoe": ["JETMOE_PRETRAINED_CONFIG_ARCHIVE_MAP", "JetMoEConfig"],
     "models.jukebox": [
         "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "JukeboxConfig",
@@ -612,7 +613,6 @@ _import_structure = {
         "MgpstrTokenizer",
     ],
     "models.mistral": ["MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MistralConfig"],
-    "models.jetmoe": ["JETMOE_PRETRAINED_CONFIG_ARCHIVE_MAP", "JetMoEConfig"],
     "models.mixtral": ["MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MixtralConfig"],
     "models.mluke": [],
     "models.mobilebert": [
@@ -2457,6 +2457,14 @@ else:
             "InstructBlipVisionModel",
         ]
     )
+    _import_structure["models.jetmoe"].extend(
+        [
+            "JetMoEForCausalLM",
+            "JetMoEForSequenceClassification",
+            "JetMoEModel",
+            "JetMoEPreTrainedModel",
+        ]
+    )
     _import_structure["models.jukebox"].extend(
         [
             "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2701,14 +2709,6 @@ else:
             "MistralForSequenceClassification",
             "MistralModel",
             "MistralPreTrainedModel",
-        ]
-    )
-    _import_structure["models.jetmoe"].extend(
-        [
-            "JetMoEForCausalLM",
-            "JetMoEForSequenceClassification",
-            "JetMoEModel",
-            "JetMoEPreTrainedModel",
         ]
     )
     _import_structure["models.mixtral"].extend(
