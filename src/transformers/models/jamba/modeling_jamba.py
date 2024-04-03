@@ -879,13 +879,9 @@ class JambaMambaMixer(nn.Module):
             hidden_states = hidden_states.unsqueeze(-1)
         else:
             if cache_params is not None:
-                conv_states = nn.functional.pad(
-                    hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
-                )
+                conv_states = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
                 cache_params.conv_states[self.layer_idx].copy_(conv_states)
-            hidden_states = causal_conv1d_fn(
-                hidden_states, conv_weights, self.conv1d.bias, activation=self.activation
-            )
+            hidden_states = causal_conv1d_fn(hidden_states, conv_weights, self.conv1d.bias, activation=self.activation)
 
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
