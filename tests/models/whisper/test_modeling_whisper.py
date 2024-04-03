@@ -477,13 +477,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         # cut to half length & take max batch_size=batch_size
         input_ids = input_ids[:batch_size, :, :]
 
-        # generate max 3 tokens
-        max_length = 4
         if config.eos_token_id is not None and config.pad_token_id is None:
             # hack to allow generate for models such as GPT2 as is done in `generate()`
             config.pad_token_id = config.eos_token_id
 
-        return config, input_ids, None, max_length
+        return config, input_ids, None
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
