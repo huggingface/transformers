@@ -27,7 +27,7 @@ from transformers.utils.import_utils import is_mamba_ssm_available
 
 
 if is_mamba_ssm_available():
-    from mamba_ssm.models.config_mamba import MambaConfig as MambaConfig_ssm
+    from mamba_ssm.models.config_mamba import MambaConfig as MambaConfigSSM
     from mamba_ssm.models.mixer_seq_simple import MambaLMHeadModel
 
     def convert_ssm_config_to_hf_config(config_ssm: MambaConfig_ssm) -> MambaConfig:
