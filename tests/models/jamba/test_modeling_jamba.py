@@ -734,7 +734,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
-    def test_flash_attn_2_inference_padding_right(self):
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
         r"""
         Overriding the test_flash_attn_2_inference_padding_right test as the Jamba model, like Mixtral, doesn't support
         right padding + use cache with FA2
