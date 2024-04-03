@@ -140,7 +140,6 @@ class JambaModelTester:
             initializer_range=self.initializer_range,
             use_mamba_kernels=False,
             num_experts=2,
-            calc_logits_for_entire_prompt=True,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -352,22 +351,6 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         # This is to mimic torch.testing.assert_not_close
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
-
-    def test_greedy_generate_with_logits_only_for_last_prompt_token(self):
-        r"""
-        Adapted from test_greedy_generate of GenerationTesterMixin, just changing config.calc_logits_for_entire_prompt
-        to `False`
-        """
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-            config.calc_logits_for_entire_prompt = False
-
-            model = model_class(config).to(torch_device).eval()
-            output_generate = self._greedy_generate(
-                model=model, input_ids=input_ids, attention_mask=attention_mask, max_length=max_length
-            )
-
-            self.assertTrue(output_generate.shape[-1] == max_length)
 
     def test_initialization(self):
         r"""

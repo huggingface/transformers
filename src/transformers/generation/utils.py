@@ -4611,6 +4611,8 @@ class GenerationMixin:
                 )
 
             model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
+            if "num_logits_to_keep" in model_inputs:
+                model_inputs["num_logits_to_keep"] = candidate_length + 1
 
             # 2.2. Run a forward pass on the candidate sequence
             outputs = self(
@@ -4936,7 +4938,7 @@ def _split_model_inputs(
     # ModelOutput object.
     # bool should not be split but replicated for each split
     bool_keys = [k for k in keys if isinstance(model_input[k], bool) or k == "cache_position"]
-    keys_to_ignore = ["cache_position", "encoder_outputs"]
+    keys_to_ignore = ["cache_position", "encoder_outputs", "num_logits_to_keep"]
     non_bool_keys = [k for k in keys if not isinstance(model_input[k], bool) and k not in keys_to_ignore]
 
     # we split the tensors and tuples of tensors
@@ -4951,6 +4953,11 @@ def _split_model_inputs(
         encoder_outputs_split = _split_model_inputs(model_input["encoder_outputs"], split_size, full_batch_size)
         data_split_list = [
             {**data_split, "encoder_outputs": encoder_outputs_split[i]} for i, data_split in enumerate(data_split_list)
+        ]
+    # num_logits_to_keep should be replicated for each split, similar to bool values
+    if "num_logits_to_keep" in model_input:
+        data_split_list = [
+            {**data_split, "num_logits_to_keep": model_input["num_logits_to_keep"]} for data_split in data_split_list
         ]
 
     # Convert each dictionary in the list to an object of the inferred class

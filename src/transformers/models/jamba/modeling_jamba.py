@@ -1743,7 +1743,7 @@ class JambaForCausalLM(JambaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        calc_logits_for_entire_prompt: Optional[bool] = True,
+        num_logits_to_keep: Optional[Union[int, None]] = None,
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
         Args:
@@ -1752,10 +1752,10 @@ class JambaForCausalLM(JambaPreTrainedModel):
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            calc_logits_for_entire_prompt (`bool`, *optional*):
-                Whether or not to calculate the logits for the entire prompt, or just the last token. Only last token
-                logits are needed for generation, and calculating them only for that token can save memory,
-                which becomes pretty significant for long sequences.
+            num_logits_to_keep (`int` or `None`, *optional*):
+                Calculate logits for the last `num_logits_to_keep` tokens. If `None`, calculate logits for all
+                `input_ids`. Only last token logits are needed for generation, and calculating them only for that token
+                can save memory, which becomes pretty significant for long sequences.
 
         Returns:
         ```"""
@@ -1785,10 +1785,10 @@ class JambaForCausalLM(JambaPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        if calc_logits_for_entire_prompt:
+        if num_logits_to_keep is None:
             logits = self.lm_head(hidden_states)
         else:
-            logits = self.lm_head(hidden_states[..., -1:, :])
+            logits = self.lm_head(hidden_states[..., -num_logits_to_keep:, :])
         logits = logits.float()
 
         loss = None
@@ -1900,7 +1900,7 @@ class JambaForCausalLM(JambaPreTrainedModel):
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
                 "output_router_logits": output_router_logits,
-                "calc_logits_for_entire_prompt": self.config.calc_logits_for_entire_prompt,
+                "num_logits_to_keep": self.config.num_logits_to_keep,
             }
         )
         return model_inputs
