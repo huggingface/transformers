@@ -57,9 +57,7 @@ _CHECKPOINT_FOR_DOC = "state-spaces/mamba-130m-hf"
 _CONFIG_FOR_DOC = "MambaConfig"
 
 
-from ..deprecated._archive_maps import (  # noqa: F401, E402
-    MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST,
-)
+from ..deprecated._archive_maps import MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST # noqa: F401, E402
 
 
 class MambaCache:
