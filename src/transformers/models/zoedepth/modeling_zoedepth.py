@@ -1013,7 +1013,7 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
     def forward(self, out, rel_depth):
         outconv_activation = out[0]
         bottleneck = out[1]
-        x_blocks = out[2:]
+        feature_blocks = out[2:]
 
         x_d0 = self.conv2(bottleneck)
         x = x_d0
@@ -1043,8 +1043,8 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         prev_bin_embedding = self.seed_projector(x)
 
         attractors = self.attractors[bin_conf_name]
-        for projector, attractor, x in zip(self.projectors, attractors, x_blocks):
-            bin_embedding = projector(x)
+        for projector, attractor, feature in zip(self.projectors, attractors, feature_blocks):
+            bin_embedding = projector(feature)
             bin, bin_centers = attractor(bin_embedding, prev_bin, prev_bin_embedding, interpolate=True)
             prev_bin = bin
             prev_bin_embedding = bin_embedding
@@ -1131,7 +1131,7 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
     def forward(self, out, rel_depth):
         outconv_activation = out[0]
         bottleneck = out[1]
-        x_blocks = out[2:]
+        feature_blocks = out[2:]
 
         x_d0 = self.conv2(bottleneck)
         x = x_d0
@@ -1145,8 +1145,8 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
         prev_bin_embedding = self.seed_projector(x)
 
         # unroll this loop for better performance
-        for projector, attractor, x in zip(self.projectors, self.attractors, x_blocks):
-            bin_embedding = projector(x)
+        for projector, attractor, feature in zip(self.projectors, self.attractors, feature_blocks):
+            bin_embedding = projector(feature)
             bin, bin_centers = attractor(bin_embedding, prev_bin, prev_bin_embedding, interpolate=True)
             prev_bin = bin.clone()
             prev_bin_embedding = bin_embedding.clone()
