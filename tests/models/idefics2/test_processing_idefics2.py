@@ -159,10 +159,10 @@ class Idefics2ProcessorTest(unittest.TestCase):
         rendered = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
 
         expected_rendered = (
-            "User:What do these images show?<fake_token_around_image><image><image><fake_token_around_image><image><image><fake_token_around_image><end_of_utterance>\n"
-            "Assistant:The first image shows the statue of Liberty in New York. The second image picture depicts Idefix, the dog of Obelix in Asterix and Obelix.<end_of_utterance>\n"
-            "User:And who is that?<end_of_utterance>\n"
-            "Assistant:\n"
+            "<s>User: What do these images show?<fake_token_around_image><image><image><fake_token_around_image><image><image><fake_token_around_image><end_of_utterance>\n"
+            "Assistant: The first image shows the statue of Liberty in New York. The second image picture depicts Idefix, the dog of Obelix in Asterix and Obelix.<end_of_utterance>\n"
+            "User: And who is that?<end_of_utterance>\n"
+            "Assistant:"
         )
 
         self.assertEqual(rendered, expected_rendered)

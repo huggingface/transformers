@@ -378,18 +378,12 @@ class Idefics2Processor(ProcessorMixin):
 
         Will create outputs like:
         ```
-        User:What is in this Image?<fake_token_around_image><image><image><image><fake_token_around_image><image><image><image><end_of_utterance>
-        Assistant:This picture depicts Idefix, the dog of Obelix in Asterix and Obelix. Idefix is running on the ground.<end_of_utterance>
-        User:And who is that?<end_of_utterance>
+        User: What is in this Image?<fake_token_around_image><image><image><image><fake_token_around_image><image><image><image><end_of_utterance>
+        Assistant: This picture depicts Idefix, the dog of Obelix in Asterix and Obelix. Idefix is running on the ground.<end_of_utterance>
+        User: And who is that?<end_of_utterance>
         Assistant:
         ```
         """
-        logger.warning_once(
-            "\nNo chat template is defined for this processor - using a default chat template "
-            "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
-        )
         # fmt: off
         return (
             "{{ bos_token }}"
