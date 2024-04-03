@@ -64,6 +64,7 @@ class JetMoEModelTester:
         num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=2,
+        kv_channels=8,
         intermediate_size=37,
         hidden_act="silu",
         moe_num_experts=4,
@@ -87,6 +88,7 @@ class JetMoEModelTester:
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
+        self.kv_channels = kv_channels
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.intermediate_size = intermediate_size
@@ -129,11 +131,13 @@ class JetMoEModelTester:
         return JetMoEConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
+            num_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
+            kv_channels=self.kv_channels,
+            ffn_hidden_size=self.intermediate_size,
+            activation_function=self.hidden_act,
+            glu=self.glu,
             moe_num_experts=self.moe_num_experts,
             moe_top_k=self.moe_top_k,
             max_position_embeddings=self.max_position_embeddings,
