@@ -269,9 +269,7 @@ class MoE(nn.Module):
         else:
             self.bias = None
 
-        self.input_linear = ParallelExperts(
-            num_experts, input_size, hidden_size * 2 if glu else hidden_size
-        )
+        self.input_linear = ParallelExperts(num_experts, input_size, hidden_size * 2 if glu else hidden_size)
         self.output_linear = ParallelExperts(num_experts, hidden_size, input_size)
 
         self.top_k = min(top_k, self.num_experts)
