@@ -2467,28 +2467,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if module_map:
                 # init state_dict for this shard
                 state_dict = {name: "" for name in shard}
-                # extract data for shard state dict
-                for key in state_dict.keys():
-                    module = module_map[key]
-                    root = key[: key.rfind(".")]  # module without .weight or .bias
-                    preforward = False
-                    if (
-                        hasattr(module_map[key], "_hf_hook")
-                        and isinstance(module_map[key]._hf_hook, AlignDevicesHook)
-                        and module_map[key]._hf_hook.offload
-                    ):
-                        preforward = True
-                        module._hf_hook.pre_forward(module)
+                for module_name in state_dict.keys():
+                    module = module_map[module_name]
+                    # update state dict with onloaded parameters
+                    state_dict = get_state_dict_from_offload(module, module_name, state_dict, device_to_put_offload=execution_device)
 
-                    for m_key in module.state_dict():
-                        params = module.state_dict()[m_key]
-                        if (root + f".{m_key}") in state_dict:
-                            state_dict[root + f".{m_key}"] = params
-
-                    if preforward:
-                        module._hf_hook.post_forward(module, torch.tensor([]))
-
-                # assign shard to be state dict with onloaded parameters
+                # assign shard to be the completed state dict 
                 shard = state_dict
 
             if safe_serialization:
