@@ -42,17 +42,16 @@ class JetMoEConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the JetMoE model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`JetMoEModel`]
-        hidden_size (`int`, *optional*, defaults to 5632):
+        hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
         num_layers (`<fill_type>`, *optional*, defaults to 24): <fill_docstring>
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         kv_channels (`<fill_type>`, *optional*, defaults to 128): <fill_docstring>
-        ffn_hidden_size (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
+        ffn_hidden_size (`<fill_type>`, *optional*, defaults to 5632): <fill_docstring>
         max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model might ever be used with. JetMoE's sliding window attention
             allows sequence of up to 4096*32 tokens.
-        rotary_percent (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
         activation_function (`<fill_type>`, *optional*, defaults to `"silu"`): <fill_docstring>
         glu (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         moe_num_experts (`<fill_type>`, *optional*, defaults to 8): <fill_docstring>
