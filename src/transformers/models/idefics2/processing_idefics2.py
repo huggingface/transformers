@@ -141,7 +141,47 @@ class Idefics2Processor(ProcessorMixin):
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ) -> BatchEncoding:
-        """ """
+        """
+        Processes the input prompts and returns a BatchEncoding.
+
+        Example:
+
+        ```python
+        >>> import requests
+        >>> from transformers import Idefics2Processor
+
+        >>> processor = Idefics2Processor.from_pretrained("amyeroberts/idefics2", image_seq_len=2)
+
+        >>> url1 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+        >>> url2 = "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg"
+
+        >>> prompts = [
+        ...     [url1, "In this image, we see"],
+        ...     ["bla bla bla", url2],
+        ... ]
+        >>> outputs = processor(prompts, return_tensors="pt", padding=True)
+        >>> input_ids = outputs.input_ids
+        >>> input_tokens = processor.tokenizer.batch_decode(input_ids)
+        ['<s><fake_token_around_image><image><image><fake_token_around_image> In this image, we see', '<s> bla bla bla<fake_token_around_image><image><image><fake_token_around_image>']
+        ```
+
+        Args:
+            prompts (`Union[List[Union[TextInput, ImageInput]], List[List[Union[TextInput, ImageInput]]]`):
+                The input prompt. This can be a string, an image, a list of strings and images or a list of list of
+                strings and images.
+            image_seq_len (`int`, *optional*):
+                The length of the image sequence. If not provided, the default value is used.
+            padding (`Union[bool, str, PaddingStrategy]`, *optional*, defaults to `False`):
+                Padding strategy applied to the input ids. See [`PreTrainedTokenizerFast.pad`] for more information.
+            truncation (`Union[bool, str, TruncationStrategy]`, *optional*):
+                Truncation strategy applied to the input ids. See [`PreTrainedTokenizerFast.truncate`] for more information.
+            max_length (`int`, *optional*):
+                Maximum length of the returned list and optionally padding/truncation length. See
+                [`PreTrainedTokenizerFast.__call__`] for more information.
+            return_tensors (`Union[str, TensorType]`, *optional*):
+                If set, will return tensors of a particular framework. See [`PreTrainedTokenizerFast.__call__`] for more
+                information.
+        """
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
 
         if _is_str_or_image(prompts):

@@ -20,7 +20,7 @@ import requests
 
 from transformers import Idefics2Processor
 from transformers.models.idefics2.processing_idefics2 import build_string_from_input
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_vision_available
 
 
 if is_vision_available():
