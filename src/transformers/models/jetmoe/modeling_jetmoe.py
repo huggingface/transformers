@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch JetMoE model."""
+"""PyTorch JetMoE model."""
 
 import math
 import warnings
@@ -80,7 +80,7 @@ def compute_gating(k: int, num_experts: int, top_k_gates: torch.Tensor, top_k_in
     top_k_gates = top_k_gates.flatten()
     top_k_experts = top_k_indices.flatten()
     _, index_sorted_experts = top_k_experts.sort(0)
-    batch_index = index_sorted_experts.div(k, rounding_mode='trunc')
+    batch_index = index_sorted_experts.div(k, rounding_mode="trunc")
     batch_gates = top_k_gates[index_sorted_experts]
     return batch_gates, batch_index, expert_size, index_sorted_experts
 
@@ -104,14 +104,15 @@ class ParallelExperts(nn.Module):
         self.output_size = output_size
 
     def extra_repr(self):
-        return 'num_experts={}, input_size={}, output_size={}'.format(
-            self.num_experts, self.input_size, self.output_size)
+        return "num_experts={}, input_size={}, output_size={}".format(
+            self.num_experts, self.input_size, self.output_size
+        )
 
     def reset_parameters(self) -> None:
         """
         Reset the parameters of the model.
         """
-        nn.init.uniform_(self.weight, -1. / self.weight.size(1), 1. / self.weight.size(1))
+        nn.init.uniform_(self.weight, -1.0 / self.weight.size(1), 1.0 / self.weight.size(1))
 
     def forward(self, inputs, expert_size):
         """
@@ -166,8 +167,7 @@ class top_k_gating(nn.Module):
         """
         Return extra representation string for the module.
         """
-        return 'k={}, num_experts={}'.format(
-            self.top_k, self.num_experts)
+        return "k={}, num_experts={}".format(self.top_k, self.num_experts)
 
     def compute_aux_loss(self, probs, logits, gates):
         """
@@ -184,10 +184,7 @@ class top_k_gating(nn.Module):
         freq = (gates > 0).float().sum(0)
         lsesq = (torch.log(torch.exp(logits).sum(dim=-1)) ** 2).sum()
 
-        switchloss =  self.num_experts * (
-            F.normalize(probs, p=1, dim=0) *
-            F.normalize(freq, p=1, dim=0)
-        ).sum()
+        switchloss = self.num_experts * (F.normalize(probs, p=1, dim=0) * F.normalize(freq, p=1, dim=0)).sum()
         zloss = lsesq / count
         loss = switchloss + 0.1 * zloss
 
@@ -259,7 +256,7 @@ class MoE(nn.Module):
         bias=True,
         activation=None,
         glu=True,
-        ):
+    ):
         super(MoE, self).__init__()
 
         self.num_experts = num_experts
@@ -272,7 +269,9 @@ class MoE(nn.Module):
         else:
             self.bias = None
 
-        self.input_linear = ParallelExperts(num_experts, input_size, hidden_size * 2 if glu else hidden_size, bias=False)
+        self.input_linear = ParallelExperts(
+            num_experts, input_size, hidden_size * 2 if glu else hidden_size, bias=False
+        )
         self.output_linear = ParallelExperts(num_experts, hidden_size, input_size, bias=False)
 
         self.top_k = min(top_k, self.num_experts)
@@ -282,11 +281,10 @@ class MoE(nn.Module):
             input_size=input_size,
             num_experts=num_experts,
             top_k=top_k,
-            )
+        )
 
     def extra_repr(self):
-        return 'k={}, e={}'.format(
-            self.top_k, self.num_experts)
+        return "k={}, e={}".format(self.top_k, self.num_experts)
 
     def get_aux_loss_and_clear(self):
         """
@@ -301,8 +299,9 @@ class MoE(nn.Module):
     def compute_gate(self, x):
         top_k_indices, self.top_k_gates = self.router(x)
 
-        self.batch_gates, self.batch_index, expert_size, self.index_sorted_experts =\
-            compute_gating(self.top_k, self.num_experts, self.top_k_gates, top_k_indices)
+        self.batch_gates, self.batch_index, expert_size, self.index_sorted_experts = compute_gating(
+            self.top_k, self.num_experts, self.top_k_gates, top_k_indices
+        )
         self.expert_size = expert_size.tolist()
 
         return self.router.loss
@@ -336,9 +335,7 @@ class MoE(nn.Module):
 
         expert_outputs = expert_outputs * self.batch_gates[:, None]
 
-        zeros = torch.zeros(
-            (bsz * length, self.input_size),
-            dtype=expert_outputs.dtype, device=expert_outputs.device)
+        zeros = torch.zeros((bsz * length, self.input_size), dtype=expert_outputs.dtype, device=expert_outputs.device)
         y = zeros.index_add(0, self.batch_index, expert_outputs)
         y = y.view(bsz, length, self.input_size)
         if self.bias is not None:
@@ -354,7 +351,7 @@ class MoE(nn.Module):
 
         y_list = []
         for i in range(self.top_k):
-            expert_idx = top_k_indices[0,i]
+            expert_idx = top_k_indices[0, i]
 
             h = F.linear(x, self.input_linear.weight[expert_idx])
             if self.glu:
@@ -362,7 +359,7 @@ class MoE(nn.Module):
                 h = self.activation(h) * g
             else:
                 h = self.activation(h)
-            y = F.linear(h, self.output_linear.weight[expert_idx]) * top_k_gates[0,i]
+            y = F.linear(h, self.output_linear.weight[expert_idx]) * top_k_gates[0, i]
 
             y_list.append(y)
 
@@ -383,7 +380,7 @@ class MoE(nn.Module):
             Tensor: Output tensor.
         """
         bsz, length, emb_size = x.size()
-        if bsz * length ==1:
+        if bsz * length == 1:
             return self.single_forward(x)
         else:
             return self.batch_forward(x)
@@ -397,7 +394,7 @@ class MoE(nn.Module):
 
         y_list = []
         for i in range(self.top_k):
-            expert_idx = self.top_k_indices[0,i]
+            expert_idx = self.top_k_indices[0, i]
             y = F.linear(x, self.input_linear.weight[expert_idx])
             y_list.append(y)
         y = torch.cat(y_list, dim=0)
@@ -438,8 +435,9 @@ class MoE(nn.Module):
         expert_inputs = x[self.batch_index]
         expert_outputs = self.input_linear(expert_inputs, self.expert_size)
 
-        zeros = torch.zeros((bsz * length * self.top_k, self.hidden_size),
-            dtype=expert_outputs.dtype, device=expert_outputs.device)
+        zeros = torch.zeros(
+            (bsz * length * self.top_k, self.hidden_size), dtype=expert_outputs.dtype, device=expert_outputs.device
+        )
         y = zeros.index_add(0, self.index_sorted_experts, expert_outputs)
         y = y.view(bsz, length, self.top_k, -1)
         return y, loss
@@ -455,7 +453,7 @@ class MoE(nn.Module):
             Tensor: Output tensor.
         """
         bsz, length, emb_size = x.size()
-        if bsz * length ==1:
+        if bsz * length == 1:
             return self.single_map(x)
         else:
             return self.batch_map(x)
@@ -467,8 +465,8 @@ class MoE(nn.Module):
 
         y_list = []
         for i in range(self.top_k):
-            expert_idx = self.top_k_indices[0,i]
-            y = F.linear(x[i], self.output_linear.weight[expert_idx]) * self.top_k_gates[0,i]
+            expert_idx = self.top_k_indices[0, i]
+            y = F.linear(x[i], self.output_linear.weight[expert_idx]) * self.top_k_gates[0, i]
             y_list.append(y)
         y = sum(y_list)
         y = y.view(bsz, length, self.input_size)
@@ -496,8 +494,7 @@ class MoE(nn.Module):
 
         expert_outputs = expert_outputs * self.batch_gates[:, None]
 
-        zeros = torch.zeros((bsz * length, self.input_size),
-            dtype=expert_outputs.dtype, device=expert_outputs.device)
+        zeros = torch.zeros((bsz * length, self.input_size), dtype=expert_outputs.dtype, device=expert_outputs.device)
         y = zeros.index_add(0, self.batch_index, expert_outputs)
         y = y.view(bsz, length, self.input_size)
         if self.bias is not None:
@@ -515,7 +512,7 @@ class MoE(nn.Module):
             Tensor: Reduced output tensor.
         """
         bsz, length, k, emb_size = x.size()
-        if bsz * length ==1:
+        if bsz * length == 1:
             return self.single_reduce(x)
         else:
             return self.batch_reduce(x)
@@ -647,6 +644,7 @@ def _get_unpad_data(attention_mask):
         max_seqlen_in_batch,
     )
 
+
 class JetMoERMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -773,12 +771,10 @@ class JetMoEAttention(nn.Module):
             hidden_size=self.kv_projection_size,
             num_experts=config.moe_num_experts,
             top_k=config.moe_top_k,
-            glu=False
+            glu=False,
         )
 
-        self.kv_proj = torch.nn.Linear(
-            config.hidden_size, self.kv_projection_size * 2, bias=False
-            )
+        self.kv_proj = torch.nn.Linear(config.hidden_size, self.kv_projection_size * 2, bias=False)
 
         self.rotary_emb = JetMoERotaryEmbedding(
             config.kv_channels,
@@ -808,9 +804,15 @@ class JetMoEAttention(nn.Module):
         query_states, aux_loss = self.experts.map(hidden_states)
         key_states, value_states = self.kv_proj(hidden_states).chunk(2, dim=-1)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.hidden_size_per_attention_head).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.hidden_size_per_attention_head).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.hidden_size_per_attention_head).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.hidden_size_per_attention_head).transpose(
+            1, 2
+        )
+        key_states = key_states.view(
+            bsz, q_len, self.num_key_value_heads, self.hidden_size_per_attention_head
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            bsz, q_len, self.num_key_value_heads, self.hidden_size_per_attention_head
+        ).transpose(1, 2)
 
         kv_seq_len = key_states.shape[2]
         if past_key_value is not None:
@@ -822,7 +824,9 @@ class JetMoEAttention(nn.Module):
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids, unsqueeze_dim=1)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin, position_ids, unsqueeze_dim=1
+        )
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
@@ -832,7 +836,9 @@ class JetMoEAttention(nn.Module):
         key_states = key_states.repeat(1, self.top_k, 1, 1)
         value_states = value_states.repeat(1, self.top_k, 1, 1)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.hidden_size_per_attention_head)
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(
+            self.hidden_size_per_attention_head
+        )
 
         if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
             raise ValueError(
@@ -909,16 +915,24 @@ class JetMoESdpaAttention(JetMoEAttention):
         query_states, aux_loss = self.experts.map(hidden_states)
         key_states, value_states = self.kv_proj(hidden_states).chunk(2, dim=-1)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.hidden_size_per_attention_head).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.hidden_size_per_attention_head).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.hidden_size_per_attention_head).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.hidden_size_per_attention_head).transpose(
+            1, 2
+        )
+        key_states = key_states.view(
+            bsz, q_len, self.num_key_value_heads, self.hidden_size_per_attention_head
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            bsz, q_len, self.num_key_value_heads, self.hidden_size_per_attention_head
+        ).transpose(1, 2)
 
         kv_seq_len = key_states.shape[2]
         if past_key_value is not None:
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids, unsqueeze_dim=1)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin, position_ids, unsqueeze_dim=1
+        )
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
@@ -994,18 +1008,22 @@ class JetMoEFlashAttention2(JetMoEAttention):
         Returns:
             Union[Tuple[torch.Tensor, Tuple[torch.Tensor]], Optional[Tuple[...]]]: Tuple containing outputs.
         """
-        #assert attention_mask is None, "attention_mask is not supported"
+        # assert attention_mask is None, "attention_mask is not supported"
         assert output_attentions is False, "output_attentions is not supported"
 
-        B, T, C = hidden_states.size() # batch size, sequence length, embedding dimensionality (hidden_size)
+        B, T, C = hidden_states.size()  # batch size, sequence length, embedding dimensionality (hidden_size)
 
         # calculate query, key, values
         query_layer, aux_loss = self.experts.map(hidden_states)
         key_layer, value_layer = self.kv_proj(hidden_states).chunk(2, dim=-1)
 
-        query_layer = query_layer.view(B, T, self.num_heads, self.hidden_size_per_attention_head) # (B, T, k * nh, hs)
-        key_layer = key_layer.view(B, T, self.num_key_value_heads, self.hidden_size_per_attention_head) # (B, T, nh, hs)
-        value_layer = value_layer.view(B, T, self.num_key_value_heads, self.hidden_size_per_attention_head) # (B, T, nh, hs)
+        query_layer = query_layer.view(B, T, self.num_heads, self.hidden_size_per_attention_head)  # (B, T, k * nh, hs)
+        key_layer = key_layer.view(
+            B, T, self.num_key_value_heads, self.hidden_size_per_attention_head
+        )  # (B, T, nh, hs)
+        value_layer = value_layer.view(
+            B, T, self.num_key_value_heads, self.hidden_size_per_attention_head
+        )  # (B, T, nh, hs)
 
         kv_seq_len = key_layer.shape[1]
         if past_key_value is not None:
@@ -1043,7 +1061,7 @@ class JetMoEFlashAttention2(JetMoEAttention):
 
         # output projection
         y = self.experts.reduce(context_layer.reshape(T, B, self.top_k, self.kv_projection_size))
-        y = y.view(B, T, C) # re-assemble all head outputs side by side
+        y = y.view(B, T, C)  # re-assemble all head outputs side by side
 
         if not output_attentions:
             attn_weights = None
@@ -1111,16 +1129,10 @@ class JetMoEFlashAttention2(JetMoEAttention):
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
-                query_states,
-                key_states,
-                value_states,
-                dropout,
-                softmax_scale=softmax_scale,
-                causal=causal
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
             )
 
         return attn_output
-
 
     def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
@@ -1188,7 +1200,7 @@ class JetMoEBlock(nn.Module):
             activation=ACT2FN[config.activation_function],
             top_k=config.moe_top_k,
             bias=config.bias,
-            glu=config.glu
+            glu=config.glu,
         )
 
     def forward(
@@ -1241,7 +1253,6 @@ class JetMoEBlock(nn.Module):
         outputs += (att_aux_loss + mlp_aux_loss,)
 
         return outputs
-
 
 
 class JetMoEPreTrainedModel(PreTrainedModel):
@@ -1320,6 +1331,7 @@ class JetMoEPreTrainedModel(PreTrainedModel):
     #         module.gradient_checkpointing = value
     #         module.gradient_checkpointing_kwargs = gradient_checkpointing_kwargs
     #         module._gradient_checkpointing_func = checkpoint
+
 
 MODULEFORMER_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
@@ -1400,9 +1412,7 @@ class JetMoEModel(JetMoEPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList(
-            [JetMoEBlock(config, layer_idx) for layer_idx in range(config.num_layers)]
-        )
+        self.layers = nn.ModuleList([JetMoEBlock(config, layer_idx) for layer_idx in range(config.num_layers)])
         self._attn_implementation = config._attn_implementation
         self.norm = JetMoERMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -1525,7 +1535,7 @@ class JetMoEModel(JetMoEPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    #decoder_layer.__call__,
+                    # decoder_layer.__call__,
                     decoder_layer,
                     hidden_states,
                     position_ids,
@@ -1583,7 +1593,7 @@ class JetMoEForCausalLM(JetMoEPreTrainedModel):
         super().__init__(config)
         self.model = JetMoEModel(config)
         self.vocab_size = config.vocab_size
-        self.aux_loss_coef = getattr(config, 'aux_loss_coef', 0.01)
+        self.aux_loss_coef = getattr(config, "aux_loss_coef", 0.01)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.tie_word_embeddings = config.tie_word_embeddings
 

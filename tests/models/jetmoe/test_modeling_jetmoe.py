@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch JetMoE model. """
-
+"""Testing suite for the PyTorch JetMoE model."""
 
 import gc
 import tempfile
@@ -92,8 +91,8 @@ class JetMoEModelTester:
         self.num_key_value_heads = num_key_value_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
-        self.moe_num_experts=moe_num_experts
-        self.moe_top_k=moe_top_k
+        self.moe_num_experts = moe_num_experts
+        self.moe_top_k = moe_top_k
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.type_sequence_label_size = type_sequence_label_size
@@ -560,9 +559,7 @@ class JetMoEIntegrationTest(unittest.TestCase):
         )
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("jetmoe/jetmoe-8b", use_fast=False)
-        model = JetMoEForCausalLM.from_pretrained(
-            "jetmoe/jetmoe-8b", device_map="auto", torch_dtype=torch.float16
-        )
+        model = JetMoEForCausalLM.from_pretrained("jetmoe/jetmoe-8b", device_map="auto", torch_dtype=torch.float16)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs

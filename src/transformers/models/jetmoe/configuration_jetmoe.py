@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" JetMoE model configuration"""
+"""JetMoE model configuration"""
 
 import json
 
@@ -100,7 +100,7 @@ class JetMoEConfig(PretrainedConfig):
         hidden_size=2048,
         num_layers=24,
         num_attention_heads=16,
-        kv_channels = 128,
+        kv_channels=128,
         ffn_hidden_size=5632,
         max_position_embeddings=4096,
         activation_function="silu",
@@ -144,7 +144,11 @@ class JetMoEConfig(PretrainedConfig):
 
     def to_dict(self):
         """Returns a dictionary representation of the config, excluding non-serializable attributes."""
-        return {k: v for k, v in self.__dict__.items() if k not in ['torch_dtype', '_pre_quantization_dtype', 'quantization_config']}
+        return {
+            k: v
+            for k, v in self.__dict__.items()
+            if k not in ["torch_dtype", "_pre_quantization_dtype", "quantization_config"]
+        }
 
     def to_json_string(self, use_diff=False):
         """Serializes this instance to a JSON string, excluding non-serializable attributes.
