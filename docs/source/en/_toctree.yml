@@ -172,7 +172,7 @@
       title: GPU inference
     title: Optimizing inference
   - local: big_models
-    title: Instantiating a big model
+    title: Instantiate a big model
   - local: debugging
     title: Debugging
   - local: tf_xla
