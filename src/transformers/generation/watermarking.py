@@ -84,7 +84,7 @@ class WatermarkDetector:
             The exact same watermarking config and arguments used when generating text.
         ignore_repeated_ngrams (`bool`, *optional*, defaults to `False`):
             Whether to count every unique ngram only once or not.
-        max_size (`int`, *optional*, defaults to 128):
+        max_cache_size (`int`, *optional*, defaults to 128):
             The max size to be used for LRU caching of seeding/sampling algorithms called for every token.
 
     Examples:
