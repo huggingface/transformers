@@ -733,6 +733,10 @@ _import_structure = {
         "Qwen2Config",
         "Qwen2Tokenizer",
     ],
+    "models.qwen2_moe": [
+        "QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Qwen2MoeConfig",
+    ],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.realm": [
         "REALM_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1105,6 +1109,7 @@ _import_structure = {
         "is_timm_available",
         "is_tokenizers_available",
         "is_torch_available",
+        "is_torch_mlu_available",
         "is_torch_neuroncore_available",
         "is_torch_npu_available",
         "is_torch_tpu_available",
@@ -3079,6 +3084,14 @@ else:
             "Qwen2ForSequenceClassification",
             "Qwen2Model",
             "Qwen2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.qwen2_moe"].extend(
+        [
+            "Qwen2MoeForCausalLM",
+            "Qwen2MoeForSequenceClassification",
+            "Qwen2MoeModel",
+            "Qwen2MoePreTrainedModel",
         ]
     )
     _import_structure["models.rag"].extend(
@@ -5605,6 +5618,7 @@ if TYPE_CHECKING:
     from .models.pvt_v2 import PvtV2Config
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
     from .models.qwen2 import QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2Config, Qwen2Tokenizer
+    from .models.qwen2_moe import QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2MoeConfig
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.realm import (
         REALM_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5974,6 +5988,7 @@ if TYPE_CHECKING:
         is_timm_available,
         is_tokenizers_available,
         is_torch_available,
+        is_torch_mlu_available,
         is_torch_neuroncore_available,
         is_torch_npu_available,
         is_torch_tpu_available,
@@ -7648,6 +7663,12 @@ if TYPE_CHECKING:
             Qwen2ForSequenceClassification,
             Qwen2Model,
             Qwen2PreTrainedModel,
+        )
+        from .models.qwen2_moe import (
+            Qwen2MoeForCausalLM,
+            Qwen2MoeForSequenceClassification,
+            Qwen2MoeModel,
+            Qwen2MoePreTrainedModel,
         )
         from .models.rag import (
             RagModel,
