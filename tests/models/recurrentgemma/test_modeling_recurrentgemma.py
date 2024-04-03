@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch RecurrentGemma model. """
+""" Testing suite for the PyTorch RecurrentRecurrentGemma model. """
 import tempfile
 import unittest
 
@@ -92,6 +92,7 @@ class RecurrentGemmaModelTester:
         self.conv1d_width = conv1d_width
         self.logits_soft_cap = logits_soft_cap
         self.rms_norm_eps = rms_norm_eps
+        print("UUU", use_cache)
         self.use_cache = use_cache
         self.rope_theta = rope_theta
 
@@ -123,6 +124,7 @@ class RecurrentGemmaModelTester:
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
+        print("UUU", config.use_cache)
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
@@ -145,7 +147,7 @@ class RecurrentGemmaModelTester:
             pad_token_id=self.pad_token_id,
         )
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Gemma
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->RecurrentGemma
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -156,7 +158,7 @@ class RecurrentGemmaModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->Gemma
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->RecurrentGemma
     def create_and_check_model_as_decoder(
         self,
         config,
@@ -187,7 +189,7 @@ class RecurrentGemmaModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->Gemma
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->RecurrentGemma
     def create_and_check_for_causal_lm(
         self,
         config,
@@ -206,7 +208,7 @@ class RecurrentGemmaModelTester:
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->Gemma
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->RecurrentGemma
     def create_and_check_decoder_model_past_large_inputs(
         self,
         config,
@@ -269,7 +271,7 @@ class RecurrentGemmaModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common with Llama->Gemma
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common with Llama->RecurrentGemma
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -292,9 +294,9 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     pipeline_model_mapping = (
         {
             "feature-extraction": RecurrentGemmaModel,
-            # "text-classification": GemmaForSequenceClassification,
+            # "text-classification": RecurrentGemmaForSequenceClassification,
             "text-generation": RecurrentGemmaForCausalLM,
-            # "zero-shot": GemmaForSequenceClassification,
+            # "zero-shot": RecurrentGemmaForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -336,12 +338,12 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     #     input_ids = input_dict["input_ids"]
     #     attention_mask = input_ids.ne(1).to(torch_device)
     #     sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-    #     model = GemmaForSequenceClassification(config)
+    #     model = RecurrentGemmaForSequenceClassification(config)
     #     model.to(torch_device)
     #     model.eval()
     #     result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
     #     self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-    #
+
     # def test_RecurrentGemma_sequence_classification_model_for_single_label(self):
     #     config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
     #     config.num_labels = 3
@@ -349,12 +351,12 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     #     input_ids = input_dict["input_ids"]
     #     attention_mask = input_ids.ne(1).to(torch_device)
     #     sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-    #     model = GemmaForSequenceClassification(config)
+    #     model = RecurrentGemmaForSequenceClassification(config)
     #     model.to(torch_device)
     #     model.eval()
     #     result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
     #     self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-    #
+
     # def test_RecurrentGemma_sequence_classification_model_for_multi_label(self):
     #     config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
     #     config.num_labels = 3
@@ -364,7 +366,7 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     #     sequence_labels = ids_tensor(
     #         [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
     #     ).to(torch.float)
-    #     model = GemmaForSequenceClassification(config)
+    #     model = RecurrentGemmaForSequenceClassification(config)
     #     model.to(torch_device)
     #     model.eval()
     #     result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
@@ -383,6 +385,157 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_past_key_values_format(self):
         pass
 
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_generate_padding_right(self):
+        import torch
+
+        for model_class in self.all_generative_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
+                    torch_device
+                )
+
+                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [1, 1, 1, 0]]).to(torch_device)
+
+                model.generate(dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_2",
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                with self.assertRaises(ValueError):
+                    _ = model.generate(
+                        dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
+                    )
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_generate_use_cache(self):
+        import torch
+
+        max_new_tokens = 30
+
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+                # NOTE: RecurrentGemma apparently does not support right padding + use_cache with FA2.
+                dummy_attention_mask[:, -1] = 1
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_2",
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                # Just test that a large cache works as expected
+                _ = model.generate(
+                    dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                )
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_inference_padding_right(self):
+        self.skipTest("RecurrentGemma flash attention does not support right padding")
+
+    @require_torch_sdpa
+    @require_torch_gpu
+    @slow
+    def test_sdpa_equivalence(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_sdpa:
+                return
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_sdpa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, attn_implementation="sdpa"
+                )
+                model_sdpa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model_class.main_input_name]
+                dummy_input = dummy_input.to(torch_device)
+                outputs = model(dummy_input, output_hidden_states=True)
+                outputs_sdpa = model_sdpa(dummy_input, output_hidden_states=True)
+
+                logits = outputs.hidden_states[-1]
+                logits_sdpa = outputs_sdpa.hidden_states[-1]
+
+                # gemma sdpa needs a high tolerance
+                assert torch.allclose(logits_sdpa, logits, atol=3e-3)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_equivalence(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model_class.main_input_name]
+                dummy_input = dummy_input.to(torch_device)
+                outputs = model(dummy_input, output_hidden_states=True)
+                outputs_fa = model_fa(dummy_input, output_hidden_states=True)
+
+                logits = outputs.hidden_states[-1]
+                logits_fa = outputs_fa.hidden_states[-1]
+
+                # gemma flash attention 2 needs a high tolerance
+                assert torch.allclose(logits_fa, logits, atol=3e-3)
+
 
 @require_torch_gpu
 @slow
@@ -391,7 +544,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
 
     def test_model_2b_fp32(self):
-        model_id = "google/recurrentgemma-2b"
+        model_id = "google/gemma-2b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I need to know what the most popular music",
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
@@ -407,45 +560,45 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    # def test_model_2b_fp16(self):
-    #     model_id = "google/gemma-2b"
-    #     EXPECTED_TEXTS = [
-    #         "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-    #         "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
-    #     ]
-    #
-    #     model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
-    #         torch_device
-    #     )
-    #
-    #     tokenizer = AutoTokenizer.from_pretrained(model_id)
-    #     inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-    #
-    #     output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-    #     output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-    #
-    #     self.assertEqual(output_text, EXPECTED_TEXTS)
-    #
-    # def test_model_2b_fp16_static_cache(self):
-    #     model_id = "google/gemma-2b"
-    #     EXPECTED_TEXTS = [
-    #         "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-    #         "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
-    #     ]
-    #
-    #     model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
-    #         torch_device
-    #     )
-    #
-    #     model.generation_config.cache_implementation = "static"
-    #
-    #     tokenizer = AutoTokenizer.from_pretrained(model_id)
-    #     inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-    #
-    #     output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-    #     output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-    #
-    #     self.assertEqual(output_text, EXPECTED_TEXTS)
+    def test_model_2b_fp16(self):
+        model_id = "google/recurrentgemma-2b"
+        EXPECTED_TEXTS = [
+            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
+            torch_device
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    def test_model_2b_fp16_static_cache(self):
+        model_id = "google/recurrentgemma-2b"
+        EXPECTED_TEXTS = [
+            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
+            torch_device
+        )
+
+        model.generation_config.cache_implementation = "static"
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_2b_bf16(self):
         model_id = "google/recurrentgemma-2b"
@@ -477,6 +630,162 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="eager"
         )
         model.to(torch_device)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    @require_torch_sdpa
+    def test_model_2b_sdpa(self):
+        model_id = "google/recurrentgemma-2b"
+        EXPECTED_TEXTS = [
+            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="sdpa"
+        )
+        model.to(torch_device)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    @pytest.mark.flash_attn_test
+    @require_flash_attn
+    def test_model_2b_flash_attn(self):
+        model_id = "google/recurrentgemma-2b"
+        EXPECTED_TEXTS = [
+            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+        )
+        model.to(torch_device)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    @require_bitsandbytes
+    def test_model_2b_4bit(self):
+        model_id = "google/recurrentgemma-2b"
+        EXPECTED_TEXTS = [
+            "Hello I am doing a project and I need to make a 3d model of a house. I have been using",
+            "Hi today I'd like to share with you my experience with the new wattpad wattpad wattpad wattpad wattpad wattpad wattpad",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, load_in_4bit=True)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    @unittest.skip("The test will not fit our CI runners")
+    def test_model_7b_fp32(self):
+        model_id = "google/recurrentgemma-7b"
+        EXPECTED_TEXTS = [
+            "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
+            "Hi,\n\nI have a problem with my 2005 1.6 16",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(torch_device)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    def test_model_7b_fp16(self):
+        model_id = "google/recurrentgemma-7b"
+        EXPECTED_TEXTS = [
+            """Hello I am doing a project on a 1999 4.0L 4x4. I""",
+            "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
+            torch_device
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    def test_model_7b_bf16(self):
+        model_id = "google/recurrentgemma-7b"
+        EXPECTED_TEXTS = [
+            """Hello I am doing a project on a 1991 240sx and I am trying to find""",
+            "Hi today I am going to show you how to make a very simple and easy to make a very simple and",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    def test_model_7b_fp16_static_cache(self):
+        model_id = "google/recurrentgemma-7b"
+        EXPECTED_TEXTS = [
+            """Hello I am doing a project on a 1999 4.0L 4x4. I""",
+            "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
+            torch_device
+        )
+
+        model.generation_config.cache_implementation = "static"
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    @require_bitsandbytes
+    def test_model_7b_4bit(self):
+        model_id = "google/recurrentgemma-7b"
+        EXPECTED_TEXTS = [
+            "Hello I am doing a project for my school and I am trying to make a program that will take a number and then",
+            """Hi today I am going to talk about the new update for the game called "The new update" and I""",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, load_in_4bit=True)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
