@@ -144,7 +144,8 @@ def _compute_causal_mask(
     """
     # Mask for attending only to the same segment.
     if q_segment_ids is not None or k_segment_ids is not None:
-        assert q_segment_ids is not None and k_segment_ids is not None
+        if q_segment_ids is not None and k_segment_ids is not None:
+            raise ValueError("Both q_segment_ids and k_segment_ids must be provided.")
         same_segment_mask = q_segment_ids[..., None] == k_segment_ids[..., None,
                                                         :]
     else:
@@ -269,10 +270,10 @@ def _attention_cache_from_prompt(
 
 def gelu(x: torch.Tensor) -> torch.Tensor:
     """Returns the GELU activation function with the same approximation as JAX."""
-    return nn.functional.gelu(x, approximate="tanh")
+    return ACT2FN["gelu_pytorch_tanh"](x)
 
 
-class LocalAttentionBlock(nn.Module):
+class RecurrentGemmaLocalAttentionBlock(nn.Module):
     """Local Multi-Head Attention (MHA) block."""
 
     def __init__(
@@ -358,31 +359,31 @@ class LocalAttentionBlock(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,
-        segment_pos: torch.Tensor,
+        hidden_states: torch.Tensor,
+        position_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        cache: dict[str, torch.Tensor] | None = None,
+        past_key_values: dict[str, torch.Tensor] | None = None,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """Calls the local attention block.
 
         Args:
-          x: Sequence of input activations.
-          segment_pos: Positions of each token in the sequence.
+          hidden_states: Sequence of input activations.
+          position_ids: Positions of each token in the sequence.
           attention_mask: The attention mask for the block.
-          cache: Optional KV-cache for the block, of previous keys and values.
+          past_key_values: Optional KV-cache for the block, of previous keys and values.
 
         Returns:
           Output of the block together with the updated cache. If `cache` is None
           than the returned updated cache is empty initialized and filled in from
           the input sequence.
         """
-        b, t, _ = x.shape
-        assert segment_pos.shape == (t,), f"{segment_pos.shape} != {(t,)}"
+        b, t, _ = hidden_states.shape
+        assert position_ids.shape == (t,), f"{position_ids.shape} != {(t,)}"
 
         # Generate keys, values and queries.
-        queries = self.proj_q(x)
-        keys = self.proj_k(x)
-        values = self.proj_v(x)
+        queries = self.proj_q(hidden_states)
+        keys = self.proj_k(hidden_states)
+        values = self.proj_v(hidden_states)
         queries = einops.rearrange(
             queries, "... (n h) -> ... n h", n=self.num_heads
         )
@@ -390,27 +391,27 @@ class LocalAttentionBlock(nn.Module):
         values = einops.rearrange(values, "... (n h) -> ... n h", n=1)
 
         # Apply rotary embeddings.
-        queries = _apply_rope(queries, segment_pos)
-        keys = _apply_rope(keys, segment_pos)
+        queries = _apply_rope(queries, position_ids)
+        keys = _apply_rope(keys, position_ids)
 
-        cache = getattr(self, "cache", cache)
+        cache = getattr(self, "past_key_values", past_key_values)
         if cache is not None:
             assert t == 1, f"When cache is provided only `t=1` is supported, not {t=}"
 
-            new_cache = _update_attention_cache(keys, values, cache)
+            new_cache = _update_attention_cache(keys, values, past_key_values)
 
-            keys = torch.concatenate([cache["keys"], keys], dim=-3)
-            values = torch.concatenate([cache["values"], values], dim=-3)
+            keys = torch.concatenate([past_key_values["keys"], keys], dim=-3)
+            values = torch.concatenate([past_key_values["values"], values], dim=-3)
 
             if attention_mask is None:
-                attention_mask = _compute_cache_mask(segment_pos, self.window_size)
+                attention_mask = _compute_cache_mask(position_ids, self.window_size)
         else:
             new_cache = _attention_cache_from_prompt(
-                keys, values, segment_pos, self.window_size
+                keys, values, position_ids, self.window_size
             )
 
             if attention_mask is None:
-                attention_mask = compute_forward_pass_mask(segment_pos, self.window_size)
+                attention_mask = compute_forward_pass_mask(position_ids, self.window_size)
 
         # Compute attention.
         logits = einops.einsum(queries, keys, "b t n h, b s n h -> b n t s")
@@ -422,7 +423,7 @@ class LocalAttentionBlock(nn.Module):
         masked_logits = torch.where(attn_mask, logits, _MIN_LOGITS_VALUE)
         masked_logits = masked_logits.type(torch.float32)
 
-        probs = nn.functional.softmax(masked_logits, dim=-1).type_as(x)
+        probs = nn.functional.softmax(masked_logits, dim=-1).type_as(hidden_states)
         encoded = einops.einsum(probs, values, "b n t s, b s n h -> b t n h")
         encoded = einops.rearrange(
             encoded, "... n h -> ... (n h)", n=self.num_heads
@@ -449,7 +450,7 @@ class LocalAttentionBlock(nn.Module):
         )
 
 
-class RecurrentBlock(nn.Module):
+class RecurrentGemmaRecurrentBlock(nn.Module):
     """Griffin and Hawk's recurrent block."""
 
     def __init__(
@@ -508,7 +509,7 @@ class RecurrentBlock(nn.Module):
             device=device,
             dtype=dtype,
         )
-        self.rg_lru = RGLRU(
+        self.rg_lru = RecurrentGemmaRGLRU(
             width=self.lru_width,
             num_heads=self.num_heads,
             device=device,
@@ -540,16 +541,16 @@ class RecurrentBlock(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,
-        segment_pos: torch.Tensor,
+        hidden_states: torch.Tensor,
+        position_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         cache: dict[str, torch.Tensor] | None = None,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """Calls the recurrent block.
 
         Args:
-          x: Sequence of input activations.
-          segment_pos: Position of each token in the sequence.
+          hidden_states: Sequence of input activations.
+          position_ids: Position of each token in the sequence.
           attention_mask: Unused attention mask.
           cache: Optional cache with the previous state of the RG-LRU and Conv1D.
 
@@ -560,27 +561,32 @@ class RecurrentBlock(nn.Module):
         """
         del attention_mask
         # y branch.
-        y = self.linear_y(x)
-        y = gelu(y)
+        y_branch = self.linear_y(hidden_states)
+        y_branch = gelu(y_branch)
 
         # x branch.
-        x = self.linear_x(x)
-        x, conv1d_state = self.conv_1d(
-            x=x,
-            segment_pos=segment_pos,
-            state=None if cache is None else cache["conv1d_state"],
+        x_branch = self.linear_x(hidden_states)
+
+        if cache is None:
+            state, prev_h = None, None
+        else:
+            state, prev_h = cache["conv1d_state"], cache["rg_lru_state"]
+        x_branch, conv1d_state = self.conv_1d(
+            x=x_branch,
+            position_ids=position_ids,
+            state=state,
         )
-        x, rg_lru_state = self.rg_lru(
-            x=x,
-            segment_pos=segment_pos,
-            prev_h=None if cache is None else cache["rg_lru_state"],
+        x_branch, rg_lru_state = self.rg_lru(
+            x=x_branch,
+            position_ids=position_ids,
+            prev_h=prev_h,
         )
 
         # Join branches.
-        x = x * y
-        x = self.linear_out(x)
+        x_branch = x_branch * y_branch
+        x_branch = self.linear_out(x_branch)
 
-        return x, dict(
+        return x_branch, dict(
             conv1d_state=conv1d_state,
             rg_lru_state=rg_lru_state,
         )
@@ -596,7 +602,7 @@ class RecurrentBlock(nn.Module):
     ) -> dict[str, torch.Tensor]:
         """Initializes an empty RG-LRU and Conv1D cache for the block."""
         return dict(
-            rg_lru_state=RGLRU.init_cache(
+            rg_lru_state=RecurrentGemmaRGLRU.init_cache(
                 batch_size=batch_size,
                 width=lru_width,
                 device=device,
@@ -732,7 +738,7 @@ class ResidualBlock(nn.Module):
 
         match self.temporal_block_type:
             case "recurrent":
-                self.recurrent_block = RecurrentBlock(
+                self.recurrent_block = RecurrentGemmaRecurrentBlock(
                     width=self.width,
                     num_heads=self.num_heads,
                     lru_width=self.lru_width,
@@ -743,7 +749,7 @@ class ResidualBlock(nn.Module):
                 )
 
             case "attention":
-                self.attention_block = LocalAttentionBlock(
+                self.attention_block = RecurrentGemmaLocalAttentionBlock(
                     width=self.width,
                     num_heads=self.num_heads,
                     window_size=self.attention_window_size,
@@ -789,7 +795,7 @@ class ResidualBlock(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,
+        activations: torch.Tensor,
         segment_pos: torch.Tensor,
         attention_mask: torch.Tensor,
         cache: dict[str, torch.Tensor] | None = None,
@@ -797,7 +803,7 @@ class ResidualBlock(nn.Module):
         """Calls the residual block.
 
         Args:
-          x: Sequence of input activations.
+          activations: Sequence of input activations.
           segment_pos: Positions of each token in the sequence.
           attention_mask: The attention mask for local attention blocks.
           cache: Optional cache for the block.
@@ -807,10 +813,10 @@ class ResidualBlock(nn.Module):
           than the returned updated cache is empty initialized and filled in from
           the input sequence.
         """
-        assert segment_pos.shape == (x.shape[1],), f"{segment_pos.shape} != {(x.shape[1],)}"
-        raw_x = x
+        assert segment_pos.shape == (x.shape[1],), f"{segment_pos.shape} != {(activations.shape[1],)}"
+        raw_activations = activations
 
-        inputs_normalized = self.temporal_pre_norm(raw_x)
+        inputs_normalized = self.temporal_pre_norm(raw_activations)
         x, cache = self.temporal_block(
             inputs_normalized,
             segment_pos,
@@ -818,7 +824,7 @@ class ResidualBlock(nn.Module):
             cache,
         )
 
-        residual = x + raw_x
+        residual = x + raw_activations
 
         x = self.channel_pre_norm(residual)
         x = self.mlp_block(x)
@@ -843,7 +849,7 @@ class ResidualBlock(nn.Module):
         """Initializes an empty cache for the block."""
         match temporal_block_type:
             case "recurrent":
-                return RecurrentBlock.init_cache(
+                return RecurrentGemmaRecurrentBlock.init_cache(
                     batch_size=batch_size,
                     lru_width=lru_width or width,
                     dtype=dtype,
@@ -851,7 +857,7 @@ class ResidualBlock(nn.Module):
                     device=device,
                 )
             case "attention":
-                return LocalAttentionBlock.init_cache(
+                return RecurrentGemmaLocalAttentionBlock.init_cache(
                     batch_size=batch_size,
                     window_size=attention_window_size,
                     heads_dim=width // num_heads,
@@ -860,64 +866,6 @@ class ResidualBlock(nn.Module):
                 )
             case _:
                 raise ValueError(f"Unrecognized {temporal_block_type=}.")
-
-
-# class Embedder(nn.Module):
-#     """Embedder module."""
-#
-#     def __init__(
-#         self,
-#         vocab_size: int,
-#         embed_dim: int,
-#         scale_by_sqrt_dim: bool,
-#         device: str | torch.device | None = None,
-#         dtype: torch.dtype | None = None,
-#     ):
-#         """Initializes the embedder.
-#
-#         Args:
-#           vocab_size: The size of the token vocabulary.
-#           embed_dim: The dimensionality of each token embedding.
-#           scale_by_sqrt_dim: Whether to scale the output of the block by
-#             `sqrt(self.embed_dim)`
-#           device: On what device to initialize parameters. Needed to allow for
-#             initializing the module without parameter initialization.
-#           dtype: What dtype to use for initialization.
-#         """
-#         super().__init__()
-#         self.vocab_size = vocab_size
-#         self.embed_dim = embed_dim
-#         self.scale_by_sqrt_dim = scale_by_sqrt_dim
-#
-#         # Parameters.
-#         self.input_embedding = nn.Parameter(
-#             torch.empty(
-#                 [self.vocab_size, self.embed_dim], device=device, dtype=dtype
-#             )
-#         )
-#
-#         # Initialization
-#         self.reset_parameters()
-#
-#     def reset_parameters(self) -> None:
-#         """Resets the parameters of the module."""
-#         torch.nn.init.normal_(
-#             self.input_embedding,
-#             mean=0.0,
-#             std=math.sqrt(1.0 / self.embed_dim),
-#         )
-#
-#     def encode(self, x: torch.Tensor) -> torch.Tensor:
-#         """Encodes an input sequence of tokens."""
-#         x = self.input_embedding[(x,)]
-#         if self.scale_by_sqrt_dim:
-#             # Cast to bfloat16 to match training.
-#             x = x * torch.tensor(math.sqrt(self.embed_dim)).type(torch.bfloat16)
-#         return x
-#
-#     def decode(self, x: torch.Tensor) -> torch.Tensor:
-#         """Decodes an input sequence of activations."""
-#         return x @ self.input_embedding.T
 
 
 class RMSNorm(nn.Module):
@@ -965,7 +913,7 @@ class RMSNorm(nn.Module):
         return normed_x * (scale + 1)
 
 
-class BlockDiagonalLinear(nn.Module):
+class RecurrentGemmaBlockDiagonalLinear(nn.Module):
     """Block-diagonal linear layer."""
 
     def __init__(
@@ -976,7 +924,7 @@ class BlockDiagonalLinear(nn.Module):
         device: str | torch.device | None = None,
         dtype: torch.dtype | None = None,
     ):
-        """Initializes the BlockDiagonalLinear.
+        """Initializes the RecurrentGemmaBlockDiagonalLinear.
 
         Args:
           width: The number of dimensions of the input and output.
@@ -994,12 +942,12 @@ class BlockDiagonalLinear(nn.Module):
         self.block_width = self.width // self.num_blocks
 
         # Parameters.
-        self.w = nn.Parameter(torch.empty(
+        self.weight = nn.Parameter(torch.empty(
             [self.num_blocks, self.block_width, self.block_width],
             device=device,
             dtype=dtype
         ))
-        self.b = nn.Parameter(torch.empty(
+        self.bias = nn.Parameter(torch.empty(
             [self.num_blocks, self.block_width], device=device, dtype=dtype
         ))
 
@@ -1008,8 +956,8 @@ class BlockDiagonalLinear(nn.Module):
 
     def reset_parameters(self) -> None:
         """Resets the parameters of the module."""
-        self.w_init_(self.w)
-        torch.nn.init.zeros_(self.b)
+        self.w_init_(self.weight)
+        torch.nn.init.zeros_(self.bias)
 
     def w_init_(self, w: torch.Tensor) -> None:
         """Initializes the weight `w` of the layer."""
@@ -1017,12 +965,12 @@ class BlockDiagonalLinear(nn.Module):
         torch.nn.init.normal_(w, mean=0.0, std=std)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Calls the BlockDiagonalLinear."""
+        """Calls the RecurrentGemmaBlockDiagonalLinear."""
         # Split x to blocks.
         x = einops.rearrange(x, "... (h i) -> ... h i", h=self.num_blocks)
 
         # Linear layer over each block + bias.
-        y = torch.einsum("... h i, h i j -> ... h j", x, self.w) + self.b
+        y = torch.einsum("... h i, h i j -> ... h j", x, self.weight) + self.bias
 
         # Flatten the output.
         return einops.rearrange(y, "... h j -> ... (h j)", h=self.num_blocks)
@@ -1121,7 +1069,7 @@ class SqrtBoundDerivative(torch.autograd.Function):
         return grad_output / torch.sqrt(clipped_x_times_4)
 
 
-class RGLRU(nn.Module):
+class RecurrentGemmaRGLRU(nn.Module):
     """A Real-Gated Linear Recurrent Unit (RG-LRU) layer."""
 
     def __init__(
@@ -1138,7 +1086,7 @@ class RGLRU(nn.Module):
           width: The number of dimensions of the input and output.
           num_heads: The number of diagonal blocks in the input and A gate layers.
           w_init_variance_scale: Initialization parameter for the
-            BlockDiagonalLinear layers of the gates. See the `BlockDiagonalLinear`
+            RecurrentGemmaBlockDiagonalLinear layers of the gates. See the `RecurrentGemmaBlockDiagonalLinear`
             layer for details.
           device: On what device to initialize parameters. Needed to allow for
             initializing the module without parameter initialization.
@@ -1153,14 +1101,14 @@ class RGLRU(nn.Module):
         self.a_param = nn.Parameter(torch.empty(
             [self.width], device=device, dtype=dtype
         ))
-        self.input_gate = BlockDiagonalLinear(
+        self.input_gate = RecurrentGemmaBlockDiagonalLinear(
             width=self.width,
             num_blocks=self.num_heads,
             w_init_variance_scale=w_init_variance_scale,
             device=device,
             dtype=dtype,
         )
-        self.a_gate = BlockDiagonalLinear(
+        self.a_gate = RecurrentGemmaBlockDiagonalLinear(
             width=self.width,
             num_blocks=self.num_heads,
             w_init_variance_scale=self.w_init_variance_scale,
@@ -1183,46 +1131,47 @@ class RGLRU(nn.Module):
 
     def __call__(
         self,
-        x: torch.Tensor,
-        segment_pos: torch.Tensor,
+        activations: torch.Tensor,
+        position_ids: torch.Tensor,
         prev_h: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calls the RG-LRU.
 
         Args:
-          x: Sequence of input activations.
-          segment_pos: Position of each token in the sequence.
+          activations: Sequence of input activations.
+          position_ids: Position of each token in the sequence.
           prev_h: The previous hidden state of the RG-LRU.
 
         Returns:
           Output of the block together with the updated hidden state.
         """
 
-        bs, l, _ = x.shape
-        assert segment_pos.shape == (l,), f"{segment_pos.shape} != {(l,)}"
-        reset = segment_pos[None, :, None] == 0
+        bs, l, _ = activations.shape
+        if position_ids.shape != (l,):
+            raise ValueError(f"{position_ids.shape} != {(l,)}")
+        reset = position_ids[None, :, None] == 0
 
         # Gates for x and a.
-        gate_x = torch.sigmoid(self.input_gate(x))
-        gate_a = torch.sigmoid(self.a_gate(x))
+        gate_x = torch.sigmoid(self.input_gate(activations))
+        gate_a = torch.sigmoid(self.a_gate(activations))
 
         # Compute the parameter `A` of the recurrence.
         log_a = -8.0 * gate_a * nn.functional.softplus(self.a_param)
-        a = torch.exp(log_a)
+        a_matrix = torch.exp(log_a)
         a_square = torch.exp(2 * log_a)
 
         # Gate the input.
-        gated_x = x * gate_x
+        gated_x = activations * gate_x
 
         # Apply gamma normalization to the input. We need to clip the derivatives of
         # `sqrt` in order to prevent NaNs during training in bfloat16.
         multiplier = SqrtBoundDerivative.apply(1 - a_square)
         multiplier = reset + ~reset * multiplier
-        normalized_x = gated_x * multiplier.type(x.dtype)
+        normalized_x = gated_x * multiplier.type(activations.dtype)
 
         y, last_h = rnn_scan(
             x=normalized_x,
-            a=a,
+            a=a_matrix,
             reset=reset,
             h0=prev_h,
         )
@@ -1292,21 +1241,21 @@ class Conv1D(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        segment_pos: torch.Tensor,
+        position_ids: torch.Tensor,
         state: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calls the Conv1D.
 
         Args:
           x: Sequence of input activations.
-          segment_pos: Position of each token in the sequence.
+          position_ids: Position of each token in the sequence.
           state: The state containing the previous `self.temporal_width-1` inputs
             This is set to `None` in training mode.
 
         Returns:
           The output of the convolution and the updated state.
         """
-        assert segment_pos.shape == (x.shape[1],)
+        assert position_ids.shape == (x.shape[1],)
 
         if state is not None:
             # 1. Decoding mode:
@@ -1345,7 +1294,7 @@ class Conv1D(nn.Module):
                 # - Ensure that the mask prevents accessing tokens from a different
                 #   document in training mode.
                 window_mask = self._compute_document_mask(
-                    segment_pos=segment_pos,
+                    position_ids=position_ids,
                     start_idx=start_idx,
                     end_idx=end_idx,
                     max_look_ahead=temporal_shift,
@@ -1417,7 +1366,7 @@ class Conv1D(nn.Module):
     def _compute_document_mask(
         self,
         *,
-        segment_pos: torch.Tensor,
+        position_ids: torch.Tensor,
         start_idx: int,
         end_idx: int,
         max_look_ahead: int,
@@ -1425,7 +1374,7 @@ class Conv1D(nn.Module):
         """Creates a mask to prevent mixing of information between documents.
 
         Args:
-            segment_pos: Position of each token in the sequence. In particular,
+            position_ids: Position of each token in the sequence. In particular,
               a zero indicates the start of a new document.
             start_idx: The starting index of the convolution window.
             end_idx: The ending index of the convolution window.
@@ -1436,8 +1385,8 @@ class Conv1D(nn.Module):
             An integer mask where `1` indicates a position that should be
             included in the convolution, and `0` a position that should be excluded.
         """
-        not_a_document_boundary = (segment_pos != 0).type(torch.int32)
-        mask = torch.ones((end_idx - start_idx), device=segment_pos.device)
+        not_a_document_boundary = (position_ids != 0).type(torch.int32)
+        mask = torch.ones((end_idx - start_idx), device=position_ids.device)
         for shift in range(1, max_look_ahead + 1):
             # At each position, look ahead by `shift` tokens to see if a
             # document boundary is present there.
