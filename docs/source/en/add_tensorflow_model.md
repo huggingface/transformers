@@ -109,52 +109,52 @@ instructions below to set up your environment and open a draft PR.
 
 2. Clone your `transformers` fork to your local disk, and add the base repository as a remote:
 
-```bash
-git clone https://github.com/[your Github handle]/transformers.git
-cd transformers
-git remote add upstream https://github.com/huggingface/transformers.git
-```
+   ```bash
+   git clone https://github.com/[your Github handle]/transformers.git
+   cd transformers
+   git remote add upstream https://github.com/huggingface/transformers.git
+   ```
 
-3. Set up a development environment, for instance by running the following command:
+3. Set up a development environment, for instance by running the following commands:
 
-```bash
-python -m venv .env
-source .env/bin/activate
-pip install -e ".[dev]"
-```
+   ```bash
+   python -m venv .env
+   source .env/bin/activate
+   pip install -e ".[dev]"
+   ```
 
-Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
-failure with this command. If that's the case make sure to install TensorFlow then do:
+   Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
+   failure with this command. If that's the case make sure to install TensorFlow then do:
 
-```bash
-pip install -e ".[quality]"
-```
+   ```bash
+   pip install -e ".[quality]"
+   ```
 
-**Note:** You don't need to have CUDA installed. Making the new model work on CPU is sufficient.
+   **Note:** You don't need to have CUDA installed. Making the new model work on CPU is sufficient.
 
-4. Create a branch with a descriptive name from your main branch
+4. Create a branch with a descriptive name from your main branch:
 
-```bash
-git checkout -b add_tf_brand_new_bert
-```
+   ```bash
+   git checkout -b add_tf_brand_new_bert
+   ```
 
-5. Fetch and rebase to current main
+5. Fetch and rebase to current main:
 
-```bash
-git fetch upstream
-git rebase upstream/main
-```
+   ```bash
+   git fetch upstream
+   git rebase upstream/main
+   ```
 
 6. Add an empty `.py` file in `transformers/src/models/brandnewbert/` named `modeling_tf_brandnewbert.py`. This will
 be your TensorFlow model file.
 
 7. Push the changes to your account using:
 
-```bash
-git add .
-git commit -m "initial commit"
-git push -u origin add_tf_brand_new_bert
-```
+   ```bash
+   git add .
+   git commit -m "initial commit"
+   git push -u origin add_tf_brand_new_bert
+   ```
 
 8. Once you are satisfied, go to the webpage of your fork on GitHub. Click on “Pull request”. Make sure to add the
    GitHub handle of some members of the Hugging Face team as reviewers, so that the Hugging Face team gets notified for
