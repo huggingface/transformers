@@ -89,12 +89,13 @@ class JetMoEConfig(PretrainedConfig):
     ```"""
 
     model_type = "jetmoe"
-    attribute_map = {
-        "max_position_embeddings": "n_positions",
-        "hidden_size": "n_embd",
-        "num_attention_heads": "n_head",
-        "num_hidden_layers": "n_layer",
-    }
+    keys_to_ignore_at_inference = ["past_key_values"]
+    # attribute_map = {
+    #     "max_position_embeddings": "n_positions",
+    #     "hidden_size": "n_embd",
+    #     "num_attention_heads": "n_head",
+    #     "num_hidden_layers": "n_layer",
+    # }
 
     def __init__(
         self,
@@ -145,22 +146,3 @@ class JetMoEConfig(PretrainedConfig):
         super().__init__(
             bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
         )
-
-    def to_dict(self):
-        """Returns a dictionary representation of the config, excluding non-serializable attributes."""
-        return {
-            k: v
-            for k, v in self.__dict__.items()
-            if k not in ["torch_dtype", "_pre_quantization_dtype", "quantization_config"]
-        }
-
-    def to_json_string(self, use_diff=False):
-        """Serializes this instance to a JSON string, excluding non-serializable attributes.
-
-        Args:
-            use_diff (bool): Whether to use differences with the default config. This argument is
-                             accepted for compatibility with the transformers library but is not
-                             used in this custom implementation.
-        """
-        config_dict = self.to_dict()  # Assuming you have a to_dict method as shown earlier
-        return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
