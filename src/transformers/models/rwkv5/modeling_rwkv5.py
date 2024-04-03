@@ -63,6 +63,7 @@ def load_wkv5_cuda_kernel(head_size):
 
     flags = [
         "-res-usage",
+        "--maxrregcount 60",
         "--use_fast_math",
         "-O3",
         "-Xptxas -O3",
@@ -251,8 +252,8 @@ class Rwkv5SelfAttention(nn.Module):
         if is_ninja_available() and is_torch_cuda_available() and not kernel_loaded:
             try:
                 load_wkv5_cuda_kernel(config.head_size)
-            except Exception:
-                logger.info("Could not load the custom CUDA kernel for RWKV5 attention.")
+            except Exception as e:
+                logger.info(f"Could not load the custom CUDA kernel for RWKV5 attention due to:{e}")
         self.layer_id = layer_id
         hidden_size = config.hidden_size
         self.head_size_divisor = config.head_size_divisor
