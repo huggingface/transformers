@@ -86,7 +86,7 @@ def compute_gating(k: int, num_experts: int, top_k_gates: torch.Tensor, top_k_in
 
 
 class ParallelExperts(nn.Module):
-    def __init__(self, num_experts, input_size, output_size, bias=False) -> None:
+    def __init__(self, num_experts, input_size, output_size) -> None:
         """
         Initialize the ParallelExperts module.
 
@@ -270,9 +270,9 @@ class MoE(nn.Module):
             self.bias = None
 
         self.input_linear = ParallelExperts(
-            num_experts, input_size, hidden_size * 2 if glu else hidden_size, bias=False
+            num_experts, input_size, hidden_size * 2 if glu else hidden_size
         )
-        self.output_linear = ParallelExperts(num_experts, hidden_size, input_size, bias=False)
+        self.output_linear = ParallelExperts(num_experts, hidden_size, input_size)
 
         self.top_k = min(top_k, self.num_experts)
         self.activation = activation
@@ -1298,6 +1298,8 @@ class JetMoEPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, ParallelExperts):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
     # def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs={}):
     #     for module in self.modules():

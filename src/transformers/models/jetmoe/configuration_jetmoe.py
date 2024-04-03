@@ -14,8 +14,6 @@
 # limitations under the License.
 """JetMoE model configuration"""
 
-import json
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
