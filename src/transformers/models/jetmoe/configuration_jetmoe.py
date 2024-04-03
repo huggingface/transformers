@@ -28,9 +28,7 @@ class JetMoEConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JetMoEModel`]. It is used to instantiate an
     JetMoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the JetMoE-7B-v0.1 or JetMoE-7B-Instruct-v0.1.
-
-    [jetmoe/jetmoe-8b](https://huggingface.co/jetmoe/jetmoe-8b)
+    with the defaults will yield a similar configuration to that of the JetMoE-8B.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -76,10 +74,10 @@ class JetMoEConfig(PretrainedConfig):
     ```python
     >>> from transformers import JetMoEModel, JetMoEConfig
 
-    >>> # Initializing a JetMoE 7B style configuration
+    >>> # Initializing a JetMoE 8B style configuration
     >>> configuration = JetMoEConfig()
 
-    >>> # Initializing a model from the JetMoE 7B style configuration
+    >>> # Initializing a model from the JetMoE 8B style configuration
     >>> model = JetMoEModel(configuration)
 
     >>> # Accessing the model configuration
