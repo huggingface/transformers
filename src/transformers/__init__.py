@@ -3101,6 +3101,7 @@ else:
         [
             "Qwen2MoeForCausalLM",
             "Qwen2MoeForSequenceClassification",
+            "Qwen2MoeForTokenClassification",
             "Qwen2MoeModel",
             "Qwen2MoePreTrainedModel",
         ]
@@ -7686,6 +7687,7 @@ if TYPE_CHECKING:
         from .models.qwen2_moe import (
             Qwen2MoeForCausalLM,
             Qwen2MoeForSequenceClassification,
+            Qwen2MoeForTokenClassification,
             Qwen2MoeModel,
             Qwen2MoePreTrainedModel,
         )

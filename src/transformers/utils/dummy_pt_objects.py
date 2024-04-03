@@ -6995,6 +6995,13 @@ class Qwen2MoeForSequenceClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class Qwen2MoeForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Qwen2MoeModel(metaclass=DummyObject):
     _backends = ["torch"]
 

@@ -45,6 +45,7 @@ if is_torch_available():
     from transformers import (
         Qwen2MoeForCausalLM,
         Qwen2MoeForSequenceClassification,
+        Qwen2MoeForTokenClassification,
         Qwen2MoeModel,
     )
 
@@ -327,13 +328,16 @@ class Qwen2MoeModelTester:
 # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Qwen2Moe
 class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Qwen2MoeModel, Qwen2MoeForCausalLM, Qwen2MoeForSequenceClassification) if is_torch_available() else ()
+        (Qwen2MoeModel, Qwen2MoeForCausalLM, Qwen2MoeForSequenceClassification, Qwen2MoeForTokenClassification)
+        if is_torch_available()
+        else ()
     )
     all_generative_model_classes = (Qwen2MoeForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Qwen2MoeModel,
             "text-classification": Qwen2MoeForSequenceClassification,
+            "token-classification": Qwen2MoeForTokenClassification,
             "text-generation": Qwen2MoeForCausalLM,
             "zero-shot": Qwen2MoeForSequenceClassification,
         }
@@ -412,6 +416,21 @@ class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    def test_Qwen2Moe_token_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        model = Qwen2MoeForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+        )
 
     @unittest.skip("Qwen2Moe buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):

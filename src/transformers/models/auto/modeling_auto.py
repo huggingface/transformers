@@ -1042,6 +1042,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("phi", "PhiForTokenClassification"),
         ("qdqbert", "QDQBertForTokenClassification"),
         ("qwen2", "Qwen2ForTokenClassification"),
+        ("qwen2_moe", "Qwen2MoeForTokenClassification"),
         ("rembert", "RemBertForTokenClassification"),
         ("roberta", "RobertaForTokenClassification"),
         ("roberta-prelayernorm", "RobertaPreLayerNormForTokenClassification"),
