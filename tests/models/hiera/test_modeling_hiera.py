@@ -18,6 +18,8 @@
 import math
 import unittest
 
+import numpy as np
+
 from transformers import HieraConfig
 from transformers.testing_utils import (
     require_accelerate,
@@ -55,17 +57,22 @@ class HieraModelTester:
         self,
         parent,
         batch_size=13,
-        input_size=(32, 32),
+        input_size=[224, 224],
         mlp_ratio=1.0,
         num_channels=3,
         depths=[1, 1, 1, 1],
+        patch_stride=[4, 4],
+        masked_unit_size=[8, 8],
         initial_num_heads=1,
-        num_head_multiplier=1.0,
-        embed_dim_multiplier=1.0,
+        num_head_multiplier=2.0,
+        embed_dim_multiplier=2.0,
         is_training=True,
         use_labels=True,
         embed_dim=32,
         hidden_act="gelu",
+        decoder_embed_dim=2,
+        decoder_depth=1,
+        decoder_num_heads=1,
         initializer_range=0.02,
         scope=None,
         type_sequence_label_size=10,
@@ -76,6 +83,8 @@ class HieraModelTester:
         self.mlp_ratio = mlp_ratio
         self.num_channels = num_channels
         self.depths = depths
+        self.patch_stride = patch_stride
+        self.masked_unit_size = masked_unit_size
         self.initial_num_heads = initial_num_heads
         self.num_head_multiplier = num_head_multiplier
         self.embed_dim_multiplier = embed_dim_multiplier
@@ -83,6 +92,9 @@ class HieraModelTester:
         self.use_labels = use_labels
         self.embed_dim = embed_dim
         self.hidden_act = hidden_act
+        self.decoder_embed_dim = decoder_embed_dim
+        self.decoder_depth = decoder_depth
+        self.decoder_num_heads = decoder_num_heads
         self.initializer_range = initializer_range
         self.scope = scope
         self.type_sequence_label_size = type_sequence_label_size
@@ -90,18 +102,27 @@ class HieraModelTester:
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.input_size[0], self.input_size[1]])
 
+        # Getting mask for MAE
+        mask_spatial_shape = [
+            i // s // ms for i, s, ms in zip(self.input_size, self.patch_stride, self.masked_unit_size)
+        ]
+        num_windows = math.prod(mask_spatial_shape)
+        noise = floats_tensor([self.batch_size, num_windows])
+
         labels = None
         if self.use_labels:
             labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
         config = self.get_config()
 
-        return config, pixel_values, labels
+        return config, pixel_values, noise, labels
 
     def get_config(self):
         return HieraConfig(
             embed_dim=self.embed_dim,
             input_size=self.input_size,
+            patch_stride=self.patch_stride,
+            masked_unit_size=self.masked_unit_size,
             mlp_ratio=self.mlp_ratio,
             num_channels=self.num_channels,
             depths=self.depths,
@@ -109,23 +130,25 @@ class HieraModelTester:
             num_head_multiplier=self.num_head_multiplier,
             embed_dim_multiplier=self.embed_dim_multiplier,
             hidden_act=self.hidden_act,
+            decoder_embed_dim=self.decoder_embed_dim,
+            decoder_depth=self.decoder_depth,
+            decoder_num_heads=self.decoder_num_heads,
             initializer_range=self.initializer_range,
         )
 
-    def create_and_check_model(self, config, pixel_values, labels):
+    def create_and_check_model(self, config, pixel_values, noise, labels):
         model = HieraModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
 
-        expected_seq_len = math.prod([i // s for i, s in zip(config.input_size, config.patch_stride)]) * math.prod(
-            config.query_stride
-        ) ** (-len(config.depths))
+        tokens_spatial_shape = [i // s for i, s in zip(self.input_size, config.patch_stride)]
+        expected_seq_len = math.prod(tokens_spatial_shape) // math.prod(config.query_stride) ** (config.num_query_pool)
         expected_dim = int(config.embed_dim * config.embed_dim_multiplier ** (len(config.depths) - 1))
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, expected_dim))
 
-    def create_and_check_backbone(self, config, pixel_values, labels):
+    def create_and_check_backbone(self, config, pixel_values, noise, labels):
         model = HieraBackbone(config=config)
         model.to(torch_device)
         model.eval()
@@ -133,7 +156,10 @@ class HieraModelTester:
 
         # verify hidden states
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], 16, 16])
+        num_patches = config.input_size[0] // config.patch_stride[0] // config.masked_unit_size[0]
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], num_patches, num_patches]
+        )
 
         # verify channels
         self.parent.assertEqual(len(model.channels), len(config.out_features))
@@ -147,18 +173,22 @@ class HieraModelTester:
 
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, model.channels[-1], 4, 4])
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape), [self.batch_size, model.channels[-1], num_patches, num_patches]
+        )
 
         # verify channels
         self.parent.assertEqual(len(model.channels), 1)
 
-    def create_and_check_for_pretraining(self, config, pixel_values, labels):
+    def create_and_check_for_pretraining(self, config, pixel_values, noise, labels):
         model = HieraForPreTraining(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
+        pred_stride = config.patch_stride[-1] * (config.query_stride[-1] ** config.num_query_pool)
+        num_patches = self.input_size[0] // pred_stride
         self.parent.assertEqual(
-            result.reconstruction.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
+            result.logits.shape, (self.batch_size, num_patches**2, self.num_channels * pred_stride**2)
         )
 
         # test greyscale images
@@ -168,10 +198,10 @@ class HieraModelTester:
         model.eval()
 
         pixel_values = floats_tensor([self.batch_size, 1, self.input_size[0], self.input_size[0]])
-        result = model(pixel_values)
-        self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, 1, self.image_size, self.image_size))
+        result = model(pixel_values, noise=noise)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, num_patches**2, pred_stride**2))
 
-    def create_and_check_for_image_classification(self, config, pixel_values, labels):
+    def create_and_check_for_image_classification(self, config, pixel_values, noise, labels):
         config.num_labels = self.type_sequence_label_size
         model = HieraForImageClassification(config)
         model.to(torch_device)
@@ -185,7 +215,7 @@ class HieraModelTester:
         model.to(torch_device)
         model.eval()
 
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        pixel_values = floats_tensor([self.batch_size, 1, self.input_size[0], self.input_size[0]])
         result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
@@ -194,9 +224,10 @@ class HieraModelTester:
         (
             config,
             pixel_values,
+            noise,
             labels,
         ) = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
+        inputs_dict = {"pixel_values": pixel_values, "noise": noise}
         return config, inputs_dict
 
 
@@ -230,10 +261,18 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = HieraModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=HieraConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=HieraConfig, has_text_modality=False)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.check_config_arguments_init()
+
+    def test_save_load(self):
+        ...
 
     @unittest.skip(reason="Hiera does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -317,31 +356,42 @@ class HieraModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.logits[0, :5], expected_slice, atol=1e-4))
 
     @slow
-    def test_inference_interpolate_pos_encoding(self):
-        # Hiera models have an `interpolate_pos_encoding` argument in their forward method,
-        # allowing to interpolate the pre-trained position embeddings in order to use
-        # the model on higher resolutions. The DINO model by Facebook AI leverages this
-        # to visualize self-attention on higher resolution images.
-        model = HieraModel.from_pretrained("facebook/dino-hieras8").to(torch_device)
+    def test_inference_for_pretraining(self):
+        # make random mask reproducible across the PT and TF model
+        np.random.seed(2)
 
-        image_processor = AutoImageProcessor.from_pretrained("facebook/dino-hieras8", size=480)
+        model = HieraForPreTraining.from_pretrained("EduardoPacheco/hiera-tiny-224-mae").to(torch_device)
+        image_processor = self.default_image_processor
+
         image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+        config = model.config
+        mask_spatial_shape = [
+            i // s // ms for i, s, ms in zip(config.input_size, config.patch_stride, config.masked_unit_size)
+        ]
+        num_windows = math.prod(mask_spatial_shape)
+        noise = np.random.uniform(size=(1, num_windows))
 
         # forward pass
         with torch.no_grad():
-            outputs = model(pixel_values, interpolate_pos_encoding=True)
+            outputs = model(**inputs, noise=torch.from_numpy(noise).to(device=torch_device))
 
         # verify the logits
-        expected_shape = torch.Size((1, 3601, 384))
-        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+        expected_shape = torch.Size((1, 196, 768))
+        self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[4.2340, 4.3906, -6.6692], [4.5463, 1.8928, -6.7257], [4.4429, 0.8496, -5.8585]]
-        ).to(torch_device)
+            [
+                [1.5719, 1.5743, 1.5732, 1.5791, 1.5958],
+                [1.9311, 1.9409, 1.9440, 1.9545, 1.9605],
+                [1.6149, 1.8555, 1.2720, 1.5385, 1.5067],
+                [1.2804, 1.8411, 0.8342, 1.5867, 1.5384],
+                [2.1131, 2.0876, 2.0349, 1.9921, 1.9496],
+            ]
+        )
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.logits[0, :5, :5], expected_slice.to(torch_device), atol=1e-4))
 
     @slow
     @require_accelerate

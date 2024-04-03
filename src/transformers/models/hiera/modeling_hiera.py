@@ -611,7 +611,6 @@ class HieraLayer(nn.Module):
         batch_size, seq_len, _ = hidden_states.shape
         # Attention + Q Pooling
         hidden_states_norm = self.layernorm_before(hidden_states)
-
         if self.dim != self.dim_out:
             hidden_states = self.proj(hidden_states_norm)
             # Refer to `HieraUnroll` to see how this performs a maxpool-Nd
@@ -925,7 +924,7 @@ class HieraPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["HieraEmbeddings", "HieraLayer"]
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module) -> None:
         """Initialize the weights"""
         std = self.config.initializer_range
 
@@ -935,6 +934,10 @@ class HieraPreTrainedModel(PreTrainedModel):
                 nn.init.trunc_normal_(module.position_embeddings_temporal, std=std)
             else:
                 nn.init.trunc_normal_(module.position_embeddings, std=std)
+
+        elif isinstance(module, HieraDecoder):
+            nn.init.trunc_normal_(module.mask_token, std=std)
+            nn.init.trunc_normal_(module.decoder_position_embeddings, std=std)
 
         elif isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d)):
             nn.init.trunc_normal_(module.weight, std=std)
@@ -1476,6 +1479,7 @@ class HieraForImageClassification(HieraPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
+        noise: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1484,6 +1488,9 @@ class HieraForImageClassification(HieraPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, HieraForImageClassificationOutput]:
         r"""
+        noise (`torch.FloatTensor` of shape `(batch_size, num_mask_units)`, *optional*) which is
+                mainly used for testing purposes to control randomness and maintain the reproducibility
+                when is_mae is set to True. Not used in classification and backbone.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -1574,11 +1581,16 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
     def forward(
         self,
         pixel_values: torch.Tensor,
+        noise: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
         """
+        noise (`torch.FloatTensor` of shape `(batch_size, num_mask_units)`, *optional*) which is
+                mainly used for testing purposes to control randomness and maintain the reproducibility
+                when is_mae is set to True. Not used in classification and backbone.
+
         Returns:
 
         Examples:

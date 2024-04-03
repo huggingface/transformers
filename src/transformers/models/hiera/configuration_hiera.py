@@ -32,7 +32,7 @@ HIERA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class HieraConfig(PretrainedConfig, BackboneConfigMixin):
+class HieraConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`HieraModel`]. It is used to instantiate an Hiera
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -46,18 +46,18 @@ class HieraConfig(PretrainedConfig, BackboneConfigMixin):
     Args:
         embed_dim (`int`, *optional*, defaults to 96):
             Dimensionality of patch embedding.
-        input_size (`tuple(int)`, *optional*, defaults to `(224, 224)`):
+        input_size (`list(int)`, *optional*, defaults to `[224, 224]`):
             The size (resolution) of input in the format (height, width) for images
             and (frames, height, width) for videos.
-        patch_kernel (`tuple(int)`, *optional*, defaults to `(7, 7)`):
+        patch_kernel (`list(int)`, *optional*, defaults to `[7, 7]`):
             The size (resolution) of each patch.
-        patch_stride (`tuple(int)`, *optional*, defaults to `(4, 4)`):
+        patch_stride (`list(int)`, *optional*, defaults to `[4, 4]`):
             The stride of the patch.
-        patch_padding (`tuple(int)`, *optional*, defaults to `(3, 3)`):
+        patch_padding (`list(int)`, *optional*, defaults to `[3, 3]`):
             The padding of the patch.
         mlp_ratio (`float`, *optional*, defaults to 4.0):
             The ratio of mlp hidden dim to embedding dim.
-        depths (`tuple(int)`, *optional*, defaults to `[2, 3, 16, 3]`):
+        depths (`list(int)`, *optional*, defaults to `[2, 3, 16, 3]`):
             Depth of each layer in the Transformer encoder.
         initial_num_heads (`int`, *optional*, defaults to 1):
             Initial number of attention heads in the first layer of the Transformer encoder.
@@ -67,9 +67,9 @@ class HieraConfig(PretrainedConfig, BackboneConfigMixin):
             The multiplier to the dimensionality of patch embedding in each layer of the Transformer encoder.
         num_query_pool (`int`, *optional*, defaults to 3):
             The number of query pool stages.
-        query_stride (`tuple(int)`, *optional*, defaults to `(2, 2)`):
+        query_stride (`list(int)`, *optional*, defaults to `[2, 2]`):
             The stride of the query pool.
-        masked_unit_size (`tuple(int)`, *optional*, defaults to `(8, 8)`):
+        masked_unit_size (`list(int)`, *optional*, defaults to `[8, 8]`):
             The size of the masked unit.
         masked_unit_attention (`list(bool)`, *optional*, defaults to `[True, True, False, False]`):
             Whether to use masked unit attention in each layer of the Transformer encoder.
@@ -129,21 +129,23 @@ class HieraConfig(PretrainedConfig, BackboneConfigMixin):
 
     model_type = "hiera"
 
+    attribute_map = {"num_hidden_layers": "num_layers"}
+
     def __init__(
         self,
         embed_dim=96,
-        input_size=(224, 224),
-        patch_kernel=(7, 7),
-        patch_stride=(4, 4),
-        patch_padding=(3, 3),
+        input_size=[224, 224],
+        patch_kernel=[7, 7],
+        patch_stride=[4, 4],
+        patch_padding=[3, 3],
         mlp_ratio=4.0,
         depths=[2, 3, 16, 3],
         initial_num_heads=1,
         num_head_multiplier=2.0,
         embed_dim_multiplier=2.0,
         num_query_pool=3,
-        query_stride=(2, 2),
-        masked_unit_size=(8, 8),
+        query_stride=[2, 2],
+        masked_unit_size=[8, 8],
         masked_unit_attention=[True, True, False, False],
         drop_path_rate=0.0,
         sep_pos_embed=False,
@@ -162,6 +164,16 @@ class HieraConfig(PretrainedConfig, BackboneConfigMixin):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        if masked_unit_size[0] % query_stride[0] ** (len(depths) - 1) != 0:
+            raise ValueError(
+                f"masked_unit_size[0] ({masked_unit_size[0]}) must be divisible by query_stride[0] ({query_stride[0]}) "
+                f"raised to the power of the number of layers ({len(depths) - 1})"
+            )
+
+        if num_query_pool >= len(depths):
+            raise ValueError(
+                f"num_query_pool ({num_query_pool}) must be less than the number of layers ({len(depths)})"
+            )
 
         self.embed_dim = embed_dim
         self.input_size = input_size
@@ -170,6 +182,7 @@ class HieraConfig(PretrainedConfig, BackboneConfigMixin):
         self.patch_padding = patch_padding
         self.mlp_ratio = mlp_ratio
         self.depths = depths
+        self.num_layers = len(depths)
         self.initial_num_heads = initial_num_heads
         self.num_head_multiplier = num_head_multiplier
         self.embed_dim_multiplier = embed_dim_multiplier
