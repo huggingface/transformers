@@ -368,6 +368,7 @@ class LocalAttentionBlock(nn.Module):
         self,
         x: torch.Tensor,
         segment_pos: torch.Tensor,
+        attention_mask: torch.Tensor,
         cache: dict[str, torch.Tensor] | None = None,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """Calls the local attention block.
@@ -375,6 +376,7 @@ class LocalAttentionBlock(nn.Module):
         Args:
           x: Sequence of input activations.
           segment_pos: Positions of each token in the sequence.
+          attention_mask: The attention mask for the block.
           cache: Optional KV-cache for the block, of previous keys and values.
 
         Returns:
@@ -404,8 +406,6 @@ class LocalAttentionBlock(nn.Module):
 
             new_cache = _update_attention_cache(keys, values, cache)
 
-            attn_mask = _compute_cache_mask(cache["num_tokens"], self.window_size)
-
             keys = torch.concatenate([cache["keys"], keys], dim=-3)
             values = torch.concatenate([cache["values"], values], dim=-3)
 
@@ -414,13 +414,11 @@ class LocalAttentionBlock(nn.Module):
                 keys, values, segment_pos, self.window_size
             )
 
-            attn_mask = _compute_forward_pass_mask(segment_pos, self.window_size)
-
         # Compute attention.
         logits = einops.einsum(queries, keys, "b t n h, b s n h -> b n t s")
         logits = logits * (self.head_dim ** -0.5)
         # Expand for heads axis.
-        attn_mask = torch.unsqueeze(attn_mask, dim=1)
+        attn_mask = torch.unsqueeze(attention_mask, dim=1)
 
         masked_logits = torch.where(attn_mask, logits, _MIN_LOGITS_VALUE)
         masked_logits = masked_logits.type(torch.float32)
@@ -546,6 +544,7 @@ class RecurrentBlock(nn.Module):
         self,
         x: torch.Tensor,
         segment_pos: torch.Tensor,
+        attention_mask: torch.Tensor,
         cache: dict[str, torch.Tensor] | None = None,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """Calls the recurrent block.
@@ -553,6 +552,7 @@ class RecurrentBlock(nn.Module):
         Args:
           x: Sequence of input activations.
           segment_pos: Position of each token in the sequence.
+          attention_mask: Unused attention mask.
           cache: Optional cache with the previous state of the RG-LRU and Conv1D.
 
         Returns:
@@ -560,6 +560,7 @@ class RecurrentBlock(nn.Module):
           than the returned updated cache is empty initialized and filled in from
           the input sequence.
         """
+        del attention_mask
         # y branch.
         y = self.linear_y(x)
         y = gelu(y)
@@ -792,6 +793,7 @@ class ResidualBlock(nn.Module):
         self,
         x: torch.Tensor,
         segment_pos: torch.Tensor,
+        attention_mask: torch.Tensor,
         cache: dict[str, torch.Tensor] | None = None,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """Calls the residual block.
@@ -799,6 +801,7 @@ class ResidualBlock(nn.Module):
         Args:
           x: Sequence of input activations.
           segment_pos: Positions of each token in the sequence.
+          attention_mask: The attention mask for local attention blocks.
           cache: Optional cache for the block.
 
         Returns:
@@ -809,7 +812,12 @@ class ResidualBlock(nn.Module):
         raw_x = x
 
         inputs_normalized = self.temporal_pre_norm(raw_x)
-        x, cache = self.temporal_block(inputs_normalized, segment_pos, cache)
+        x, cache = self.temporal_block(
+            inputs_normalized,
+            segment_pos,
+            attention_mask,
+            cache,
+        )
 
         residual = x + raw_x
 
@@ -1823,6 +1831,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         cache: Optional[GriffinCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1874,12 +1883,14 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
                     residual_block.__call__,
                     hidden_states,
                     cache_position[None],
+                    attention_mask,
                     None if cache is None else cache.states[i],
                 )
             else:
                 layer_outputs = residual_block(
                     hidden_states,
                     cache_position[None],
+                    attention_mask,
                     None if cache is None else cache.states[i],
                 )
 
@@ -1986,7 +1997,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: RecurrentGemmaConfig):
         super().__init__(config)
         self.model = RecurrentGemmaModel(config)
         self.vocab_size = config.vocab_size
@@ -2021,6 +2032,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         cache: Optional[GriffinCache] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -2063,6 +2075,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         outputs = self.model(
             input_ids=input_ids,
             cache_position=cache_position,
+            attention_mask=attention_mask,
             cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -2122,4 +2135,20 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
 
         model_inputs["state"] = state
         model_inputs["cache_position"] = cache_position
+
+        batch_size = input_ids.shape[0]
+        num_tokens = torch.zeros([batch_size], dtype=torch.int32,)
+
+        if state is not None:
+            attn_mask = _compute_cache_mask(
+                num_tokens,
+                self.config.attention_window_size,
+            )
+        else:
+            attn_mask = _compute_forward_pass_mask(
+                cache_position[None],
+                self.config.attention_window_size,
+            )
+
+        model_inputs["attention_mask"] = attn_mask
         return model_inputs
