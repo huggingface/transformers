@@ -1002,8 +1002,22 @@ class BarkModelIntegrationTests(unittest.TestCase):
         return BarkProcessor.from_pretrained("suno/bark")
 
     @cached_property
-    def inputs(self):
+    def single_speaker_inputs(self):
         input_ids = self.processor("In the light of the moon, a little egg lay on a leaf", voice_preset="en_speaker_6")
+
+        input_ids = input_ids.to(torch_device)
+
+        return input_ids
+
+    @cached_property
+    def multiple_speaker_inputs(self):
+        input_ids = self.processor(
+            [
+                "In the light of the moon, a little egg lay on a leaf",
+                "Dans la lumière de la lune, un petit oeuf repose sur une feuille",
+            ],
+            voice_preset=["en_speaker_6", "fr_speaker_0"],
+        )
 
         input_ids = input_ids.to(torch_device)
 
@@ -1026,24 +1040,31 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_generate_semantic(self):
-        input_ids = self.inputs
+        single_speaker_input_ids = self.single_speaker_inputs
+        multiple_speaker_input_ids = self.multiple_speaker_inputs
 
         # check first ids
-        expected_output_ids = [7363, 321, 41, 1461, 6915, 952, 326, 41, 41, 927,]  # fmt: skip
+        expected_single_speaker_output_ids = [[7363, 321, 41, 1461, 6915, 952, 326, 41, 41, 927]]  # fmt: skip
+        expected_multiple_speaker_output_ids = [[7363, 321, 41, 1461, 6915, 952, 326, 41, 41, 927],
+                                                [10, 1710, 1710, 10, 1710, 206, 206, 206, 206, 206]]  # fmt: skip
 
-        # greedy decoding
-        with torch.no_grad():
-            output_ids = self.model.semantic.generate(
-                **input_ids,
-                do_sample=False,
-                temperature=1.0,
-                semantic_generation_config=self.semantic_generation_config,
-            )
-        self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
+        for input_ids, expected_output_ids in zip(
+            (single_speaker_input_ids, multiple_speaker_input_ids),
+            (expected_single_speaker_output_ids, expected_multiple_speaker_output_ids),
+        ):
+            # greedy decoding
+            with torch.no_grad():
+                output_ids = self.model.semantic.generate(
+                    **input_ids,
+                    do_sample=False,
+                    temperature=1.0,
+                    semantic_generation_config=self.semantic_generation_config,
+                )
+            self.assertListEqual(output_ids[:, : len(expected_output_ids[0])].tolist(), expected_output_ids)
 
     @slow
     def test_generate_semantic_early_stop(self):
-        input_ids = self.inputs
+        input_ids = self.single_speaker_inputs
         min_eos_p = 0.01
 
         # check first ids
@@ -1086,41 +1107,50 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_generate_coarse(self):
-        input_ids = self.inputs
-
-        history_prompt = input_ids["history_prompt"]
+        single_speaker_input_ids = self.single_speaker_inputs
+        multiple_speaker_input_ids = self.multiple_speaker_inputs
 
         # check first ids
-        expected_output_ids = [11018, 11391, 10651, 11418, 10857, 11620, 10642, 11366, 10312, 11528, 10531, 11516, 10474, 11051, 10524, 11051, ]  # fmt: skip
+        expected_single_speaker_output_ids = [[11018, 11391, 10651, 11418, 10857, 11620, 10642, 11366,
+                                              10312, 11528, 10531, 11516, 10474, 11051, 10524, 11051, ]]  # fmt: skip
+        expected_multiple_speaker_output_ids = [[11018, 11391, 10776, 11371, 10776, 11371, 10776, 11371, 10776, 11371,
+                                                10776, 11371, 10776, 11371, 10776, 11371],
+                                               [10904, 11540, 10904, 11711, 10904, 11540, 10904, 11711, 10904, 11540,
+                                                10904, 11711, 10904, 11540, 10904, 11711]]  # fmt: skip
 
-        with torch.no_grad():
-            output_ids = self.model.semantic.generate(
-                **input_ids,
-                do_sample=False,
-                temperature=1.0,
-                semantic_generation_config=self.semantic_generation_config,
-            )
+        for input_ids, expected_output_ids in zip(
+            (single_speaker_input_ids, multiple_speaker_input_ids),
+            (expected_single_speaker_output_ids, expected_multiple_speaker_output_ids),
+        ):
+            history_prompt = input_ids["history_prompt"]
 
-            output_ids = self.model.coarse_acoustics.generate(
-                output_ids,
-                history_prompt=history_prompt,
-                do_sample=False,
-                temperature=1.0,
-                semantic_generation_config=self.semantic_generation_config,
-                coarse_generation_config=self.coarse_generation_config,
-                codebook_size=self.model.generation_config.codebook_size,
-            )
+            with torch.no_grad():
+                output_ids = self.model.semantic.generate(
+                    **input_ids,
+                    do_sample=False,
+                    temperature=1.0,
+                    semantic_generation_config=self.semantic_generation_config,
+                )
 
-        self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
+                output_ids = self.model.coarse_acoustics.generate(
+                    output_ids,
+                    history_prompt=history_prompt,
+                    do_sample=False,
+                    temperature=1.0,
+                    semantic_generation_config=self.semantic_generation_config,
+                    coarse_generation_config=self.coarse_generation_config,
+                    codebook_size=self.model.generation_config.codebook_size,
+                )
+
+                self.assertListEqual(output_ids[:, : len(expected_output_ids[0])].tolist(), expected_output_ids)
 
     @slow
     def test_generate_fine(self):
-        input_ids = self.inputs
-
-        history_prompt = input_ids["history_prompt"]
+        single_speaker_input_ids = self.single_speaker_inputs
+        multiple_speaker_input_ids = self.multiple_speaker_inputs
 
         # fmt: off
-        expected_output_ids = [
+        expected_single_speaker_output_ids = [[
             [1018, 651, 857, 642, 312, 531, 474, 524, 524, 776,],
             [367, 394, 596, 342, 504, 492, 27, 27, 822, 822,],
             [961, 955, 221, 955, 955, 686, 939, 939, 479, 176,],
@@ -1129,43 +1159,69 @@ class BarkModelIntegrationTests(unittest.TestCase):
             [440, 673, 861, 666, 372, 558, 49, 172, 232, 342,],
             [244, 358, 123, 356, 586, 520, 499, 877, 542, 637,],
             [806, 685, 905, 848, 803, 810, 921, 208, 625, 203,],
-        ]
+        ]]
         # fmt: on
 
-        with torch.no_grad():
-            output_ids = self.model.semantic.generate(
-                **input_ids,
-                do_sample=False,
-                temperature=1.0,
-                semantic_generation_config=self.semantic_generation_config,
-            )
+        # fmt: off
+        expected_multiple_speaker_output_ids = [
+            [[1018, 776, 776, 776, 776, 776, 776, 776, 776, 776],
+             [367, 347, 347, 347, 347, 347, 347, 347, 347, 347],
+             [961, 530, 530, 530, 530, 530, 530, 530, 530, 530],
+             [638, 292, 81, 81, 81, 81, 81, 81, 81, 81],
+             [208, 384, 64, 910, 664, 910, 910, 910, 910, 910],
+             [225, 576, 181, 489, 172, 489, 489, 489, 489, 489],
+             [342, 795, 716, 726, 716, 671, 671, 671, 499, 499],
+             [308, 81, 232, 335, 128, 724, 335, 69, 866, 866]],
+        [[904, 904, 904, 904, 904, 904, 904, 904, 904, 904],
+         [516, 687, 516, 687, 516, 687, 516, 687, 516, 687],
+         [458, 458, 863, 458, 458, 458, 458, 458, 458, 678],
+         [859, 1014, 88, 36, 866, 1014, 866, 916, 866, 963],
+         [652, 862, 606, 862, 930, 736, 885, 884, 885, 537],
+         [885, 505, 430, 634, 10, 1005, 430, 430, 430, 903],
+         [764, 908, 364, 444, 853, 853, 853, 782, 667, 764],
+         [410, 558, 237, 173, 42, 859, 42, 701, 937, 559]]]
+        # fmt: on
 
-            output_ids = self.model.coarse_acoustics.generate(
-                output_ids,
-                history_prompt=history_prompt,
-                do_sample=False,
-                temperature=1.0,
-                semantic_generation_config=self.semantic_generation_config,
-                coarse_generation_config=self.coarse_generation_config,
-                codebook_size=self.model.generation_config.codebook_size,
-            )
+        for input_ids, expected_output_ids in zip(
+            (single_speaker_input_ids, multiple_speaker_input_ids),
+            (expected_single_speaker_output_ids, expected_multiple_speaker_output_ids),
+        ):
+            history_prompt = input_ids["history_prompt"]
 
-            # greedy decoding
-            output_ids = self.model.fine_acoustics.generate(
-                output_ids,
-                history_prompt=history_prompt,
-                temperature=None,
-                semantic_generation_config=self.semantic_generation_config,
-                coarse_generation_config=self.coarse_generation_config,
-                fine_generation_config=self.fine_generation_config,
-                codebook_size=self.model.generation_config.codebook_size,
-            )
+            with torch.no_grad():
+                output_ids = self.model.semantic.generate(
+                    **input_ids,
+                    do_sample=False,
+                    temperature=1.0,
+                    semantic_generation_config=self.semantic_generation_config,
+                )
 
-        self.assertListEqual(output_ids[0, :, : len(expected_output_ids[0])].tolist(), expected_output_ids)
+                output_ids = self.model.coarse_acoustics.generate(
+                    output_ids,
+                    history_prompt=history_prompt,
+                    do_sample=False,
+                    temperature=1.0,
+                    semantic_generation_config=self.semantic_generation_config,
+                    coarse_generation_config=self.coarse_generation_config,
+                    codebook_size=self.model.generation_config.codebook_size,
+                )
+
+                # greedy decoding
+                output_ids = self.model.fine_acoustics.generate(
+                    output_ids,
+                    history_prompt=history_prompt,
+                    temperature=None,
+                    semantic_generation_config=self.semantic_generation_config,
+                    coarse_generation_config=self.coarse_generation_config,
+                    fine_generation_config=self.fine_generation_config,
+                    codebook_size=self.model.generation_config.codebook_size,
+                )
+
+                self.assertListEqual(output_ids[:, :, : len(expected_output_ids[0][0])].tolist(), expected_output_ids)
 
     @slow
     def test_generate_end_to_end(self):
-        input_ids = self.inputs
+        input_ids = self.single_speaker_inputs
 
         with torch.no_grad():
             self.model.generate(**input_ids)
@@ -1173,7 +1229,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_generate_end_to_end_with_args(self):
-        input_ids = self.inputs
+        input_ids = self.single_speaker_inputs
 
         with torch.no_grad():
             self.model.generate(**input_ids, do_sample=True, temperature=0.6, penalty_alpha=0.6)
@@ -1212,38 +1268,40 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_generate_end_to_end_with_sub_models_args(self):
-        input_ids = self.inputs
+        single_speaker_input_ids = self.single_speaker_inputs
+        multiple_speaker_input_ids = self.multiple_speaker_inputs
 
-        with torch.no_grad():
-            torch.manual_seed(0)
-            self.model.generate(
-                **input_ids, do_sample=False, temperature=1.0, coarse_do_sample=True, coarse_temperature=0.7
-            )
-            output_ids_without_min_eos_p = self.model.generate(
-                **input_ids,
-                do_sample=True,
-                temperature=0.9,
-                coarse_do_sample=True,
-                coarse_temperature=0.7,
-                fine_temperature=0.3,
-            )
+        for input_ids in [single_speaker_input_ids, multiple_speaker_input_ids]:
+            with torch.no_grad():
+                torch.manual_seed(0)
+                self.model.generate(
+                    **input_ids, do_sample=False, temperature=1.0, coarse_do_sample=True, coarse_temperature=0.7
+                )
+                output_ids_without_min_eos_p = self.model.generate(
+                    **input_ids,
+                    do_sample=True,
+                    temperature=0.9,
+                    coarse_do_sample=True,
+                    coarse_temperature=0.7,
+                    fine_temperature=0.3,
+                )
 
-            output_ids_with_min_eos_p = self.model.generate(
-                **input_ids,
-                do_sample=True,
-                temperature=0.9,
-                coarse_temperature=0.7,
-                fine_temperature=0.3,
-                min_eos_p=0.1,
+                output_ids_with_min_eos_p = self.model.generate(
+                    **input_ids,
+                    do_sample=True,
+                    temperature=0.9,
+                    coarse_temperature=0.7,
+                    fine_temperature=0.3,
+                    min_eos_p=0.1,
+                )
+            self.assertLess(
+                len(output_ids_with_min_eos_p[0, :].tolist()), len(output_ids_without_min_eos_p[0, :].tolist())
             )
-        self.assertLess(
-            len(output_ids_with_min_eos_p[0, :].tolist()), len(output_ids_without_min_eos_p[0, :].tolist())
-        )
 
     @require_torch_gpu
     @slow
     def test_generate_end_to_end_with_offload(self):
-        input_ids = self.inputs
+        input_ids = self.single_speaker_inputs
 
         with torch.no_grad():
             # standard generation
