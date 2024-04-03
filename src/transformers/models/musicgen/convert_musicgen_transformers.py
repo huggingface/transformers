@@ -128,9 +128,9 @@ def decoder_config_from_checkpoint(checkpoint: str) -> MusicgenDecoderConfig:
 
 @torch.no_grad()
 def convert_musicgen_checkpoint(
-    checkpoint, pytorch_dump_folder=None, repo_id=None, device="cpu", safe_serialization=False
+    checkpoint, custom_checkpoint=None, pytorch_dump_folder=None, repo_id=None, device="cpu", safe_serialization=False
 ):
-    fairseq_model = MusicGen.get_pretrained(checkpoint, device=device)
+    fairseq_model = MusicGen.get_pretrained(custom_checkpoint or checkpoint, device=device)
     decoder_config = decoder_config_from_checkpoint(checkpoint)
 
     decoder_state_dict = fairseq_model.lm.state_dict()
@@ -212,6 +212,7 @@ if __name__ == "__main__":
         "`['facebook/musicgen-stereo-small', 'facebook/musicgen-stereo-medium', 'facebook/musicgen-stereo-large']` "
         "for the stereo checkpoints.",
     )
+    parser.add_argument("--custom_checkpoint", default=None, type=str, help="Path to a custom checkpoint")
     parser.add_argument(
         "--pytorch_dump_folder",
         required=True,
@@ -232,4 +233,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_musicgen_checkpoint(args.checkpoint, args.pytorch_dump_folder, args.push_to_hub)
+    convert_musicgen_checkpoint(args.checkpoint, args.custom_checkpoint, args.pytorch_dump_folder, args.push_to_hub)
