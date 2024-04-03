@@ -28,7 +28,7 @@ class JetMoEConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JetMoEModel`]. It is used to instantiate an
     JetMoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the JetMoE-8B.
+    with the defaults will yield a configuration of the JetMoE-4B.
 
     [jetmoe/jetmoe-8b](https://huggingface.co/jetmoe/jetmoe-8b)
 
@@ -42,7 +42,7 @@ class JetMoEConfig(PretrainedConfig):
             `inputs_ids` passed when calling [`JetMoEModel`]
         hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
-        num_hidden_layers (`int`, *optional*, defaults to 24): Defines the number of blocks.
+        num_hidden_layers (`int`, *optional*, defaults to 12): Defines the number of blocks.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_key_value_heads (`int`, *optional*, defaults to 16):
@@ -76,10 +76,10 @@ class JetMoEConfig(PretrainedConfig):
     ```python
     >>> from transformers import JetMoEModel, JetMoEConfig
 
-    >>> # Initializing a JetMoE 8B style configuration
+    >>> # Initializing a JetMoE 4B style configuration
     >>> configuration = JetMoEConfig()
 
-    >>> # Initializing a model from the JetMoE 8B style configuration
+    >>> # Initializing a model from the JetMoE 4B style configuration
     >>> model = JetMoEModel(configuration)
 
     >>> # Accessing the model configuration
@@ -93,7 +93,7 @@ class JetMoEConfig(PretrainedConfig):
         self,
         vocab_size=32000,
         hidden_size=2048,
-        num_hidden_layers=8,
+        num_hidden_layers=12,
         num_attention_heads=32,
         num_key_value_heads=16,
         kv_channels=128,
