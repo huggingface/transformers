@@ -302,14 +302,14 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
                 position_ids[i, num_padding_tokens:num_padding_tokens + num_image_tokens + num_text_tokens] = torch.arange(1, num_image_tokens + num_text_tokens + 1, device=inputs_embeds.device)
                 final_attention_mask_4d[i, :, num_padding_tokens:num_image_tokens +num_text_tokens +num_padding_tokens, num_padding_tokens:num_padding_tokens + num_image_tokens + num_text_tokens] = 1
                 if labels is not None:
-                    final_labels[i, num_padding_tokens + num_image_tokens:] = labels
+                    final_labels[i, num_padding_tokens + num_image_tokens:] = labels[i]
             else:
                 final_embedding[i, :num_image_tokens] = scaled_image_features
                 final_embedding[i, num_image_tokens:num_image_tokens + num_text_tokens] = inputs_embeds[i][text_tokens_mask]
                 position_ids[i, :num_image_tokens + num_text_tokens] = torch.arange(1, num_image_tokens + num_text_tokens + 1, device=inputs_embeds.device)
                 final_attention_mask_4d[i, :, :num_image_tokens + num_text_tokens, :num_image_tokens + num_text_tokens] = 1
                 if labels is not None:
-                    final_labels[i, num_image_tokens:num_image_tokens + num_text_tokens] = labels
+                    final_labels[i, num_image_tokens:num_image_tokens + num_text_tokens] = labels[i]
         return final_embedding, final_attention_mask_4d, final_labels, position_ids
 
     @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
@@ -434,7 +434,7 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
         # we know if the batch is left padded or not
         # logits and labels need to be sliced/padding logits need to be ignored
         # rather, last logit should be repeated last valid logit, not pad token logit over and over
-        """if attention_mask.dim() == 4:
+        if attention_mask.dim() == 4:
             # this is to identify input phase
             # else, we are in the cached situation and don't need to slice 
             attention_mask_2d = attention_mask[:, 0, -1] if left_padding else attention_mask[:, 0, 0]
@@ -445,7 +445,7 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
             padding_mask = attention_mask_2d == 0
             updated_logits = torch.where(padding_mask.unsqueeze(-1), expanded_selected_logits, logits)       
             logits = updated_logits
-        """
+        
         # -----  end slice   -----      
 
         
