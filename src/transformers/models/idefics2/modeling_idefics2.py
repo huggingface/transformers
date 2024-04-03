@@ -1542,34 +1542,11 @@ class Idefics2Model(Idefics2PreTrainedModel):
         - The merging happens so that we obtain the following sequence: `vector_tok_1 vector_tok_2 vector_tok_3 vector_fake_tok_around_image {sequence of image_seq_len image hidden states} vector_fake_toke_around_image vector_tok_4`. That sequence is fed to the LM.
         - To fit the format of that sequence, `input_ids`, `input_embeds`, `attention_mask` are all 3 adapted to insert the image hidden states.
         """
-        batch_size = inputs_embeds.size(0)
-
-        vision_pipeline_output_seq_len = image_hidden_states.shape[1]
-        vision_hidden_size = image_hidden_states.shape[2]
+        num_images, _, vision_hidden_size = image_hidden_states.shape
+        special_image_token_mask = input_ids == self.image_token_id
         new_inputs_embeds = inputs_embeds.clone()
-        # Get the number of images for each example
-        num_images = (input_ids == self.image_token_id).sum(dim=-1) // self.image_seq_len
-        cum_num_images = num_images.cumsum(dim=-1)
-        for batch_idx in range(batch_size):
-            # Get the number of images for this particular example
-            example_num_images = num_images[batch_idx]
-            # Get the image_hidden_states corresponding to True images for the example, so get rid of the padding images.
-            start = 0 if batch_idx == 0 else cum_num_images[batch_idx - 1]
-            end = cum_num_images[batch_idx]
-            example_true_image_hidden_states = image_hidden_states[start:end]
-
-            m_image = input_ids[batch_idx] == self.image_token_id
-            if new_inputs_embeds[batch_idx][m_image].shape[0] != example_num_images * vision_pipeline_output_seq_len:
-                raise ValueError(
-                    "new_inputs_embeds to replace has shape[0]:"
-                    f" {new_inputs_embeds[batch_idx][m_image].shape[0]} but"
-                    " should have shape[0]:"
-                    f" {example_num_images}*{vision_pipeline_output_seq_len}={example_num_images * vision_pipeline_output_seq_len} "
-                )
-            # Insert the image_hidden_states
-            input_embed_size = (example_num_images * vision_pipeline_output_seq_len, vision_hidden_size)
-            new_inputs_embeds[batch_idx][m_image] = example_true_image_hidden_states.view(input_embed_size)
-
+        reshaped_image_hidden_states = image_hidden_states.view(-1, vision_hidden_size)
+        new_inputs_embeds[special_image_token_mask] = reshaped_image_hidden_states
         return new_inputs_embeds
 
     @add_start_docstrings_to_model_forward(
