@@ -2457,9 +2457,6 @@ class Data2VecVisionPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-DBRX_PRETRAINED_CONFIG_ARCHIVE_MAP = None
-
-
 class DbrxForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 

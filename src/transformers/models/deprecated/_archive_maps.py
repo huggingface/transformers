@@ -532,8 +532,6 @@ DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = DeprecatedList(["facebook/data2vec
 
 DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST = DeprecatedList(["facebook/data2vec-vision-base-ft1k"])
 
-DBRX_PRETRAINED_CONFIG_ARCHIVE_MAP = DeprecatedDict({})
-
 DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = DeprecatedDict(
     {
         "microsoft/deberta-base": "https://huggingface.co/microsoft/deberta-base/resolve/main/config.json",
@@ -2582,7 +2580,6 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("data2vec-audio", "DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("data2vec-text", "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("data2vec-vision", "DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("dbrx", "DBRX_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("deberta", "DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("deberta-v2", "DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("deformable_detr", "DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
