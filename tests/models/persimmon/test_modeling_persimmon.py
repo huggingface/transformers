@@ -278,7 +278,9 @@ class PersimmonModelTester:
 @require_torch
 class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (PersimmonModel, PersimmonForCausalLM, PersimmonForSequenceClassification, PersimmonForTokenClassification) if is_torch_available() else ()
+        (PersimmonModel, PersimmonForCausalLM, PersimmonForSequenceClassification, PersimmonForTokenClassification)
+        if is_torch_available()
+        else ()
     )
     pipeline_model_mapping = (
         {

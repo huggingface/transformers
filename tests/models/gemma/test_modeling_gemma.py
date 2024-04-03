@@ -283,7 +283,11 @@ class GemmaModelTester:
 
 @require_torch
 class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (GemmaModel, GemmaForCausalLM, GemmaForSequenceClassification, GemmaForTokenClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (GemmaModel, GemmaForCausalLM, GemmaForSequenceClassification, GemmaForTokenClassification)
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (GemmaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {

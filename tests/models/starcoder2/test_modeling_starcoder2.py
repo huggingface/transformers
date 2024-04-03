@@ -291,7 +291,9 @@ class Starcoder2ModelTester:
 # Copied from transformers.tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Starcoder2
 class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Starcoder2Model, Starcoder2ForCausalLM, Starcoder2ForSequenceClassification, Starcoder2ForTokenClassification) if is_torch_available() else ()
+        (Starcoder2Model, Starcoder2ForCausalLM, Starcoder2ForSequenceClassification, Starcoder2ForTokenClassification)
+        if is_torch_available()
+        else ()
     )
     all_generative_model_classes = (Starcoder2ForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (

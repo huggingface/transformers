@@ -283,7 +283,13 @@ class LlamaModelTester:
 @require_torch
 class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (LlamaModel, LlamaForCausalLM, LlamaForSequenceClassification, LlamaForQuestionAnswering, LlamaForTokenClassification)
+        (
+            LlamaModel,
+            LlamaForCausalLM,
+            LlamaForSequenceClassification,
+            LlamaForQuestionAnswering,
+            LlamaForTokenClassification,
+        )
         if is_torch_available()
         else ()
     )

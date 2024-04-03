@@ -282,7 +282,9 @@ class StableLmModelTester:
 # Copied from transformers.tests.persimmon.test_modeling_persimmon.PersimmonModelTest with Persimmon -> StableLm
 class StableLmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (StableLmModel, StableLmForCausalLM, StableLmForSequenceClassification, StableLmForTokenClassification) if is_torch_available() else ()
+        (StableLmModel, StableLmForCausalLM, StableLmForSequenceClassification, StableLmForTokenClassification)
+        if is_torch_available()
+        else ()
     )
     pipeline_model_mapping = (
         {
