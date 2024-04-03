@@ -1363,8 +1363,8 @@ class JambaPreTrainedModel(PreTrainedModel):
         past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]], batch_size: int
     ) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
         """
-        Standardizes the format of the cache so as to match most implementations, i.e. have the seqlen as the third dim
-        also for mamba layers
+        Standardizes the format of the cache so as to match most models in transformers, i.e. have the seqlen as the
+        third dim also for mamba layers
         """
         attn_layer_index = [k.shape == v.shape for k, v in past_key_value].index(True)
         seqlen = past_key_value[attn_layer_index][0].shape[2]
