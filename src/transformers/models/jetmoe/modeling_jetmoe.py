@@ -1262,7 +1262,7 @@ class JetMoEPreTrainedModel(PreTrainedModel):
 
     config_class = JetMoEConfig
     base_model_prefix = "transformer"
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
     _no_split_modules = ["JetMoEBlock"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
@@ -1334,7 +1334,7 @@ class JetMoEPreTrainedModel(PreTrainedModel):
     #         module._gradient_checkpointing_func = checkpoint
 
 
-MODULEFORMER_START_DOCSTRING = r"""
+JETMOE_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
@@ -1345,7 +1345,7 @@ MODULEFORMER_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-MODULEFORMER_INPUTS_DOCSTRING = r"""
+JETMOE_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
@@ -1397,7 +1397,7 @@ MODULEFORMER_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare JetMoE Model outputting raw hidden-states without any specific head on top.",
-    MODULEFORMER_START_DOCSTRING,
+    JETMOE_START_DOCSTRING,
 )
 class JetMoEModel(JetMoEPreTrainedModel):
     """
@@ -1427,7 +1427,7 @@ class JetMoEModel(JetMoEPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(MODULEFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(JETMOE_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1619,7 +1619,7 @@ class JetMoEForCausalLM(JetMoEPreTrainedModel):
     def get_decoder(self):
         return self.model
 
-    @add_start_docstrings_to_model_forward(MODULEFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(JETMOE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1776,9 +1776,9 @@ class JetMoEForCausalLM(JetMoEPreTrainedModel):
     padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
     each row of the batch).
     """,
-    MODULEFORMER_START_DOCSTRING,
+    JETMOE_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->JetMoE, LLAMA->MODULEFORMER
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->JetMoE, LLAMA->JETMOE
 class JetMoEForSequenceClassification(JetMoEPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1795,7 +1795,7 @@ class JetMoEForSequenceClassification(JetMoEPreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(MODULEFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(JETMOE_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,

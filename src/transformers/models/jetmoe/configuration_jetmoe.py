@@ -30,6 +30,8 @@ class JetMoEConfig(PretrainedConfig):
     JetMoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the JetMoE-8B.
 
+    [jetmoe/jetmoe-8b](https://huggingface.co/jetmoe/jetmoe-8b)
+
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 

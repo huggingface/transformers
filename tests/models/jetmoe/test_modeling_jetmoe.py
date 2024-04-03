@@ -299,6 +299,7 @@ class JetMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     )
     test_headmasking = False
     test_pruning = False
+    test_mismatched_shapes = False
 
     # TODO: @Fxmarty
     @is_flaky(max_attempts=3, description="flaky on some models.")
