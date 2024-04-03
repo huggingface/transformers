@@ -51,6 +51,7 @@ if is_vision_available():
     from PIL import Image
 
 
+# Copied from transformers.models.llava_next.image_processing_llava_next.divide_to_patches
 def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> List[np.array]:
     """
     Divides an image into patches of a specified size.
@@ -79,6 +80,7 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> Li
     return patches
 
 
+# Copied from transformers.models.llava_next.image_processing_llava_next.expand_to_square
 def expand_to_square(image: np.array, background_color, input_data_format) -> np.array:
     """
     Expands an image to a square by adding a background color.
@@ -97,6 +99,7 @@ def expand_to_square(image: np.array, background_color, input_data_format) -> np
         return result
 
 
+# Copied from transformers.models.llava_next.image_processing_llava_next._get_patch_output_size
 def _get_patch_output_size(image, target_resolution, input_data_format):
     original_height, original_width = get_image_size(image, channel_dim=input_data_format)
     target_height, target_width = target_resolution
@@ -114,6 +117,7 @@ def _get_patch_output_size(image, target_resolution, input_data_format):
     return new_height, new_width
 
 
+# Ignore copy
 class FalconImageProcessor(BaseImageProcessor):
     r"""
     Constructs a FalconVLM image processor. Based on [`CLIPImageProcessor`] with incorporation of additional techniques

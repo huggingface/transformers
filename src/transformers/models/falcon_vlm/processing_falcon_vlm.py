@@ -50,8 +50,8 @@ class FalconVLProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
 
         self.system_prompt_vl = "System: You serve as a language and vision assistant. \
-                    You are able to understand the visual content that the user provides, \
-                    and assist the user with a variety of tasks using natural language. User: "
+                     You are able to understand the visual content that the user provides, \
+                     and assist the user with a variety of tasks using natural language. User: "
         self.image_padded_token = torch.tensor(-200).view(1, -1)
         self.image_padded_mask = torch.tensor(1).view(1, -1)
 
@@ -151,6 +151,7 @@ class FalconVLProcessor(ProcessorMixin):
 
         return BatchFeature(data={**text_inputs, **image_inputs})
 
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Falcon
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to FalconTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
@@ -158,14 +159,16 @@ class FalconVLProcessor(ProcessorMixin):
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Llama
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to FalconTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 
     @property
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names

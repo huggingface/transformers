@@ -21,8 +21,6 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers.generation.utils import GenerateOutput
-
 from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache
@@ -299,9 +297,7 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
         image_features = self.mm_projector(image_features)
         return image_features
 
-    def prepare_inputs_labels_for_multimodal(
-        self, input_ids, position_ids, attention_mask, past_key_values, labels, images
-    ):
+    def prepare_inputs_labels_for_multimodal(self, input_ids, position_ids, attention_mask, labels, images):
         concat_images = torch.cat(list(images), dim=0)
 
         image_features = self.encode_images(concat_images)
@@ -449,7 +445,7 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
         if _position_ids is None:
             position_ids = None
 
-        return None, position_ids, attention_mask, past_key_values, new_input_embeds, new_labels
+        return None, position_ids, attention_mask, new_input_embeds, new_labels
 
     @add_start_docstrings_to_model_forward(FALCON_VLM_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=FalconVLMCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -488,20 +484,16 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if inputs_embeds is None:
-            # 1. Extract the input embeddings
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-            # 2. Merge text and images
+            # 1. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
                 (
                     input_ids,
                     position_ids,
                     attention_mask,
-                    past_key_values,
                     inputs_embeds,
                     labels,
                 ) = self.prepare_inputs_labels_for_multimodal(
-                    input_ids, position_ids, attention_mask, past_key_values, labels, pixel_values
+                    input_ids, position_ids, attention_mask, labels, pixel_values
                 )
 
             # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
@@ -537,6 +529,7 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
                 position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
         outputs = self.language_model(
+            input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -575,38 +568,6 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-        )
-
-    @torch.no_grad()
-    def generate(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        pixel_values: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        max_new_tokens: Optional[int] = 128,
-        **kwargs,
-    ) -> Union[GenerateOutput, torch.LongTensor]:
-        position_ids = kwargs.pop("position_ids", None)
-        if "inputs_embeds" in kwargs:
-            raise NotImplementedError("`inputs_embeds` is not supported")
-
-        (input_ids, position_ids, attention_mask, _, inputs_embeds, _) = self.prepare_inputs_labels_for_multimodal(
-            input_ids,
-            position_ids,
-            attention_mask,
-            None,
-            None,
-            pixel_values,
-        )
-
-        return super().generate(
-            position_ids=position_ids,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            pad_token_id=11,
-            max_new_tokens=max_new_tokens,
-            **kwargs,
         )
 
     # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.prepare_inputs_for_generation
