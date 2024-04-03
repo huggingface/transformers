@@ -35,7 +35,6 @@ from ...utils import (
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_mamba import MambaConfig
 
-
 logger = logging.get_logger(__name__)
 
 if is_mamba_ssm_available():
@@ -57,11 +56,29 @@ _CHECKPOINT_FOR_DOC = "state-spaces/mamba-130m-hf"
 _CONFIG_FOR_DOC = "MambaConfig"
 
 
-from ..deprecated._archive_maps import MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+from ..deprecated._archive_maps import (  # noqa: F401, E402
+    MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST,
+)
 
 
 class MambaCache:
-    def __init__(self, config, batch_size, dtype=torch.float16, device=None):
+    """
+    Arguments:
+        config: MambaConfig
+        batch_size: int
+        dtype: torch.dtype
+        device: torch.device
+
+    Attributes:
+        seqlen_offset: int
+        dtype: torch.dtype
+        conv_states: Dict[int, torch.Tensor] # layer_idx -> [batch_size, intermediate_size, conv_kernel_size]
+        ssm_states: Dict[int, torch.Tensor] # layer_idx -> [batch_size, intermediate_size, ssm_state_size]
+    """
+
+    def __init__(
+        self, config: MambaConfig, batch_size: int, dtype: torch.dtype = torch.float16, device: Optional[str] = None
+    ):
         self.seqlen_offset = 0
         self.dtype = dtype
         intermediate_size = config.intermediate_size
@@ -86,13 +103,13 @@ class MambaMixer(nn.Module):
     and is why Mamba is called **selective** state spaces)
     """
 
-    def __init__(self, config, layer_idx):
+    def __init__(self, config: MambaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
         self.intermediate_size = config.intermediate_size
-        self.time_step_rank = config.time_step_rank
+        self.time_step_rank = int(config.time_step_rank)
         self.layer_idx = layer_idx
         self.use_conv_bias = config.use_conv_bias
         self.conv1d = nn.Conv1d(
