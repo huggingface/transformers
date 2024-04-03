@@ -404,7 +404,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
-        EXPECTED_DECODED_TEXT = "USER:  \nWhat are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a body of water, there are a few things to be cautious about. First, be aware of the surroundings and potential hazards, such as slippery surfaces, uneven ground, or any obstacles in the water. Second, be mindful of the weather conditions, as sudden changes in weather can make the dock or pier unsafe to use. Third, be cautious of the water depth and any underwater hazards, such as rocks or debris, that could pose a risk to your safety. Lastly, be respectful of the environment and other visitors, and follow any rules or guidelines posted at the dock or pier."  # fmt: skip
+        EXPECTED_DECODED_TEXT = "USER:  \nWhat are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the presence of wildlife, such as birds or fish, and avoid disturbing their natural habitats. Lastly, be aware of any local regulations or guidelines for the use of the pier, as some areas may be restricted or prohibited for certain activities."  # fmt: skip
 
         self.assertEqual(
             processor.decode(output[0], skip_special_tokens=True),
@@ -508,7 +508,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = model.eval()
 
         EXPECTED_OUTPUT = [
-            "\n \nUSER: What's the the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a small dog in one and a ll",
+            "\n \nUSER: What's the the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a small dog holding a flower in one",
             "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
             "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
         ]
