@@ -118,8 +118,6 @@ class JambaConfig(PretrainedConfig):
             Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
         mamba_proj_bias (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
-        mamba_inner_layernorms (`bool`, *optional*, defaults to `True`):
-            Flag indicating whether or not to apply layernorms to internal mamba activations
 
     """
 
@@ -161,7 +159,6 @@ class JambaConfig(PretrainedConfig):
         mamba_dt_rank="auto",
         mamba_conv_bias=True,
         mamba_proj_bias=False,
-        mamba_inner_layernorms=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -202,7 +199,6 @@ class JambaConfig(PretrainedConfig):
         self.mamba_dt_rank = math.ceil(self.hidden_size / 16) if mamba_dt_rank == "auto" else mamba_dt_rank
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
-        self.mamba_inner_layernorms = mamba_inner_layernorms
 
         super().__init__(
             pad_token_id=pad_token_id,

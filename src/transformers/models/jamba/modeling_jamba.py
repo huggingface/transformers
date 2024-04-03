@@ -828,7 +828,6 @@ class JambaMambaMixer(nn.Module):
 
         self.activation = config.hidden_act
         self.act = ACT2FN[config.hidden_act]
-        self.apply_inner_layernorms = config.mamba_inner_layernorms
 
         self.use_fast_kernels = config.use_mamba_kernels
 
@@ -848,14 +847,9 @@ class JambaMambaMixer(nn.Module):
         self.D = nn.Parameter(torch.ones(self.intermediate_size))
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=self.use_bias)
 
-        if self.apply_inner_layernorms:
-            self.dt_layernorm = JambaRMSNorm(self.time_step_rank, eps=config.rms_norm_eps)
-            self.b_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
-            self.c_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
-        else:
-            self.dt_layernorm = None
-            self.b_layernorm = None
-            self.c_layernorm = None
+        self.dt_layernorm = JambaRMSNorm(self.time_step_rank, eps=config.rms_norm_eps)
+        self.b_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
+        self.c_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
 
         if not is_fast_path_available:
             logger.warning_once(
@@ -868,105 +862,87 @@ class JambaMambaMixer(nn.Module):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
-        if (
-            self.training and cache_params is None and not self.apply_inner_layernorms
-        ):  # Doesn't support outputting the states -> used for training
-            contextualized_states = mamba_inner_fn(
-                projected_states,
-                self.conv1d.weight,
-                self.conv1d.bias if self.use_conv_bias else None,
-                self.x_proj.weight,
-                self.dt_proj.weight,
-                self.out_proj.weight,
-                self.out_proj.bias.float() if self.use_bias else None,
-                -torch.exp(self.A_log.float()),
-                None,  # input-dependent B
-                None,  # input-dependent C
-                self.D.float(),
-                delta_bias=self.dt_proj.bias.float(),
-                delta_softplus=True,
-            )
+        # We can't use `mamba_inner_fn` even if in training and without cache params because we have the
+        # inner layernorms which isn't supported by this fused kernel
+        hidden_states, gate = projected_states.chunk(2, dim=1)
 
+        # 2. Convolution sequence transformation
+        conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
+        if cache_params is not None and cache_params.seqlen_offset > 0:
+            hidden_states = causal_conv1d_update(
+                hidden_states.squeeze(-1),
+                cache_params.conv_states[self.layer_idx],
+                conv_weights,
+                self.conv1d.bias,
+                self.activation,
+            )
+            hidden_states = hidden_states.unsqueeze(-1)
         else:
-            hidden_states, gate = projected_states.chunk(2, dim=1)
-
-            # 2. Convolution sequence transformation
-            conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
-            if cache_params is not None and cache_params.seqlen_offset > 0:
-                hidden_states = causal_conv1d_update(
-                    hidden_states.squeeze(-1),
-                    cache_params.conv_states[self.layer_idx],
-                    conv_weights,
-                    self.conv1d.bias,
-                    self.activation,
+            if cache_params is not None:
+                conv_states = nn.functional.pad(
+                    hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
                 )
-                hidden_states = hidden_states.unsqueeze(-1)
-            else:
-                if cache_params is not None:
-                    conv_states = nn.functional.pad(
-                        hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
-                    )
-                    cache_params.conv_states[self.layer_idx].copy_(conv_states)
-                hidden_states = causal_conv1d_fn(
-                    hidden_states, conv_weights, self.conv1d.bias, activation=self.activation
-                )
-
-            # 3. State Space Model sequence transformation
-            # 3.a. input varying initialization of time_step, B and C
-            ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
-            time_step, B, C = torch.split(
-                ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
+                cache_params.conv_states[self.layer_idx].copy_(conv_states)
+            hidden_states = causal_conv1d_fn(
+                hidden_states, conv_weights, self.conv1d.bias, activation=self.activation
             )
 
-            if self.apply_inner_layernorms:
-                time_step = self.dt_layernorm(time_step)
-                B = self.b_layernorm(B)
-                C = self.c_layernorm(C)
+        # 3. State Space Model sequence transformation
+        # 3.a. input varying initialization of time_step, B and C
+        ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
+        time_step, B, C = torch.split(
+            ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
+        )
 
-            # Here we need to apply dt_proj without the bias, as the bias is added in the selective scan kernel.
-            # This is a hack to apply dt_proj while still using the forward pass of `torch.nn.Linear`, which is needed
-            # in order to make quantization work. Quantization code replaces `torch.nn.Linear` layers with quantized
-            # linear layers, and requires to call the forward pass directly.
-            # The original code here was: ```discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)```
-            time_proj_bias = self.dt_proj.bias
-            self.dt_proj.bias = None
-            discrete_time_step = self.dt_proj(time_step).transpose(1, 2)
-            self.dt_proj.bias = time_proj_bias
+        time_step = self.dt_layernorm(time_step)
+        B = self.b_layernorm(B)
+        C = self.c_layernorm(C)
 
-            A = -torch.exp(self.A_log.float())
-            # 3.c perform the recurrence y ← SSM(A, B, C)(x)
-            time_proj_bias = time_proj_bias.float() if time_proj_bias is not None else None
-            if cache_params is not None and cache_params.seqlen_offset > 0:
-                scan_outputs = selective_state_update(
-                    cache_params.ssm_states[self.layer_idx],
-                    hidden_states[..., 0],
-                    discrete_time_step[..., 0],
-                    A,
-                    B[:, 0],
-                    C[:, 0],
-                    self.D,
-                    gate[..., 0],
-                    time_proj_bias,
-                    dt_softplus=True,
-                ).unsqueeze(-1)
-            else:
-                scan_outputs, ssm_state = selective_scan_fn(
-                    hidden_states,
-                    discrete_time_step,
-                    A,
-                    B.transpose(1, 2),
-                    C.transpose(1, 2),
-                    self.D.float(),
-                    gate,
-                    time_proj_bias,
-                    delta_softplus=True,
-                    return_last_state=True,
-                )
-                if ssm_state is not None and cache_params is not None:
-                    cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
+        # Here we need to apply dt_proj without the bias, as the bias is added in the selective scan kernel.
+        # This is a hack to apply dt_proj while still using the forward pass of `torch.nn.Linear`, which is needed
+        # in order to make quantization work. Quantization code replaces `torch.nn.Linear` layers with quantized
+        # linear layers, and requires to call the forward pass directly.
+        # The original code here was: ```discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)```
+        time_proj_bias = self.dt_proj.bias
+        self.dt_proj.bias = None
+        discrete_time_step = self.dt_proj(time_step).transpose(1, 2)
+        self.dt_proj.bias = time_proj_bias
 
-            # 4. Final linear projection
-            contextualized_states = self.out_proj(scan_outputs.transpose(1, 2))
+        A = -torch.exp(self.A_log.float())
+        # 3.c perform the recurrence y ← SSM(A, B, C)(x)
+        time_proj_bias = time_proj_bias.float() if time_proj_bias is not None else None
+        if cache_params is not None and cache_params.seqlen_offset > 0:
+            scan_outputs = selective_state_update(
+                cache_params.ssm_states[self.layer_idx],
+                hidden_states[..., 0],
+                discrete_time_step[..., 0],
+                A,
+                B[:, 0],
+                C[:, 0],
+                self.D,
+                gate[..., 0],
+                time_proj_bias,
+                dt_softplus=True,
+            ).unsqueeze(-1)
+        else:
+            scan_outputs, ssm_state = selective_scan_fn(
+                hidden_states,
+                discrete_time_step,
+                A,
+                B.transpose(1, 2),
+                C.transpose(1, 2),
+                self.D.float(),
+                gate,
+                time_proj_bias,
+                delta_softplus=True,
+                return_last_state=True,
+            )
+            if ssm_state is not None and cache_params is not None:
+                cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
+
+        # 4. Final linear projection
+        contextualized_states = self.out_proj(scan_outputs.transpose(1, 2))
+
         return contextualized_states
 
     # fmt: off
@@ -1015,10 +991,9 @@ class JambaMambaMixer(nn.Module):
             ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
         )
 
-        if self.apply_inner_layernorms:
-            time_step = self.dt_layernorm(time_step)
-            B = self.b_layernorm(B)
-            C = self.c_layernorm(C)
+        time_step = self.dt_layernorm(time_step)
+        B = self.b_layernorm(B)
+        C = self.c_layernorm(C)
 
         discrete_time_step = self.dt_proj(time_step)                                    # [batch, seq_len, intermediate_size]
         discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1, 2) # [batch, intermediate_size, seq_len]
