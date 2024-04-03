@@ -284,6 +284,16 @@ class JetMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         (JetMoEModel, JetMoEForCausalLM, JetMoEForSequenceClassification) if is_torch_available() else ()
     )
     all_generative_model_classes = (JetMoEForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": JetMoEModel,
+            "text-classification": JetMoEForSequenceClassification,
+            "text-generation": JetMoEForCausalLM,
+            "zero-shot": JetMoEForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_headmasking = False
     test_pruning = False
 
