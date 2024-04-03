@@ -569,14 +569,13 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.prepare_inputs_for_generation
+    # Ignore copy
     def prepare_inputs_for_generation(
         self,
         input_ids,
         past_key_values=None,
         inputs_embeds=None,
         pixel_values=None,
-        image_sizes=None,
         attention_mask=None,
         **kwargs,
     ):
@@ -626,7 +625,6 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
                 "pixel_values": pixel_values,
-                "image_sizes": image_sizes,
             }
         )
         return model_inputs
