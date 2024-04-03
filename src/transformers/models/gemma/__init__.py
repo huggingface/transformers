@@ -55,6 +55,7 @@ else:
         "GemmaModel",
         "GemmaPreTrainedModel",
         "GemmaForSequenceClassification",
+        "GemmaForTokenClassification",
     ]
 
 try:
@@ -98,6 +99,7 @@ if TYPE_CHECKING:
         from .modeling_gemma import (
             GemmaForCausalLM,
             GemmaForSequenceClassification,
+            GemmaForTokenClassification,
             GemmaModel,
             GemmaPreTrainedModel,
         )

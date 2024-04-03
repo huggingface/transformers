@@ -43,6 +43,7 @@ if is_torch_available():
         AutoTokenizer,
         PersimmonForCausalLM,
         PersimmonForSequenceClassification,
+        PersimmonForTokenClassification,
         PersimmonModel,
     )
 
@@ -277,12 +278,13 @@ class PersimmonModelTester:
 @require_torch
 class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (PersimmonModel, PersimmonForCausalLM, PersimmonForSequenceClassification) if is_torch_available() else ()
+        (PersimmonModel, PersimmonForCausalLM, PersimmonForSequenceClassification, PersimmonForTokenClassification) if is_torch_available() else ()
     )
     pipeline_model_mapping = (
         {
             "feature-extraction": PersimmonModel,
             "text-classification": PersimmonForSequenceClassification,
+            "token-classification": PersimmonForTokenClassification,
             # TODO (ydshieh): check why these two fail. Fix them or skip them in a better way.
             # "text-generation": PersimmonForCausalLM,
             # "zero-shot": PersimmonForSequenceClassification,
@@ -358,6 +360,22 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_token_classification_model with Llama->Persimmon,llama->persimmon
+    def test_persimmon_token_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        model = PersimmonForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+        )
 
     @unittest.skip("Persimmon buffers include complex numbers, which breaks this test")
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_save_load_fast_init_from_base

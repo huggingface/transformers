@@ -1398,6 +1398,7 @@ class MistralForSequenceClassification(MistralPreTrainedModel):
     """,
     MISTRAL_START_DOCSTRING,
 )
+# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Mistral, LLAMA->MISTRAL
 class MistralForTokenClassification(MistralPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

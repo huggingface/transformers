@@ -3855,6 +3855,13 @@ class GemmaForSequenceClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class GemmaForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class GemmaModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -4769,6 +4776,13 @@ class LlamaForQuestionAnswering(metaclass=DummyObject):
 
 
 class LlamaForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LlamaForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -6589,6 +6603,12 @@ class PersimmonForSequenceClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class PersimmonForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 class PersimmonModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -8022,6 +8042,13 @@ class StableLmForSequenceClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class StableLmForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class StableLmModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -8044,6 +8071,13 @@ class Starcoder2ForCausalLM(metaclass=DummyObject):
 
 
 class Starcoder2ForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Starcoder2ForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

@@ -2282,6 +2282,7 @@ else:
         [
             "GemmaForCausalLM",
             "GemmaForSequenceClassification",
+            "GemmaForTokenClassification",
             "GemmaModel",
             "GemmaPreTrainedModel",
         ]
@@ -2533,6 +2534,7 @@ else:
             "LlamaForCausalLM",
             "LlamaForQuestionAnswering",
             "LlamaForSequenceClassification",
+            "LlamaForTokenClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
         ]
@@ -2989,6 +2991,7 @@ else:
         [
             "PersimmonForCausalLM",
             "PersimmonForSequenceClassification",
+            "PersimmonForTokenClassification",
             "PersimmonModel",
             "PersimmonPreTrainedModel",
         ]
@@ -3348,6 +3351,7 @@ else:
         [
             "StableLmForCausalLM",
             "StableLmForSequenceClassification",
+            "StableLmForTokenClassification",
             "StableLmModel",
             "StableLmPreTrainedModel",
         ]
@@ -3356,6 +3360,7 @@ else:
         [
             "Starcoder2ForCausalLM",
             "Starcoder2ForSequenceClassification",
+            "Starcoder2ForTokenClassification",
             "Starcoder2Model",
             "Starcoder2PreTrainedModel",
         ]
@@ -7014,6 +7019,7 @@ if TYPE_CHECKING:
         from .models.gemma import (
             GemmaForCausalLM,
             GemmaForSequenceClassification,
+            GemmaForTokenClassification,
             GemmaModel,
             GemmaPreTrainedModel,
         )
@@ -7213,6 +7219,7 @@ if TYPE_CHECKING:
             LlamaForCausalLM,
             LlamaForQuestionAnswering,
             LlamaForSequenceClassification,
+            LlamaForTokenClassification,
             LlamaModel,
             LlamaPreTrainedModel,
         )
@@ -7581,6 +7588,7 @@ if TYPE_CHECKING:
         from .models.persimmon import (
             PersimmonForCausalLM,
             PersimmonForSequenceClassification,
+            PersimmonForTokenClassification,
             PersimmonModel,
             PersimmonPreTrainedModel,
         )
@@ -7877,12 +7885,14 @@ if TYPE_CHECKING:
         from .models.stablelm import (
             StableLmForCausalLM,
             StableLmForSequenceClassification,
+            StableLmForTokenClassification,
             StableLmModel,
             StableLmPreTrainedModel,
         )
         from .models.starcoder2 import (
             Starcoder2ForCausalLM,
             Starcoder2ForSequenceClassification,
+            Starcoder2ForTokenClassification,
             Starcoder2Model,
             Starcoder2PreTrainedModel,
         )

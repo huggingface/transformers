@@ -1620,7 +1620,7 @@ class MixtralForSequenceClassification(MixtralPreTrainedModel):
     """,
     MIXTRAL_START_DOCSTRING,
 )
-# Copied from transformers.models.mistral.modeling_mistral.MistralForTokenClassification with Mistral->Mixtral, MISTRAL->MIXTRAL
+# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Mixtral, LLAMA->MIXTRAL
 class MixtralForTokenClassification(MixtralPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

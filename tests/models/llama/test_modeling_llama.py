@@ -48,6 +48,7 @@ if is_torch_available():
         LlamaForCausalLM,
         LlamaForQuestionAnswering,
         LlamaForSequenceClassification,
+        LlamaForTokenClassification,
         LlamaModel,
         LlamaTokenizer,
     )
@@ -282,7 +283,7 @@ class LlamaModelTester:
 @require_torch
 class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (LlamaModel, LlamaForCausalLM, LlamaForSequenceClassification, LlamaForQuestionAnswering)
+        (LlamaModel, LlamaForCausalLM, LlamaForSequenceClassification, LlamaForQuestionAnswering, LlamaForTokenClassification)
         if is_torch_available()
         else ()
     )
@@ -294,6 +295,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             "text-generation": LlamaForCausalLM,
             "zero-shot": LlamaForSequenceClassification,
             "question-answering": LlamaForQuestionAnswering,
+            "token-classification": LlamaForTokenClassification,
         }
         if is_torch_available()
         else {}
@@ -364,6 +366,21 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    def test_llama_token_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        model = LlamaForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+        )
 
     @unittest.skip("Llama buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
