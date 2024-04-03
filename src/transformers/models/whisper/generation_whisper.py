@@ -12,11 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import math
 import warnings
 import zlib
 from typing import Callable, Iterator, List, Optional, Tuple, Union
-import copy
+
 import numpy as np
 import torch
 import torch.nn.functional as F
