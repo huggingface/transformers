@@ -137,10 +137,11 @@ class WatermarkDetector:
         self.processor = WatermarkLogitsProcessor(
             vocab_size=model_config.vocab_size, device=device, **watermarking_config
         )
+
+        # Expensive re-seeding and sampling is cached.
         self._get_ngram_score_cached = lru_cache(maxsize=max_size)(self._get_ngram_score)
 
     def _get_ngram_score(self, prefix: torch.LongTensor, target: int):
-        """Expensive re-seeding and sampling is cached."""
         greenlist_ids = self.processor._get_greenlist_ids(prefix)
         return target in greenlist_ids
 
@@ -219,12 +220,12 @@ class WatermarkDetector:
 
         num_tokens_scored, green_token_count = self._score_ngrams_in_passage(input_ids)
         z_score = self._compute_z_score(green_token_count, num_tokens_scored)
-
-        p_value = self._compute_pval(z_score)
         prediction = z_score > z_threshold
-        confidence = 1 - p_value
 
         if return_dict:
+            p_value = self._compute_pval(z_score)
+            confidence = 1 - p_value
+
             return WatermarkDetectorOutput(
                 num_tokens_scored=num_tokens_scored,
                 num_green_tokens=green_token_count,

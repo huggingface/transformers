@@ -227,8 +227,8 @@ class GenerationConfig(PushToHubMixin):
             Used with beam search and contrastive search.
         watermarking_config (Union[`WatermarkingConfig`, `dict`], *optional*):
             Arguments used to watermark the model outputs by adding a small bias to randomly selected set of "green" tokens.
-            See [this paper](https://arxiv.org/abs/2306.04634) for more details.
-            Accepts the following keys:
+            If passed as `Dict`, it will be converted to a `WatermarkingConfig` internally.
+            See [this paper](https://arxiv.org/abs/2306.04634) for more details. Accepts the following keys:
             - greenlist_ratio (`float`):
                 Used for watermarking. The ratio of "green" tokens used to the vocabulary size. Defaults to 0.25.
             - bias (`float`):
@@ -636,36 +636,7 @@ class GenerationConfig(PushToHubMixin):
 
         # check watermarking arguments
         if self.watermarking_config is not None:
-            watermark_missing_arg_msg = (
-                "Some of the keys in `watermarking_config` are defined incorrectly. `{key}` should be {correct_value}` "
-                "but found {found_value}"
-            )
-            if self.watermarking_config.seeding_scheme not in ["selfhash", "lefthash"]:
-                raise ValueError(
-                    watermark_missing_arg_msg.format(
-                        key="seeding_scheme",
-                        correct_value="[`selfhash`, `lefthash`]",
-                        found_value=self.watermarking_config.seeding_scheme,
-                    ),
-                )
-
-            if not 0.0 <= self.watermarking_config.greenlist_ratio <= 1.0:
-                raise ValueError(
-                    watermark_missing_arg_msg.format(
-                        key="greenlist_ratio",
-                        correct_value="in range between 0.0 and 1.0",
-                        found_value=self.watermarking_config.seeding_scheme,
-                    ),
-                )
-
-            if not self.watermarking_config.context_width >= 1:
-                raise ValueError(
-                    watermark_missing_arg_msg.format(
-                        key="context_width",
-                        correct_value="a positive integer",
-                        found_value=self.watermarking_config.context_width,
-                    ),
-                )
+            self.watermarking_config.validate()
 
         # 5. check common issue: passing `generate` arguments inside the generation config
         generate_arguments = (
@@ -1206,8 +1177,6 @@ class WatermarkingConfig:
         Returns:
             WatermarkingConfig: Instance of WatermarkingConfig constructed from the dictionary.
         """
-        if config_dict is None:
-            return None
         config = cls(**config_dict)
         to_remove = []
         for key, value in kwargs.items():
@@ -1267,3 +1236,33 @@ class WatermarkingConfig:
         for key, value in kwargs.items():
             if hasattr(self, key):
                 setattr(self, key, value)
+
+    def validate(self):
+        watermark_missing_arg_msg = (
+            "Some of the keys in `watermarking_config` are defined incorrectly. `{key}` should be {correct_value}` "
+            "but found {found_value}"
+        )
+        if self.seeding_scheme not in ["selfhash", "lefthash"]:
+            raise ValueError(
+                watermark_missing_arg_msg.format(
+                    key="seeding_scheme",
+                    correct_value="[`selfhash`, `lefthash`]",
+                    found_value=self.seeding_scheme,
+                ),
+            )
+        if not 0.0 <= self.greenlist_ratio <= 1.0:
+            raise ValueError(
+                watermark_missing_arg_msg.format(
+                    key="greenlist_ratio",
+                    correct_value="in range between 0.0 and 1.0",
+                    found_value=self.seeding_scheme,
+                ),
+            )
+        if not self.context_width >= 1:
+            raise ValueError(
+                watermark_missing_arg_msg.format(
+                    key="context_width",
+                    correct_value="a positive integer",
+                    found_value=self.context_width,
+                ),
+            )
