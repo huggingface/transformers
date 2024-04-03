@@ -71,7 +71,7 @@ class WatermarkDetector:
     Detector for detection of watermark generated text. The detector needs to be given the exact same settings that were
     given during text generation to replicate the watermark greenlist generation and so detect the watermark. This includes
     the correct device that was used during text generation, the correct watermarking arguments and the correct tokenizer vocab size.
-    The code was absed on the [original repo](https://github.com/jwkirchenbauer/lm-watermarking/tree/main).
+    The code was based on the [original repo](https://github.com/jwkirchenbauer/lm-watermarking/tree/main).
 
     See [the paper](https://arxiv.org/abs/2306.04634) for more information.
 

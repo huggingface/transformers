@@ -172,6 +172,47 @@ your screen, one word at a time:
 An increasing sequence: one, two, three, four, five, six, seven, eight, nine, ten, eleven,
 ```
 
+
+## Watermarking
+
+The `generate()` supports watermarking the generated text by randomly marking a portion of tokens as "red" and "green".
+This watermarking strategy was proposed in the paper ["On the Reliability of Watermarks for Large Language Models"](https://arxiv.org/abs/2306.04634).
+It can be used with any generative model in `tranformers` and does not require classification model to detect watermarking. 
+
+To trigger watermarking, pass in a `WatermarkingConfig` with needed arguments, otherwise initialize `WatermarkingConfig`
+without overwriting arguments to use the default values. The watermarked text can be detected by using a `WatermarkDetector`.
+
+
+<Tip warning={true}>
+
+The `WatermarkDetector` internally relies on the proportion of "green" and "red" tokens, and whether generated text follows the coloring pattern.
+That is why it is recommended to strip off the prompt text, if it is much longer than the generated text.
+This also can have an effect when one sequence in the batch is a lot longer causing other rows to be padded. 
+
+</Tip>
+
+
+```python
+>>> from transformers import AutoTokenizer, AutoModelForCausalLM, WatermarkDetector, WatermarkingConfig
+
+>>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+>>> tok = AutoTokenizer.from_pretrained("openai-community/gpt2")
+>>> tok.pad_token_id = tok.eos_token_id
+>>> tok.padding_side = "left"
+
+>>> inputs = tok(["This is the beginning of a long story", "Alice and Bob are"], padding=True, return_tensors="pt")
+>>> input_len = inputs["input_ids"].shape[-1]
+
+>>> watermarking_config = WatermarkingConfig(bias=2.5, seeding_scheme="selfhash")
+>>> out = model.generate(**inputs, watermarking_config=watermarking_config, do_sample=False, max_length=20)
+
+>>> detector = WatermarkDetector(model_config=model.config, device="cpu", watermarking_config=watermarking_config)
+>>> detection_out = detector(out, return_dict=True)
+>>> detection_out.prediction
+array([Truem True])
+```
+
+
 ## Decoding strategies
 
 Certain combinations of the `generate()` parameters, and ultimately `generation_config`, can be used to enable specific
