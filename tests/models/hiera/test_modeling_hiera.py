@@ -271,8 +271,67 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
-    def test_save_load(self):
-        ...
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            expected_num_attentions = len(self.model_tester.depths)
+            self.assertEqual(len(attentions), expected_num_attentions)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            seq_len = math.prod([i // s for i, s in zip(config.input_size, config.patch_stride)])
+            mask_unit_area = math.prod(config.masked_unit_size)
+            num_windows = seq_len // mask_unit_area
+            if model_class.__name__ == "HieraForPreTraining":
+                num_windows = int(num_windows * (1 - config.mask_ratio))
+                seq_len = int(num_windows * mask_unit_area)
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), expected_num_attentions)
+
+            self.assertListEqual(
+                list(attentions[0].shape[-4:]),
+                [self.model_tester.initial_num_heads, num_windows, mask_unit_area, seq_len // num_windows],
+            )
+            out_len = len(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # also another +1 for reshaped_hidden_states
+            added_hidden_states = 1 if model_class.__name__ == "HieraBackbone" else 2
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self_attentions = outputs.attentions
+
+            self.assertEqual(len(self_attentions), expected_num_attentions)
+
+            self.assertListEqual(
+                list(self_attentions[0].shape[-4:]),
+                [self.model_tester.initial_num_heads, num_windows, mask_unit_area, seq_len // num_windows],
+            )
 
     @unittest.skip(reason="Hiera does not use inputs_embeds")
     def test_inputs_embeds(self):
