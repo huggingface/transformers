@@ -44,9 +44,6 @@ FALCON_VLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all FalconVLM models at https://huggingface.co/models?filter=falcon_vlm
 ]
 
-IGNORE_INDEX = -100
-IMAGE_TOKEN_INDEX = -200
-
 
 @dataclass
 # Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->FalconVLM
@@ -315,7 +312,7 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
         if position_ids is None:
             position_ids = torch.arange(0, input_ids.shape[1], dtype=torch.long, device=input_ids.device)
         if labels is None:
-            labels = torch.full_like(input_ids, IGNORE_INDEX)
+            labels = torch.full_like(input_ids, self.config.ignore_index)
 
         _input_ids = input_ids
         input_ids = [
@@ -327,7 +324,7 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
         new_labels = []
         cur_image_idx = 0
         for batch_idx, cur_input_ids in enumerate(input_ids):
-            num_images = (cur_input_ids == IMAGE_TOKEN_INDEX).sum()
+            num_images = (cur_input_ids == self.config.image_token_index).sum()
             if num_images == 0:
                 cur_image_features = image_features[cur_image_idx]
                 cur_input_embeds_1 = self.language_model.transformer.word_embeddings(cur_input_ids)
@@ -338,7 +335,9 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
                 continue
 
             image_token_indices = (
-                [-1] + torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[0].tolist() + [cur_input_ids.shape[0]]
+                [-1]
+                + torch.where(cur_input_ids == self.config.image_token_index)[0].tolist()
+                + [cur_input_ids.shape[0]]
             )
             cur_input_ids_noim = []
             cur_labels = labels[batch_idx]
@@ -362,7 +361,7 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
                     cur_new_labels.append(
                         torch.full(
                             (cur_image_features.shape[0],),
-                            IGNORE_INDEX,
+                            self.config.ignore_index,
                             device=cur_labels.device,
                             dtype=cur_labels.dtype,
                         )
@@ -382,7 +381,7 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
 
         new_input_embeds_padded = []
         new_labels_padded = torch.full(
-            (batch_size, max_len), IGNORE_INDEX, dtype=new_labels[0].dtype, device=new_labels[0].device
+            (batch_size, max_len), self.config.ignore_index, dtype=new_labels[0].dtype, device=new_labels[0].device
         )
         attention_mask = torch.zeros((batch_size, max_len), dtype=attention_mask.dtype, device=attention_mask.device)
         position_ids = torch.zeros((batch_size, max_len), dtype=position_ids.dtype, device=position_ids.device)

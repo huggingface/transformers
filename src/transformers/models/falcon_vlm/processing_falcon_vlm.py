@@ -28,6 +28,7 @@ from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextI
 from ...utils import TensorType
 
 
+# Ignore copy
 class FalconVLProcessor(ProcessorMixin):
     r"""
     Constructs a FalconVLM processor which wraps a Falcon image processor and a Falcon tokenizer into a single processor.
@@ -49,10 +50,7 @@ class FalconVLProcessor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
 
-        self.system_prompt_vl = "System: You serve as a language and vision assistant. \
-                     You are able to understand the visual content that the user provides, \
-                     and assist the user with a variety of tasks using natural language. User: "
-        self.image_padded_token = torch.tensor(-200).view(1, -1)
+        self.image_padded_token = torch.tensor(tokenizer("<image>").input_ids).view(1, -1)
         self.image_padded_mask = torch.tensor(1).view(1, -1)
 
     def __call__(
@@ -114,14 +112,6 @@ class FalconVLProcessor(ProcessorMixin):
         else:
             image_inputs = {}
 
-        system_inputs = self.tokenizer(
-            self.system_prompt_vl,
-            return_tensors=return_tensors,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-        )
-
         if isinstance(text, list):
             text = ["\n" + t for t in text]
         else:
@@ -131,23 +121,22 @@ class FalconVLProcessor(ProcessorMixin):
             text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
 
-        batch, _ = text_inputs["input_ids"].shape
-        text_inputs["input_ids"] = torch.cat(
-            [
-                system_inputs["input_ids"].repeat(batch, 1),
-                self.image_padded_token.repeat(batch, 1),
-                text_inputs["input_ids"],
-            ],
-            dim=-1,
-        )
-        text_inputs["attention_mask"] = torch.cat(
-            [
-                system_inputs["attention_mask"].repeat(batch, 1),
-                self.image_padded_mask.repeat(batch, 1),
-                text_inputs["attention_mask"],
-            ],
-            dim=-1,
-        )
+        if "<image>" not in text:
+            batch, _ = text_inputs["input_ids"].shape
+            text_inputs["input_ids"] = torch.cat(
+                [
+                    self.image_padded_token.repeat(batch, 1),
+                    text_inputs["input_ids"],
+                ],
+                dim=-1,
+            )
+            text_inputs["attention_mask"] = torch.cat(
+                [
+                    self.image_padded_mask.repeat(batch, 1),
+                    text_inputs["attention_mask"],
+                ],
+                dim=-1,
+            )
 
         return BatchFeature(data={**text_inputs, **image_inputs})
 
