@@ -510,8 +510,8 @@ class WhisperGenerationMixin:
         self._set_language_and_task(
             language=language, task=task, is_multilingual=is_multilingual, generation_config=generation_config
         )
-        self._check_num_frames(
-            return_token_timestamps=return_token_timestamps, generation_config=generation_config
+        self._set_num_frames(
+            return_token_timestamps=return_token_timestamps, generation_config=generation_config, kwargs=kwargs
         )
         self._set_thresholds_and_condition(
             generation_config=generation_config,
@@ -562,7 +562,7 @@ class WhisperGenerationMixin:
                     [prompt_ids[None].repeat(decoder_input_ids.shape[0], 1), decoder_input_ids], dim=-1
                 )
 
-            max_new_tokens = generation_config.max_new_tokens if generation_config.max_new_tokens is not None else 0 
+            max_new_tokens = generation_config.max_new_tokens if generation_config.max_new_tokens is not None else 0
             if max_new_tokens + decoder_input_ids.shape[-1] > self.config.max_target_positions:
                 raise ValueError(
                     f"The length of `decoder_input_ids` equal `prompt_ids` plus special start tokens is {decoder_input_ids.shape[-1]}, and the `max_new_tokens` "
@@ -1275,7 +1275,7 @@ class WhisperGenerationMixin:
             )
 
     @staticmethod
-    def _check_num_frames(return_token_timestamps, generation_config):
+    def _set_num_frames(return_token_timestamps, generation_config, kwargs):
         if return_token_timestamps:
             if getattr(generation_config, "task", None) == "translate":
                 logger.warning("Token-level timestamps may not be reliable for task 'translate'.")
@@ -1284,6 +1284,7 @@ class WhisperGenerationMixin:
                     "Model generation config has no `alignment_heads`, token-level timestamps not available. "
                     "See https://gist.github.com/hollance/42e32852f24243b748ae6bc1f985b13a on how to add this property to the generation config."
                 )
+            generation_config.num_frames = kwargs.pop("num_frames", None)
 
     @staticmethod
     def _set_thresholds_and_condition(
