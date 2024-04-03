@@ -685,7 +685,6 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     [layer_attention.shape for layer_attention in iter_attentions],
                     [expected_shape] * len(iter_attentions),
                 )
-                print("PASS", expected_shape)
 
     @slow
     def test_model_from_pretrained(self):
