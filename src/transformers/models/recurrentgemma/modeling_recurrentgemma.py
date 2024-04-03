@@ -418,7 +418,6 @@ class LocalAttentionBlock(nn.Module):
 
         # Expand for batch and heads axis.
         attn_mask = attention_mask[None, None].type(torch.bool)
-        print(attn_mask.shape, logits.shape)
 
         masked_logits = torch.where(attn_mask, logits, _MIN_LOGITS_VALUE)
         masked_logits = masked_logits.type(torch.float32)
@@ -808,7 +807,7 @@ class ResidualBlock(nn.Module):
           than the returned updated cache is empty initialized and filled in from
           the input sequence.
         """
-        assert segment_pos.shape == (x.shape[1],)
+        assert segment_pos.shape == (x.shape[1],), f"{segment_pos.shape} != {(x.shape[1],)}"
         raw_x = x
 
         inputs_normalized = self.temporal_pre_norm(raw_x)
@@ -1624,7 +1623,7 @@ class GriffinCausalLMOutput(ModelOutput):
     logits: Optional[torch.FloatTensor] = None
     past_key_values: Optional[GriffinCache] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: None = None
+    attentions: tuple | None = None
 
 
 # END: adapted from mamba.
@@ -2118,6 +2117,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
+            attentions=(),
         )
 
     def prepare_inputs_for_generation(
@@ -2131,6 +2131,8 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
     ):
         if past_key_values is not None or cache_position.shape[0] == 1:
             input_ids = input_ids[:, -1].unsqueeze(-1)
+            if cache_position is not None:
+                cache_position = cache_position[-1:]
 
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}

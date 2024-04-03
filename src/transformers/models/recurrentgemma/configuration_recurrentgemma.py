@@ -133,7 +133,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
-        self._block_types = block_types
+        self._block_types = list(block_types)
 
         self.head_dim = self.hidden_size // self.num_attention_heads
 
