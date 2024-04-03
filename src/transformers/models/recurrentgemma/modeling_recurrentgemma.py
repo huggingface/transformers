@@ -144,10 +144,9 @@ def _compute_causal_mask(
     """
     # Mask for attending only to the same segment.
     if q_segment_ids is not None or k_segment_ids is not None:
-        if q_segment_ids is not None and k_segment_ids is not None:
+        if q_segment_ids is None or k_segment_ids is None:
             raise ValueError("Both q_segment_ids and k_segment_ids must be provided.")
-        same_segment_mask = q_segment_ids[..., None] == k_segment_ids[..., None,
-                                                        :]
+        same_segment_mask = q_segment_ids[..., None] == k_segment_ids[..., None, :]
     else:
         same_segment_mask = (k_positions >= 0)[..., None, :]
 
@@ -572,12 +571,12 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         else:
             state, prev_h = cache["conv1d_state"], cache["rg_lru_state"]
         x_branch, conv1d_state = self.conv_1d(
-            x=x_branch,
+            activations=x_branch,
             position_ids=position_ids,
             state=state,
         )
         x_branch, rg_lru_state = self.rg_lru(
-            x=x_branch,
+            activations=x_branch,
             position_ids=position_ids,
             prev_h=prev_h,
         )
@@ -813,7 +812,7 @@ class ResidualBlock(nn.Module):
           than the returned updated cache is empty initialized and filled in from
           the input sequence.
         """
-        assert segment_pos.shape == (x.shape[1],), f"{segment_pos.shape} != {(activations.shape[1],)}"
+        assert segment_pos.shape == (activations.shape[1],)
         raw_activations = activations
 
         inputs_normalized = self.temporal_pre_norm(raw_activations)
@@ -1240,14 +1239,14 @@ class Conv1D(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,
+        activations: torch.Tensor,
         position_ids: torch.Tensor,
         state: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calls the Conv1D.
 
         Args:
-          x: Sequence of input activations.
+          activations: Sequence of input activations.
           position_ids: Position of each token in the sequence.
           state: The state containing the previous `self.temporal_width-1` inputs
             This is set to `None` in training mode.
@@ -1255,13 +1254,13 @@ class Conv1D(nn.Module):
         Returns:
           The output of the convolution and the updated state.
         """
-        assert position_ids.shape == (x.shape[1],)
+        assert position_ids.shape == (activations.shape[1],)
 
         if state is not None:
             # 1. Decoding mode:
             # - We have access to the previous `self.temporal_width - 1` inputs.
             # - Only a single token needs to be output.
-            x = self._concatenate_with_state(x, state)
+            activations = self._concatenate_with_state(activations, state)
             prompt_len = self.temporal_width - 1
             output_len = 1
             state_dtype = state.dtype
@@ -1269,8 +1268,8 @@ class Conv1D(nn.Module):
             # 1. Training mode:
             # - The full sequence length need to be output.
             prompt_len = 0
-            output_len = x.shape[1]
-            state_dtype = x.dtype
+            output_len = activations.shape[1]
+            state_dtype = activations.dtype
 
         # 3. Perform the convolution:
         # - Initialize an accumulator for the convolution output.
@@ -1288,7 +1287,7 @@ class Conv1D(nn.Module):
                 shift_back=temporal_shift,
                 output_len=output_len,
             )
-            x_window = x[:, start_idx:end_idx]
+            x_window = activations[:, start_idx:end_idx]
 
             if state is None:
                 # - Ensure that the mask prevents accessing tokens from a different
@@ -1299,7 +1298,7 @@ class Conv1D(nn.Module):
                     end_idx=end_idx,
                     max_look_ahead=temporal_shift,
                 )
-                x_window *= window_mask[None, :, None].type(x.dtype).to(device=x.device)
+                x_window *= window_mask[None, :, None].type(activations.dtype).to(device=activations.device)
 
             x_window = self._pad_window(x_window, output_len)
 
@@ -1314,7 +1313,7 @@ class Conv1D(nn.Module):
         convolution_output += self.b[None, None]
 
         # 4. Store the new (potentially padded) state for future decoding.
-        new_state = x[:, 1 - self.temporal_width:].type(state_dtype)
+        new_state = activations[:, 1 - self.temporal_width:].type(state_dtype)
         new_state = self._pad_state(new_state)
 
         return convolution_output, new_state
@@ -1486,9 +1485,9 @@ class Einsum(nn.Module):
         std = math.sqrt(self.w_init_variance_scale / self.w_shape[1])
         torch.nn.init.normal_(w, mean=0.0, std=std)
 
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+    def __call__(self, activations: torch.Tensor) -> torch.Tensor:
         """Calls the Einsum."""
-        return torch.einsum(self.eqn, x, self.w) + self.b
+        return torch.einsum(self.eqn, activations, self.w) + self.b
 
 
 # ======================================== TRANSITION ========================================

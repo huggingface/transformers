@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch RecurrentRecurrentGemma model. """
+""" Testing suite for the PyTorch RecurrentGemma model. """
 import tempfile
 import unittest
 
@@ -551,7 +551,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
 
     def test_model_2b_fp32(self):
-        model_id = "google/gemma-2b"
+        model_id = "gg-hf/recurrentgemma-2b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I need to know what the most popular music",
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
@@ -608,7 +608,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_2b_bf16(self):
-        model_id = "google/recurrentgemma-2b"
+        model_id = "gg-hf/recurrentgemma-2b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I need to know what the most popular music",
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
@@ -627,7 +627,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_2b_eager(self):
-        model_id = "google/recurrentgemma-2b"
+        model_id = "gg-hf/recurrentgemma-2b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I am looking for some information on the ",
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
@@ -648,7 +648,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
 
     @require_torch_sdpa
     def test_model_2b_sdpa(self):
-        model_id = "google/recurrentgemma-2b"
+        model_id = "gg-hf/recurrentgemma-2b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I need to know what the most popular music",
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
@@ -670,7 +670,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     @pytest.mark.flash_attn_test
     @require_flash_attn
     def test_model_2b_flash_attn(self):
-        model_id = "google/recurrentgemma-2b"
+        model_id = "gg-hf/recurrentgemma-2b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I need to know what the most popular music",
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
@@ -691,105 +691,10 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
 
     @require_bitsandbytes
     def test_model_2b_4bit(self):
-        model_id = "google/recurrentgemma-2b"
+        model_id = "gg-hf/recurrentgemma-2b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project and I need to make a 3d model of a house. I have been using",
             "Hi today I'd like to share with you my experience with the new wattpad wattpad wattpad wattpad wattpad wattpad wattpad",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, load_in_4bit=True)
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    @unittest.skip("The test will not fit our CI runners")
-    def test_model_7b_fp32(self):
-        model_id = "google/recurrentgemma-7b"
-        EXPECTED_TEXTS = [
-            "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
-            "Hi,\n\nI have a problem with my 2005 1.6 16",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(torch_device)
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    def test_model_7b_fp16(self):
-        model_id = "google/recurrentgemma-7b"
-        EXPECTED_TEXTS = [
-            """Hello I am doing a project on a 1999 4.0L 4x4. I""",
-            "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
-            torch_device
-        )
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    def test_model_7b_bf16(self):
-        model_id = "google/recurrentgemma-7b"
-        EXPECTED_TEXTS = [
-            """Hello I am doing a project on a 1991 240sx and I am trying to find""",
-            "Hi today I am going to show you how to make a very simple and easy to make a very simple and",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    def test_model_7b_fp16_static_cache(self):
-        model_id = "google/recurrentgemma-7b"
-        EXPECTED_TEXTS = [
-            """Hello I am doing a project on a 1999 4.0L 4x4. I""",
-            "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
-            torch_device
-        )
-
-        model.generation_config.cache_implementation = "static"
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    @require_bitsandbytes
-    def test_model_7b_4bit(self):
-        model_id = "google/recurrentgemma-7b"
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project for my school and I am trying to make a program that will take a number and then",
-            """Hi today I am going to talk about the new update for the game called "The new update" and I""",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, load_in_4bit=True)
