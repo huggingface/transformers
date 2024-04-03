@@ -357,7 +357,13 @@ class GenerationConfig(PushToHubMixin):
         self.sequence_bias = kwargs.pop("sequence_bias", None)
         self.guidance_scale = kwargs.pop("guidance_scale", None)
         self.low_memory = kwargs.pop("low_memory", None)
-        self.watermarking_config = WatermarkingConfig.from_dict(kwargs.pop("watermarking_config", None))
+        watermarking_config = kwargs.pop("watermarking_config", None)
+        if watermarking_config is None:
+            self.watermarking_config = None
+        elif isinstance(watermarking_config, WatermarkingConfig):
+            self.watermarking_config = watermarking_config
+        else:
+            self.watermarking_config = WatermarkingConfig.from_dict(watermarking_config)
 
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
