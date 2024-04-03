@@ -761,9 +761,9 @@ class JetMoEAttention(nn.Module):
 
         self.top_k = config.moe_top_k
 
-        self.kv_projection_size = config.kv_channels * config.num_attention_heads
-        self.num_key_value_heads = config.num_attention_heads
-        self.num_heads = self.num_key_value_heads * self.top_k
+        self.kv_projection_size = config.kv_channels * config.num_key_value_heads
+        self.num_key_value_heads = config.num_key_value_heads
+        self.num_heads = config.num_attention_heads
         self.hidden_size_per_attention_head = config.kv_channels
 
         self.experts = MoE(
