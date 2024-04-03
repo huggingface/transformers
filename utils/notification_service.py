@@ -855,7 +855,6 @@ def prepare_reports(title, header, reports, to_truncate=True):
 
 
 if __name__ == "__main__":
-
     # The value of `ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID` is *NOT* the Slack channel ID. Instead, the value is an
     # environment variable name that is set in `.github/workflows/slack-report.yml`. The possible values are:
     # `CI_SLACK_CHANNEL_ID`, `CI_SLACK_CHANNEL_ID_DAILY`, `CI_SLACK_CHANNEL_DUMMY_TESTS`, etc.
@@ -953,7 +952,7 @@ if __name__ == "__main__":
             folder_slices = ast.literal_eval(model_list_as_str)
             # Need to change from elements like `models/bert` to `models_bert` (the ones used as artifact names).
             models = [x.replace("models/", "models_") for folders in folder_slices for x in folders]
-        except:
+        except Exception:
             Message.error_out(title, ci_title)
             raise ValueError("Errored out.")
 
