@@ -97,7 +97,9 @@ class HieraConfig(PretrainedConfig, BackboneConfigMixin):
         decoder_num_heads (`int`, *optional*):
             Number of attention heads in each layer of the decoder for MAE pretraining.
         norm_pix_loss (`bool`, *optional*, defaults to `True`):
-
+            Whether to normalize the pixel loss by the number of pixels.
+        mask_ratio (`float`, *optional*, defaults to 0.6):
+            The ratio of masked tokens in the input.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
@@ -154,6 +156,7 @@ class HieraConfig(PretrainedConfig, BackboneConfigMixin):
         decoder_depth=None,
         decoder_num_heads=None,
         norm_pix_loss=True,
+        mask_ratio=0.6,
         out_features=None,
         out_indices=None,
         **kwargs,
@@ -184,6 +187,8 @@ class HieraConfig(PretrainedConfig, BackboneConfigMixin):
         self.decoder_embed_dim = decoder_embed_dim
         self.decoder_depth = decoder_depth
         self.decoder_num_heads = decoder_num_heads
+        self.norm_pix_loss = norm_pix_loss
+        self.mask_ratio = mask_ratio
         # we set the hidden_size attribute in order to make Hiera work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * embed_dim_multiplier ** (len(depths) - 1))
