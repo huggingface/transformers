@@ -110,7 +110,7 @@ class SuperPointKeypointDescriptionOutput(ModelOutput):
     scores: Optional[torch.FloatTensor] = None
     descriptors: Optional[torch.FloatTensor] = None
     mask: Optional[torch.BoolTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 class SuperPointConvBlock(nn.Module):

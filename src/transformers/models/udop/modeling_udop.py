@@ -252,10 +252,10 @@ class BaseModelOutputWithAttentionMask(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     attention_mask: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 def get_visual_bbox(image_size=224, patch_size=16):
@@ -1993,7 +1993,7 @@ class UdopEncoderModel(UdopPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutputWithAttentionMask]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], BaseModelOutputWithAttentionMask]:
         r"""
         Returns:
 

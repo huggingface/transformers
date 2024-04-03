@@ -1849,8 +1849,8 @@ class ReformerModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor
     past_buckets_states: Optional[List[Tuple[torch.LongTensor, torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -1889,8 +1889,8 @@ class ReformerModelWithLMHeadOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     past_buckets_states: Optional[List[Tuple[torch.LongTensor, torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 REFORMER_START_DOCSTRING = r"""
@@ -2016,7 +2016,7 @@ class ReformerModel(ReformerPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         num_hashes: Optional[int] = None,
-        past_buckets_states: Optional[List[Tuple[torch.Tensor]]] = None,
+        past_buckets_states: Optional[List[Tuple[torch.Tensor, ...]]] = None,
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -2228,7 +2228,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         num_hashes: Optional[int] = None,
-        past_buckets_states: Optional[List[Tuple[torch.Tensor]]] = None,
+        past_buckets_states: Optional[List[Tuple[torch.Tensor, ...]]] = None,
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,

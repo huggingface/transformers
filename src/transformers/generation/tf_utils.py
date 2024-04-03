@@ -77,9 +77,9 @@ class TFGreedySearchDecoderOnlyOutput(ModelOutput):
     """
 
     sequences: tf.Tensor = None
-    scores: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
-    hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    scores: Optional[Tuple[tf.Tensor, ...]] = None
+    attentions: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
+    hidden_states: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
 
 
 @dataclass
@@ -116,12 +116,12 @@ class TFGreedySearchEncoderDecoderOutput(ModelOutput):
     """
 
     sequences: tf.Tensor = None
-    scores: Optional[Tuple[tf.Tensor]] = None
-    encoder_attentions: Optional[Tuple[tf.Tensor]] = None
-    encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    decoder_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
-    cross_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
-    decoder_hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    scores: Optional[Tuple[tf.Tensor, ...]] = None
+    encoder_attentions: Optional[Tuple[tf.Tensor, ...]] = None
+    encoder_hidden_states: Optional[Tuple[tf.Tensor, ...]] = None
+    decoder_attentions: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
+    cross_attentions: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
+    decoder_hidden_states: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
 
 
 @dataclass
@@ -147,9 +147,9 @@ class TFSampleDecoderOnlyOutput(ModelOutput):
     """
 
     sequences: tf.Tensor = None
-    scores: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
-    hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    scores: Optional[Tuple[tf.Tensor, ...]] = None
+    attentions: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
+    hidden_states: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
 
 
 @dataclass
@@ -186,12 +186,12 @@ class TFSampleEncoderDecoderOutput(ModelOutput):
     """
 
     sequences: tf.Tensor = None
-    scores: Optional[Tuple[tf.Tensor]] = None
-    encoder_attentions: Optional[Tuple[tf.Tensor]] = None
-    encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    decoder_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
-    cross_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
-    decoder_hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    scores: Optional[Tuple[tf.Tensor, ...]] = None
+    encoder_attentions: Optional[Tuple[tf.Tensor, ...]] = None
+    encoder_hidden_states: Optional[Tuple[tf.Tensor, ...]] = None
+    decoder_attentions: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
+    cross_attentions: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
+    decoder_hidden_states: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
 
 
 @dataclass
@@ -223,10 +223,10 @@ class TFBeamSearchDecoderOnlyOutput(ModelOutput):
 
     sequences: tf.Tensor = None
     sequences_scores: Optional[tf.Tensor] = None
-    scores: Optional[Tuple[tf.Tensor]] = None
+    scores: Optional[Tuple[tf.Tensor, ...]] = None
     beam_indices: Optional[tf.Tensor] = None
-    attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
-    hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    attentions: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
+    hidden_states: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
 
 
 @dataclass
@@ -270,13 +270,13 @@ class TFBeamSearchEncoderDecoderOutput(ModelOutput):
 
     sequences: tf.Tensor = None
     sequences_scores: Optional[tf.Tensor] = None
-    scores: Optional[Tuple[tf.Tensor]] = None
+    scores: Optional[Tuple[tf.Tensor, ...]] = None
     beam_indices: Optional[tf.Tensor] = None
-    encoder_attentions: Optional[Tuple[tf.Tensor]] = None
-    encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    decoder_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
-    cross_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
-    decoder_hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    encoder_attentions: Optional[Tuple[tf.Tensor, ...]] = None
+    encoder_hidden_states: Optional[Tuple[tf.Tensor, ...]] = None
+    decoder_attentions: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
+    cross_attentions: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
+    decoder_hidden_states: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
 
 
 @dataclass
@@ -308,10 +308,10 @@ class TFBeamSampleDecoderOnlyOutput(ModelOutput):
 
     sequences: tf.Tensor = None
     sequences_scores: Optional[tf.Tensor] = None
-    scores: Optional[Tuple[tf.Tensor]] = None
+    scores: Optional[Tuple[tf.Tensor, ...]] = None
     beam_indices: Optional[tf.Tensor] = None
-    attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
-    hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    attentions: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
+    hidden_states: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
 
 
 @dataclass
@@ -354,13 +354,13 @@ class TFBeamSampleEncoderDecoderOutput(ModelOutput):
 
     sequences: tf.Tensor = None
     sequences_scores: Optional[tf.Tensor] = None
-    scores: Optional[Tuple[tf.Tensor]] = None
+    scores: Optional[Tuple[tf.Tensor, ...]] = None
     beam_indices: Optional[tf.Tensor] = None
-    encoder_attentions: Optional[Tuple[tf.Tensor]] = None
-    encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    decoder_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
-    cross_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
-    decoder_hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    encoder_attentions: Optional[Tuple[tf.Tensor, ...]] = None
+    encoder_hidden_states: Optional[Tuple[tf.Tensor, ...]] = None
+    decoder_attentions: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
+    cross_attentions: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
+    decoder_hidden_states: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
 
 
 @dataclass
@@ -385,9 +385,9 @@ class TFContrastiveSearchDecoderOnlyOutput(ModelOutput):
     """
 
     sequences: tf.Tensor = None
-    scores: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
-    hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    scores: Optional[Tuple[tf.Tensor, ...]] = None
+    attentions: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
+    hidden_states: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
 
 
 @dataclass
@@ -423,12 +423,12 @@ class TFContrastiveSearchEncoderDecoderOutput(ModelOutput):
     """
 
     sequences: tf.Tensor = None
-    scores: Optional[Tuple[tf.Tensor]] = None
-    encoder_attentions: Optional[Tuple[tf.Tensor]] = None
-    encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    decoder_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
-    cross_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
-    decoder_hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    scores: Optional[Tuple[tf.Tensor, ...]] = None
+    encoder_attentions: Optional[Tuple[tf.Tensor, ...]] = None
+    encoder_hidden_states: Optional[Tuple[tf.Tensor, ...]] = None
+    decoder_attentions: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
+    cross_attentions: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
+    decoder_hidden_states: Optional[Tuple[Tuple[tf.Tensor, tf.Tensor], ...]] = None
 
 
 TFGreedySearchOutput = Union[TFGreedySearchEncoderDecoderOutput, TFGreedySearchDecoderOnlyOutput]
@@ -477,7 +477,7 @@ class TFGenerationMixin:
     def compute_transition_scores(
         self,
         sequences: tf.Tensor,
-        scores: Tuple[tf.Tensor],
+        scores: Tuple[tf.Tensor, ...],
         beam_indices: Optional[tf.Tensor] = None,
         normalize_logits: bool = False,
     ) -> tf.Tensor:

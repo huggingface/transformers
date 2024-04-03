@@ -370,7 +370,7 @@ class Owlv2Attention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor, ...]]]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = hidden_states.size()
@@ -478,7 +478,7 @@ class Owlv2EncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> Tuple[torch.FloatTensor, ...]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -1263,7 +1263,7 @@ class Owlv2ClassPredictionHead(nn.Module):
         image_embeds: torch.FloatTensor,
         query_embeds: Optional[torch.FloatTensor],
         query_mask: Optional[torch.Tensor],
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> Tuple[torch.FloatTensor, ...]:
         image_class_embeds = self.dense0(image_embeds)
         if query_embeds is None:
             device = image_class_embeds.device
@@ -1394,7 +1394,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         image_feats: torch.FloatTensor,
         query_embeds: Optional[torch.FloatTensor] = None,
         query_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> Tuple[torch.FloatTensor, ...]:
         """
         Args:
             image_feats:
@@ -1416,7 +1416,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> Tuple[torch.FloatTensor, ...]:
         # Encode text and image
         outputs = self.owlv2(
             pixel_values=pixel_values,
@@ -1456,7 +1456,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> Tuple[torch.FloatTensor, ...]:
         # Get Owlv2Model vision embeddings (same as CLIP)
         vision_outputs = self.owlv2.vision_model(pixel_values=pixel_values, return_dict=True)
 

@@ -515,7 +515,7 @@ class UnivNetModel(PreTrainedModel):
         padding_mask: Optional[torch.FloatTensor] = None,
         generator: Optional[torch.Generator] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], UnivNetModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], UnivNetModelOutput]:
         r"""
         Returns:
 

@@ -370,7 +370,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
         # To remain simple and XLA-compatible, we work on a per-row fashion.
         # TODO (Joao): this function might trigger XLA retracing as `cur_len` increases. Fix it if it becomes
         # a frequent choke point. (make `cur_len` a tensor?)
-        def _get_row_updated_score(row_inputs: Tuple[tf.Tensor]) -> tf.Tensor:
+        def _get_row_updated_score(row_inputs: Tuple[tf.Tensor, ...]) -> tf.Tensor:
             row_input_ids, row_score = row_inputs
             banned_tokens = self._calc_row_banned_bad_tokens(row_input_ids[:cur_len])
             banned_tokens_mask = tf.scatter_nd(

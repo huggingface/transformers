@@ -836,7 +836,7 @@ class TFMobileViTMainLayer(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutputWithPooling]:
+    ) -> Union[Tuple[tf.Tensor, ...], TFBaseModelOutputWithPooling]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1004,7 +1004,7 @@ class TFMobileViTModel(TFMobileViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutputWithPooling]:
+    ) -> Union[Tuple[tf.Tensor, ...], TFBaseModelOutputWithPooling]:
         output = self.mobilevit(pixel_values, output_hidden_states, return_dict, training=training)
         return output
 

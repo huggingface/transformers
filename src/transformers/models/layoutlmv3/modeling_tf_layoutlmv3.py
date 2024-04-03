@@ -367,7 +367,7 @@ class TFLayoutLMv3SelfAttention(keras.layers.Layer):
         rel_pos: tf.Tensor | None = None,
         rel_2d_pos: tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], Tuple[tf.Tensor, tf.Tensor]]:
+    ) -> Union[Tuple[tf.Tensor, ...], Tuple[tf.Tensor, tf.Tensor]]:
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
         query_layer = self.transpose_for_scores(self.query(hidden_states))
@@ -472,7 +472,7 @@ class TFLayoutLMv3Attention(keras.layers.Layer):
         rel_pos: tf.Tensor | None = None,
         rel_2d_pos: tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], Tuple[tf.Tensor, tf.Tensor]]:
+    ) -> Union[Tuple[tf.Tensor, ...], Tuple[tf.Tensor, tf.Tensor]]:
         self_outputs = self.self_attention(
             hidden_states,
             attention_mask,
@@ -575,7 +575,7 @@ class TFLayoutLMv3Layer(keras.layers.Layer):
         rel_pos: tf.Tensor | None = None,
         rel_2d_pos: tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], Tuple[tf.Tensor, tf.Tensor]]:
+    ) -> Union[Tuple[tf.Tensor, ...], Tuple[tf.Tensor, tf.Tensor]]:
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
@@ -717,7 +717,7 @@ class TFLayoutLMv3Encoder(keras.layers.Layer):
         training: bool = False,
     ) -> Union[
         TFBaseModelOutput,
-        Tuple[tf.Tensor],
+        Tuple[tf.Tensor, ...],
         Tuple[tf.Tensor, tf.Tensor],
         Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
     ]:
@@ -972,7 +972,7 @@ class TFLayoutLMv3MainLayer(keras.layers.Layer):
         training: bool = False,
     ) -> Union[
         TFBaseModelOutput,
-        Tuple[tf.Tensor],
+        Tuple[tf.Tensor, ...],
         Tuple[tf.Tensor, tf.Tensor],
         Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
     ]:
@@ -1284,7 +1284,7 @@ class TFLayoutLMv3Model(TFLayoutLMv3PreTrainedModel):
         training: bool = False,
     ) -> Union[
         TFBaseModelOutput,
-        Tuple[tf.Tensor],
+        Tuple[tf.Tensor, ...],
         Tuple[tf.Tensor, tf.Tensor],
         Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
     ]:
@@ -1425,7 +1425,7 @@ class TFLayoutLMv3ForSequenceClassification(TFLayoutLMv3PreTrainedModel, TFSeque
         training: Optional[bool] = False,
     ) -> Union[
         TFSequenceClassifierOutput,
-        Tuple[tf.Tensor],
+        Tuple[tf.Tensor, ...],
         Tuple[tf.Tensor, tf.Tensor],
         Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
         Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor],
@@ -1550,7 +1550,7 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
         training: Optional[bool] = False,
     ) -> Union[
         TFTokenClassifierOutput,
-        Tuple[tf.Tensor],
+        Tuple[tf.Tensor, ...],
         Tuple[tf.Tensor, tf.Tensor],
         Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
         Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor],
@@ -1680,7 +1680,7 @@ class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAn
         training: bool = False,
     ) -> Union[
         TFQuestionAnsweringModelOutput,
-        Tuple[tf.Tensor],
+        Tuple[tf.Tensor, ...],
         Tuple[tf.Tensor, tf.Tensor],
         Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
         Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor],

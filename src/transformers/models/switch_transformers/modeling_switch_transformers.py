@@ -1340,8 +1340,8 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor, ...]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1349,7 +1349,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqMoEModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], Seq2SeqMoEModelOutput]:
         r"""
         Returns:
 
@@ -1519,8 +1519,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         head_mask: Optional[torch.FloatTensor] = None,
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.Tensor, ...]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1529,7 +1529,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = True,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqMoEOutput]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], Seq2SeqMoEOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
@@ -1828,7 +1828,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = True,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], MoEModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], MoEModelOutput]:
         r"""
         Returns:
 

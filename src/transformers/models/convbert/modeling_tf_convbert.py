@@ -873,7 +873,7 @@ class TFConvBertModel(TFConvBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor, ...]]:
         outputs = self.convbert(
             input_ids=input_ids,
             attention_mask=attention_mask,

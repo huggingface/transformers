@@ -273,8 +273,8 @@ class _ModelFallbackWrapper(GenerationMixin):
         )
 
     def _reorder_cache(
-        self, past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
-    ) -> Tuple[Tuple[torch.Tensor]]:
+        self, past_key_values: Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...], beam_idx: torch.Tensor
+    ) -> Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PretrainedModel.beam_search`] or
         [`~PretrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct

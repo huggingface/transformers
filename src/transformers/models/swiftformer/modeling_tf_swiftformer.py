@@ -725,7 +725,7 @@ class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithNoAttention, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithNoAttention, Tuple[tf.Tensor, ...]]:
         outputs = self.swiftformer(
             pixel_values=pixel_values,
             output_hidden_states=output_hidden_states,

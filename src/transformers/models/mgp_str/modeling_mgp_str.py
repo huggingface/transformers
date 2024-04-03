@@ -116,10 +116,10 @@ class MgpstrModelOutput(ModelOutput):
             heads.
     """
 
-    logits: Tuple[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    a3_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Tuple[torch.FloatTensor, ...] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    a3_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 class MgpstrEmbeddings(nn.Module):
@@ -381,7 +381,7 @@ class MgpstrModel(MgpstrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -443,7 +443,7 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
         output_a3_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], MgpstrModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], MgpstrModelOutput]:
         r"""
         output_a3_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of a3 modules. See `a3_attentions` under returned tensors

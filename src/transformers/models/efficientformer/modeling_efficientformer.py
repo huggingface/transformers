@@ -120,7 +120,7 @@ class EfficientFormerSelfAttention(nn.Module):
         else:
             self.ab = self.attention_biases[:, self.attention_bias_idxs]
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor, ...]:
         batch_size, sequence_length, num_channels = hidden_states.shape
         qkv = self.qkv(hidden_states)
         query_layer, key_layer, value_layer = qkv.reshape(batch_size, sequence_length, self.num_heads, -1).split(
@@ -282,7 +282,7 @@ class EfficientFormerFlat(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
         return hidden_states
 
@@ -311,7 +311,7 @@ class EfficientFormerMeta3D(nn.Module):
             self.layer_scale_1 = nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
             self.layer_scale_2 = nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor, ...]:
         self_attention_outputs = self.token_mixer(self.layernorm1(hidden_states), output_attentions)
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -343,7 +343,7 @@ class EfficientFormerMeta3DLayers(nn.Module):
             [EfficientFormerMeta3D(config, config.hidden_sizes[-1], drop_path=drop_path) for drop_path in drop_paths]
         )
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor, ...]:
         all_attention_outputs = () if output_attentions else None
 
         for layer_module in self.blocks:
@@ -378,7 +378,7 @@ class EfficientFormerMeta4D(nn.Module):
             self.layer_scale_1 = nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
             self.layer_scale_2 = nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
 
-    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         outputs = self.token_mixer(hidden_states)
 
         if self.use_layer_scale:
@@ -411,7 +411,7 @@ class EfficientFormerMeta4DLayers(nn.Module):
             ]
         )
 
-    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         for layer_module in self.blocks:
             hidden_states = layer_module(hidden_states)
         return hidden_states
@@ -422,7 +422,7 @@ class EfficientFormerIntermediateStage(nn.Module):
         super().__init__()
         self.meta4D_layers = EfficientFormerMeta4DLayers(config, index)
 
-    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         hidden_states = self.meta4D_layers(hidden_states)
         return hidden_states
 
@@ -434,7 +434,7 @@ class EfficientFormerLastStage(nn.Module):
         self.flat = EfficientFormerFlat()
         self.meta3D_layers = EfficientFormerMeta3DLayers(config)
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor, ...]:
         hidden_states = self.meta4D_layers(hidden_states)
         hidden_states = self.flat(hidden_states)
         hidden_states = self.meta3D_layers(hidden_states, output_attentions)
@@ -725,8 +725,8 @@ class EfficientFormerForImageClassificationWithTeacherOutput(ModelOutput):
     logits: torch.FloatTensor = None
     cls_logits: torch.FloatTensor = None
     distillation_logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @add_start_docstrings(

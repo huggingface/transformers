@@ -130,9 +130,9 @@ class ErnieMSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_value: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> Tuple[torch.Tensor, ...]:
         mixed_query_layer = self.q_proj(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -257,9 +257,9 @@ class ErnieMAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_value: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> Tuple[torch.Tensor, ...]:
         self_outputs = self.self_attn(
             hidden_states,
             attention_mask,
@@ -299,7 +299,7 @@ class ErnieMEncoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_value: Optional[Tuple[torch.FloatTensor, torch.FloatTensor]] = None,
         output_attentions: Optional[bool] = True,
     ):
         residual = hidden_states
@@ -348,11 +348,11 @@ class ErnieMEncoder(nn.Module):
         input_embeds: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[Tuple[torch.Tensor, ...], BaseModelOutputWithPastAndCrossAttentions]:
         hidden_states = () if output_hidden_states else None
         attentions = () if output_attentions else None
 
@@ -530,7 +530,7 @@ class ErnieMModel(ErnieMPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], BaseModelOutputWithPoolingAndCrossAttentions]:
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time.")
 
@@ -639,7 +639,7 @@ class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = True,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.FloatTensor], SequenceClassifierOutput]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -736,7 +736,7 @@ class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.FloatTensor], MultipleChoiceModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], MultipleChoiceModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
@@ -829,7 +829,7 @@ class ErnieMForTokenClassification(ErnieMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = True,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.FloatTensor], TokenClassifierOutput]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -906,7 +906,7 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.FloatTensor], QuestionAnsweringModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], QuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -995,7 +995,7 @@ class ErnieMForInformationExtraction(ErnieMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.FloatTensor], QuestionAnsweringModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], QuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for position (index) for computing the start_positions loss. Position outside of the sequence are

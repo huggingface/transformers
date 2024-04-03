@@ -695,8 +695,8 @@ class TFTransfoXLModelOutput(ModelOutput):
 
     last_hidden_state: tf.Tensor = None
     mems: List[tf.Tensor] = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -728,8 +728,8 @@ class TFTransfoXLLMHeadModelOutput(ModelOutput):
 
     prediction_scores: tf.Tensor = None
     mems: List[tf.Tensor] = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -762,8 +762,8 @@ class TFTransfoXLSequenceClassifierOutputWithPast(ModelOutput):
     loss: tf.Tensor | None = None
     logits: tf.Tensor = None
     mems: List[tf.Tensor] = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 TRANSFO_XL_START_DOCSTRING = r"""
@@ -873,7 +873,7 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         training: bool = False,
-    ) -> TFTransfoXLModelOutput | Tuple[tf.Tensor]:
+    ) -> TFTransfoXLModelOutput | Tuple[tf.Tensor, ...]:
         outputs = self.transformer(
             input_ids=input_ids,
             mems=mems,
@@ -942,7 +942,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> TFTransfoXLLMHeadModelOutput | Tuple[tf.Tensor]:
+    ) -> TFTransfoXLLMHeadModelOutput | Tuple[tf.Tensor, ...]:
         if input_ids is not None:
             bsz, tgt_len = shape_list(input_ids)[:2]
         else:

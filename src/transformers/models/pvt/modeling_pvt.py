@@ -210,7 +210,7 @@ class PvtEfficientSelfAttention(nn.Module):
         height: int,
         width: int,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> Tuple[torch.Tensor, ...]:
         query_layer = self.transpose_for_scores(self.query(hidden_states))
 
         if self.sequences_reduction_ratio > 1:
@@ -283,7 +283,7 @@ class PvtAttention(nn.Module):
 
     def forward(
         self, hidden_states: torch.Tensor, height: int, width: int, output_attentions: bool = False
-    ) -> Tuple[torch.Tensor]:
+    ) -> Tuple[torch.Tensor, ...]:
         self_outputs = self.self(hidden_states, height, width, output_attentions)
 
         attention_output = self.output(self_outputs[0])

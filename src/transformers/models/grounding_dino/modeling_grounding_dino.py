@@ -186,8 +186,8 @@ class GroundingDinoDecoderOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_reference_points: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[Tuple[torch.FloatTensor, ...]]] = None
 
 
 @dataclass
@@ -219,9 +219,9 @@ class GroundingDinoEncoderOutput(ModelOutput):
 
     last_hidden_state_vision: torch.FloatTensor = None
     last_hidden_state_text: torch.FloatTensor = None
-    vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    text_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    vision_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    text_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[Tuple[torch.FloatTensor, ...]]] = None
 
 
 @dataclass
@@ -276,13 +276,13 @@ class GroundingDinoModelOutput(ModelOutput):
     init_reference_points: torch.FloatTensor = None
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_reference_points: torch.FloatTensor = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor, ...]]] = None
     encoder_last_hidden_state_vision: Optional[torch.FloatTensor] = None
     encoder_last_hidden_state_text: Optional[torch.FloatTensor] = None
-    encoder_vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_text_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    encoder_vision_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_text_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor, ...]]] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
 
@@ -360,13 +360,13 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
     init_reference_points: Optional[torch.FloatTensor] = None
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor, ...]]] = None
     encoder_last_hidden_state_vision: Optional[torch.FloatTensor] = None
     encoder_last_hidden_state_text: Optional[torch.FloatTensor] = None
-    encoder_vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_text_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    encoder_vision_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_text_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor, ...]]] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
 
@@ -1325,7 +1325,7 @@ class GroundingDinoMultiheadAttention(nn.Module):
         values: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> Tuple[torch.Tensor, ...]:
         query_layer = self.transpose_for_scores(self.query(queries))
         key_layer = self.transpose_for_scores(self.key(keys))
         value_layer = self.transpose_for_scores(self.value(values))

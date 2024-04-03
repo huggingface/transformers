@@ -184,7 +184,7 @@ class FunnelAttentionStructure(nn.Module):
         inputs_embeds: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
+    ) -> Tuple[torch.Tensor, ...]:
         """Returns the attention inputs associated to the inputs of the model."""
         # inputs_embeds has shape batch_size x seq_len x d_model
         # attention_mask and token_type_ids have shape batch_size x seq_len
@@ -209,7 +209,7 @@ class FunnelAttentionStructure(nn.Module):
 
     def get_position_embeds(
         self, seq_len: int, dtype: torch.dtype, device: torch.device
-    ) -> Union[Tuple[torch.Tensor], List[List[torch.Tensor]]]:
+    ) -> Union[Tuple[torch.Tensor, ...], List[List[torch.Tensor]]]:
         """
         Create and cache inputs related to relative position encoding. Those are very different depending on whether we
         are using the factorized or the relative shift attention:
@@ -318,7 +318,7 @@ class FunnelAttentionStructure(nn.Module):
 
     def stride_pool(
         self,
-        tensor: Union[torch.Tensor, Tuple[torch.Tensor], List[torch.Tensor]],
+        tensor: Union[torch.Tensor, Tuple[torch.Tensor, ...], List[torch.Tensor]],
         axis: Union[int, Tuple[int], List[int]],
     ) -> torch.Tensor:
         """
@@ -350,7 +350,7 @@ class FunnelAttentionStructure(nn.Module):
         return tensor[enc_slice]
 
     def pool_tensor(
-        self, tensor: Union[torch.Tensor, Tuple[torch.Tensor], List[torch.Tensor]], mode: str = "mean", stride: int = 2
+        self, tensor: Union[torch.Tensor, Tuple[torch.Tensor, ...], List[torch.Tensor]], mode: str = "mean", stride: int = 2
     ) -> torch.Tensor:
         """Apply 1D pooling to a tensor of size [B x T (x H)]."""
         if tensor is None:
@@ -388,8 +388,8 @@ class FunnelAttentionStructure(nn.Module):
         return tensor
 
     def pre_attention_pooling(
-        self, output, attention_inputs: Tuple[torch.Tensor]
-    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor]]:
+        self, output, attention_inputs: Tuple[torch.Tensor, ...]
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, ...]]:
         """Pool `output` and the proper parts of `attention_inputs` before the attention layer."""
         position_embeds, token_type_mat, attention_mask, cls_mask = attention_inputs
         if self.config.pool_q_only:
@@ -409,7 +409,7 @@ class FunnelAttentionStructure(nn.Module):
         attention_inputs = (position_embeds, token_type_mat, attention_mask, cls_mask)
         return output, attention_inputs
 
-    def post_attention_pooling(self, attention_inputs: Tuple[torch.Tensor]) -> Tuple[torch.Tensor]:
+    def post_attention_pooling(self, attention_inputs: Tuple[torch.Tensor, ...]) -> Tuple[torch.Tensor, ...]:
         """Pool the proper parts of `attention_inputs` after the attention layer."""
         position_embeds, token_type_mat, attention_mask, cls_mask = attention_inputs
         if self.config.pool_q_only:
@@ -534,7 +534,7 @@ class FunnelRelMultiheadAttention(nn.Module):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        attention_inputs: Tuple[torch.Tensor],
+        attention_inputs: Tuple[torch.Tensor, ...],
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, ...]:
         # query has shape batch_size x seq_len x d_model
@@ -845,8 +845,8 @@ class FunnelForPreTrainingOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 FUNNEL_START_DOCSTRING = r"""

@@ -132,11 +132,11 @@ class GenerateDecoderOnlyOutput(ModelOutput):
     """
 
     sequences: torch.LongTensor = None
-    scores: Optional[Tuple[torch.FloatTensor]] = None
-    logits: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor]]]] = None
+    scores: Optional[Tuple[torch.FloatTensor, ...]] = None
+    logits: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[Tuple[torch.FloatTensor, ...]]] = None
+    hidden_states: Optional[Tuple[Tuple[torch.FloatTensor, ...]]] = None
+    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor, ...]]]] = None
 
 
 @dataclass
@@ -181,14 +181,14 @@ class GenerateEncoderDecoderOutput(ModelOutput):
     """
 
     sequences: torch.LongTensor = None
-    scores: Optional[Tuple[torch.FloatTensor]] = None
-    logits: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor]]]] = None
+    scores: Optional[Tuple[torch.FloatTensor, ...]] = None
+    logits: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor, ...]]] = None
+    cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor, ...]]] = None
+    decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor, ...]]] = None
+    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor, ...]]]] = None
 
 
 @dataclass
@@ -231,12 +231,12 @@ class GenerateBeamDecoderOnlyOutput(ModelOutput):
 
     sequences: torch.LongTensor = None
     sequences_scores: Optional[torch.FloatTensor] = None
-    scores: Optional[Tuple[torch.FloatTensor]] = None
-    logits: Optional[Tuple[torch.FloatTensor]] = None
+    scores: Optional[Tuple[torch.FloatTensor, ...]] = None
+    logits: Optional[Tuple[torch.FloatTensor, ...]] = None
     beam_indices: Optional[torch.LongTensor] = None
-    attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor]]]] = None
+    attentions: Optional[Tuple[Tuple[torch.FloatTensor, ...]]] = None
+    hidden_states: Optional[Tuple[Tuple[torch.FloatTensor, ...]]] = None
+    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor, ...]]]] = None
 
 
 @dataclass
@@ -289,15 +289,15 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
 
     sequences: torch.LongTensor = None
     sequences_scores: Optional[torch.FloatTensor] = None
-    scores: Optional[Tuple[torch.FloatTensor]] = None
-    logits: Optional[Tuple[torch.FloatTensor]] = None
+    scores: Optional[Tuple[torch.FloatTensor, ...]] = None
+    logits: Optional[Tuple[torch.FloatTensor, ...]] = None
     beam_indices: Optional[torch.LongTensor] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor]]]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor, ...]]] = None
+    cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor, ...]]] = None
+    decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor, ...]]] = None
+    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor, ...]]]] = None
 
 
 # Equivalent classes (kept for retrocompatibility purposes)
@@ -942,7 +942,7 @@ class GenerationMixin:
     def compute_transition_scores(
         self,
         sequences: torch.Tensor,
-        scores: Tuple[torch.Tensor],
+        scores: Tuple[torch.Tensor, ...],
         beam_indices: Optional[torch.Tensor] = None,
         normalize_logits: bool = False,
     ) -> torch.Tensor:

@@ -96,8 +96,8 @@ class TFBlipForConditionalGenerationModelOutput(ModelOutput):
             heads.`
     """
 
-    loss: Tuple[tf.Tensor] | None = None
-    logits: Tuple[tf.Tensor] | None = None
+    loss: Tuple[tf.Tensor, ...] | None = None
+    logits: Tuple[tf.Tensor, ...] | None = None
     image_embeds: tf.Tensor | None = None
     last_hidden_state: tf.Tensor = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
@@ -186,7 +186,7 @@ class TFBlipImageTextMatchingModelOutput(ModelOutput):
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     vision_pooler_output: tf.Tensor | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
-    question_embeds: Tuple[tf.Tensor] | None = None
+    question_embeds: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -372,7 +372,7 @@ class TFBlipAttention(keras.layers.Layer):
         head_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = False,
         training: Optional[bool] = None,
-    ) -> Tuple[tf.Tensor, tf.Tensor | None, Tuple[tf.Tensor] | None]:
+    ) -> Tuple[tf.Tensor, tf.Tensor | None, Tuple[tf.Tensor, ...] | None]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = shape_list(hidden_states)
@@ -475,7 +475,7 @@ class TFBlipEncoderLayer(keras.layers.Layer):
         attention_mask: tf.Tensor,
         output_attentions: Optional[bool] = False,
         training: Optional[bool] = None,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[tf.Tensor, ...]:
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`

@@ -1118,7 +1118,7 @@ class TFSamVisionLayer(keras.layers.Layer):
         hidden_states: tf.Tensor,
         output_attentions: Optional[bool] = False,
         training: Optional[bool] = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[tf.Tensor, ...]:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -1514,7 +1514,7 @@ class TFSamModel(TFSamPreTrainedModel):
         return_dict: bool | None = None,
         training: bool = False,
         **kwargs,
-    ) -> TFSamImageSegmentationOutput | Tuple[tf.Tensor]:
+    ) -> TFSamImageSegmentationOutput | Tuple[tf.Tensor, ...]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

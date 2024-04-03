@@ -74,7 +74,7 @@ class LevitForImageClassificationWithTeacherOutput(ModelOutput):
     logits: torch.FloatTensor = None
     cls_logits: torch.FloatTensor = None
     distillation_logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 class LevitConvEmbeddings(nn.Module):

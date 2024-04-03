@@ -78,8 +78,8 @@ class FlaxElectraForPreTrainingOutput(ModelOutput):
     """
 
     logits: jnp.ndarray = None
-    hidden_states: Optional[Tuple[jnp.ndarray]] = None
-    attentions: Optional[Tuple[jnp.ndarray]] = None
+    hidden_states: Optional[Tuple[jnp.ndarray, ...]] = None
+    attentions: Optional[Tuple[jnp.ndarray, ...]] = None
 
 
 ELECTRA_START_DOCSTRING = r"""

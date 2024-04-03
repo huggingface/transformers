@@ -91,8 +91,8 @@ class CanineModelOutputWithPooling(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     pooler_output: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 def load_tf_weights_in_canine(model, config, tf_checkpoint_path):
@@ -505,7 +505,7 @@ class CanineSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
-        self, hidden_states: Tuple[torch.FloatTensor], input_tensor: torch.FloatTensor
+        self, hidden_states: Tuple[torch.FloatTensor, ...], input_tensor: torch.FloatTensor
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -583,7 +583,7 @@ class CanineAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states: Tuple[torch.FloatTensor],
+        hidden_states: Tuple[torch.FloatTensor, ...],
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
@@ -678,7 +678,7 @@ class CanineOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: Tuple[torch.FloatTensor], input_tensor: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, hidden_states: Tuple[torch.FloatTensor, ...], input_tensor: torch.FloatTensor) -> torch.FloatTensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -715,7 +715,7 @@ class CanineLayer(nn.Module):
 
     def forward(
         self,
-        hidden_states: Tuple[torch.FloatTensor],
+        hidden_states: Tuple[torch.FloatTensor, ...],
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
@@ -776,7 +776,7 @@ class CanineEncoder(nn.Module):
 
     def forward(
         self,
-        hidden_states: Tuple[torch.FloatTensor],
+        hidden_states: Tuple[torch.FloatTensor, ...],
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
@@ -825,7 +825,7 @@ class CaninePooler(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def forward(self, hidden_states: Tuple[torch.FloatTensor]) -> torch.FloatTensor:
+    def forward(self, hidden_states: Tuple[torch.FloatTensor, ...]) -> torch.FloatTensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
@@ -844,7 +844,7 @@ class CaninePredictionHeadTransform(nn.Module):
             self.transform_act_fn = config.hidden_act
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states: Tuple[torch.FloatTensor]) -> torch.FloatTensor:
+    def forward(self, hidden_states: Tuple[torch.FloatTensor, ...]) -> torch.FloatTensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.transform_act_fn(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
@@ -865,7 +865,7 @@ class CanineLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def forward(self, hidden_states: Tuple[torch.FloatTensor]) -> torch.FloatTensor:
+    def forward(self, hidden_states: Tuple[torch.FloatTensor, ...]) -> torch.FloatTensor:
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
         return hidden_states
@@ -878,8 +878,8 @@ class CanineOnlyMLMHead(nn.Module):
 
     def forward(
         self,
-        sequence_output: Tuple[torch.Tensor],
-    ) -> Tuple[torch.Tensor]:
+        sequence_output: Tuple[torch.Tensor, ...],
+    ) -> Tuple[torch.Tensor, ...]:
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 

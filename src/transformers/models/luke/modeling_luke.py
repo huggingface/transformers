@@ -147,7 +147,7 @@ class LukeMaskedLMOutput(ModelOutput):
     mep_loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     entity_logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     entity_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 

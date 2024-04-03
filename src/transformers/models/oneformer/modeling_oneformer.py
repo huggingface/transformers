@@ -781,9 +781,9 @@ class OneFormerPixelDecoderOutput(ModelOutput):
             or when `config.output_attentions=True`
     """
 
-    multi_scale_features: Tuple[torch.FloatTensor] = None
+    multi_scale_features: Tuple[torch.FloatTensor, ...] = None
     mask_features: torch.FloatTensor = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -846,8 +846,8 @@ class OneFormerModelOutput(ModelOutput):
             sequence_length)`. Self and Cross Attentions weights from transformer decoder.
     """
 
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    pixel_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    pixel_decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     transformer_decoder_hidden_states: Optional[torch.FloatTensor] = None
     transformer_decoder_object_queries: torch.FloatTensor = None
     transformer_decoder_contrastive_queries: Optional[torch.FloatTensor] = None
@@ -856,7 +856,7 @@ class OneFormerModelOutput(ModelOutput):
     transformer_decoder_auxiliary_predictions: Optional[Tuple[Dict[str, torch.FloatTensor]]] = None
     text_queries: Optional[torch.FloatTensor] = None
     task_token: torch.FloatTensor = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -915,7 +915,7 @@ class OneFormerForUniversalSegmentationOutput(ModelOutput):
     class_queries_logits: torch.FloatTensor = None
     masks_queries_logits: torch.FloatTensor = None
     auxiliary_predictions: List[Dict[str, torch.FloatTensor]] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     pixel_decoder_hidden_states: Optional[List[torch.FloatTensor]] = None
     transformer_decoder_hidden_states: Optional[torch.FloatTensor] = None
     transformer_decoder_object_queries: torch.FloatTensor = None
@@ -925,7 +925,7 @@ class OneFormerForUniversalSegmentationOutput(ModelOutput):
     transformer_decoder_auxiliary_predictions: Optional[List[Dict[str, torch.FloatTensor]]] = None
     text_queries: Optional[torch.FloatTensor] = None
     task_token: torch.FloatTensor = None
-    attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    attentions: Optional[Tuple[Tuple[torch.FloatTensor, ...]]] = None
 
 
 # Modified from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrFrozenBatchNorm2d with DeformableDetr->OneFormerPixelDecoder
@@ -1546,7 +1546,7 @@ class OneFormerAttention(nn.Module):
         key_value_states: Optional[torch.Tensor] = None,
         key_value_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor, ...]]]:
         """Input shape: Batch x Time x Channel"""
 
         hidden_states = hidden_states.permute(1, 0, 2) if hidden_states is not None else None

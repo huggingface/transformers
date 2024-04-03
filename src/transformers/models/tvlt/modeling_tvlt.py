@@ -712,7 +712,7 @@ class TvltModel(TvltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], TvltModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], TvltModelOutput]:
         r"""
         Returns:
 
@@ -1041,7 +1041,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], TvltForPreTrainingOutput]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], TvltForPreTrainingOutput]:
         r"""
         pixel_values_mixed (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
             Pixel values that mix positive and negative samples in Tvlt vision-audio matching. Audio values can be
@@ -1240,7 +1240,7 @@ class TvltForAudioVisualClassification(TvltPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.FloatTensor], SequenceClassifierOutput]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, num_labels)`, *optional*):
             Labels for computing the audiovisual loss. Indices should be in `[0, ..., num_classes-1]` where num_classes
