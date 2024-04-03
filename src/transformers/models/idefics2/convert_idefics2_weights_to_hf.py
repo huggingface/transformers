@@ -11,7 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import argparse
+import copy
 
 import torch
 from accelerate import init_empty_weights
@@ -64,21 +66,16 @@ def convert_state_dict_to_hf(state_dict):
 
 
 def merge_weights(state_dict):
-    new_state_dict = {}
+    new_state_dict = copy.deepcopy(state_dict)
 
-    # Add empty list we can insert the weights in the correct order
+    # Merge the weights
     for weights_to_merge, new_weight_name in WEIGHTS_TO_MERGE_MAPPING:
-        new_state_dict[new_weight_name] = [None] * len(weights_to_merge)
-
-    for key, value in state_dict.items():
-        for weights_to_merge, new_weight_name in WEIGHTS_TO_MERGE_MAPPING:
-            if key in weights_to_merge:
-                new_state_dict[new_weight_name][weights_to_merge.index(key)] = value
+        for weight in weights_to_merge:
+            assert weight in state_dict, f"Weight {weight} is missing in the state dict"
+            if new_weight_name not in new_state_dict:
+                new_state_dict[new_weight_name] = [state_dict[weight]]
             else:
-                new_state_dict[key] = value
-
-    # Concatenate the weights
-    for weights_to_merge, new_weight_name in WEIGHTS_TO_MERGE_MAPPING:
+                new_state_dict[new_weight_name].append(state_dict[weight])
         new_state_dict[new_weight_name] = torch.cat(new_state_dict[new_weight_name], dim=0)
 
     # Remove the weights that were merged
