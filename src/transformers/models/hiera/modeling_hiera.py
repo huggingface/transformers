@@ -1000,6 +1000,12 @@ class HieraPooler(nn.Module):
 @add_start_docstrings(
     "The bare Hiera Model transformer outputting raw hidden-states without any specific head on top.",
     HIERA_START_DOCSTRING,
+    """
+        add_pooling_layer (`bool`, *optional*, defaults to `True`):
+                Whether or not to apply pooling layer.
+        is_mae (`bool`, *optional*, defaults to `False`):
+                Whether or not to run the model on MAE mode.
+    """,
 )
 class HieraModel(HieraPreTrainedModel):
     def __init__(self, config: HieraConfig, add_pooling_layer: bool = True, is_mae: bool = False):
