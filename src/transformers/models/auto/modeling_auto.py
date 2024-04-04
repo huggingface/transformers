@@ -284,7 +284,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("distilbert", "DistilBertForMaskedLM"),
         ("electra", "ElectraForPreTraining"),
         ("ernie", "ErnieForPreTraining"),
-        ("falcon_vlm", "FalconVLMForConditionalGeneration"),
+        ("falcon_vlm", "FalconVlmForConditionalGeneration"),
         ("flaubert", "FlaubertWithLMHeadModel"),
         ("flava", "FlavaForPreTraining"),
         ("fnet", "FNetForPreTraining"),
@@ -691,7 +691,7 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
         ("blip", "BlipForConditionalGeneration"),
         ("blip-2", "Blip2ForConditionalGeneration"),
-        ("falcon_vlm", "FalconVLMForConditionalGeneration"),
+        ("falcon_vlm", "FalconVlmForConditionalGeneration"),
         ("git", "GitForCausalLM"),
         ("idefics2", "Idefics2ForConditionalGeneration"),
         ("instructblip", "InstructBlipForConditionalGeneration"),

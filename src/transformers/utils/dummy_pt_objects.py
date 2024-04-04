@@ -3521,14 +3521,14 @@ class FalconPreTrainedModel(metaclass=DummyObject):
 FALCON_VLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class FalconVLMForConditionalGeneration(metaclass=DummyObject):
+class FalconVlmForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class FalconVLMPreTrainedModel(metaclass=DummyObject):
+class FalconVlmPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

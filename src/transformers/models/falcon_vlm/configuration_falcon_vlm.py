@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" FalconVLM model configuration"""
+""" FalconVlm model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -25,10 +25,10 @@ FALCON_VLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class FalconVLMConfig(PretrainedConfig):
+class FalconVlmConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FalconVLMForConditionalGeneration`]. It is used to instantiate an
-    FalconVLM model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    This is the configuration class to store the configuration of a [`FalconVlmForConditionalGeneration`]. It is used to instantiate an
+    FalconVlm model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the [tiiuae/falcon-10B-vlm](https://huggingface.co/tiiuae/falcon-10B-vlm)
     model.
 
@@ -48,7 +48,7 @@ class FalconVLMConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import FalconVLMForConditionalGeneration, FalconVLMConfig, CLIPVisionConfig, LlamaConfig
+    >>> from transformers import FalconVlmForConditionalGeneration, FalconVlmConfig, CLIPVisionConfig, LlamaConfig
 
     >>> # Initializing a CLIP-vision config
     >>> vision_config = CLIPVisionConfig()
@@ -56,11 +56,11 @@ class FalconVLMConfig(PretrainedConfig):
     >>> # Initializing a Llama config
     >>> text_config = LlamaConfig()
 
-    >>> # Initializing a FalconVLM tiiuae/falcon-10B-vlm style configuration
-    >>> configuration = FalconVLMConfig(vision_config, text_config)
+    >>> # Initializing a FalconVlm tiiuae/falcon-10B-vlm style configuration
+    >>> configuration = FalconVlmConfig(vision_config, text_config)
 
     >>> # Initializing a model from the tiiuae/falcon-10B-vlm style configuration
-    >>> model = FalconVLMForConditionalGeneration(configuration)
+    >>> model = FalconVlmForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch FalconVLM model."""
+""" PyTorch FalconVlm model."""
 
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -32,24 +32,24 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..auto import AutoModel, AutoModelForCausalLM
-from .configuration_falcon_vlm import FalconVLMConfig
+from .configuration_falcon_vlm import FalconVlmConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "FalconVLMConfig"
+_CONFIG_FOR_DOC = "FalconVlmConfig"
 
 FALCON_VLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "tiiuae/falcon-10B-vlm",
-    # See all FalconVLM models at https://huggingface.co/models?filter=falcon_vlm
+    # See all FalconVlm models at https://huggingface.co/models?filter=falcon_vlm
 ]
 
 
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->FalconVLM
-class FalconVLMCausalLMOutputWithPast(ModelOutput):
+# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->FalconVlm
+class FalconVlmCausalLMOutputWithPast(ModelOutput):
     """
-    Base class for FalconVLM causal language model (or autoregressive) outputs.
+    Base class for FalconVlm causal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -88,9 +88,9 @@ class FalconVLMCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->FalconVLM
-class FalconVLMMultiModalProjector(nn.Module):
-    def __init__(self, config: FalconVLMConfig):
+# Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->FalconVlm
+class FalconVlmMultiModalProjector(nn.Module):
+    def __init__(self, config: FalconVlmConfig):
         super().__init__()
 
         self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.text_config.hidden_size, bias=True)
@@ -114,7 +114,7 @@ FALCON_VLM_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`FalconVLMConfig`] or [`FalconVLMVisionConfig`]):
+        config ([`FalconVlmConfig`] or [`FalconVlmVisionConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -125,18 +125,18 @@ FALCON_VLM_START_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     FALCON_VLM_START_DOCSTRING,
 )
-# Copied from transformers.models.llava.modeling_llava.LlavaPreTrainedModel with Llava->FalconVLM,llava->falcon_vlm
-class FalconVLMPreTrainedModel(PreTrainedModel):
-    config_class = FalconVLMConfig
+# Copied from transformers.models.llava.modeling_llava.LlavaPreTrainedModel with Llava->FalconVlm,llava->falcon_vlm
+class FalconVlmPreTrainedModel(PreTrainedModel):
+    config_class = FalconVlmConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["FalconVLMVisionAttention"]
+    _no_split_modules = ["FalconVlmVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
     # Ignore copy
     _supports_flash_attn_2 = False
 
     def _init_weights(self, module):
-        # important: this ported version of FalconVLM isn't meant for training from scratch - only
+        # important: this ported version of FalconVlm isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
         # https://github.com/haotian-liu/LLaVA/tree/main/falcon_vlm should serve for that purpose
         std = (
@@ -240,17 +240,17 @@ FALCON_VLM_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    """The FalconVLM model which consists of a vision backbone and a language model.""",
+    """The FalconVlm model which consists of a vision backbone and a language model.""",
     FALCON_VLM_START_DOCSTRING,
 )
-class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
+class FalconVlmForConditionalGeneration(FalconVlmPreTrainedModel):
     # Ignore copy
-    def __init__(self, config: FalconVLMConfig):
+    def __init__(self, config: FalconVlmConfig):
         super().__init__(config)
 
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
-        self.mm_projector = FalconVLMMultiModalProjector(config)
+        self.mm_projector = FalconVlmMultiModalProjector(config)
 
         self.vocab_size = config.text_config.vocab_size
 
@@ -447,7 +447,7 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
         return None, position_ids, attention_mask, new_input_embeds, new_labels
 
     @add_start_docstrings_to_model_forward(FALCON_VLM_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FalconVLMCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=FalconVlmCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     # Ignore copy
     def forward(
         self,
@@ -462,7 +462,7 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, FalconVLMCausalLMOutputWithPast]:
+    ) -> Union[Tuple, FalconVlmCausalLMOutputWithPast]:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -515,7 +515,7 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
                 )
 
                 # Filter out only the tokens that can be un-attended, this can happen
-                # if one uses FalconVLM + Fused modules where the cache on the
+                # if one uses FalconVlm + Fused modules where the cache on the
                 # first iteration is already big enough, or if one passes custom cache
                 valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
                 new_batch_index = batch_index[valid_indices]
@@ -561,7 +561,7 @@ class FalconVLMForConditionalGeneration(FalconVLMPreTrainedModel):
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
-        return FalconVLMCausalLMOutputWithPast(
+        return FalconVlmCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,

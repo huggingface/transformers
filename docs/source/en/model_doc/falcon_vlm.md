@@ -14,17 +14,17 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# FalconVLM
+# FalconVlm
 
-# FalconVLM
+# FalconVlm
 
-# FalconVLM
+# FalconVlm
 
-# FalconVLM
+# FalconVlm
 
 ## Overview
 
-The FalconVLM model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+The FalconVlm model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
 <INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
@@ -39,9 +39,9 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface
 The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 
-## FalconVLMConfig
+## FalconVlmConfig
 
-[[autodoc]] FalconVLMConfig
+[[autodoc]] FalconVlmConfig
 
 ## FalconImageProcessor
 
@@ -52,7 +52,7 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] FalconVLProcessor
 
-## FalconVLMForConditionalGeneration
+## FalconVlmForConditionalGeneration
 
-[[autodoc]] FalconVLMForConditionalGeneration
+[[autodoc]] FalconVlmForConditionalGeneration
     - forward

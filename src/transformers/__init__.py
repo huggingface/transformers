@@ -444,7 +444,7 @@ _import_structure = {
     "models.falcon": ["FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP", "FalconConfig"],
     "models.falcon_vlm": [
         "FALCON_VLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "FalconVLMConfig",
+        "FalconVlmConfig",
         "FalconVLProcessor",
     ],
     "models.fastspeech2_conformer": [
@@ -2247,8 +2247,8 @@ else:
     _import_structure["models.falcon_vlm"].extend(
         [
             "FALCON_VLM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "FalconVLMForConditionalGeneration",
-            "FalconVLMPreTrainedModel",
+            "FalconVlmForConditionalGeneration",
+            "FalconVlmPreTrainedModel",
         ]
     )
     _import_structure["models.fastspeech2_conformer"].extend(
@@ -5432,7 +5432,7 @@ if TYPE_CHECKING:
     from .models.falcon import FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP, FalconConfig
     from .models.falcon_vlm import (
         FALCON_VLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        FalconVLMConfig,
+        FalconVlmConfig,
         FalconVLProcessor,
     )
     from .models.fastspeech2_conformer import (
@@ -7085,8 +7085,8 @@ if TYPE_CHECKING:
         )
         from .models.falcon_vlm import (
             FALCON_VLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FalconVLMForConditionalGeneration,
-            FalconVLMPreTrainedModel,
+            FalconVlmForConditionalGeneration,
+            FalconVlmPreTrainedModel,
         )
         from .models.fastspeech2_conformer import (
             FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
