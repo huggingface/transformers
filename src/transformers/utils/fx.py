@@ -255,7 +255,7 @@ def torch_arange(*args, **kwargs):
         step = int(step)
     step = kwargs.get("step", step)
     dtype = kwargs.get("dtype")
-    return torch.empty((end - start) // step, dtype=dtype, device="cpu")
+    return torch.empty((end - start) // step, dtype=dtype, device="meta")
 
 
 def torch_full(*args, **kwargs):
@@ -267,7 +267,7 @@ def torch_full(*args, **kwargs):
         kwargs["fill_value"] = 1
     kwargs_without_device = dict(kwargs)
     kwargs_without_device.pop("device", None)
-    return torch.full(*args, **kwargs_without_device, device="cpu")
+    return torch.full(*args, **kwargs_without_device, device="meta")
 
 
 def torch_cat(tensors, dim=None, axis=None, *, out=None):
@@ -727,10 +727,6 @@ def _gen_constructor_wrapper(target):
             return target(*args, **kwargs)
 
     return wrapper, target
-
-
-def make_leaf(target):
-    return _gen_constructor_wrapper(target)[0]
 
 
 def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None):
