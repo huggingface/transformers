@@ -571,18 +571,20 @@ class ZoeDepthSeedBinRegressor(nn.Module):
         self.min_depth = min_depth
         self.max_depth = max_depth
 
-        self._net = nn.Sequential(
-            nn.Conv2d(in_features, mlp_dim, 1, 1, 0),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(mlp_dim, n_bins, 1, 1, 0),
-            nn.ReLU(inplace=True),
-        )
+        self.conv1 = nn.Conv2d(in_features, mlp_dim, 1, 1, 0)
+        self.act1 = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(mlp_dim, n_bins, 1, 1, 0)
+        self.act2 = nn.ReLU(inplace=True)
 
     def forward(self, x):
         """
         Returns tensor of bin_width vectors (centers). One vector b for every pixel
         """
-        bins = self._net(x)
+        x = self.conv1(x)
+        x = self.act1(x)
+        x = self.conv2(x)
+        bins = self.act2(x)
+
         eps = 1e-3
         bins = bins + eps
         bin_widths_normed = bins / bins.sum(dim=1, keepdim=True)
@@ -614,18 +616,20 @@ class ZoeDepthSeedBinRegressorUnnormed(nn.Module):
                 Not used. (for compatibility with SeedBinRegressor)
         """
         super().__init__()
-        self._net = nn.Sequential(
-            nn.Conv2d(in_features, mlp_dim, 1, 1, 0),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(mlp_dim, n_bins, 1, 1, 0),
-            nn.Softplus(),
-        )
+        self.conv1 = nn.Conv2d(in_features, mlp_dim, 1, 1, 0)
+        self.act1 = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(mlp_dim, n_bins, 1, 1, 0)
+        self.act2 = nn.Softplus()
 
     def forward(self, x):
         """
         Returns tensor of bin_width vectors (centers). One vector b for every pixel
         """
-        bin_centers = self._net(x)
+        x = self.conv1(x)
+        x = self.act1(x)
+        x = self.conv2(x)
+        bin_centers = self.act2(x)
+
         return bin_centers, bin_centers
 
 
@@ -677,12 +681,10 @@ class ZoeDepthAttractorLayer(nn.Module):
         self.kind = kind
         self.memory_efficient = memory_efficient
 
-        self._net = nn.Sequential(
-            nn.Conv2d(in_features, mlp_dim, 1, 1, 0),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(mlp_dim, n_attractors * 2, 1, 1, 0),  # x2 for linear norm
-            nn.ReLU(inplace=True),
-        )
+        self.conv1 = nn.Conv2d(in_features, mlp_dim, 1, 1, 0)
+        self.act1 = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(mlp_dim, n_attractors * 2, 1, 1, 0)  # x2 for linear norm
+        self.act2 = nn.ReLU(inplace=True)
 
     def forward(self, x, prev_bin, prev_bin_embedding=None, interpolate=True):
         """
@@ -707,7 +709,11 @@ class ZoeDepthAttractorLayer(nn.Module):
                 )
             x = x + prev_bin_embedding
 
-        attractors = self._net(x)
+        x = self.conv1(x)
+        x = self.act1(x)
+        x = self.conv2(x)
+        attractors = self.act2(x)
+
         eps = 1e-3
         attractors = attractors + eps
         batch_size, _, height, width = attractors.shape
@@ -771,12 +777,10 @@ class ZoeDepthAttractorLayerUnnormed(nn.Module):
         self.kind = kind
         self.memory_efficient = memory_efficient
 
-        self._net = nn.Sequential(
-            nn.Conv2d(in_features, mlp_dim, 1, 1, 0),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(mlp_dim, n_attractors, 1, 1, 0),
-            nn.Softplus(),
-        )
+        self.conv1 = nn.Conv2d(in_features, mlp_dim, 1, 1, 0)
+        self.act1 = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(mlp_dim, n_attractors, 1, 1, 0)
+        self.act2 = nn.Softplus()
 
     def forward(self, x, prev_bin, prev_bin_embedding=None, interpolate=True):
         """
@@ -801,7 +805,11 @@ class ZoeDepthAttractorLayerUnnormed(nn.Module):
                 )
             x = x + prev_bin_embedding
 
-        attractors = self._net(x)
+        x = self.conv1(x)
+        x = self.act1(x)
+        x = self.conv2(x)
+        attractors = self.act2(x)
+
         height, width = attractors.shape[-2:]
 
         prev_bin = nn.functional.interpolate(prev_bin, (height, width), mode="bilinear", align_corners=True)
@@ -843,14 +851,16 @@ class ZoeDepthProjector(nn.Module):
         """
         super().__init__()
 
-        self._net = nn.Sequential(
-            nn.Conv2d(in_features, mlp_dim, 1, 1, 0),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(mlp_dim, out_features, 1, 1, 0),
-        )
+        self.conv1 = nn.Conv2d(in_features, mlp_dim, 1, 1, 0)
+        self.act = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(mlp_dim, out_features, 1, 1, 0)
 
     def forward(self, x):
-        return self._net(x)
+        x = self.conv1(x)
+        x = self.act(x)
+        x = self.conv2(x)
+
+        return x
 
 
 class ZoeDepthPatchTransformerEncoder(nn.Module):
