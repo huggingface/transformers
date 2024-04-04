@@ -171,7 +171,10 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         import bitsandbytes as bnb
 
         fp16_statistics_key = param_name.replace("weight", "SCB")
+        fp16_weights_format_key = param_name.replace("weight", "weight_format")
+
         fp16_statistics = state_dict.get(fp16_statistics_key, None)
+        fp16_weights_format = state_dict.get(fp16_weights_format_key, None)
 
         module, tensor_name = get_module_from_name(model, param_name)
         if tensor_name not in module._parameters:
@@ -209,6 +212,10 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             setattr(module.weight, "SCB", fp16_statistics.to(target_device))
             if unexpected_keys is not None:
                 unexpected_keys.remove(fp16_statistics_key)
+
+        if fp16_weights_format is not None:
+            if unexpected_keys is not None:
+                unexpected_keys.remove(fp16_weights_format_key)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         model.is_loaded_in_8bit = True
