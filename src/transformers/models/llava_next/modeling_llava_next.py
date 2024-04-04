@@ -593,19 +593,17 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
         with torch.no_grad():
             image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
+            embed_indices = torch.arange(max_embed_dim).unsqueeze(0).to(target_device)
+            embed_indices = embedding_indices.expand(batch_size, max_embed_dim)
+            embed_seq_lens = embed_sequence_lengths[:, None].to(target_device)
+
             if left_padding:
                 # exclude padding on the left
-                val = (
-                    max_embed_dim
-                    - torch.arange(max_embed_dim).unsqueeze(0).to(target_device).expand(batch_size, max_embed_dim)
-                ) <= embed_sequence_lengths[:, None].to(target_device)
-                image_to_overwrite &= val
+                val = (max_embed_dim - embed_indices) <= embed_seq_lens
             else:
                 # exclude padding on the right
-                val = torch.arange(max_embed_dim).unsqueeze(0).to(target_device).expand(
-                    batch_size, max_embed_dim
-                ) < embed_sequence_lengths[:, None].to(target_device)
-                image_to_overwrite &= val
+                val = embed_indices < embed_seq_lens
+            image_to_overwrite &= val
 
             if image_to_overwrite.sum() != num_image_features:
                 raise ValueError(
