@@ -3007,12 +3007,12 @@ class Trainer:
                             # We remove the existing callback and add a new one
                             self.callback_handler.remove_callback(callback)
                             self.callback_handler.add_callback(new_callback)
-                logger.info("  Continuing training from checkpoint, restoring any callbacks that were passed in")
+                logger.info("Continuing training from checkpoint, restoring any callbacks that were passed in")
             else:
                 not_found.append(stored_callback)
         if len(not_found) > 0:
             logger.warning(
-                f"  Checkpoint included callbacks not included in current configuration. Ignoring. ({', '.join(not_found)})"
+                f"Checkpoint included callbacks not included in current configuration. Ignoring. ({', '.join(not_found)})"
             )
 
     def hyperparameter_search(
