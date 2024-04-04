@@ -281,10 +281,9 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
-            position_ids = torch.arange(
-                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
+            position_ids = self.get_position_ids_from_attention_mask(
+                attention_mask, past_key_values_length, seq_length=seq_length, device=device
             )
-            position_ids = position_ids.unsqueeze(0)
 
         if inputs_embeds is None:
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
@@ -325,16 +324,32 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         image_patches_indices=None,
         **kwargs,
     ):
-        if past_key_values:
-            input_ids = input_ids[:, -1:]
+        # Omit tokens covered by past_key_values
+        past_length = 0
+        if past_key_values is not None:
+            past_length = past_key_values[0][0].shape[2]
+
+            # Keep only the unprocessed tokens:
+            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
+            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
+            # input)
+            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
+                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
+            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
+            # input_ids based on the past_length.
+            elif past_length < input_ids.shape[1]:
+                input_ids = input_ids[:, past_length:]
+            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
 
         position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
+        seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-1]
+        if position_ids is None:
+            device = input_ids.device if input_ids is not None else inputs_embeds.device
+            position_ids = self.get_position_ids_from_attention_mask(
+                attention_mask, past_length, seq_length=seq_length, device=device
+            )
+        else:
+            position_ids = position_ids[:, -seq_length:]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:

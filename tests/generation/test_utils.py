@@ -1606,6 +1606,56 @@ class GenerationTesterMixin:
                         )
                     )
 
+    def test_generate_with_and_without_position_ids(self):
+        for model_class in self.all_generative_model_classes:
+            config, input_ids, attention_mask, _ = self._get_input_ids_and_config()
+            model = model_class(config).to(torch_device).eval()
+            model_forward_args = inspect.signature(model.forward).parameters
+            if "position_ids" not in model_forward_args:
+                self.skipTest("This model doesn't use `position_ids`")
+
+            out_wo_positions = model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=5)
+
+            # infer position ids from attn mask and generate again
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            position_ids = position_ids[..., -input_ids.shape[-1] :].view(-1, input_ids.shape[-1])
+            out_w_positions = model.generate(
+                input_ids, attention_mask=attention_mask, position_ids=position_ids, max_new_tokens=5
+            )
+
+            # The two sets of generated sequences must match, if generate can infer position ids correctly
+            # and can continue adding new ids to the already passed position ids
+            self.assertListEqual(out_wo_positions.tolist(), out_w_positions.tolist())
+
+    def test_generate_with_and_without_position_ids_inputs_embeds(self):
+        for model_class in self.all_generative_model_classes:
+            config, input_ids, attention_mask, _ = self._get_input_ids_and_config()
+            model = model_class(config).to(torch_device).eval()
+            model_forward_args = inspect.signature(model.forward).parameters
+            if "position_ids" not in model_forward_args:
+                self.skipTest("This model doesn't use `position_ids`")
+
+            if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
+                self.skipTest("This model doesn't use `inputs_embeds`")
+
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+            out_wo_positions = model.generate(
+                inputs_embeds=inputs_embeds, attention_mask=attention_mask, max_new_tokens=5
+            )
+
+            # infer position ids from attn mask and generate again
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            position_ids = position_ids[..., -input_ids.shape[-1] :].view(-1, input_ids.shape[-1])
+            out_w_positions = model.generate(
+                inputs_embeds=inputs_embeds, attention_mask=attention_mask, position_ids=position_ids, max_new_tokens=5
+            )
+
+            # The two sets of generated sequences must match, if generate can infer position ids correctly
+            # and can continue adding new ids to the already passed position ids
+            self.assertListEqual(out_wo_positions.tolist(), out_w_positions.tolist())
+
     @parameterized.expand([(1, False), (1, True), (4, False)])
     def test_new_cache_format(self, num_beams, do_sample):
         # Tests that generating with the new format is exactly the same as the legacy one (for models that support it).

@@ -979,15 +979,11 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         else:
             past_length = past_key_values[0].size(-2)
 
-        if attention_mask is not None and len(attention_mask.shape) == 2 and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_length > 0:
-                position_ids = position_ids[:, past_length : input_shape[-1] + past_length :]
-        elif position_ids is None:
-            position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0)
+        if position_ids is None:
+            seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-1]
+            position_ids = self.get_position_ids_from_attention_mask(
+                attention_mask, past_length, seq_length=seq_length, device=device
+            )
 
         # Self-attention mask.
         query_length = input_shape[-1]
@@ -1163,6 +1159,7 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
         # Omit tokens covered by past_key_values
+        past_length = 0
         if past_key_values:
             if self.config.multi_query:
                 past_length = past_key_values[0].shape[1]
@@ -1182,15 +1179,15 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
 
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
+        seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-1]
 
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
+        if position_ids is None:
+            device = input_ids.device if input_ids is not None else inputs_embeds.device
+            position_ids = self.get_position_ids_from_attention_mask(
+                attention_mask, past_length, seq_length=seq_length, device=device
+            )
         else:
-            position_ids = None
+            position_ids = position_ids[:, -seq_length:]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:

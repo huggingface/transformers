@@ -4360,6 +4360,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             logger.warning_once(warn_string)
 
+    def get_position_ids_from_attention_mask(self, attention_mask, past_length, seq_length, device):
+        """
+        Tries to infer position ids given attention mask and past kv cache length. All instances when
+        `position_ids=None` should call this method.
+        """
+        if attention_mask is not None:
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            position_ids = position_ids[..., -seq_length:].view(-1, seq_length)
+        else:
+            position_ids = torch.arange(past_length, seq_length + past_length, dtype=torch.long, device=device)
+            position_ids = position_ids.unsqueeze(0)
+        return position_ids
+
     @property
     def _is_quantized_training_enabled(self):
         warnings.warn(

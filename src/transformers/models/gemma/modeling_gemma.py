@@ -886,7 +886,9 @@ class GemmaModel(GemmaPreTrainedModel):
             )
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            position_ids = self.get_position_ids_from_attention_mask(
+                attention_mask, past_seen_tokens, seq_length=inputs_embeds.shape[-1], device=inputs_embeds.device
+            )
 
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
 
@@ -1182,12 +1184,14 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
                 attention_mask = attention_mask[:, -max_cache_length:]
 
         position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
+        seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-1]
+        if position_ids is None:
+            device = input_ids.device if input_ids is not None else inputs_embeds.device
+            position_ids = self.get_position_ids_from_attention_mask(
+                attention_mask, past_length, seq_length=seq_length, device=device
+            )
+        else:
+            position_ids = position_ids[:, -seq_length:]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:

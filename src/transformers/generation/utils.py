@@ -667,6 +667,11 @@ class GenerationMixin:
         if "cache_position" in model_kwargs and model_kwargs["cache_position"] is not None:
             model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + 1
 
+        if "position_ids" in model_kwargs and model_kwargs["position_ids"] is not None:
+            position_ids = model_kwargs["position_ids"]
+            model_kwargs["position_ids"] = torch.cat([position_ids, position_ids[:, -1:] + 1], dim=-1)
+            print(model_kwargs["position_ids"])
+
         return model_kwargs
 
     def _reorder_cache(self, past_key_values, beam_idx):

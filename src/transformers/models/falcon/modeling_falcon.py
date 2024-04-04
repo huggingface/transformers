@@ -1077,10 +1077,9 @@ class FalconModel(FalconPreTrainedModel):
             alibi = None
             if position_ids is None:
                 device = input_ids.device if input_ids is not None else inputs_embeds.device
-                position_ids = torch.arange(
-                    past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
+                position_ids = self.get_position_ids_from_attention_mask(
+                    attention_mask, past_key_values_length, seq_length=seq_length, device=device
                 )
-                position_ids = position_ids.unsqueeze(0)
 
         if self._use_flash_attention_2:
             # 2d mask is passed through the layers
@@ -1217,6 +1216,7 @@ class FalconForCausalLM(FalconPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> dict:
+        past_length = 0
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2]
 
@@ -1230,12 +1230,13 @@ class FalconForCausalLM(FalconPreTrainedModel):
             input_ids = input_ids[:, remove_prefix_length:]
 
         # Note: versions of Falcon with alibi do not use position_ids. It is used with RoPE.
-        if not self.transformer.use_alibi and attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
+        if not self.transformer.use_alibi:
+            if position_ids is None:
+                position_ids = self.get_position_ids_from_attention_mask(
+                    attention_mask, past_length, seq_length=input_ids.shape[-1], device=input_ids.device
+                )
+            else:
+                position_ids = position_ids[:, -input_ids.shape[-1] :]
 
         return {
             "input_ids": input_ids,

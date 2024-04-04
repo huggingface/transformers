@@ -727,9 +727,12 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
             past_key_values = tuple([None] * len(self.h))
         else:
             past_length = past_key_values[0][0].size(-2)
+
         if position_ids is None:
-            position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0)
+            seq_length = input_shape[-1]
+            position_ids = self.get_position_ids_from_attention_mask(
+                attention_mask, past_length, seq_length=seq_length, device=device
+            )
 
         # ImageGPTAttention mask.
         if attention_mask is not None:
@@ -899,6 +902,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
     def prepare_inputs_for_generation(self, input_ids: torch.Tensor, past_key_values: Optional[bool] = None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
         # Omit tokens covered by past_key_values
+        past_length = 0
         if past_key_values:
             past_length = past_key_values[0][0].shape[2]
 
@@ -916,14 +920,15 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
 
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
+        seq_length = input_ids.shape[-1]
+        if position_ids is None:
+            device = input_ids.device
+            position_ids = self.get_position_ids_from_attention_mask(
+                attention_mask, past_length, seq_length=seq_length, device=device
+            )
         else:
-            position_ids = None
+            position_ids = position_ids[:, -seq_length:]
+
         return {
             "input_ids": input_ids,
             "past_key_values": past_key_values,
