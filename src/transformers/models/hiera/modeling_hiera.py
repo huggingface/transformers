@@ -275,7 +275,7 @@ class HieraPatchEmbeddings(nn.Module):
             )
 
         if mask.shape[2:] != target_size:
-            mask = nn.functional.interpolate(mask.float(), size=target_size)
+            mask = nn.functional.interpolate(mask, size=target_size)
 
         return self.projection(pixel_values * mask.bool())
 
@@ -309,7 +309,7 @@ class HieraPatchEmbeddings(nn.Module):
         # Unshuffle to get the binary mask
         mask = torch.gather(mask, dim=1, index=ids_restore)
 
-        return mask.bool(), ids_restore
+        return mask, ids_restore
 
     def forward(
         self,
@@ -922,7 +922,6 @@ class HieraPreTrainedModel(PreTrainedModel):
     base_model_prefix = "hiera"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["HieraEmbeddings", "HieraLayer"]
 
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
@@ -941,7 +940,7 @@ class HieraPreTrainedModel(PreTrainedModel):
 
         elif isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d)):
             nn.init.trunc_normal_(module.weight, std=std)
-            if isinstance(module, nn.Linear) and module.bias is not None:
+            if module.bias is not None:
                 nn.init.constant_(module.bias, std)
 
         elif isinstance(module, nn.LayerNorm):
@@ -1092,6 +1091,7 @@ class HieraModel(HieraPreTrainedModel):
             mask_unit_area = math.prod(self.config.masked_unit_size)
             batch_size, _, hidden_size = hidden_states.shape
             positions = mask.unsqueeze(-1).tile(1, mask_unit_area, hidden_size)
+            positions = positions.bool()
             hidden_states = hidden_states[positions]
             hidden_states = hidden_states.view(batch_size, -1, hidden_size)
 
@@ -1176,7 +1176,7 @@ class HieraDecoder(nn.Module):
 
         # Combine visible and mask tokens
 
-        # hidden_states : [batch_size, num_mask_units, *mask_unit_spatial_shape_final, encoder_dim_out]
+        # hidden_states : [batch_size, num_mask_units_visible, *mask_unit_spatial_shape_final, decoder_embed_dim]
         # mask: [batch_size, num_mask_units]
         decoder_hidden_states = torch.zeros(
             *mask.shape, *hidden_states.shape[2:], device=hidden_states.device, dtype=hidden_states.dtype
@@ -1185,9 +1185,9 @@ class HieraDecoder(nn.Module):
         new_mask_shape = mask.shape + (1,) * len(hidden_states.shape[2:])
         mask = mask.reshape(new_mask_shape)
         expand_shape = (-1,) * 2 + hidden_states.shape[2:]
-        mask = mask.expand(expand_shape).bool()
-        decoder_hidden_states[mask] = hidden_states.flatten()
-        decoder_hidden_states = ~mask * mask_tokens + mask * decoder_hidden_states
+        mask = mask.expand(expand_shape)
+        decoder_hidden_states[mask.bool()] = hidden_states.flatten()
+        decoder_hidden_states = (1 - mask) * mask_tokens + mask * decoder_hidden_states
 
         # Get back spatial order
         hidden_states = undo_windowing(
@@ -1308,7 +1308,7 @@ class HieraForPreTraining(HieraPreTrainedModel):
         size = self.pred_stride
         label = pixel_values.unfold(1, size, size).unfold(2, size, size)
         label = label.flatten(1, 2).flatten(2)
-        label = label[mask]
+        label = label[mask.bool()]
         if self.config.norm_pix_loss:
             mean = label.mean(dim=-1, keepdim=True)
             var = label.var(dim=-1, keepdim=True)
@@ -1325,7 +1325,7 @@ class HieraForPreTraining(HieraPreTrainedModel):
         # Different from 2D
         label = label.permute(0, 2, 3, 4, 5, 6, 1)
         label = label.flatten(1, 3).flatten(2)
-        label = label[mask]
+        label = label[mask.bool()]
         if self.config.norm_pix_loss:
             mean = label.mean(dim=-1, keepdim=True)
             var = label.var(dim=-1, keepdim=True)
@@ -1334,7 +1334,8 @@ class HieraForPreTraining(HieraPreTrainedModel):
         return label
 
     def forward_loss(self, pixel_values: torch.Tensor, logits: torch.Tensor, mask: torch.BoolTensor):
-        # mask (boolean tensor): True means *masked*
+        # We invert the mask such that 1.0 is *masked*
+        mask = 1 - mask
         if len(self.config.query_stride) == 2:
             label = self.get_pixel_label_2d(pixel_values, mask)
         elif len(self.config.query_stride) == 3:
@@ -1342,7 +1343,7 @@ class HieraForPreTraining(HieraPreTrainedModel):
         else:
             raise NotImplementedError("Only images and videos are supported")
 
-        logits = logits[mask]
+        logits = logits[mask.bool()]
         loss = (logits - label) ** 2
         loss = loss.mean()
 
@@ -1388,6 +1389,10 @@ class HieraForPreTraining(HieraPreTrainedModel):
         [1, 196, 768]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         outputs = self.hiera(
             pixel_values,
@@ -1415,8 +1420,7 @@ class HieraForPreTraining(HieraPreTrainedModel):
             output_attentions=output_attentions,
         )
 
-        # We invert the pred_mask such that True means *masked*
-        loss = self.forward_loss(pixel_values, logits, ~mask)
+        loss = self.forward_loss(pixel_values, logits, mask)
 
         if not return_dict:
             output = (logits, mask, ids_to_restore)
@@ -1479,7 +1483,6 @@ class HieraForImageClassification(HieraPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        noise: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1488,15 +1491,16 @@ class HieraForImageClassification(HieraPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, HieraForImageClassificationOutput]:
         r"""
-        noise (`torch.FloatTensor` of shape `(batch_size, num_mask_units)`, *optional*) which is
-                mainly used for testing purposes to control randomness and maintain the reproducibility
-                when is_mae is set to True. Not used in classification and backbone.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         outputs = self.hiera(
             pixel_values,
@@ -1537,7 +1541,7 @@ class HieraForImageClassification(HieraPreTrainedModel):
                 loss = loss_fct(logits, labels)
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[4:]
             return ((loss,) + output) if loss is not None else output
 
         return HieraForImageClassificationOutput(
@@ -1581,16 +1585,11 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        noise: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
         """
-        noise (`torch.FloatTensor` of shape `(batch_size, num_mask_units)`, *optional*) which is
-                mainly used for testing purposes to control randomness and maintain the reproducibility
-                when is_mae is set to True. Not used in classification and backbone.
-
         Returns:
 
         Examples:
