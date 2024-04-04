@@ -84,21 +84,22 @@ class HybridCache(Cache):
         )
 
         cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
-        self.key_cache: torch.Tensor = [
-            torch.zeros(cache_shape, dtype=self.dtype, device=device) for _ in range(config.num_hidden_layers)
-        ]
-        self.value_cache: torch.Tensor = [
-            torch.zeros(cache_shape, dtype=self.dtype, device=device) for _ in range(config.num_hidden_layers)
-        ]
+        self.key_cache: torch.Tensor = []
+        self.value_cache: torch.Tensor = []
+        self.rg_lru_state: torch.Tensor = []
+        self.conv1d_state: torch.Tensor = []
 
-        self.rg_lru_state: torch.Tensor = [
-            torch.zeros((max_batch_size, config.width, config.lru_width), dtype=config.torch_dtype)
-            for _ in range(config.num_hidden_layers)
-        ]
-        self.conv1d_state: torch.Tensor = [
-            torch.zeros((max_batch_size, config.width, config.lru_width), dtype=config.torch_dtype)
-            for _ in range(config.num_hidden_layers)
-        ]
+        for i in range(config.num_hidden_layers):
+            if config.block_types[i] == "recurrent":
+                self.rg_lru_state.append(torch.zeros((max_batch_size, config.lru_width), dtype=config.torch_dtype,device=device))
+                self.conv1d_state.append(torch.zeros((max_batch_size, config.hidden_size, config.conv1d_width), dtype=config.torch_dtype,device=device))
+                self.value_cache.append([])
+                self.key_cache.append([])
+            else:
+                self.value_cache.append(torch.zeros(cache_shape, dtype=self.dtype, device=device))
+                self.key_cache.append(torch.zeros(cache_shape, dtype=self.dtype, device=device))
+                self.rg_lru_state.append([])
+                self.conv1d_state.append([])
 
     def update(self, key_states, value_states, layer_idx, **cache_kwargs):
         new_cache_positions = cache_kwargs.get("cache_position")
@@ -240,23 +241,23 @@ class RecurrentGemmaAttention(nn.Module):
 
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
+        self.num_attention_heads = config.num_attention_heads
         self.head_dim = config.head_dim
         self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.num_key_value_groups = self.num_attention_heads // self.num_key_value_heads
         self.rope_theta = config.rope_theta
 
         self.partial_rotary_factor = 0.5
-        if self.hidden_size % self.num_heads != 0:
+        if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
-                f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
-                f" and `num_heads`: {self.num_heads})."
+                f"hidden_size must be divisible by num_attention_heads (got `hidden_size`: {self.hidden_size}"
+                f" and `num_attention_heads`: {self.num_attention_heads})."
             )
 
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.q_proj = nn.Linear(self.hidden_size, self.num_attention_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
+        self.o_proj = nn.Linear(self.num_attention_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
         self.rotary_emb = RecurrentGemmaRotaryEmbedding(
             int(self.partial_rotary_factor * self.head_dim),
             base=self.rope_theta,
@@ -265,12 +266,12 @@ class RecurrentGemmaAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        use_cache: bool = False,
+        output_attentions: bool = False,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
@@ -279,7 +280,7 @@ class RecurrentGemmaAttention(nn.Module):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
@@ -287,8 +288,8 @@ class RecurrentGemmaAttention(nn.Module):
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
 
         # Partial rotary embedding
-        query_rot, query_pass = torch.chunk(query_states, 1 / self.partial_rotary_factor, dim=-1)
-        key_rot, key_pass = torch.chunk(key_states, 1 / self.partial_rotary_factor, dim=-1)
+        query_rot, query_pass = torch.chunk(query_states, int(1/self.partial_rotary_factor), dim=-1)
+        key_rot, key_pass = torch.chunk(key_states, int(1/self.partial_rotary_factor), dim=-1)
         query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
         query_states = torch.cat((query_rot, query_pass), dim=-1)
         key_states = torch.cat((key_rot, key_pass), dim=-1)
@@ -296,7 +297,7 @@ class RecurrentGemmaAttention(nn.Module):
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, **cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -312,9 +313,9 @@ class RecurrentGemmaAttention(nn.Module):
         attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
         attn_output = torch.matmul(attn_weights, value_states)
 
-        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
+        if attn_output.size() != (bsz, self.num_attention_heads, q_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
+                f"`attn_output` should be of size {(bsz, self.num_attention_heads, q_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
@@ -326,7 +327,7 @@ class RecurrentGemmaAttention(nn.Module):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, past_key_value
 
 
 class RecurrentGemmaRecurrentBlock(nn.Module):
@@ -334,14 +335,15 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
 
     def __init__(self, config, layer_idx):
         super().__init__()
-        self.linear_y = nn.Linear(in_features=config.width, out_features=config.lru_width)
-        self.linear_x = nn.Linear(in_features=config.width, out_features=config.lru_width)
-        self.linear_out = nn.Linear(in_features=config.lru_width, out_features=config.width)
+        self.linear_y = nn.Linear(in_features=config.hidden_size, out_features=config.lru_width)
+        self.linear_x = nn.Linear(in_features=config.hidden_size, out_features=config.lru_width)
+        self.linear_out = nn.Linear(in_features=config.lru_width, out_features=config.hidden_size)
+        self.conv1d_width = config.conv1d_width
         self.conv_1d = nn.Conv1d(
             config.lru_width,
             config.lru_width,
             kernel_size=config.conv1d_width,
-            # groups=config.intermediate_size,
+            groups=config.lru_width,
             padding=config.conv1d_width - 1,
         )
         self.rg_lru = RecurrentGemmaRglru(config)
@@ -350,10 +352,11 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
+        input_states: torch.Tensor,
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        cache: Union[dict[str, torch.Tensor], None]
+        cache: Union[dict[str, torch.Tensor], None],
+        cache_position: torch.Tensor,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """Calls the recurrent block.
 
@@ -368,34 +371,52 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
           than the returned updated cache is empty initialized and filled in from
           the input sequence.
         """
-        y_branch = self.linear_y(hidden_states)
+        batch_size, seq_len, _ = input_states.shape
+        dtype = input_states.dtype
+
+        y_branch = self.linear_y(input_states)
         y_branch = self.act_fn(y_branch)
 
-        x_branch = self.linear_x(hidden_states)
+        x_branch = self.linear_x(input_states)
 
-        state, prev_h = None, None
+        hidden_states = self.conv_1d(x_branch.transpose(1,2))
+
         if cache is not None:
-            state, prev_h = cache[self.layer_idx].conv1d_state, cache[self.layer_idx].rg_lru_state
+            if cache_position[0] == 0:
+                conv_state = nn.functional.pad( 
+                    hidden_states, (self.conv1d_width - hidden_states.shape[-1], 0)
+                )
+                hidden_states = self.conv_1d(hidden_states)[..., :seq_len]
+            else:
+                conv_state = cache.conv1d_state[self.layer_idx]                # [batch, intermediate_size, conv_kernel_size]
+                conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
+                conv_state[:, :, -1] = hidden_states[:, :, 0]
+                hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1) + self.conv1d.bias
 
-        x_branch, conv1d_state = self.conv_1d(
-            activations=x_branch,
+            cache.conv1d_state[self.layer_idx].copy_(conv_state)
+        
+            rg_lru_state = cache.rg_lru_state[self.layer_idx]
+        else:
+            hidden_states = self.act(self.conv_1d(hidden_states)[..., :seq_len])  
+        
+            rg_lru_state = torch.zeros(
+                (batch_size, self.intermediate_size, self.ssm_state_size), device=hidden_states.device, dtype=dtype
+            )
+
+
+        hidden_states, rg_lru_state = self.rg_lru(
+            activations=y_branch,
             position_ids=position_ids,
-            state=state,
-        )
-        x_branch, rg_lru_state = self.rg_lru(
-            activations=x_branch,
-            position_ids=position_ids,
-            prev_h=prev_h,
+            prev_h=rg_lru_state,
         )
 
         # Join branches.
-        x_branch = x_branch * y_branch
-        x_branch = self.linear_out(x_branch)
+        hidden_states = hidden_states * y_branch
+        hidden_states = self.linear_out(hidden_states)
 
-        cache.conv1d_state = conv1d_state
         cache.rg_lru_state = rg_lru_state
 
-        return x_branch, cache
+        return hidden_states, cache
 
 
 TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaAttention}
@@ -435,10 +456,10 @@ class RecurrentGemmaBlockDiagonalLinear(nn.Module):
           dtype: What dtype to use for initialization.
         """
         super().__init__()
-        self.width = config.width
+        self.hidden_size = config.hidden_size
         self.num_blocks = config.num_blocks
         self.w_init_variance_scale = config.w_init_variance_scale
-        self.block_width = self.width // self.num_blocks
+        self.block_width = self.hidden_size // self.num_blocks
 
         # Parameters.
         self.weight = nn.Parameter(torch.empty([self.num_blocks, self.block_width, self.block_width]))
@@ -539,7 +560,7 @@ class RecurrentGemmaRglru(nn.Module):
 
         Args:
           width: The number of dimensions of the input and output.
-          num_heads: The number of diagonal blocks in the input and A gate layers.
+          num_attention_heads: The number of diagonal blocks in the input and A gate layers.
           w_init_variance_scale: Initialization parameter for the
             RecurrentGemmaBlockDiagonalLinear layers of the gates. See the `RecurrentGemmaBlockDiagonalLinear`
             layer for details.
@@ -548,13 +569,13 @@ class RecurrentGemmaRglru(nn.Module):
           dtype: What dtype to use for initialization.
         """
         super().__init__()
-        self.width = config.width
-        self.num_heads = config.num_heads
-        self.block_width = self.width // self.num_heads
+        self.hidden_size = config.hidden_size
+        self.num_attention_heads = config.num_attention_heads
+        self.block_width = self.hidden_size // self.num_attention_heads
         # Parameters and layers.
-        self.a_param = nn.Parameter(torch.empty([self.width]))
-        self.input_gate = nn.Linear(config.width * self.block_width, self.block_width)
-        self.a_gate = nn.Linear(self.num_heads, self.block_width)
+        self.a_param = nn.Parameter(torch.empty([self.hidden_size]))
+        self.input_gate = nn.Linear(self.num_attention_heads * self.block_width, self.block_width) 
+        self.a_gate =  nn.Linear(self.num_attention_heads * self.block_width, self.block_width) 
 
     def __call__(
         self,
@@ -573,16 +594,21 @@ class RecurrentGemmaRglru(nn.Module):
           Output of the block together with the updated hidden state.
         """
 
-        batch_size, l, hidden_size = activations.shape
-        if position_ids.shape != (l,):
-            raise ValueError(f"{position_ids.shape} != {(l,)}")
-        reset = position_ids[None, :, None] == 0
+        batch_size, seq_len, hidden_size = activations.shape
+        reset = position_ids[:, :, None] == 0
 
-        # Gates for x and a.
-        gate_x = torch.sigmoid(self.input_gate(activations.view(-1, self.width * self.block_width))).view(
-            -1, self.num_heads, self.block_width
-        )
-        gate_a = torch.sigmoid(self.a_gate(activations))
+        x = activations.reshape(batch_size, seq_len, self.num_attention_heads, hidden_size//self.num_attention_heads)
+        y = torch.einsum("... h i, h i j -> ... h j", x, self.input_gate.weight.reshape(self.num_attention_heads, self.block_width, self.block_width).transpose(1,2))
+        y += self.input_gate.bias
+        gate_x = torch.sigmoid(einops.rearrange(y, "... h j -> ... (h j)", h=self.num_attention_heads))
+
+        y = torch.einsum("... h i, h i j -> ... h j", x, self.a_gate.weight.reshape(self.num_attention_heads, self.block_width, self.block_width).transpose(1,2))
+        y += self.a_gate.bias
+        gate_a = torch.sigmoid(einops.rearrange(y, "... h j -> ... (h j)", h=self.num_attention_heads))
+
+        # vs
+        # gate_x = torch.sigmoid(self.input_gate(activations)) # TODO fix me
+        # gate_a = torch.sigmoid(self.a_gate(activations))
 
         # Compute the parameter `A` of the recurrence.
         log_a = -8.0 * gate_a * nn.functional.softplus(self.a_param)
@@ -613,9 +639,9 @@ class RecurrentGemmaDecoderLayer(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
         # Sub-blocks and layers.
-        self.temporal_pre_norm = RecurrentGemmaRMSNorm(config.width)
+        self.temporal_pre_norm = RecurrentGemmaRMSNorm(config.hidden_size)
         self.temporal_block = TEMPORAL_BLOCK_CLASSES[config.block_types[layer_idx]](config, layer_idx)
-        self.channel_pre_norm = RecurrentGemmaRMSNorm(config.width)
+        self.channel_pre_norm = RecurrentGemmaRMSNorm(config.hidden_size)
         self.mlp_block = RecurrentGemmaMLP(config)
 
     def forward(
@@ -623,6 +649,7 @@ class RecurrentGemmaDecoderLayer(nn.Module):
         activations: torch.Tensor,
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor,
+        cache_position: torch.Tensor = None,
         cache: Union[dict[str, torch.Tensor], None] = None,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         raw_activations = activations
@@ -633,6 +660,7 @@ class RecurrentGemmaDecoderLayer(nn.Module):
             position_ids,
             attention_mask,
             cache,
+            cache_position=cache_position,
         )
 
         residual = hidden_states + raw_activations
@@ -642,7 +670,7 @@ class RecurrentGemmaDecoderLayer(nn.Module):
 
         hidden_states = hidden_states + residual
 
-        return hidden_states, cache
+        return hidden_states
 
 
 @dataclass
@@ -782,7 +810,7 @@ RECURRENTGEMMA_INPUTS_DOCSTRING = r"""
             Two formats are allowed:
             - a [`~cache_utils.Cache`] instance;
             - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
+            shape `(batch_size, num_attention_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
             cache format.
 
             The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
@@ -836,7 +864,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         self.layers = nn.ModuleList(
             [RecurrentGemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.final_norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -901,16 +929,15 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             hidden_states = hidden_states * normalizer.type(torch.bfloat16)
 
         all_hidden_states = () if output_hidden_states else None
-        for _, residual_block in enumerate(self.blocks):
+        for residual_block in self.layers:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    residual_block.__call__, hidden_states, position_ids, cache_position, causal_mask, cache
+                hidden_states = self._gradient_checkpointing_func(
+                    residual_block.__call__, hidden_states, position_ids, causal_mask, cache_position, cache
                 )
             else:
-                layer_outputs = residual_block(hidden_states, position_ids, cache_position, causal_mask, cache)
-            hidden_states = layer_outputs[0]
+                hidden_states = residual_block(hidden_states, position_ids, causal_mask, cache_position, cache)
 
         hidden_states = self.final_norm(hidden_states)
 
@@ -941,9 +968,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        target_length = (
-            attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else cache_position[-1] + 1
-        )
+        target_length = self.config.attention_window_size
 
         diagonal = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
         offset = cache_position[-1] - self.config.attention_window_size - 1
