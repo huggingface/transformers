@@ -980,7 +980,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             past_length = past_key_values[0].size(-2)
 
         if position_ids is None:
-            seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-1]
+            seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[1]
             position_ids = self.get_position_ids_from_attention_mask(
                 attention_mask, past_length, seq_length=seq_length, device=device
             )
@@ -1179,7 +1179,9 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
 
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
-        seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-1]
+        seq_length = (
+            inputs_embeds.shape[1] if inputs_embeds is not None and past_key_values is None else input_ids.shape[1]
+        )
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device

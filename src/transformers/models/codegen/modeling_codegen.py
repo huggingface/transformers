@@ -467,7 +467,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
             past_length = past_key_values[0][0].size(-2)
 
         if position_ids is None:
-            seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-1]
+            seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[1]
             position_ids = self.get_position_ids_from_attention_mask(
                 attention_mask, past_length, seq_length=seq_length, device=device
             )

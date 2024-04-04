@@ -887,7 +887,7 @@ class GemmaModel(GemmaPreTrainedModel):
 
         if position_ids is None:
             position_ids = self.get_position_ids_from_attention_mask(
-                attention_mask, past_seen_tokens, seq_length=inputs_embeds.shape[-1], device=inputs_embeds.device
+                attention_mask, past_seen_tokens, seq_length=inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
@@ -1184,7 +1184,9 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
                 attention_mask = attention_mask[:, -max_cache_length:]
 
         position_ids = kwargs.get("position_ids", None)
-        seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-1]
+        seq_length = (
+            inputs_embeds.shape[1] if inputs_embeds is not None and past_key_values is None else input_ids.shape[1]
+        )
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
             position_ids = self.get_position_ids_from_attention_mask(
@@ -1202,7 +1204,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
             # TODO: use `next_tokens` directly instead.
             model_inputs = {"input_ids": input_ids.contiguous()}
 
-        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
+        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[1]
         if cache_position is None:
             cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
         else:
