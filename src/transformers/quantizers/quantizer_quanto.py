@@ -224,4 +224,14 @@ class QuantoHfQuantizer(HfQuantizer):
 
     @property
     def is_serializable(self):
+        _quanto_serialization_support = version.parse(importlib.metadata.version("quanto")) > version.parse(
+            "0.1.0"
+        )
+        if not _quanto_serialization_support:
+            logger.warning(
+                "You are calling `save_pretrained` to a quanto converted model, but your `quanto` version doesn't support it. "
+                "If you want to save quanto models, make sure to have `quanto>0.1.0` installed. You will most likely face errors or"
+                " unexpected behaviours."
+            )
+            return False
         return True

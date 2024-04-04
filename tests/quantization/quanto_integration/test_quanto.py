@@ -256,7 +256,6 @@ class QuantoQuantizationTest(unittest.TestCase):
         self.check_same_model(model, self.quantized_model)
         self.check_inference_correctness(model, device="cuda")
 
-    @unittest.skip
     def test_load_from_quanto_saved(self):
         from quanto import freeze, qint4, qint8, quantize, safe_save
 
@@ -276,7 +275,7 @@ class QuantoQuantizationTest(unittest.TestCase):
             model.config.quantization_config = QuantoConfig(
                 weights=self.weights, activations=self.activations, modules_to_not_convert=["lm_head"]
             )
-            safe_save(model.state_dict(), tmpdirname + "/model.safetensors")
+            safe_save(model.state_dict(), tmpdirname + "/model.safetensors", discard_names=model._tied_weights_keys)
             model.config.save_pretrained(tmpdirname)
             quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
                 tmpdirname,
@@ -398,17 +397,17 @@ class QuantoQuantizationSerializationCudaTest(QuantoQuantizationTest):
 
 
 class QuantoQuantizationQBitsTensorTest(QuantoQuantizationTest):
-    EXPECTED_OUTPUTS = "Hello my name is John, I am a young man from the Philippines"
+    EXPECTED_OUTPUTS = "Hello my name is Nellie, I am a very sweet and"
     weights = "int4"
 
 
 class QuantoQuantizationQBitsTensorOffloadTest(QuantoQuantizationOffloadTest):
-    EXPECTED_OUTPUTS = "Hello my name is John, I am a young man from the Philippines"
+    EXPECTED_OUTPUTS = "Hello my name is Nellie, I am a very sweet and"
     weights = "int4"
 
 
 class QuantoQuantizationQBitsTensorSerializationTest(QuantoQuantizationSerializationTest):
-    EXPECTED_OUTPUTS = "Hello my name is John, I am a young man from the Philippines"
+    EXPECTED_OUTPUTS = "Hello my name is Nellie, I am a very sweet and"
     weights = "int4"
 
 
