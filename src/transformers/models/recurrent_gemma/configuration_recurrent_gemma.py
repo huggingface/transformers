@@ -90,7 +90,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "griffin"
+    model_type = "recurrent_gemma"
     # keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -111,8 +111,12 @@ class RecurrentGemmaConfig(PretrainedConfig):
         eos_token_id=1,
         bos_token_id=2,
         tie_word_embeddings=True,
+        hidden_activation="gelu_pytorch_tanh",
         rope_theta=10000.0,
-        block_types=_PATTERN,
+        block_types=("recurrent", "recurrent", "attention"),
+        attention_dropout=0.0,
+        num_key_value_heads=16,
+        attention_bias=False,
         **kwargs,
     ):
         self.num_hidden_layers = num_hidden_layers
@@ -129,8 +133,11 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self._block_types = list(block_types)
-
+        self.hidden_activation = hidden_activation
         self.head_dim = self.hidden_size // self.num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
+        self.attention_dropout = attention_dropout
+        self.attention_bias = attention_bias
 
         super().__init__(
             pad_token_id=pad_token_id,

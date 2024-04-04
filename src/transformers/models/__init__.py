@@ -187,7 +187,7 @@ from . import (
     qwen2_moe,
     rag,
     realm,
-    recurrentgemma,
+    recurrent_gemma,
     reformer,
     regnet,
     rembert,

@@ -41,7 +41,6 @@ if is_torch_available():
     import torch
 
     from transformers import RecurrentGemmaForCausalLM, RecurrentGemmaModel
-    from transformers.models.recurrentgemma.modeling_recurrentgemma import compute_forward_pass_mask
 
 
 class RecurrentGemmaModelTester:
@@ -544,7 +543,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
 
     def test_model_2b_fp32(self):
-        model_id = "gg-hf/recurrentgemma-2b"
+        model_id = "gg-hf/recurrent_gemma-2b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I need to know what the most popular music",
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
@@ -561,7 +560,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_2b_fp16(self):
-        model_id = "google/recurrentgemma-2b"
+        model_id = "google/recurrent_gemma-2b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I need to know what the most popular music",
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
@@ -580,7 +579,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_2b_fp16_static_cache(self):
-        model_id = "google/recurrentgemma-2b"
+        model_id = "google/recurrent_gemma-2b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I need to know what the most popular music",
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
@@ -601,7 +600,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_2b_bf16(self):
-        model_id = "gg-hf/recurrentgemma-2b"
+        model_id = "gg-hf/recurrent_gemma-2b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I need to know what the most popular music",
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
@@ -620,7 +619,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_2b_eager(self):
-        model_id = "gg-hf/recurrentgemma-2b"
+        model_id = "gg-hf/recurrent_gemma-2b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I am looking for some information on the ",
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
@@ -641,7 +640,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
 
     @require_torch_sdpa
     def test_model_2b_sdpa(self):
-        model_id = "gg-hf/recurrentgemma-2b"
+        model_id = "gg-hf/recurrent_gemma-2b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I need to know what the most popular music",
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
@@ -663,7 +662,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     @pytest.mark.flash_attn_test
     @require_flash_attn
     def test_model_2b_flash_attn(self):
-        model_id = "gg-hf/recurrentgemma-2b"
+        model_id = "gg-hf/recurrent_gemma-2b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I need to know what the most popular music",
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
@@ -684,7 +683,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
 
     @require_bitsandbytes
     def test_model_2b_4bit(self):
-        model_id = "gg-hf/recurrentgemma-2b"
+        model_id = "gg-hf/recurrent_gemma-2b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project and I need to make a 3d model of a house. I have been using",
             "Hi today I'd like to share with you my experience with the new wattpad wattpad wattpad wattpad wattpad wattpad wattpad",

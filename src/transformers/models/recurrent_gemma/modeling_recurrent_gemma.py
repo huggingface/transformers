@@ -37,7 +37,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_recurrentgemma import RecurrentGemmaConfig
+from .configuration_recurrent_gemma import RecurrentGemmaConfig
 
 
 if is_flash_attn_2_available():
@@ -57,7 +57,7 @@ class HybridCache(Cache):
 
     Parameters:
         config (`PretrainedConfig):
-            The configuration file defining the `max_position_embeddings`, `hidden_size` and `num_attention_heads`
+            The configuration file defining the `window_length`, `hidden_size` and `num_attention_heads`
             required to initialize the static cache.
         max_batch_size (`int`):
             The maximum batch size with which the model will be used.
@@ -72,7 +72,7 @@ class HybridCache(Cache):
     def __init__(self, config, max_batch_size, window_length: int, device, dtype=None) -> None:
         super().__init__()
         self.max_batch_size = max_batch_size
-        self.max_cache_len = config.max_position_embeddings if window_length is None else window_length
+        self.max_cache_len = window_length
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         self.head_dim = (
             config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
@@ -147,11 +147,9 @@ ALL_LAYERNORM_LAYERS.append(RecurrentGemmaRMSNorm)
 
 # Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with Gemma->RecurrentGemma
 class RecurrentGemmaRotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+    def __init__(self, dim, base=10000, device=None):
         super().__init__()
-
         self.dim = dim
-        self.max_position_embeddings = max_position_embeddings
         self.base = base
         self.register_buffer("inv_freq", None, persistent=False)
 
@@ -246,7 +244,6 @@ class RecurrentGemmaAttention(nn.Module):
         self.head_dim = config.head_dim
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
 
         self.partial_rotary_factor = 0.5
@@ -262,7 +259,6 @@ class RecurrentGemmaAttention(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
         self.rotary_emb = RecurrentGemmaRotaryEmbedding(
             int(self.partial_rotary_factor * self.head_dim),
-            max_position_embeddings=self.max_position_embeddings,
             base=self.rope_theta,
         )
 
@@ -343,12 +339,12 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         self.linear_out = nn.Linear(in_features=config.lru_width, out_features=config.width)
         self.conv_1d = nn.Conv1d(
             config.lru_width,
-            config.conv1d_temporal_width,
-            kernel_size=config.conv_kernel,
-            groups=self.intermediate_size,
-            padding=config.conv_kernel - 1,
+            config.lru_width,
+            kernel_size=config.conv1d_width,
+            # groups=config.intermediate_size,
+            padding=config.conv1d_width - 1,
         )
-        self.rg_lru = RecurrentGemmaRglru(width=config.lru_width, num_heads=config.num_heads)
+        self.rg_lru = RecurrentGemmaRglru(config)
         self.act_fn = ACT2FN[config.hidden_activation]
         self.layer_idx = layer_idx
 
@@ -357,7 +353,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         hidden_states: torch.Tensor,
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        cache: dict[str, torch.Tensor] | None = None,
+        cache: Union[dict[str, torch.Tensor], None]
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """Calls the recurrent block.
 
@@ -402,7 +398,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         return x_branch, cache
 
 
-TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaAttentionBlock}
+TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaAttention}
 
 
 # TODO copied from mistral or whatever
@@ -420,56 +416,6 @@ class RecurrentGemmaMLP(nn.Module):
     def forward(self, hidden_states):
         return self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
 
-
-class ResidualBlock(nn.Module):
-    """Griffin and Hawk's residual block."""
-
-    def __init__(self, config):
-        super().__init__()
-        # Sub-blocks and layers.
-        self.temporal_pre_norm = RecurrentGemmaRMSNorm(width=config.width)
-        self.temporal_block = TEMPORAL_BLOCK_CLASSES[config.temporal_block_type](config)
-        self.channel_pre_norm = RecurrentGemmaRMSNorm(width=config.width)
-        self.mlp_block = RecurrentGemmaMLP(config)
-
-    def forward(
-        self,
-        activations: torch.Tensor,
-        position_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
-        cache: dict[str, torch.Tensor] | None = None,
-    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        """Calls the residual block.
-
-        Args:
-          activations: Sequence of input activations.
-          segment_pos: Positions of each token in the sequence.
-          attention_mask: The attention mask for local attention blocks.
-          cache: Optional cache for the block.
-
-        Returns:
-          Output of the block together with the updated cache. If `cache` is None
-          than the returned updated cache is empty initialized and filled in from
-          the input sequence.
-        """
-        raw_activations = activations
-
-        inputs_normalized = self.temporal_pre_norm(raw_activations)
-        hidden_states, cache = self.temporal_block(
-            inputs_normalized,
-            position_ids,
-            attention_mask,
-            cache,
-        )
-
-        residual = hidden_states + raw_activations
-
-        hidden_states = self.channel_pre_norm(residual)
-        hidden_states = self.mlp_block(hidden_states)
-
-        hidden_states = hidden_states + residual
-
-        return hidden_states, cache
 
 
 # TODO remove einops from this one
@@ -519,7 +465,7 @@ def rnn_scan(
     x: torch.Tensor,
     a: torch.Tensor,
     reset: torch.Tensor,
-    h0: torch.Tensor | None,
+    h0: Union[torch.Tensor, None],
     acc_dtype: torch.dtype = torch.float32,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Runs the recurrence of a linear RNN.
@@ -604,17 +550,17 @@ class RecurrentGemmaRglru(nn.Module):
         super().__init__()
         self.width = config.width
         self.num_heads = config.num_heads
-
+        self.block_width = self.width // self.num_heads
         # Parameters and layers.
         self.a_param = nn.Parameter(torch.empty([self.width]))
-        self.input_gate = nn.Linear(config.width * config.block_width, self.block_width)
-        self.a_gate = nn.Linear(self.num_blocks, self.block_width)
+        self.input_gate = nn.Linear(config.width * self.block_width, self.block_width)
+        self.a_gate = nn.Linear(self.num_heads, self.block_width)
 
     def __call__(
         self,
         activations: torch.Tensor,
         position_ids: torch.Tensor,
-        prev_h: torch.Tensor | None = None,
+        prev_h: Union[torch.Tensor, None] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calls the RG-LRU.
 
@@ -634,7 +580,7 @@ class RecurrentGemmaRglru(nn.Module):
 
         # Gates for x and a.
         gate_x = torch.sigmoid(self.input_gate(activations.view(-1, self.width * self.block_width))).view(
-            -1, self.num_blocks, self.block_width
+            -1, self.num_heads, self.block_width
         )
         gate_a = torch.sigmoid(self.a_gate(activations))
 
@@ -659,6 +605,44 @@ class RecurrentGemmaRglru(nn.Module):
             h0=prev_h,
         )
         return y, last_h
+
+
+class RecurrentGemmaDecoderLayer(nn.Module):
+    """Griffin and Hawk's residual block."""
+
+    def __init__(self, config, layer_idx):
+        super().__init__()
+        # Sub-blocks and layers.
+        self.temporal_pre_norm = RecurrentGemmaRMSNorm(config.width)
+        self.temporal_block = TEMPORAL_BLOCK_CLASSES[config.block_types[layer_idx]](config, layer_idx)
+        self.channel_pre_norm = RecurrentGemmaRMSNorm(config.width)
+        self.mlp_block = RecurrentGemmaMLP(config)
+
+    def forward(
+        self,
+        activations: torch.Tensor,
+        position_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        cache: Union[dict[str, torch.Tensor], None] = None,
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        raw_activations = activations
+
+        inputs_normalized = self.temporal_pre_norm(raw_activations)
+        hidden_states, cache = self.temporal_block(
+            inputs_normalized,
+            position_ids,
+            attention_mask,
+            cache,
+        )
+
+        residual = hidden_states + raw_activations
+
+        hidden_states = self.channel_pre_norm(residual)
+        hidden_states = self.mlp_block(hidden_states)
+
+        hidden_states = hidden_states + residual
+
+        return hidden_states, cache
 
 
 @dataclass
@@ -712,7 +696,7 @@ class GriffinCausalLMOutput(ModelOutput):
     logits: Optional[torch.FloatTensor] = None
     cache: Optional[HybridCache] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: tuple | None = None
+    attentions: Union[tuple, None] = None
 
 
 # TODO(lberrada, botev): adapt all doctsrings.
@@ -742,9 +726,8 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     config_class = RecurrentGemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _keep_in_fp32_modules = ["inv_freq", "rotary_emb", "cos_cached", "sin_cached"]
     _no_split_modules = ["RecurrentGemmaDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values", "causal_mask"]
+    _skip_keys_device_placement = ["cache"]
     # TODO(lberrada, botev): decide whether we want to support the various implementations of attention
     # in first version.
     _supports_flash_attn_2 = False
@@ -752,12 +735,7 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     _supports_cache_class = False
 
     def _init_weights(self, module):
-        if isinstance(module, nn.ModuleList):
-            for block_module in module:
-                block_module.reset_parameters()
-        elif isinstance(module, RecurrentGemmaRMSNorm) or isinstance(module, nn.Embedding):
-            module.reset_parameters()
-
+        pass
         # TODO add the missing init schemes
 
 

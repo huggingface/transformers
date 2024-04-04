@@ -743,7 +743,7 @@ _import_structure = {
         "RealmConfig",
         "RealmTokenizer",
     ],
-    "models.recurrentgemma": ["RECURRENTGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RecurrentGemmaConfig"],
+    "models.recurrent_gemma": ["RECURRENTGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RecurrentGemmaConfig"],
     "models.reformer": ["REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ReformerConfig"],
     "models.regnet": ["REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "RegNetConfig"],
     "models.rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
@@ -3116,7 +3116,7 @@ else:
             "load_tf_weights_in_realm",
         ]
     )
-    _import_structure["models.recurrentgemma"].extend(
+    _import_structure["models.recurrent_gemma"].extend(
         [
             "RecurrentGemmaForCausalLM",
             "RecurrentGemmaModel",
@@ -5633,7 +5633,7 @@ if TYPE_CHECKING:
         RealmConfig,
         RealmTokenizer,
     )
-    from .models.recurrentgemma import RECURRENTGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP, RecurrentGemmaConfig
+    from .models.recurrent_gemma import RecurrentGemmaConfig
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
     from .models.regnet import REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP, RegNetConfig
     from .models.rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
@@ -7695,7 +7695,7 @@ if TYPE_CHECKING:
             RealmScorer,
             load_tf_weights_in_realm,
         )
-        from .models.recurrentgemma import (
+        from .models.recurrent_gemma import (
             RecurrentGemmaForCausalLM,
             RecurrentGemmaModel,
             RecurrentGemmaPreTrainedModel,
@@ -9142,8 +9142,9 @@ if TYPE_CHECKING:
             FlaxPegasusModel,
             FlaxPegasusPreTrainedModel,
         )
+
         # Not implemented for FLAX yet.
-        # from .models.recurrentgemma import (
+        # from .models.recurrent_gemma import (
         #     RecurrentGemmaForCausalLM,
         #     RecurrentGemmaModel,
         #     RecurrentGemmaPreTrainedModel,
