@@ -85,19 +85,19 @@ class HybridCache(Cache):
 
         cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         self.key_cache: torch.Tensor = [
-            torch.zeros(cache_shape, dtype=self.dtype, device=device) for i in range(config.num_layers)
+            torch.zeros(cache_shape, dtype=self.dtype, device=device) for _ in range(config.num_hidden_layers)
         ]
         self.value_cache: torch.Tensor = [
-            torch.zeros(cache_shape, dtype=self.dtype, device=device) for i in range(config.num_layers)
+            torch.zeros(cache_shape, dtype=self.dtype, device=device) for _ in range(config.num_hidden_layers)
         ]
 
         self.rg_lru_state: torch.Tensor = [
-            torch.zeros((max_batch_size, config.width, config.rg_lu_dim), config.torch_dtype)
-            for i in range(config.num_layers)
+            torch.zeros((max_batch_size, config.width, config.lru_width), dtype=config.torch_dtype)
+            for _ in range(config.num_hidden_layers)
         ]
         self.conv1d_state: torch.Tensor = [
-            torch.zeros((max_batch_size, config.width, config.rg_lu_dim), config.torch_dtype)
-            for i in range(config.num_layers)
+            torch.zeros((max_batch_size, config.width, config.lru_width), dtype=config.torch_dtype)
+            for _ in range(config.num_hidden_layers)
         ]
 
     def update(self, key_states, value_states, layer_idx, **cache_kwargs):
@@ -828,6 +828,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
     def __init__(self, config: RecurrentGemmaConfig):
         super().__init__(config)
+        self.config = config
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
@@ -883,7 +884,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if cache is None:
-            cache = HybridCache(self.config, inputs_embeds.shape[0], self.window_length)
+            cache = HybridCache(self.config, inputs_embeds.shape[0], self.config.attention_window_size, inputs_embeds.device)
 
         hidden_states = inputs_embeds
 
@@ -944,14 +945,12 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else cache_position[-1] + 1
         )
 
-        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
+        diagonal = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
+        offset = cache_position[-1] - self.config.attention_window_size - 1
+        causal_mask = torch.tril(diagonal, diagonal=offset)
         if sequence_length != 1:
-            causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask += torch.triu(diagonal, diagonal=1)
 
-        # mask with lower triangular
-        causal_mask *= torch.triu(causal_mask, diagonal=cache_position[-1] - self.sliding_window - 1)
-
-        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
         causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
@@ -1103,24 +1102,11 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         # With static cache, the `past_key_values` is None
         # TODO joao: standardize interface for the different Cache classes and remove of this if
         has_static_cache = False
-        if past_key_values is None:
-            past_key_values = getattr(self.model.layers[0].self_attn, "past_key_value", None)
-            has_static_cache = past_key_values is not None
-
         past_length = 0
         if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
-                max_cache_length = (
-                    torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
-                    if past_key_values.get_max_length() is not None
-                    else None
-                )
-                cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
-            # TODO joao: remove this `else` after `generate` prioritizes `Cache` objects
-            else:
-                cache_length = past_length = past_key_values[0][0].shape[2]
-                max_cache_length = None
+            past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
+            max_cache_length = self.config.attention_window_size
+            cache_length = torch.min(max_cache_length, past_length)
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
