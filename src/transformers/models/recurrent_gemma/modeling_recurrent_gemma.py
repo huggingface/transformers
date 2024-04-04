@@ -391,7 +391,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
                 conv_state = cache.conv1d_state[self.layer_idx]                # [batch, intermediate_size, conv_kernel_size]
                 conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
                 conv_state[:, :, -1] = hidden_states[:, :, 0]
-                hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1) + self.conv1d.bias
+                hidden_states = torch.sum(conv_state * self.conv_1d.weight[:, 0, :], dim=-1) + self.conv_1d.bias
 
             cache.conv1d_state[self.layer_idx].copy_(conv_state)
         
@@ -950,7 +950,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
         return GriffinOutput(
             last_hidden_state=hidden_states,
-            past_key_values=cache,
+            cache=cache,
             hidden_states=all_hidden_states,
         )
 
@@ -1116,7 +1116,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         return GriffinCausalLMOutput(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=(),
         )
