@@ -32,12 +32,25 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import require_torch
+from transformers.trainer_callback import ExportableState
 
 
 if is_torch_available():
     from transformers.trainer import DEFAULT_CALLBACKS, TRAINER_STATE_NAME
 
     from .test_trainer import RegressionDataset, RegressionModelConfig, RegressionPreTrainedModel
+
+
+class MyTestExportableCallback(TrainerCallback, ExportableState):
+    def __init__(self, my_test_state="test"):
+        self.my_test_state = my_test_state
+
+    def state(self):
+        return {
+            "args": {
+                "my_test_state": self.my_test_state,
+            },
+        }
 
 
 class MyTestTrainerCallback(TrainerCallback):
@@ -325,6 +338,43 @@ class TrainerCallbackTest(unittest.TestCase):
         assert early_stopping.early_stopping_patience == 5
         assert early_stopping.early_stopping_threshold == 0.2
         assert my_test.my_test_state == "test"
+
+    def test_stateful_duplicate_callbacks(self):
+        # Use something with non-defaults
+        cbs = [MyTestExportableCallback("first"), MyTestExportableCallback("second")]
+        trainer = self.get_trainer(
+            callbacks=cbs,
+            load_best_model_at_end=True,
+            save_strategy="steps",
+            evaluation_strategy="steps",
+            save_steps=2,
+            eval_steps=2,
+            max_steps=2,
+        )
+        trainer.train()
+
+        # Create a new trainer with defaults
+        trainer = self.get_trainer(
+            callbacks=[MyTestExportableCallback(), MyTestExportableCallback()],
+            load_best_model_at_end=True,
+            save_strategy="steps",
+            evaluation_strategy="steps",
+            save_steps=2,
+            eval_steps=2,
+            max_steps=2,
+            restore_callback_states_from_checkpoint=True,
+        )
+        # Load it back in and verify values
+        checkpoint = os.path.join(self.output_dir, "checkpoint-2")
+        trainer.train(resume_from_checkpoint=checkpoint)
+        cbs = [
+            callback
+            for callback in trainer.callback_handler.callbacks
+            if isinstance(callback, MyTestExportableCallback)
+        ]
+        assert len(cbs) == 2
+        assert cbs[0].my_test_state == "first"
+        assert cbs[1].my_test_state == "second"
 
     def test_missing_stateful_callback(self):
         cb = EarlyStoppingCallback()

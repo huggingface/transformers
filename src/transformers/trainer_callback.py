@@ -125,7 +125,13 @@ class TrainerState:
                     raise TypeError(
                         f"All callbacks passed to be saved must inherit `ExportableState`, but received {type(callback)}"
                     )
-                stateful_callbacks[callback.__class__.__name__] = callback.state()
+                name = callback.__class__.__name__
+                if name in stateful_callbacks:
+                    if not isinstance(stateful_callbacks[name], list):
+                        stateful_callbacks[name] = [stateful_callbacks[name]]
+                    stateful_callbacks[name].append(callback.state())
+                else:
+                    stateful_callbacks[callback.__class__.__name__] = callback.state()
             self.stateful_callbacks = stateful_callbacks
 
     def save_to_json(self, json_path: str):
