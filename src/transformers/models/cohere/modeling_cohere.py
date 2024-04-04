@@ -76,9 +76,10 @@ def _get_unpad_data(attention_mask):
 
 
 class CohereLayerNorm(nn.Module):
-    def __init__(self, param_shape=None, eps=1e-5, bias=False):
+    def __init__(self, hidden_size=None, eps=1e-5, bias=False):
+        """ The hidden size can be a tuple or an int. The tuple is used for QKNorm to normalize across head_dim """
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(param_shape))
+        self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
@@ -224,9 +225,9 @@ class CohereAttention(nn.Module):
 
         if self.use_qk_norm:
             # When sharding the model using Tensor Parallelism, need to be careful to use n_local_heads
-            self.q_norm = CohereLayerNorm(param_shape=(self.num_heads, self.head_dim), eps=config.layer_norm_eps)
+            self.q_norm = CohereLayerNorm(hidden_size=(self.num_heads, self.head_dim), eps=config.layer_norm_eps)
             self.k_norm = CohereLayerNorm(
-                param_shape=(self.num_key_value_heads, self.head_dim), eps=config.layer_norm_eps
+                hidden_size=(self.num_key_value_heads, self.head_dim), eps=config.layer_norm_eps
             )
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
@@ -620,7 +621,7 @@ class CohereDecoderLayer(nn.Module):
         self.self_attn = COHERE_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = CohereMLP(config)
-        self.input_layernorm = CohereLayerNorm(param_shape=(config.hidden_size), eps=config.layer_norm_eps)
+        self.input_layernorm = CohereLayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -843,7 +844,7 @@ class CohereModel(CoherePreTrainedModel):
         self.layers = nn.ModuleList(
             [CohereDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = CohereLayerNorm(param_shape=(config.hidden_size), eps=config.layer_norm_eps)
+        self.norm = CohereLayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
