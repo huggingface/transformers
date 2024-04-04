@@ -77,7 +77,7 @@ def _get_unpad_data(attention_mask):
 
 class CohereLayerNorm(nn.Module):
     def __init__(self, hidden_size=None, eps=1e-5, bias=False):
-        """ The hidden size can be a tuple or an int. The tuple is used for QKNorm to normalize across head_dim """
+        """The hidden size can be a tuple or an int. The tuple is used for QKNorm to normalize across head_dim"""
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
