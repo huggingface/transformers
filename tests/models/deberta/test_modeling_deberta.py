@@ -32,7 +32,6 @@ if is_torch_available():
         DebertaForTokenClassification,
         DebertaModel,
     )
-    from transformers.models.deberta.modeling_deberta import DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class DebertaModelTester(object):
@@ -274,9 +273,9 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DebertaModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/deberta-base"
+        model = DebertaModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

@@ -185,6 +185,7 @@ from . import (
     pvt_v2,
     qdqbert,
     qwen2,
+    qwen2_moe,
     rag,
     realm,
     reformer,

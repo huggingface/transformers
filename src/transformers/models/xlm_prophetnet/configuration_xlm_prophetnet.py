@@ -23,11 +23,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/xprophetnet-large-wiki100-cased": (
-        "https://huggingface.co/microsoft/xprophetnet-large-wiki100-cased/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class XLMProphetNetConfig(PretrainedConfig):

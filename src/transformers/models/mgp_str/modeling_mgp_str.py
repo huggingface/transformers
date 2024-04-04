@@ -44,10 +44,8 @@ _TOKENIZER_FOR_DOC = "MgpstrTokenizer"
 # Base docstring
 _CHECKPOINT_FOR_DOC = "alibaba-damo/mgp-str-base"
 
-MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "alibaba-damo/mgp-str-base",
-    # See all MGP-STR models at https://huggingface.co/models?filter=mgp-str
-]
+
+from ..deprecated._archive_maps import MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path

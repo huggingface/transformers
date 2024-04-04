@@ -49,10 +49,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "BlenderbotSmallConfig"
 
 
-BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/blenderbot_small-90M",
-    # See all BlenderbotSmall models at https://huggingface.co/models?filter=blenderbot_small
-]
+from ..deprecated._archive_maps import BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
