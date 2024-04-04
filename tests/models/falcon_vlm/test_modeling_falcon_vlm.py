@@ -149,9 +149,6 @@ class FalconVLMVisionText2TextModelTester:
         input_ids[:, 1] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
-            "image_sizes": torch.tensor(
-                [[self.vision_config["image_size"], self.vision_config["image_size"]]] * self.batch_size
-            ),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
