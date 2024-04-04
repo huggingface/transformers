@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for FalconVLM."""
+"""Image processor class for FalconVlm."""
 
 import math
 from typing import Dict, List, Optional, Union
@@ -120,7 +120,7 @@ def _get_patch_output_size(image, target_resolution, input_data_format):
 # Ignore copy
 class FalconImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a FalconVLM image processor. Based on [`CLIPImageProcessor`] with incorporation of additional techniques
+    Constructs a FalconVlm image processor. Based on [`CLIPImageProcessor`] with incorporation of additional techniques
     for processing high resolution images as explained in the [LLaVa paper](https://arxiv.org/abs/2310.03744).
 
     Args:

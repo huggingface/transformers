@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Processor class for FalconVLM.
+Processor class for FalconVlm.
 """
 
 
@@ -31,7 +31,7 @@ from ...utils import TensorType
 # Ignore copy
 class FalconVLProcessor(ProcessorMixin):
     r"""
-    Constructs a FalconVLM processor which wraps a Falcon image processor and a Falcon tokenizer into a single processor.
+    Constructs a FalconVlm processor which wraps a Falcon image processor and a Falcon tokenizer into a single processor.
 
     [`FalconVLProcessor`] offers all the functionalities of [`FalconImageProcessor`] and [`FalconTokenizerFast`]. See the
     [`~FalconVLProcessor.__call__`] and [`~FalconVLProcessor.decode`] for more information.

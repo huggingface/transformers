@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch FalconVLM model. """
+""" Testing suite for the PyTorch FalconVlm model. """
 
 import copy
 import gc
@@ -22,8 +22,8 @@ import requests
 
 from transformers import (
     AutoProcessor,
-    FalconVLMConfig,
-    FalconVLMForConditionalGeneration,
+    FalconVlmConfig,
+    FalconVlmForConditionalGeneration,
     is_torch_available,
     is_vision_available,
 )
@@ -43,7 +43,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class FalconVLMVisionText2TextModelTester:
+class FalconVlmVisionText2TextModelTester:
     def __init__(
         self,
         parent,
@@ -115,7 +115,7 @@ class FalconVLMVisionText2TextModelTester:
         self.image_grid_pinpoints = [[32, 32]]
 
     def get_config(self):
-        return FalconVLMConfig(
+        return FalconVlmConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
             ignore_index=self.ignore_index,
@@ -156,18 +156,18 @@ class FalconVLMVisionText2TextModelTester:
 
 
 @require_torch
-class FalconVLMForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class FalconVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
-    Model tester for `FalconVLMForConditionalGeneration`.
+    Model tester for `FalconVlmForConditionalGeneration`.
     """
 
-    all_model_classes = (FalconVLMForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (FalconVlmForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = FalconVLMVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FalconVLMConfig, has_text_modality=False)
+        self.model_tester = FalconVlmVisionText2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=FalconVlmConfig, has_text_modality=False)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -214,7 +214,7 @@ class FalconVLMForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
 
 
 @require_torch
-class FalconVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
+class FalconVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("tiiuae/falcon-10B-vlm")
         url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
@@ -229,7 +229,7 @@ class FalconVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
-        model = FalconVLMForConditionalGeneration.from_pretrained("tiiuae/falcon-10B-vlm", load_in_8bit=True)
+        model = FalconVlmForConditionalGeneration.from_pretrained("tiiuae/falcon-10B-vlm", load_in_8bit=True)
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         cats_image = Image.open(requests.get(url, stream=True).raw)
 

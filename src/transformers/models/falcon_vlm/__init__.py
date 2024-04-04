@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_falcon_vlm": ["FALCON_VLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "FalconVLMConfig"],
+    "configuration_falcon_vlm": ["FALCON_VLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "FalconVlmConfig"],
     "processing_falcon_vlm": ["FalconVLProcessor"],
 }
 
@@ -30,8 +30,8 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_falcon_vlm"] = [
         "FALCON_VLM_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "FalconVLMForConditionalGeneration",
-        "FalconVLMPreTrainedModel",
+        "FalconVlmForConditionalGeneration",
+        "FalconVlmPreTrainedModel",
     ]
 
 try:
@@ -44,7 +44,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_falcon_vlm import FALCON_VLM_PRETRAINED_CONFIG_ARCHIVE_MAP, FalconVLMConfig
+    from .configuration_falcon_vlm import FALCON_VLM_PRETRAINED_CONFIG_ARCHIVE_MAP, FalconVlmConfig
     from .processing_falcon_vlm import FalconVLProcessor
 
     try:
@@ -55,8 +55,8 @@ if TYPE_CHECKING:
     else:
         from .modeling_falcon_vlm import (
             FALCON_VLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FalconVLMForConditionalGeneration,
-            FalconVLMPreTrainedModel,
+            FalconVlmForConditionalGeneration,
+            FalconVlmPreTrainedModel,
         )
 
     try:
