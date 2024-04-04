@@ -366,7 +366,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         return self._padding_side
 
     def set_padding_side(self, padding_side: str):
-        assert padding_side in ["left", "right"], f"{padding_side} is not `left` or `right`."
+        if padding_side not in ["left", "right"]:
+            raise ValueError(f"{padding_side} is not `left` or `right`.")
         self._padding_side = padding_side
 
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_input_embeddings
