@@ -30,20 +30,19 @@ class LlavaProcessor(ProcessorMixin):
     r"""
     Constructs a Llava processor which wraps a Llava image processor and a Llava tokenizer into a single processor.
 
-    [`LlavaProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`LlavaProcessor`] offers all the functionalities of [`AutoImageProcessor`] and [`AutoTokenizer`]. See the
     [`~LlavaProcessor.__call__`] and [`~LlavaProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`CLIPImageProcessor`], *optional*):
+        image_processor ([`AutoImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`], *optional*):
+        tokenizer ([`AutoTokenizer`], *optional*):
             The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("CLIPImageProcessor", "BitImageProcessor")
-    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast",
-                       "GemmaTokenizer", "GemmaTokenizerFast")
+    image_processor_class = ("AutoImageProcessor")
+    tokenizer_class = ("AutoTokenizer")
 
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
@@ -56,6 +55,7 @@ class LlavaProcessor(ProcessorMixin):
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length=None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        add_special_tokens: bool = True,
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -108,7 +108,7 @@ class LlavaProcessor(ProcessorMixin):
         else:
             pixel_values = None
         text_inputs = self.tokenizer(
-            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length, add_special_tokens=add_special_tokens
         )
 
         return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
