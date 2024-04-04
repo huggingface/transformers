@@ -52,6 +52,7 @@ class FalconVLProcessor(ProcessorMixin):
 
         self.image_padded_token = torch.tensor(tokenizer("<image>").input_ids).view(1, -1)
         self.image_padded_mask = torch.tensor(1).view(1, -1)
+        tokenizer.pad_token_id = tokenizer.eos_token_id
 
     def __call__(
         self,
