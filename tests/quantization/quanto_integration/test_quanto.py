@@ -256,7 +256,6 @@ class QuantoQuantizationTest(unittest.TestCase):
         self.check_same_model(model, self.quantized_model)
         self.check_inference_correctness(model, device="cuda")
 
-    # skipping for now
     @unittest.skip
     def test_load_from_quanto_saved(self):
         from quanto import freeze, qint4, qint8, quantize, safe_save
@@ -279,7 +278,6 @@ class QuantoQuantizationTest(unittest.TestCase):
             )
             safe_save(model.state_dict(), tmpdirname + "/model.safetensors")
             model.config.save_pretrained(tmpdirname)
-            # model.save_pretrained(tmpdirname, safe_serialization=True)
             quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
                 tmpdirname,
                 device_map=self.device_map,
@@ -340,7 +338,7 @@ class QuantoQuantizationOffloadTest(QuantoQuantizationTest):
 
     def test_check_offload_quantized(self):
         """
-        We check that we have quantized value in the cpu and unquantized value for values stored in the disk
+        We check that we have unquantized value in the cpu and in the disk
         """
         import quanto
 
@@ -350,10 +348,10 @@ class QuantoQuantizationOffloadTest(QuantoQuantizationTest):
         disk_weights = self.quantized_model.transformer.h[23].self_attention.query_key_value._hf_hook.weights_map[
             "weight"
         ]
-        self.assertTrue(isinstance(cpu_weights, quanto.QTensor))
+        self.assertTrue(isinstance(cpu_weights, torch.Tensor) and not isinstance(cpu_weights, quanto.QTensor))
         self.assertTrue(isinstance(disk_weights, torch.Tensor) and not isinstance(disk_weights, quanto.QTensor))
         if self.weights == "int4":
-            self.assertTrue(isinstance(cpu_weights, quanto.QBitsTensor))
+            self.assertTrue(isinstance(cpu_weights, torch.Tensor) and not isinstance(disk_weights, quanto.QBitsTensor))
             self.assertTrue(
                 isinstance(disk_weights, torch.Tensor) and not isinstance(disk_weights, quanto.QBitsTensor)
             )

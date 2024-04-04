@@ -23,7 +23,7 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_quanto_available, is_torch_available, logging
+from ..utils import is_accelerate_available, is_quanto_available, is_torch_available, logging
 from ..utils.quantization_config import QuantoConfig
 
 
@@ -59,16 +59,23 @@ class QuantoHfQuantizer(HfQuantizer):
     def validate_environment(self, *args, **kwargs):
         if not is_quanto_available():
             raise ImportError("Loading a quanto quantized model requires quanto library (`pip install quanto`)")
-        device_map = kwargs.get("device_map", None)
-        if device_map is not None and isinstance(device_map, dict):
-            if "cpu" in device_map.values() or "disk" in device_map.values():
-                if version.parse(importlib.metadata.version("accelerate")) <= version.parse("0.27.0"):
-                    raise ValueError(
-                        "You have a version of `accelerate` that is not compatible cpu/disk offload with quanto quantized model. "
-                        "You need to install a version of accelerate > 0.27.0."
-                    )
+        if not is_accelerate_available():
+            raise ImportError("Loading a quanto quantized model requires accelerate library (`pip install quanto`)")
+
+    def update_device_map(self, device_map):
+        if device_map is None:
+            device_map = {"": "cpu"}
+            logger.info(
+                "The device_map was not initialized. "
+                "Setting device_map to {'':'cpu'}. "
+                "If you want to use the model for inference, please set device_map ='auto'"
+            )
+        return device_map
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
+        if torch_dtype is None:
+            logger.info("You did not specify `torch_dtype` in `from_pretrained`. Setting it to `torch.float32`.")
+            torch_dtype = torch.float32
         return torch_dtype
 
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
@@ -85,7 +92,12 @@ class QuantoHfQuantizer(HfQuantizer):
         return val
 
     def check_quantized_param(
-        self, model: "PreTrainedModel", param_value: "torch.Tensor", param_name: str, state_dict: Dict[str, Any]
+        self,
+        model: "PreTrainedModel",
+        param_value: "torch.Tensor",
+        param_name: str,
+        state_dict: Dict[str, Any],
+        **kwargs,
     ) -> bool:
         """
         Check if a parameter needs to be quantized.
@@ -99,6 +111,16 @@ class QuantoHfQuantizer(HfQuantizer):
             else:
                 return False
 
+        device_map = kwargs.get("device_map", None)
+        param_device = kwargs.get("param_device", None)
+        # we don't quantize the model if the module is going to be offloaded to the cpu
+        if device_map is not None and param_device is not None:
+            device_map_values = set(device_map.values())
+            if param_device == "cpu" and len(device_map_values) > 1:
+                if not (device_map_values == {"cpu"} or device_map_values == {"cpu", "disk"}):
+                    return False
+
+        module, tensor_name = get_module_from_name(model, param_name)
         # We only quantize the weights and the bias is not quantized.
         if isinstance(module, quanto.QModuleMixin) and "weight" in tensor_name:
             # if the weights are quantized, don't need to recreate it again with `create_quantized_param`
@@ -182,9 +204,6 @@ class QuantoHfQuantizer(HfQuantizer):
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
         model.config.quantization_config = self.quantization_config
-
-    def _process_model_after_weight_loading(self, model):
-        return model
 
     def _process_model_after_weight_loading(self, model):
         return model

@@ -35,7 +35,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import ViTMAEForPreTraining, ViTMAEModel
-    from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -270,11 +269,15 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_outputs_equivalence(self):
         pass
 
+    @unittest.skip(reason="ViTMAE returns a random mask + ids_restore in each forward pass")
+    def test_batching_equivalence(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ViTMAEModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/vit-base-patch16-224"
+        model = ViTMAEModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

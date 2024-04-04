@@ -51,10 +51,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "OneFormerConfig"
 _CHECKPOINT_FOR_DOC = "shi-labs/oneformer_ade20k_swin_tiny"
 
-ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "shi-labs/oneformer_ade20k_swin_tiny",
-    # See all OneFormer models at https://huggingface.co/models?filter=oneformer
-]
+
+from ..deprecated._archive_maps import ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 if is_scipy_available():
@@ -201,10 +199,9 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
     cross_entropy_loss_pos = criterion(inputs, torch.ones_like(inputs))
     cross_entropy_loss_neg = criterion(inputs, torch.zeros_like(inputs))
 
-    loss_pos = torch.matmul(cross_entropy_loss_pos, labels.T)
-    loss_neg = torch.matmul(cross_entropy_loss_neg, (1 - labels).T)
+    loss_pos = torch.matmul(cross_entropy_loss_pos / height_and_width, labels.T)
+    loss_neg = torch.matmul(cross_entropy_loss_neg / height_and_width, (1 - labels).T)
     loss = loss_pos + loss_neg
-    loss = loss / height_and_width
     return loss
 
 

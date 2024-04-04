@@ -62,16 +62,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "distilbert-base-uncased"
 _CONFIG_FOR_DOC = "DistilBertConfig"
 
-DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "distilbert-base-uncased",
-    "distilbert-base-uncased-distilled-squad",
-    "distilbert-base-cased",
-    "distilbert-base-cased-distilled-squad",
-    "distilbert-base-german-cased",
-    "distilbert-base-multilingual-cased",
-    "distilbert-base-uncased-finetuned-sst-2-english",
-    # See all DistilBERT models at https://huggingface.co/models?filter=distilbert
-]
+
+from ..deprecated._archive_maps import DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE #
@@ -114,10 +106,6 @@ class Embeddings(nn.Module):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.dim, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.dim)
-        if config.sinusoidal_pos_embds:
-            create_sinusoidal_embeddings(
-                n_pos=config.max_position_embeddings, dim=config.dim, out=self.position_embeddings.weight
-            )
 
         self.LayerNorm = nn.LayerNorm(config.dim, eps=1e-12)
         self.dropout = nn.Dropout(config.dropout)
@@ -370,7 +358,7 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
             attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
+            dropout (`float`):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
@@ -642,6 +630,10 @@ class DistilBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, Embeddings) and self.config.sinusoidal_pos_embds:
+            create_sinusoidal_embeddings(
+                self.config.max_position_embeddings, self.config.dim, module.position_embeddings.weight
+            )
 
 
 DISTILBERT_START_DOCSTRING = r"""

@@ -218,7 +218,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             This flag runs LLM.int8() with 16-bit main weights. This is useful for fine-tuning as the weights do not
             have to be converted back and forth for the backward pass.
         bnb_4bit_compute_dtype (`torch.dtype` or str, *optional*, defaults to `torch.float32`):
-            This sets the computational type which might be different than the input time. For example, inputs might be
+            This sets the computational type which might be different than the input type. For example, inputs might be
             fp32, but computation can be set to bf16 for speedups.
         bnb_4bit_quant_type (`str`,  *optional*, defaults to `"fp4"`):
             This sets the quantization data type in the bnb.nn.Linear4Bit layers. Options are FP4 and NF4 data types
@@ -226,6 +226,8 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         bnb_4bit_use_double_quant (`bool`, *optional*, defaults to `False`):
             This flag is used for nested quantization where the quantization constants from the first quantization are
             quantized again.
+        bnb_4bit_quant_storage (`torch.dtype` or str, *optional*, defaults to `torch.uint8`):
+            This sets the storage type to pack the quanitzed 4-bit prarams.
         kwargs (`Dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
@@ -241,6 +243,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         bnb_4bit_compute_dtype=None,
         bnb_4bit_quant_type="fp4",
         bnb_4bit_use_double_quant=False,
+        bnb_4bit_quant_storage=None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.BITS_AND_BYTES
@@ -266,6 +269,18 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         else:
             raise ValueError("bnb_4bit_compute_dtype must be a string or a torch.dtype")
 
+        if bnb_4bit_quant_storage is None:
+            self.bnb_4bit_quant_storage = torch.uint8
+        elif isinstance(bnb_4bit_quant_storage, str):
+            self.bnb_4bit_quant_storage = getattr(torch, bnb_4bit_quant_storage)
+        elif isinstance(bnb_4bit_quant_storage, torch.dtype):
+            self.bnb_4bit_quant_storage = bnb_4bit_quant_storage
+        else:
+            raise ValueError("bnb_4bit_quant_storage must be a string or a torch.dtype")
+
+        if kwargs:
+            logger.warning(f"Unused kwargs: {list(kwargs.keys())}. These kwargs are not used in {self.__class__}.")
+
         self.post_init()
 
     @property
@@ -274,6 +289,9 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
 
     @load_in_4bit.setter
     def load_in_4bit(self, value: bool):
+        if not isinstance(value, bool):
+            raise ValueError("load_in_4bit must be a boolean")
+
         if self.load_in_8bit and value:
             raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")
         self._load_in_4bit = value
@@ -284,6 +302,9 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
 
     @load_in_8bit.setter
     def load_in_8bit(self, value: bool):
+        if not isinstance(value, bool):
+            raise ValueError("load_in_8bit must be a boolean")
+
         if self.load_in_4bit and value:
             raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")
         self._load_in_8bit = value
@@ -292,6 +313,12 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
+        if not isinstance(self.load_in_4bit, bool):
+            raise ValueError("load_in_4bit must be a boolean")
+
+        if not isinstance(self.load_in_8bit, bool):
+            raise ValueError("load_in_8bit must be a boolean")
+
         if not isinstance(self.llm_int8_threshold, float):
             raise ValueError("llm_int8_threshold must be a float")
 
@@ -346,6 +373,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         """
         output = copy.deepcopy(self.__dict__)
         output["bnb_4bit_compute_dtype"] = str(output["bnb_4bit_compute_dtype"]).split(".")[1]
+        output["bnb_4bit_quant_storage"] = str(output["bnb_4bit_quant_storage"]).split(".")[1]
         output["load_in_4bit"] = self.load_in_4bit
         output["load_in_8bit"] = self.load_in_8bit
 

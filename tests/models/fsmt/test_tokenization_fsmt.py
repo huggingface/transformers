@@ -30,6 +30,7 @@ FSMT_TINY2 = "stas/tiny-wmt19-en-ru"
 
 
 class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "stas/tiny-wmt19-en-de"
     tokenizer_class = FSMTTokenizer
     test_rust_tokenizer = False
 

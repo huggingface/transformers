@@ -20,10 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/markuplm-base": "https://huggingface.co/microsoft/markuplm-base/resolve/main/config.json",
-    "microsoft/markuplm-large": "https://huggingface.co/microsoft/markuplm-large/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class MarkupLMConfig(PretrainedConfig):
