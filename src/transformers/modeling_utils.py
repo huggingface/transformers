@@ -606,7 +606,12 @@ def _find_disjoint(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor])
         areas = []
         for name in shared:
             tensor = state_dict[name]
-            areas.append((tensor.data_ptr(), _end_ptr(tensor), name))
+            if isinstance(tensor, torch.Tensor):
+                start_ptr, end_ptr = tensor.data_ptr(), _end_ptr(tensor)
+            else:
+                start_ptr, end_ptr = id(tensor), id(tensor)
+
+            areas.append((start_ptr, end_ptr, name))
         areas.sort()
 
         _, last_stop, last_name = areas[0]
@@ -637,7 +642,11 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
         areas = collections.defaultdict(set)
         for name in shared:
             tensor = state_dict[name]
-            area = (tensor.device, tensor.data_ptr(), _end_ptr(tensor))
+            if isinstance(tensor, torch.Tensor):
+                start_ptr, end_ptr, device = tensor.data_ptr(), _end_ptr(tensor), tensor.device
+            else:
+                start_ptr, end_ptr, device = id(tensor), id(tensor), torch.device("cpu")
+            area = (device, start_ptr, end_ptr)
             areas[area].add(name)
         if len(areas) == 1:
             identical.append(shared)
@@ -2516,7 +2525,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Those are actually tensor sharing but disjoint from each other, we can safely clone them
             # Reloaded won't have the same property, but it shouldn't matter in any meaningful way.
             for name in disjoint_names:
-                state_dict[name] = state_dict[name].clone()
+                tensor = state_dict[name]
+                if isinstance(tensor, torch.Tensor):
+                    tensor = tensor.clone()
+                state_dict[name] = tensor
 
             # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
             # If the link between tensors was done at runtime then `from_pretrained` will not get
