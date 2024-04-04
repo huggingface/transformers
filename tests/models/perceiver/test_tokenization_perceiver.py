@@ -36,6 +36,7 @@ else:
 
 
 class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "deepmind/language-perceiver"
     tokenizer_class = PerceiverTokenizer
     test_rust_tokenizer = False
 
@@ -268,10 +269,6 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_decode_invalid_byte_id(self):
         tokenizer = self.perceiver_tokenizer
         self.assertEqual(tokenizer.decode([178]), "�")
-
-    # tokenizer can be instantiated without any pretrained files, so no need for pretrained tokenizer list
-    def test_pretrained_model_lists(self):
-        pass
 
     # tokenizer does not have vocabulary
     def test_get_vocab(self):

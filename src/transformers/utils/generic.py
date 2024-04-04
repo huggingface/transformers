@@ -242,7 +242,7 @@ def is_jax_tensor(x):
 
 
 def _is_mlx(x):
-    import mx.core as mx
+    import mlx.core as mx
 
     return isinstance(x, mx.array)
 

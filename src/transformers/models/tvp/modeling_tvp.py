@@ -34,11 +34,8 @@ from .configuration_tvp import TvpConfig
 
 logger = logging.get_logger(__name__)
 
-TVP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Intel/tvp-base",
-    "Intel/tvp-base-ANet",
-    # See all Tvp models at https://huggingface.co/models?filter=tvp
-]
+
+from ..deprecated._archive_maps import TVP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -679,7 +676,7 @@ class TvpFramePadPrompter(nn.Module):
             prompt = torch.cat([self.pad_left, base, self.pad_right], dim=4)
             prompt = torch.cat([self.pad_up, prompt, self.pad_down], dim=3)
             prompt = torch.cat(pixel_values.size(0) * [prompt])
-            pixel_values += prompt.to(pixel_values.dtype)
+            pixel_values = pixel_values + prompt.to(pixel_values.dtype)
         return pixel_values
 
 

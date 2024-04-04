@@ -37,7 +37,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING, VivitForVideoClassification, VivitModel
-    from transformers.models.vivit.modeling_vivit import VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -225,9 +224,9 @@ class VivitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = VivitModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/vivit-b-16x2-kinetics400"
+        model = VivitModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

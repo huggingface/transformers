@@ -52,6 +52,7 @@ if is_torch_available():
 @require_sentencepiece
 @require_tokenizers
 class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = ["hf-internal-testing/llama-tokenizer", "meta-llama/Llama-2-7b-hf"]
     tokenizer_class = LlamaTokenizer
     rust_tokenizer_class = LlamaTokenizerFast
 
@@ -579,6 +580,19 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(tokens, ["▁▁", "<s>", "▁Hello", "<s>", "▁how"])
         decoded_tokens = tokenizer.decode(input_ids)
         self.assertEqual(decoded_tokens, " <s> Hello<s> how")
+
+        # Let's make sure the space is preserved
+        input_ids = tokenizer.encode("hello", add_special_tokens=True)
+        self.assertEqual(input_ids, [1, 22172])
+        tokens = tokenizer.tokenize("hello")
+        self.assertEqual(tokens, ["▁hello"])
+        decoded_tokens = tokenizer.decode(input_ids)
+        self.assertEqual(decoded_tokens, "<s> hello")
+
+        input_ids = tokenizer.encode("hello", add_special_tokens=False)
+        self.assertEqual(input_ids, [22172])
+        decoded_tokens = tokenizer.decode(input_ids)
+        self.assertEqual(decoded_tokens, "hello")
 
     def test_some_edge_cases(self):
         tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False)

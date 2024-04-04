@@ -65,7 +65,7 @@ training your model with [`Trainer`] or writing a pure PyTorch loop, in which ca
 with 🤗 Accelerate](#using--accelerate).
 
 If these methods do not result in sufficient gains, you can explore the following options: 
-* [Look into building your own custom Docker container with efficient softare prebuilds](#efficient-software-prebuilds)
+* [Look into building your own custom Docker container with efficient software prebuilds](#efficient-software-prebuilds)
 * [Consider a model that uses Mixture of Experts (MoE)](#mixture-of-experts)
 * [Convert your model to BetterTransformer to leverage PyTorch native attention](#using-pytorch-native-attention-and-flash-attention)
 
