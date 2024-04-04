@@ -7058,13 +7058,6 @@ class RecurrentGemmaForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class RecurrentGemmaForSequenceClassification(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class RecurrentGemmaModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7077,7 +7070,6 @@ class RecurrentGemmaPreTrainedModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-
 
 
 REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None

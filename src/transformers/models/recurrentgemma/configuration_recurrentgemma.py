@@ -39,36 +39,28 @@ class RecurrentGemmaConfig(PretrainedConfig):
 
 
     Args:
-        block_types: ('Sequence[str]`, *optional*)
-            A sequence containing the type of the residual blocks in the
-            architecture, specifying each block in order if it should use a
-            recurrent or an attention sub-block for the temporal-mixing.
-        vocab_size (`int`, *optional*, defaults to 256128):
+        num_hidden_layers (`<fill_type>`, *optional*, defaults to 26): <fill_docstring>
+        vocab_size (`int`, *optional*, defaults to 256000):
             Vocabulary size of the RecurrentGemma model. Defines the number of
             different tokens that can be represented by the
             `inputs_ids` passed when calling [`RecurrentGemmaModel`]
         hidden_size (`int`, *optional*, defaults to 2560):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 24576):
+        intermediate_size (`int`, *optional*, defaults to 7680):
             Dimension of the MLP representations.
         num_attention_heads (`int`, *optional*, defaults to 10):
             The number of heads for the attention block and the number of
             heads/blocks for the block-diagonal layers used in the RG-LRU gates.
             This number must divide `hidden_size` and `lru_width`.
-        lru_width (`int` or `None`, *optional*, defaults to None):
+        lru_width (`int` or `None`, *optional*):
             Dimension of the hidden representations of the RG-LRU. If `None`
             this will be set to `hidden_size`.
-        embeddings_scale_by_sqrt_dim (`bool`, defaults to `True`, *optional*,
-        defaults to `True`):
             Whether to scale the output of the embeddings by `sqrt(hidden_size)`.
-        attention_window_size (`int`, *optional*, defaults to 2048)
+        embeddings_scale_by_sqrt_dim (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        attention_window_size (`int`, *optional*, defaults to 2048):
             The size of the attention window used in the attention block.
-        logits_soft_cap: (`float`, *optional*, defaults to 30.0)
-            This will cap the values of the final logits to not exceed this cap
-            in absolute value by applying a `tanh`.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for
-            initializing all weight matrices.
+        conv1d_width (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
+        logits_soft_cap (`<fill_type>`, *optional*, defaults to 30.0): <fill_docstring>
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -85,6 +77,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
+        block_types (`<fill_type>`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`): <fill_docstring>
     ```python
     >>> from transformers import RecurrentGemmaModel, RecurrentGemmaConfig
 

@@ -109,10 +109,7 @@ class RecurrentGemmaModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = compute_forward_pass_mask(
-                torch.arange(self.seq_length).to(torch_device),
-                self.attention_window_size,
-            )
+            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -285,11 +282,7 @@ class RecurrentGemmaModelTester:
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        inputs_dict = {
-            "input_ids": input_ids,
-            "attention_mask": input_mask,
-            "labels": token_labels,
-        }
+        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
 
