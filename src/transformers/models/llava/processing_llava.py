@@ -41,8 +41,8 @@ class LlavaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("AutoImageProcessor")
-    tokenizer_class = ("AutoTokenizer")
+    image_processor_class = "AutoImageProcessor"
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
@@ -59,9 +59,9 @@ class LlavaProcessor(ProcessorMixin):
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
+        and `kwargs` arguments to AutoTokenizerFast's [`~AutoTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        AutoImageProcessor's [`~AutoImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
         of the above two methods for more information.
 
         Args:
@@ -93,6 +93,8 @@ class LlavaProcessor(ProcessorMixin):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
+            add_special_tokens (`bool`, *optional*, defaults to `True`):
+                Passes `add_special_tokens` argument to tokenizer. You may want to set to `False` if you are separately using the `PreTrainedTokenizerBase.apply_chat_template` functionality.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -108,7 +110,12 @@ class LlavaProcessor(ProcessorMixin):
         else:
             pixel_values = None
         text_inputs = self.tokenizer(
-            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length, add_special_tokens=add_special_tokens
+            text,
+            return_tensors=return_tensors,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            add_special_tokens=add_special_tokens,
         )
 
         return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
