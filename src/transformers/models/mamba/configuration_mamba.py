@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MAMBA configuration"""
+"""MAMBA configuration"""
+
 import math
 
 from ...configuration_utils import PretrainedConfig
@@ -21,9 +22,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "state-spaces/mamba-2.8b": "https://huggingface.co/state-spaces/mamba-2.8b/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class MambaConfig(PretrainedConfig):
@@ -54,7 +54,7 @@ class MambaConfig(PretrainedConfig):
             The id of the beginning of sentence token in the vocabulary.
         eos_token_id (`int`, *optional*, defaults to 0):
             The id of the end of sentence token in the vocabulary.
-        expand (`int`, *optional*, defaults to 2): Expanding factor used to determin the intermediate size.
+        expand (`int`, *optional*, defaults to 2): Expanding factor used to determine the intermediate size.
         conv_kernel (`int`, *optional*, defaults to 4): Size of the convolution kernel.
         use_bias (`bool`, *optional*, defaults to `False`):
             Whether or not to use bias in ["in_proj", "out_proj"] of the mixer block

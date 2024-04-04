@@ -40,7 +40,6 @@ if is_torch_available():
         ViltModel,
     )
     from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
-    from transformers.models.vilt.modeling_vilt import VILT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     import PIL
@@ -346,6 +345,12 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
+        "VilT samples image tokens from a multinomial distribution, resulting in not deterministic hidden states"
+    )
+    def test_batching_equivalence(self):
+        pass
+
+    @unittest.skip(
         reason="""VilT samples image tokens from a multinomial distribution, resulting in not deterministic
                             hidden states"""
     )
@@ -522,9 +527,9 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VILT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ViltModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "dandelin/vilt-b32-mlm"
+        model = ViltModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

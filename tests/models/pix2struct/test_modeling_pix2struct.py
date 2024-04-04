@@ -48,7 +48,6 @@ if is_torch_available():
         Pix2StructTextModel,
         Pix2StructVisionModel,
     )
-    from transformers.models.pix2struct.modeling_pix2struct import PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -222,9 +221,9 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Pix2StructVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/pix2struct-textcaps-base"
+        model = Pix2StructVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class Pix2StructTextModelTester:
@@ -371,9 +370,9 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Pix2StructTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/pix2struct-textcaps-base"
+        model = Pix2StructTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class Pix2StructModelTester:
@@ -386,6 +385,7 @@ class Pix2StructModelTester:
         self.parent = parent
         self.text_model_tester = Pix2StructTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Pix2StructVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):

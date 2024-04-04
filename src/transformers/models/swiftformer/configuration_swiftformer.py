@@ -26,9 +26,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "MBZUAI/swiftformer-xs": "https://huggingface.co/MBZUAI/swiftformer-xs/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class SwiftFormerConfig(PretrainedConfig):

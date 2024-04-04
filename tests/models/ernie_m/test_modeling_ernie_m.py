@@ -36,7 +36,6 @@ if is_torch_available():
         ErnieMForTokenClassification,
         ErnieMModel,
     )
-    from transformers.models.ernie_m.modeling_ernie_m import ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class ErnieMModelTester:
@@ -298,9 +297,9 @@ class ErnieMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ErnieMModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "susnato/ernie-m-base_pytorch"
+        model = ErnieMModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

@@ -22,9 +22,8 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 logger = logging.get_logger(__name__)
 
-VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/vit-det-base": "https://huggingface.co/facebook/vit-det-base/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class VitDetConfig(BackboneConfigMixin, PretrainedConfig):

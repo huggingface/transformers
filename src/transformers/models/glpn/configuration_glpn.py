@@ -20,10 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "vinvino02/glpn-kitti": "https://huggingface.co/vinvino02/glpn-kitti/resolve/main/config.json",
-    # See all GLPN models at https://huggingface.co/models?filter=glpn
-}
+
+from ..deprecated._archive_maps import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class GLPNConfig(PretrainedConfig):

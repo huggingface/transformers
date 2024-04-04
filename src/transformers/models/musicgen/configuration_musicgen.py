@@ -21,10 +21,8 @@ from ..auto.configuration_auto import AutoConfig
 
 logger = logging.get_logger(__name__)
 
-MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/musicgen-small": "https://huggingface.co/facebook/musicgen-small/resolve/main/config.json",
-    # See all Musicgen models at https://huggingface.co/models?filter=musicgen
-}
+
+from ..deprecated._archive_maps import MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class MusicgenDecoderConfig(PretrainedConfig):
@@ -241,3 +239,20 @@ class MusicgenConfig(PretrainedConfig):
     # This is a property because you might want to change the codec model on the fly
     def sampling_rate(self):
         return self.audio_encoder.sampling_rate
+
+    @property
+    def _attn_implementation(self):
+        # This property is made private for now (as it cannot be changed and a PreTrainedModel.use_attn_implementation method needs to be implemented.)
+        if hasattr(self, "_attn_implementation_internal"):
+            if self._attn_implementation_internal is None:
+                # `config.attn_implementation` should never be None, for backward compatibility.
+                return "eager"
+            else:
+                return self._attn_implementation_internal
+        else:
+            return "eager"
+
+    @_attn_implementation.setter
+    def _attn_implementation(self, value):
+        self._attn_implementation_internal = value
+        self.decoder._attn_implementation = value

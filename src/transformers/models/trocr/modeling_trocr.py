@@ -37,10 +37,7 @@ _CONFIG_FOR_DOC = "TrOCRConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/trocr-base-handwritten"
 
 
-TROCR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/trocr-base-handwritten",
-    # See all TrOCR models at https://huggingface.co/models?filter=trocr
-]
+from ..deprecated._archive_maps import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->TrOCR
@@ -875,7 +872,7 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
         >>> text = "industry, ' Mr. Brown commented icily. ' Let us have a"
 
         >>> # training
-        >>> model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
+        >>> model.config.decoder_start_token_id = processor.tokenizer.eos_token_id
         >>> model.config.pad_token_id = processor.tokenizer.pad_token_id
         >>> model.config.vocab_size = model.config.decoder.vocab_size
 

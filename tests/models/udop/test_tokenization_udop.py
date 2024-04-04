@@ -54,6 +54,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_tokenizers
 @require_pandas
 class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/udop-large"
     tokenizer_class = UdopTokenizer
     rust_tokenizer_class = UdopTokenizerFast
     test_rust_tokenizer = True
@@ -1152,6 +1153,14 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Assert there is online added_tokens special_tokens
                 self.assertEqual(sum(tokens_with_offsets["special_tokens_mask"]), added_tokens)
 
+    @unittest.skip("Chat template tests don't play well with table/layout models.")
+    def test_chat_template(self):
+        pass
+
+    @unittest.skip("Chat template tests don't play well with table/layout models.")
+    def test_chat_template_batched(self):
+        pass
+
     @require_torch
     @slow
     def test_torch_encode_plus_sent_to_model(self):
@@ -1715,10 +1724,6 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @unittest.skip("TO DO: overwrite this very extensive test.")
     def test_alignement_methods(self):
-        pass
-
-    @unittest.skip("#TODO will be removed in main")
-    def test_pretrained_model_lists(self):
         pass
 
     @unittest.skip("UDOP tokenizer requires boxes besides sequences.")
