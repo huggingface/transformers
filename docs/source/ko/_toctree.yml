@@ -29,7 +29,8 @@
     title: 대규모 언어 모델로 생성하기
   title: 튜토리얼
 - sections:
-  - sections:
+  - isExpanded: false
+    sections:
       - local: tasks/sequence_classification
         title: 텍스트 분류
       - local: tasks/token_classification
@@ -47,15 +48,15 @@
       - local: tasks/multiple_choice
         title: 객관식 문제(Multiple Choice)
     title: 자연어처리
-    isExpanded: false
-  - sections:
+  - isExpanded: false
+    sections:
       - local: tasks/audio_classification
         title: 오디오 분류
       - local: tasks/asr
         title: 자동 음성 인식
     title: 오디오
-    isExpanded: false
-  - sections:
+  - isExpanded: false
+    sections:
       - local: tasks/image_classification
         title: 이미지 분류
       - local: tasks/semantic_segmentation
@@ -70,51 +71,79 @@
         title: 제로샷(zero-shot) 이미지 분류
       - local: tasks/monocular_depth_estimation
         title: 단일 영상 기반 깊이 추정
+      - local: tasks/image_to_image
+        title: Image-to-Image
+      - local: tasks/image_feature_extraction
+        title: Image Feature Extraction
+      - local: tasks/mask_generation
+        title: Mask Generation
+      - local: tasks/knowledge_distillation_for_image_classification
+        title: Knowledge Distillation for Computer Vision
     title: 컴퓨터 비전
-    isExpanded: false
-  - sections:
+  - isExpanded: false
+    sections:
       - local: tasks/image_captioning
         title: 이미지 캡셔닝
       - local: tasks/document_question_answering
         title: 문서 질의 응답(Document Question Answering)
       - local: tasks/visual_question_answering
         title: 시각적 질의응답 (Visual Question Answering)
+      - local: tasks/text-to-speech
+        title: Text to speech
     title: 멀티모달
-    isExpanded: false
-  title: 태스크 가이드
-- sections:
-    - local: fast_tokenizers
-      title: 🤗 Tokenizers 라이브러리에서 토크나이저 사용하기
-    - local: multilingual
-      title: 다국어 모델 추론하기
+  - isExpanded: false
+    sections:
     - local: generation_strategies
       title: 텍스트 생성 전략 사용자 정의
-    - local: create_a_model
-      title: 모델별 API 사용하기
-    - local: custom_models
-      title: 사용자 정의 모델 공유하기
-    - local: sagemaker
-      title: Amazon SageMaker에서 학습 실행하기
-    - local: serialization
-      title: ONNX로 내보내기
-    - local: tflite
-      title: TFLite로 내보내기
-    - local: torchscript
-      title: TorchScript로 내보내기
+    title: 생성
+  - isExpanded: false
+    sections:
     - local: in_translation
-      title: (번역중) Benchmarks
+      title: (번역중) Image tasks with IDEFICS
     - local: in_translation
-      title: (번역중) Notebooks with examples
-    - local: community
-      title: 커뮤니티 리소스
-    - local: custom_tools
-      title: 사용자 정의 도구와 프롬프트
-    - local: troubleshooting
-      title: 문제 해결
-  title: (번역중) 개발자 가이드
+      title: (번역중) LLM prompting guide
+    title: (번역중) 프롬프팅
+  title: 태스크 가이드
 - sections:
-    - local: performance
-      title: 성능 및 확장성
+  - local: fast_tokenizers
+    title: 🤗 Tokenizers 라이브러리에서 토크나이저 사용하기
+  - local: multilingual
+    title: 다국어 모델 추론하기
+  - local: create_a_model
+    title: 모델별 API 사용하기
+  - local: custom_models
+    title: 사용자 정의 모델 공유하기
+  - local: in_translation
+    title: (번역중) Templates for chat models
+  - local: in_translation
+    title: (번역중) Trainer
+  - local: sagemaker
+    title: Amazon SageMaker에서 학습 실행하기
+  - local: serialization
+    title: ONNX로 내보내기
+  - local: tflite
+    title: TFLite로 내보내기
+  - local: torchscript
+    title: TorchScript로 내보내기
+  - local: in_translation
+    title: (번역중) Benchmarks
+  - local: in_translation
+    title: (번역중) Notebooks with examples
+  - local: community
+    title: 커뮤니티 리소스
+  - local: custom_tools
+    title: 사용자 정의 도구와 프롬프트
+  - local: troubleshooting
+    title: 문제 해결
+  - local: hf_quantizer
+    title: Contribute new quantization method
+  title: (번역중) 개발자 가이드
+  sections:
+  - local: performance
+    title: 성능 및 확장성
+  - local: in_translation
+    title: (번역중) Quantization
+  - sections:
     - local: in_translation
       title: (번역중) Training on one GPU
     - local: perf_train_gpu_many
