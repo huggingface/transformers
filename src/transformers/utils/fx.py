@@ -255,34 +255,24 @@ def torch_arange(*args, **kwargs):
         step = int(step)
     step = kwargs.get("step", step)
     dtype = kwargs.get("dtype")
-    return torch.empty((end - start) // step, dtype=dtype, device="meta")
+    return torch.empty((end - start) // step, dtype=dtype, device="cpu")
 
 
 def torch_full(*args, **kwargs):
     args = list(args)
-
     if len(args) > 0:
         size = args[0]
     else:
         size = kwargs["size"]
 
-    # size = list(size)
-    # for idx, arg in enumerate(size):
-    #     if isinstance(arg, torch.Tensor) and arg.device == torch.device("meta"):
-    #         size[idx] = 14
-    #         
-    # args = (size,) + tuple(args[1:])
-    # print(args)
-
     # We set the fill value to 1 as its value is not important as long as it's not a tensor on the `meta` device.
     if len(args) > 1:
-        args = [args[0], 1] + args[2:]
+        args[1] = 1
     else:
         kwargs["fill_value"] = 1
-
     kwargs_without_device = dict(kwargs)
     kwargs_without_device.pop("device", None)
-    return torch.full(*args, **kwargs_without_device)
+    return torch.full(*args, **kwargs_without_device, device="cpu")
 
 
 def torch_cat(tensors, dim=None, axis=None, *, out=None):
