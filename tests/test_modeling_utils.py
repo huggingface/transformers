@@ -101,7 +101,7 @@ if is_torch_available():
         _prepare_4d_attention_mask,
         _prepare_4d_causal_attention_mask,
     )
-    from transformers.modeling_utils import shard_checkpoint
+    from transformers.modeling_utils import _find_disjoint, _find_identical, shard_checkpoint
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
@@ -253,6 +253,26 @@ class ModelUtilsTest(TestCasePlus):
                 _ = BertModel.from_pretrained(tmp_dir)
 
             model_loaded = BertModel.from_pretrained(tmp_dir, subfolder=subfolder)
+
+        self.assertTrue(check_models_equal(model, model_loaded))
+
+    def test_model_manually_shared_disjointed_tensors_optimum(self):
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+        model = BertModel(config)
+
+        # Let's fuse qkv
+        attn = model.encoder.layer[0].attention.self
+        q = attn.query.weight
+        k = attn.key.weight
+        v = attn.value.weight
+        # Force some shared storage
+        qkv = torch.stack([q, k, v], dim=0)
+        attn.query.weight = torch.nn.Parameter(qkv[0])
+        attn.key.weight = torch.nn.Parameter(qkv[1])
+        attn.value.weight = torch.nn.Parameter(qkv[2])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            model_loaded = BertModel.from_pretrained(tmp_dir)
 
         self.assertTrue(check_models_equal(model, model_loaded))
 
@@ -2222,3 +2242,40 @@ class Mask4DTestHard(unittest.TestCase):
         ]
 
         self.assertEqual(decoded_0, decoded_1b)
+
+
+@require_torch
+class TestTensorSharing(TestCasePlus):
+    def test_disjoint(self):
+        main = torch.zeros(10)
+        a = main[:5]
+        b = main[5:]
+        state_dict = {"a": a, "b": b}
+
+        shared_names, disjoint_names = _find_disjoint([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [])
+        self.assertEqual(disjoint_names, ["a", "b"])
+
+        a = main[::2]
+        b = main[1::2]
+        state_dict = {"a": a, "b": b}
+
+        shared_names, disjoint_names = _find_disjoint([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [{"a", "b"}])
+        self.assertEqual(disjoint_names, [])
+
+    def test_identical(self):
+        a = torch.zeros(10)
+        b = a
+        state_dict = {"a": a, "b": b}
+
+        shared_names, identical_names = _find_identical([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [])
+        self.assertEqual(identical_names, [{"a", "b"}])
+
+        b = a[:5]
+        state_dict = {"a": a, "b": b}
+
+        shared_names, identical_names = _find_identical([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [{"a", "b"}])
+        self.assertEqual(identical_names, [])
