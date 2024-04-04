@@ -13,6 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+import shutil
+shutil.rmtree('/mnt/cache/hub/models--hf-internal-testing--tiny-random-bert-sharded', ignore_errors=True)
+
 import copy
 import sys
 import tempfile
