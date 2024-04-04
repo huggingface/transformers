@@ -260,11 +260,6 @@ def torch_arange(*args, **kwargs):
 
 def torch_full(*args, **kwargs):
     args = list(args)
-    if len(args) > 0:
-        size = args[0]
-    else:
-        size = kwargs["size"]
-
     # We set the fill value to 1 as its value is not important as long as it's not a tensor on the `meta` device.
     if len(args) > 1:
         args[1] = 1
@@ -732,6 +727,7 @@ def _gen_constructor_wrapper(target):
             return target(*args, **kwargs)
 
     return wrapper, target
+
 
 def make_leaf(target):
     return _gen_constructor_wrapper(target)[0]
