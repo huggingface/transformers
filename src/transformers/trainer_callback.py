@@ -127,11 +127,13 @@ class TrainerState:
                     )
                 name = callback.__class__.__name__
                 if name in stateful_callbacks:
+                    # We can have multiple versions of the same callback
+                    # if so, we store them as a list of states to restore
                     if not isinstance(stateful_callbacks[name], list):
                         stateful_callbacks[name] = [stateful_callbacks[name]]
                     stateful_callbacks[name].append(callback.state())
                 else:
-                    stateful_callbacks[callback.__class__.__name__] = callback.state()
+                    stateful_callbacks[name] = callback.state()
             self.stateful_callbacks = stateful_callbacks
 
     def save_to_json(self, json_path: str):

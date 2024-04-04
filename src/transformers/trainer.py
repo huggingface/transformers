@@ -2995,10 +2995,11 @@ class Trainer:
             if not isinstance(data, list):
                 data = [data]
             if any(callback.__class__.__name__ == stored_callback for callback in original_callbacks):
-                matches = [
+                # We can load/restore from multiple callbacks of the same type.
+                duplicates = [
                     callback for callback in original_callbacks if callback.__class__.__name__ == stored_callback
                 ]
-                for callback, callback_data in zip(matches, data):
+                for callback, callback_data in zip(duplicates, data):
                     args = callback_data.get("args", {})
                     attributes = callback_data.get("attributes", {})
                     new_callback = type(callback)(**args)
