@@ -958,6 +958,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         if self.modelcard is not None:
             self.modelcard.save_pretrained(save_directory)
 
+    # Copied from src/transformers/configuration_utils.py
     @staticmethod
     def _set_token_in_kwargs(kwargs, token=None):
         """Temporary method to deal with `token` and `use_auth_token`.
