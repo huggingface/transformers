@@ -97,7 +97,7 @@ class ViTHybridConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "vit_hybrid"
+    model_type = "vit-hybrid"
 
     def __init__(
         self,
