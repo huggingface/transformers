@@ -16,7 +16,7 @@ jobs:
     with:
       job: run_tests_gpu
       # See the comment for `ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID` in `.github/workflows/slack-report.yml`.
-      env_name_for_slack_report_channel: "#transformers-ci-feedback-tests"
+      env_name_for_slack_report_channel: "#transformers-ci-daily-models"
     secrets: inherit
 
   torch-pipeline:
@@ -25,7 +25,7 @@ jobs:
     with:
       job: run_pipelines_torch_gpu
       # See the comment for `ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID` in `.github/workflows/slack-report.yml`.
-      env_name_for_slack_report_channel: "#transformers-ci-feedback-tests"
+      env_name_for_slack_report_channel: "#transformers-ci-daily-pipeline-torch"
     secrets: inherit
 
   tf-pipeline:
@@ -34,7 +34,7 @@ jobs:
     with:
       job: run_pipelines_tf_gpu
       # See the comment for `ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID` in `.github/workflows/slack-report.yml`.
-      env_name_for_slack_report_channel: "#transformers-ci-feedback-tests"
+      env_name_for_slack_report_channel: "#transformers-ci-daily-pipeline-tf"
     secrets: inherit
 
   example-ci:
@@ -43,7 +43,7 @@ jobs:
     with:
       job: run_examples_gpu
       # See the comment for `ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID` in `.github/workflows/slack-report.yml`.
-      env_name_for_slack_report_channel: "#transformers-ci-feedback-tests"
+      env_name_for_slack_report_channel: "#transformers-ci-daily-examples"
     secrets: inherit
 
   deepspeed-ci:
@@ -52,7 +52,7 @@ jobs:
     with:
       job: run_all_tests_torch_cuda_extensions_gpu
       # See the comment for `ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID` in `.github/workflows/slack-report.yml`.
-      env_name_for_slack_report_channel: "#transformers-ci-feedback-tests"
+      env_name_for_slack_report_channel: "#transformers-ci-daily-deepspeed"
     secrets: inherit
 
   quantization-ci:
@@ -61,5 +61,5 @@ jobs:
     with:
       job: run_tests_quantization_torch_gpu
       # See the comment for `ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID` in `.github/workflows/slack-report.yml`.
-      env_name_for_slack_report_channel: "#transformers-ci-feedback-tests"
+      env_name_for_slack_report_channel: "#transformers-ci-daily-quantization"
     secrets: inherit
