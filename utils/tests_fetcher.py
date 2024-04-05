@@ -967,6 +967,8 @@ def create_module_to_test_map(
             for t in tests
             if not t.startswith("tests/models/")
             or Path(t).parts[2] in IMPORTANT_MODELS
+            # at this point, `t` is of the form `tests/models/my_model`, and we check if `models/my_model`
+            # (i.e. `parts[1:3]`) is in `module`.
             or "/".join(Path(t).parts[1:3]) in module
         ]
 
