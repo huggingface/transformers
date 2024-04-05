@@ -124,7 +124,7 @@ class WatermarkDetector:
         device: str,
         watermarking_config: Union[WatermarkingConfig, Dict],
         ignore_repeated_ngrams: bool = False,
-        max_size: int = 128,
+        max_cache_size: int = 128,
     ):
         if isinstance(watermarking_config, WatermarkingConfig):
             watermarking_config = watermarking_config.to_dict()
@@ -139,7 +139,7 @@ class WatermarkDetector:
         )
 
         # Expensive re-seeding and sampling is cached.
-        self._get_ngram_score_cached = lru_cache(maxsize=max_size)(self._get_ngram_score)
+        self._get_ngram_score_cached = lru_cache(maxsize=max_cache_size)(self._get_ngram_score)
 
     def _get_ngram_score(self, prefix: torch.LongTensor, target: int):
         greenlist_ids = self.processor._get_greenlist_ids(prefix)
