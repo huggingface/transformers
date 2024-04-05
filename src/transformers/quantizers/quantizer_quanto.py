@@ -61,6 +61,13 @@ class QuantoHfQuantizer(HfQuantizer):
             raise ImportError("Loading a quanto quantized model requires quanto library (`pip install quanto`)")
         if not is_accelerate_available():
             raise ImportError("Loading a quanto quantized model requires accelerate library (`pip install quanto`)")
+        device_map = kwargs.get("device_map", None)
+        device_map_values = set(device_map.values())
+        if self.pre_quantized and len(device_map_values) > 1:
+            if "cpu" in device_map_values or "disk" in device_map_values:
+                raise ValueError(
+                    "We can't offload to the cpu/disk serialized quantized models. Please pass a device map that does not contain cpu or disk."
+                )
 
     def update_device_map(self, device_map):
         if device_map is None:
@@ -77,6 +84,10 @@ class QuantoHfQuantizer(HfQuantizer):
             logger.info("You did not specify `torch_dtype` in `from_pretrained`. Setting it to `torch.float32`.")
             torch_dtype = torch.float32
         return torch_dtype
+
+    def update_state_dict_with_metadata(self, state_dict, metadata):
+        state_dict.update(metadata)
+        return state_dict
 
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
         import quanto
@@ -224,9 +235,7 @@ class QuantoHfQuantizer(HfQuantizer):
 
     @property
     def is_serializable(self):
-        _quanto_serialization_support = version.parse(importlib.metadata.version("quanto")) > version.parse(
-            "0.1.0"
-        )
+        _quanto_serialization_support = version.parse(importlib.metadata.version("quanto")) > version.parse("0.1.0")
         if not _quanto_serialization_support:
             logger.warning(
                 "You are calling `save_pretrained` to a quanto converted model, but your `quanto` version doesn't support it. "

@@ -498,10 +498,11 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)
 
 
-def load_state_dict(checkpoint_file: Union[str, os.PathLike], is_quantized: bool = False):
+def load_state_dict(checkpoint_file: Union[str, os.PathLike], hf_quantizer=None):
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
     """
+    is_quantized = hf_quantizer is not None
     if checkpoint_file.endswith(".safetensors") and is_safetensors_available():
         # Check format of the archive
         with safe_open(checkpoint_file, framework="pt") as f:
@@ -512,8 +513,9 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike], is_quantized: bool
                 "you save your model with the `save_pretrained` method."
             )
         state_dict = safe_load_file(checkpoint_file)
-        del metadata["format"]
-        state_dict.update(metadata)
+        if hf_quantizer is not None:
+            del metadata["format"]
+            hf_quantizer.update_state_dict_with_metadata(state_dict, metadata)
         return state_dict
     try:
         if (
@@ -4089,7 +4091,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
                     continue
-                state_dict = load_state_dict(shard_file, is_quantized=is_quantized)
+                state_dict = load_state_dict(shard_file, hf_quantizer=hf_quantizer)
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
