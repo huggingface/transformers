@@ -212,8 +212,8 @@ class FalconVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
             params_tied_2 = list(model_tied.parameters())
             self.assertEqual(len(params_tied_2), len(params_tied))
 
-   @unittest.skip(reason="We don't do this 😉")
-   def test_tied_weights_keys(self):
+    @unittest.skip(reason="We don't do this 😉")
+    def test_tied_weights_keys(self):
        pass
 
 
