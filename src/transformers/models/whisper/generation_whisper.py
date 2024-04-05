@@ -1068,7 +1068,7 @@ class WhisperGenerationMixin:
                     "to `generate`. Either set the language using the `forced_decoder_ids` in the model config, "
                     "or update the generation config as per the instructions https://github.com/huggingface/transformers/issues/25084#issuecomment-1664398224"
                 )
-            generation_config.language = language.lower()
+            generation_config.language = language
 
         if task is not None:
             if not hasattr(generation_config, "task_to_id"):

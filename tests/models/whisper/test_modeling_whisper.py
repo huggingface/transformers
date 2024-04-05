@@ -1757,7 +1757,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             torch_device
         )
 
-        # Japanese transcription, batch size 1
+        # Japanese transcription
         generated_ids = model.generate(
             input_features, do_sample=False, max_length=20, language="<|ja|>", task="transcribe"
         )
@@ -1766,7 +1766,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         EXPECTED_TRANSCRIPT_JA = "木村さんに電話を貸してもらいました"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT_JA)
 
-        # English transcription, batch size 1
+        # English transcription
         generated_ids = model.generate(
             input_features, do_sample=False, max_length=20, language="<|en|>", task="transcribe"
         )
@@ -1774,18 +1774,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         EXPECTED_TRANSCRIPT_EN = " Kimura-san called me."
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT_EN)
-
-        # Both languages in the same batch
-        generated_ids = model.generate(
-            input_features.repeat(2, 1, 1),
-            do_sample=False,
-            max_length=20,
-            language=["<|ja|>", "<|en|>"],
-            task="transcribe",
-        )
-        [transcript_ja, transcript_en] = processor.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(transcript_ja, EXPECTED_TRANSCRIPT_JA)
-        self.assertEqual(transcript_en, EXPECTED_TRANSCRIPT_EN)
 
         # Translation
         generated_ids = model.generate(
@@ -1830,6 +1818,35 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
+
+    @slow
+    def test_large_batched_generation_multilingual(self):
+        torch_device = "cpu"
+        set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
+        model.to(torch_device)
+
+        token = os.getenv("HF_HUB_READ_TOKEN", True)
+        ds = load_dataset("mozilla-foundation/common_voice_6_1", "ja", split="test", streaming=True, token=token)
+        ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+
+        input_speech = next(iter(ds))["audio"]["array"]
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
+            torch_device
+        )
+
+        EXPECTED_TRANSCRIPTS = ["木村さんに電話を貸してもらいました", " Kimura-san called me."]
+
+        generated_ids = model.generate(
+            input_features.repeat(2, 1, 1),
+            do_sample=False,
+            max_length=20,
+            language=["<|ja|>", "<|en|>"],
+            task="transcribe",
+        )
+        transcripts = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(transcripts, EXPECTED_TRANSCRIPTS)
 
     @slow
     def test_tiny_en_batched_generation(self):
