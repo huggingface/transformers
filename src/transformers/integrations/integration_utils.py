@@ -26,13 +26,21 @@ import sys
 import tempfile
 from dataclasses import asdict, fields
 from pathlib import Path
+from platform import version
 from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Union
 
 import numpy as np
 import packaging.version
 
 from .. import PreTrainedModel, TFPreTrainedModel
-from ..utils import flatten_dict, is_datasets_available, is_pandas_available, is_torch_available, logging
+from ..utils import (
+    PushToHubMixin,
+    flatten_dict,
+    is_datasets_available,
+    is_pandas_available,
+    is_torch_available,
+    logging,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -69,11 +77,11 @@ if TYPE_CHECKING and _has_neptune:
         except importlib.metadata.PackageNotFoundError:
             _has_neptune = False
 
+from .. import modelcard
 from ..trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
 from ..trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
 from ..training_args import ParallelMode  # noqa: E402
 from ..utils import ENV_VARS_TRUE_VALUES, is_torch_xla_available  # noqa: E402
-from .. import modelcard
 
 
 # Integration functions:
