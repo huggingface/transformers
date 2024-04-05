@@ -712,7 +712,7 @@ def main():
                 f"eval_{k}": v.tolist() if isinstance(v, np.ndarray) else v for k, v in eval_metrics.items()
             }
             with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
-                json.dump(all_results, f)
+                json.dump(all_results, f, indent=2)
 
 
 if __name__ == "__main__":
