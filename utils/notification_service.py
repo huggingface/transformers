@@ -576,7 +576,7 @@ class Message:
         print(json.dumps({"blocks": blocks}))
 
         client.chat_postMessage(
-            channel=CI_SLACK_REPORT_CHANNEL_ID,
+            channel=SLACK_REPORT_CHANNEL_ID,
             text=text,
             blocks=payload,
         )
@@ -589,7 +589,7 @@ class Message:
         text = f"{self.n_failures} failures out of {self.n_tests} tests," if self.n_failures else "All tests passed."
 
         self.thread_ts = client.chat_postMessage(
-            channel=CI_SLACK_REPORT_CHANNEL_ID,
+            channel=SLACK_REPORT_CHANNEL_ID,
             blocks=payload,
             text=text,
         )
@@ -715,7 +715,7 @@ class Message:
                     print(json.dumps({"blocks": blocks}))
 
                     client.chat_postMessage(
-                        channel=CI_SLACK_REPORT_CHANNEL_ID,
+                        channel=SLACK_REPORT_CHANNEL_ID,
                         text=f"Results for {job}",
                         blocks=blocks,
                         thread_ts=self.thread_ts["ts"],
@@ -738,7 +738,7 @@ class Message:
                     print(json.dumps({"blocks": blocks}))
 
                     client.chat_postMessage(
-                        channel=CI_SLACK_REPORT_CHANNEL_ID,
+                        channel=SLACK_REPORT_CHANNEL_ID,
                         text=f"Results for {job}",
                         blocks=blocks,
                         thread_ts=self.thread_ts["ts"],
@@ -752,7 +752,7 @@ class Message:
             print(json.dumps({"blocks": blocks}))
 
             client.chat_postMessage(
-                channel=CI_SLACK_REPORT_CHANNEL_ID,
+                channel=SLACK_REPORT_CHANNEL_ID,
                 text="Results for new failures",
                 blocks=blocks,
                 thread_ts=self.thread_ts["ts"],
@@ -855,13 +855,7 @@ def prepare_reports(title, header, reports, to_truncate=True):
 
 
 if __name__ == "__main__":
-    # The value of `ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID` is *NOT* the Slack channel ID. Instead, the value is an
-    # environment variable name that is set in `.github/workflows/slack-report.yml`. The possible values are:
-    # `CI_SLACK_CHANNEL_ID`, `CI_SLACK_CHANNEL_ID_DAILY`, `CI_SLACK_CHANNEL_DUMMY_TESTS`, etc.
-    ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID = os.environ["ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID"]
-    # The value of `CI_SLACK_REPORT_CHANNEL_ID` is the Slack channel ID where we want to send the CI report.
-    # CI_SLACK_REPORT_CHANNEL_ID = os.environ[ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID]
-    CI_SLACK_REPORT_CHANNEL_ID = ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID
+    SLACK_REPORT_CHANNEL_ID = os.environ["SLACK_REPORT_CHANNEL"]
 
     # runner_status = os.environ.get("RUNNER_STATUS")
     # runner_env_status = os.environ.get("RUNNER_ENV_STATUS")

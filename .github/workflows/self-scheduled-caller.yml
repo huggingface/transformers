@@ -15,8 +15,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_tests_gpu
-      # See the comment for `ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID` in `.github/workflows/slack-report.yml`.
-      env_name_for_slack_report_channel: "#transformers-ci-daily-models"
+      slack_report_channel: "#transformers-ci-daily-models"
     secrets: inherit
 
   torch-pipeline:
@@ -24,8 +23,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_pipelines_torch_gpu
-      # See the comment for `ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID` in `.github/workflows/slack-report.yml`.
-      env_name_for_slack_report_channel: "#transformers-ci-daily-pipeline-torch"
+      slack_report_channel: "#transformers-ci-daily-pipeline-torch"
     secrets: inherit
 
   tf-pipeline:
@@ -33,8 +31,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_pipelines_tf_gpu
-      # See the comment for `ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID` in `.github/workflows/slack-report.yml`.
-      env_name_for_slack_report_channel: "#transformers-ci-daily-pipeline-tf"
+      slack_report_channel: "#transformers-ci-daily-pipeline-tf"
     secrets: inherit
 
   example-ci:
@@ -42,8 +39,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_examples_gpu
-      # See the comment for `ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID` in `.github/workflows/slack-report.yml`.
-      env_name_for_slack_report_channel: "#transformers-ci-daily-examples"
+      slack_report_channel: "#transformers-ci-daily-examples"
     secrets: inherit
 
   deepspeed-ci:
@@ -51,8 +47,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_all_tests_torch_cuda_extensions_gpu
-      # See the comment for `ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID` in `.github/workflows/slack-report.yml`.
-      env_name_for_slack_report_channel: "#transformers-ci-daily-deepspeed"
+      slack_report_channel: "#transformers-ci-daily-deepspeed"
     secrets: inherit
 
   quantization-ci:
@@ -60,6 +55,5 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_tests_quantization_torch_gpu
-      # See the comment for `ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID` in `.github/workflows/slack-report.yml`.
-      env_name_for_slack_report_channel: "#transformers-ci-daily-quantization"
+      slack_report_channel: "#transformers-ci-daily-quantization"
     secrets: inherit
