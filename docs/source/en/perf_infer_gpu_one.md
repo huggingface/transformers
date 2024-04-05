@@ -52,6 +52,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
 * [JetMoe](https://huggingface.co/docs/transformers/model_doc/jetmoe#transformers.JetMoeModel)
 * [Jamba](https://huggingface.co/docs/transformers/model_doc/jamba#transformers.JambaModel)
+* [FalconVlm](https://huggingface.co/docs/transformers/model_doc/falcon_vlm)
 * [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel)
 * [Llava](https://huggingface.co/docs/transformers/model_doc/llava)
 * [Llava-NeXT](https://huggingface.co/docs/transformers/model_doc/llava_next)
