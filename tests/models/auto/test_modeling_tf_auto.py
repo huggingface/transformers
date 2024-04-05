@@ -126,7 +126,7 @@ class TFAutoModelTest(unittest.TestCase):
 
     @slow
     def test_model_for_masked_lm(self):
-        model_name = "openai-community/gpt2"
+        model_name = "google-bert/bert-base-uncased"
         config = AutoConfig.from_pretrained(model_name)
         self.assertIsNotNone(config)
         self.assertIsInstance(config, BertConfig)
