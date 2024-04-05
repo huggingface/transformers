@@ -1068,11 +1068,7 @@ class WhisperGenerationMixin:
                     "to `generate`. Either set the language using the `forced_decoder_ids` in the model config, "
                     "or update the generation config as per the instructions https://github.com/huggingface/transformers/issues/25084#issuecomment-1664398224"
                 )
-            if isinstance(language, str):
-                language = language.lower()
-            else:
-                language = [l.lower() for l in language]
-            generation_config.language = language
+            generation_config.language = language.lower()
 
         if task is not None:
             if not hasattr(generation_config, "task_to_id"):
@@ -1092,6 +1088,28 @@ class WhisperGenerationMixin:
             else:
                 lst.append(num)
             return lst
+
+        def language_to_id(language: str) -> int:
+            language = language.lower()
+            if language in generation_config.lang_to_id.keys():
+                language_token = language
+            elif language in TO_LANGUAGE_CODE.keys():
+                language_token = f"<|{TO_LANGUAGE_CODE[language]}|>"
+            elif language in TO_LANGUAGE_CODE.values():
+                language_token = f"<|{language}|>"
+            else:
+                is_language_code = len(language) == 2
+                raise ValueError(
+                    f"Unsupported language: {language}. Language should be one of:"
+                    f" {list(TO_LANGUAGE_CODE.values()) if is_language_code else list(TO_LANGUAGE_CODE.keys())}."
+                )
+            if language_token not in generation_config.lang_to_id:
+                raise ValueError(
+                    f"{language_token} is not supported by this specific model as it is not in the `generation_config.lang_to_id`."
+                    "(You should just add it to the generation config)"
+                )
+
+            return generation_config.lang_to_id[language_token]
 
         task = getattr(generation_config, "task", None)
         language = getattr(generation_config, "language", None)
@@ -1137,6 +1155,9 @@ class WhisperGenerationMixin:
 
         is_lang_id_undefined = len(init_tokens) <= 1 or (len(init_tokens) > 1 and init_tokens[1] is None)
 
+        # from v4.39 the forced decoder ids are always None in favour of decoder input ids
+        generation_config.forced_decoder_ids = None
+
         # Make sure language is a list of strings of the correct length
         if isinstance(language, (list, tuple)):
             if any(l is None for l in language):
@@ -1148,39 +1169,20 @@ class WhisperGenerationMixin:
                     "When passing a list of languages, the length of the list must match the batch size. "
                     f"Expected length of {batch_size}, but got {len(language)} languages."
                 )
+            languages = language
+        elif language is None:
+            # Language will be detected for each item in batch
+            languages = [None] * batch_size
         else:
-            language = [language]  # Use a length-1 list now, broadcast later
+            languages = [language]  # Use a length-1 list now, broadcast later
 
         # Separate init_tokens for each language
-        init_tokens = [copy.deepcopy(init_tokens) for _ in language]
+        init_tokens = [copy.copy(init_tokens) for _ in languages]
 
-        # from v4.39 the forced decoder ids are always None in favour of decoder input ids
-        generation_config.forced_decoder_ids = None
-
-        if language[0] is not None:
-            for i in range(len(init_tokens)):
-                if language[i] in generation_config.lang_to_id.keys():
-                    language_token = language[i]
-                elif language[i] in TO_LANGUAGE_CODE.keys():
-                    language_token = f"<|{TO_LANGUAGE_CODE[language[i]]}|>"
-                elif language[i] in TO_LANGUAGE_CODE.values():
-                    language_token = f"<|{language[i]}|>"
-                else:
-                    is_language_code = len(language[i]) == 2
-                    raise ValueError(
-                        f"Unsupported language: {language[i]}. Language should be one of:"
-                        f" {list(TO_LANGUAGE_CODE.values()) if is_language_code else list(TO_LANGUAGE_CODE.keys())}."
-                    )
-                if language_token not in generation_config.lang_to_id:
-                    raise ValueError(
-                        f"{language_token} is not supported by this specific model as it is not in the `generation_config.lang_to_id`."
-                        "(You should just add it to the generation config)"
-                    )
-
-                lang_id = generation_config.lang_to_id[language_token]
-
-                # if language is defined it'll overwrite language ids that might have already been defined via the generation_config
-                replace_or_add(init_tokens[i], lang_id, generation_config.lang_to_id.values())
+        # Update init_tokens with languages
+        lang_ids = None
+        if language is not None:
+            lang_ids = [language_to_id(l) for l in languages]
         elif hasattr(generation_config, "lang_to_id") and is_lang_id_undefined:
             # language is not defined or intentially set to `None` to trigger language detection
             lang_ids = self.detect_language(
@@ -1188,16 +1190,17 @@ class WhisperGenerationMixin:
                 encoder_outputs=kwargs.get("encoder_outputs", None),
                 generation_config=generation_config,
                 num_segment_frames=num_segment_frames,
-            )
-
-            # append or replace lang_id to init_tokens
+            ).tolist()
+        if lang_ids is not None:
+            # append or replace lang_ids to init_tokens
             for i in range(len(init_tokens)):
-                lang_id = lang_ids[i].item()
                 if len(init_tokens[i]) > 1:
-                    init_tokens[i][1] = lang_id
+                    init_tokens[i][1] = lang_ids[i]
                 else:
-                    init_tokens[i].append(lang_id)
+                    init_tokens[i].append(lang_ids[i])
+        del languages
 
+        # Update init_tokens with task
         for i in range(len(init_tokens)):
             if task is not None:
                 if task in TASK_IDS:
@@ -1208,7 +1211,7 @@ class WhisperGenerationMixin:
                     replace_or_add(init_tokens[i], task_id, generation_config.task_to_id.values())
                 else:
                     raise ValueError(f"The `{task}`task is not supported. The task should be one of `{TASK_IDS}`")
-            elif language[i] is not None and hasattr(generation_config, "task_to_id"):
+            elif language is not None and hasattr(generation_config, "task_to_id"):
                 # if language is defined, but no task id is in `init_tokens`, default to transcribe
                 if not any(ti in init_tokens[i] for ti in generation_config.task_to_id.values()):
                     init_tokens[i].append(generation_config.task_to_id["transcribe"])
