@@ -1122,7 +1122,7 @@ class OLMoModel(OLMoPreTrainedModel):
         return causal_mask
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->OLMO,Llama->OLMo,meta-llama/Llama-2-7b-hf->allenai/OLMo-7B
+# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with meta-llama/Llama-2-7b-hf->allenai/OLMo-7B,LLAMA->OLMO,Llama->OLMo
 class OLMoForCausalLM(OLMoPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1183,8 +1183,8 @@ class OLMoForCausalLM(OLMoPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, OLMoForCausalLM
 
-        >>> model = OLMoForCausalLM.from_pretrained("meta-llama/OLMo-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/OLMo-2-7b-hf")
+        >>> model = OLMoForCausalLM.from_pretrained("allenai/OLMo-7B")
+        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
