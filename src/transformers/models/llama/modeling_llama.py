@@ -604,7 +604,14 @@ class LlamaSdpaAttention(LlamaAttention):
     SDPA API.
     """
 
-    def _scaled_dot_product_attention(self, query_states: torch.Tensor, key_states: torch.Tensor, value_states: torch.Tensor, causal_mask: torch.Tensor, q_len: int):
+    def _scaled_dot_product_attention(
+        self,
+        query_states: torch.Tensor,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        causal_mask: torch.Tensor,
+        q_len: int,
+    ):
         # This method is abstracted in order to enable Copied from statements for it.
 
         if torch._dynamo.is_compiling():
@@ -1070,7 +1077,13 @@ class LlamaModel(LlamaPreTrainedModel):
             attentions=all_self_attns,
         )
 
-    def _update_causal_mask(self, attention_mask: torch.Tensor, input_tensor: torch.Tensor, cache_position: torch.Tensor, past_seen_tokens: int):
+    def _update_causal_mask(
+        self,
+        attention_mask: torch.Tensor,
+        input_tensor: torch.Tensor,
+        cache_position: torch.Tensor,
+        past_seen_tokens: int,
+    ):
         # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
         # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
         # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
@@ -1084,7 +1097,9 @@ class LlamaModel(LlamaPreTrainedModel):
         if self.config._attn_implementation == "sdpa":
             # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument,
             # in order to dispatch on Flash Attention 2.
-            attention_mask, mask_none_and_is_tracing = AttentionMaskConverter._ignore_causal_mask_sdpa(attention_mask, inputs_embeds=input_tensor, past_key_values_length=past_seen_tokens)
+            attention_mask, mask_none_and_is_tracing = AttentionMaskConverter._ignore_causal_mask_sdpa(
+                attention_mask, inputs_embeds=input_tensor, past_key_values_length=past_seen_tokens
+            )
 
             if attention_mask is None and not mask_none_and_is_tracing:
                 return None
@@ -1096,7 +1111,9 @@ class LlamaModel(LlamaPreTrainedModel):
             target_length = self.config.max_position_embeddings
         else:  # dynamic cache
             target_length = (
-                attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else past_seen_tokens + sequence_length + 1
+                attention_mask.shape[-1]
+                if isinstance(attention_mask, torch.Tensor)
+                else past_seen_tokens + sequence_length + 1
             )
 
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
