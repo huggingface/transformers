@@ -998,7 +998,9 @@ class OLMoModel(OLMoPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+        causal_mask = self._update_causal_mask(
+            attention_mask, inputs_embeds, cache_position, past_seen_tokens + inputs_embeds.shape[1]
+        )
 
         # embed positions
         hidden_states = inputs_embeds
@@ -1067,25 +1069,27 @@ class OLMoModel(OLMoPreTrainedModel):
     # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
     # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
     # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
-    def _update_causal_mask(self, attention_mask, input_tensor):
+    def _update_causal_mask(self, attention_mask, input_tensor, cache_position, current_length):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
 
-        batch_size, seq_length = input_tensor.shape[:2]
-        dtype = input_tensor.dtype
-        device = input_tensor.device
-
-        # support going beyond cached `max_position_embedding`
-        if seq_length > self.causal_mask.shape[-1]:
-            causal_mask = torch.full((2 * self.causal_mask.shape[-1], 2 * self.causal_mask.shape[-1]), fill_value=1)
-            self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
-
-        # We use the current dtype to avoid any overflows
+        dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
-        causal_mask = self.causal_mask[None, None, :, :].to(dtype=dtype, device=device) * min_dtype
-        causal_mask = causal_mask.expand(batch_size, 1, -1, -1)
+        sequence_length = input_tensor.shape[1]
+        if hasattr(getattr(self.layers[0], "self_attn", {}), "past_key_value"):  # static cache
+            target_length = self.config.max_position_embeddings
+        else:  # dynamic cache
+            target_length = (
+                attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else current_length + 1
+            )
+
+        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
+        if sequence_length != 1:
+            causal_mask = torch.triu(causal_mask, diagonal=1)
+        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+        causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
             if attention_mask.dim() == 2:
@@ -1093,26 +1097,27 @@ class OLMoModel(OLMoPreTrainedModel):
                 padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
                 causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
             elif attention_mask.dim() == 4:
+                # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
+                # cache. In that case, the 4D attention mask attends to the newest tokens only.
+                if attention_mask.shape[-2] < cache_position[0] + sequence_length:
+                    offset = cache_position[0]
+                else:
+                    offset = 0
                 mask_shape = attention_mask.shape
                 mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
-                causal_mask[: mask_shape[0], : mask_shape[1], : mask_shape[2], : mask_shape[3]] = mask_slice
+                causal_mask[
+                    : mask_shape[0], : mask_shape[1], offset : mask_shape[2] + offset, : mask_shape[3]
+                ] = mask_slice
 
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
             and attention_mask.device.type == "cuda"
         ):
-            # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
-            is_tracing = (
-                torch.jit.is_tracing()
-                or isinstance(input_tensor, torch.fx.Proxy)
-                or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
-            )
-            if not is_tracing and torch.any(attention_mask != 1):
-                # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-                # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-                # Details: https://github.com/pytorch/pytorch/issues/110213
-                causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+            # Details: https://github.com/pytorch/pytorch/issues/110213
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
         return causal_mask
 
@@ -1250,7 +1255,7 @@ class OLMoForCausalLM(OLMoPreTrainedModel):
         # TODO joao: standardize interface for the different Cache classes and remove of this if
         has_static_cache = False
         if past_key_values is None:
-            past_key_values = getattr(self.model.layers[0].self_attn, "past_key_value", None)
+            past_key_values = getattr(getattr(self.model.layers[0], "self_attn", {}), "past_key_value", None)
             has_static_cache = past_key_values is not None
 
         past_length = 0
