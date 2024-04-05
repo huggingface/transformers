@@ -692,6 +692,8 @@ class BatchEncoding(UserDict):
                 Whether or not to add the batch dimension during the conversion.
         """
         if tensor_type is None:
+            if prepend_batch_axis:
+                 self.data = {k: [v] for k, v in self.data.items()}
             return self
 
         # Convert to TensorType
