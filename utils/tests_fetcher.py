@@ -91,6 +91,7 @@ IMPORTANT_MODELS = [
     "opt",
     "longformer",
     "vit",
+    "whisper",
     # Pipeline-specific model (to be sure each pipeline has one model in this list)
     "tapas",
     "vilt",
