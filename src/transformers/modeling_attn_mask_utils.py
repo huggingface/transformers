@@ -334,7 +334,7 @@ def _ignore_causal_mask_sdpa(
                 # Reference: https://github.com/pytorch/pytorch/issues/108108
                 pass
     elif is_tracing:
-        logger.warning("Tracing a model using SDPA (https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) without an `attention_mask` input. This may result in wrong results for batched inference, as it is assumed that no padding is used. Please make sure to pass an `attention_mask` input to torch.jit.trace, torch.fx.symbolic_trace or to your TorchDynamo `OptimizedModule` model.")
+        logger.warning("Tracing a model using SDPA (https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) without an `attention_mask` input. This may result in wrong results for batched inference, as it is then assumed that no padding is used. If you intend to use the traced model with batched inputs, please make sure to pass an `attention_mask` input to torch.jit.trace, torch.fx.symbolic_trace before tracing, or to your TorchDynamo `OptimizedModule` model.")
 
     return attention_mask, mask_none_and_is_tracing
 
