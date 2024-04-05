@@ -46,6 +46,7 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_mlu_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tf32_available,
@@ -502,6 +503,11 @@ class TrainingArguments:
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
             `ds_config.json`) or an already loaded json file as a `dict`"
+
+            <Tip warning={true}>
+                If enabling any Zero-init, make sure that your model is not initialized until
+                *after* initializing the `TrainingArguments`, else it will not be applied.
+            </Tip>
 
         accelerator_config (`str`, `dict`, or `AcceleratorConfig`, *optional*):
             Config to be used with the internal `Accelerator` implementation. The value is either a location of
@@ -993,7 +999,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": "The backend to be used for distributed training",
-            "choices": ["nccl", "gloo", "mpi", "ccl", "hccl"],
+            "choices": ["nccl", "gloo", "mpi", "ccl", "hccl", "cncl"],
         },
     )
     tpu_num_cores: Optional[int] = field(
@@ -1549,6 +1555,7 @@ class TrainingArguments:
             self.framework == "pt"
             and is_torch_available()
             and (self.device.type != "cuda")
+            and (self.device.type != "mlu")
             and (self.device.type != "npu")
             and (self.device.type != "xpu")
             and (get_xla_device_type(self.device) not in ["GPU", "CUDA"])
@@ -1556,13 +1563,14 @@ class TrainingArguments:
         ):
             raise ValueError(
                 "FP16 Mixed precision training with AMP or APEX (`--fp16`) and FP16 half precision evaluation"
-                " (`--fp16_full_eval`) can only be used on CUDA or NPU devices or certain XPU devices (with IPEX)."
+                " (`--fp16_full_eval`) can only be used on CUDA or MLU devices or NPU devices or certain XPU devices (with IPEX)."
             )
 
         if (
             self.framework == "pt"
             and is_torch_available()
             and (self.device.type != "cuda")
+            and (self.device.type != "mlu")
             and (self.device.type != "npu")
             and (self.device.type != "xpu")
             and (get_xla_device_type(self.device) not in ["GPU", "CUDA"])
@@ -1572,7 +1580,7 @@ class TrainingArguments:
         ):
             raise ValueError(
                 "BF16 Mixed precision training with AMP (`--bf16`) and BF16 half precision evaluation"
-                " (`--bf16_full_eval`) can only be used on CUDA, XPU (with IPEX), NPU or CPU/TPU/NeuronCore devices."
+                " (`--bf16_full_eval`) can only be used on CUDA, XPU (with IPEX), NPU, MLU or CPU/TPU/NeuronCore devices."
             )
 
         if self.torchdynamo is not None:
@@ -1998,6 +2006,10 @@ class TrainingArguments:
             elif is_torch_xpu_available():
                 device = torch.device("xpu:0")
                 torch.xpu.set_device(device)
+                self._n_gpu = 1
+            elif is_torch_mlu_available():
+                device = torch.device("mlu:0")
+                torch.mlu.set_device(device)
                 self._n_gpu = 1
             elif is_torch_npu_available():
                 device = torch.device("npu:0")

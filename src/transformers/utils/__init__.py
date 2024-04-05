@@ -185,6 +185,7 @@ from .import_utils import (
     is_torch_fp16_available_on_device,
     is_torch_fx_available,
     is_torch_fx_proxy,
+    is_torch_mlu_available,
     is_torch_mps_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
