@@ -36,6 +36,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...utils import logging
 from .tokenization_whisper import TASK_IDS, TO_LANGUAGE_CODE
 
+
 logger = logging.get_logger(__name__)
 
 
