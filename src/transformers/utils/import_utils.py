@@ -340,6 +340,15 @@ def is_torch_cuda_available():
         return False
 
 
+def is_torch_mps_available():
+    if is_torch_available():
+        import torch
+
+        return torch.backends.mps.is_available()
+    else:
+        return False
+
+
 def is_mamba_ssm_available():
     if is_torch_available():
         import torch
