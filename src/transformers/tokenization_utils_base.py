@@ -752,8 +752,11 @@ class BatchEncoding(UserDict):
         # Do the tensor conversion in batch
         for key, value in self.items():
             try:
+                # if prepend_batch_axis:
+                #     value = [value]
                 if prepend_batch_axis:
-                    value = [value]
+                    # wrap each token of the value in the list
+                    self[key] = [[v] for v in self[key]]
 
                 if not is_tensor(value):
                     tensor = as_tensor(value)
