@@ -202,7 +202,7 @@ from transformers import pipeline
 classifier = pipeline("pair-classification", model="sgugger/finetuned-bert-mrpc")
 ```
 
-Successivamente possiamo condividerlo sull'Hub usando il metodo `push_to_hub` in un `Repository`:
+Successivamente possiamo condividerlo sull'Hub usando il metodo `push_to_hub`
 
 ```py
 classifier.push_to_hub("test-dynamic-pipeline")
