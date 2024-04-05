@@ -39,6 +39,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
+    add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
@@ -1122,7 +1123,26 @@ class OLMoModel(OLMoPreTrainedModel):
         return causal_mask
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with meta-llama/Llama-2-7b-hf->allenai/OLMo-7B,LLAMA->OLMO,Llama->OLMo
+OLMO_GENERATION_EXAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import AutoTokenizer, OLMoForCausalLM
+
+    >>> model = OLMoForCausalLM.from_pretrained("allenai/OLMo-7B)
+    >>> tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B")
+
+    >>> prompt = "Hey, are you conscious? Can you talk to me?"
+    >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+    >>> # Generate
+    >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+    >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+    "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+"""
+
+
+# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->OLMO,Llama->OLMo
 class OLMoForCausalLM(OLMoPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1155,6 +1175,7 @@ class OLMoForCausalLM(OLMoPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(OLMO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @add_end_docstrings(OLMO_GENERATION_EXAMPLE)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1177,22 +1198,6 @@ class OLMoForCausalLM(OLMoPreTrainedModel):
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, OLMoForCausalLM
-
-        >>> model = OLMoForCausalLM.from_pretrained("allenai/OLMo-7B")
-        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B")
-
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
