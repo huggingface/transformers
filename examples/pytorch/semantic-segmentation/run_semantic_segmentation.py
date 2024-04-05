@@ -94,20 +94,6 @@ class Resize:
         return image, target
 
 
-class RandomResize:
-    def __init__(self, min_size, max_size=None):
-        self.min_size = min_size
-        if max_size is None:
-            max_size = min_size
-        self.max_size = max_size
-
-    def __call__(self, image, target):
-        size = random.randint(self.min_size, self.max_size)
-        image = functional.resize(image, size)
-        target = functional.resize(target, size, interpolation=transforms.InterpolationMode.NEAREST)
-        return image, target
-
-
 class RandomCrop:
     def __init__(self, size):
         self.size = size if isinstance(size, tuple) else (size, size)
