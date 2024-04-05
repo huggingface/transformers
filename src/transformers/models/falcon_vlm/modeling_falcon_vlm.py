@@ -122,7 +122,7 @@ FALCON_VLM_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
+    "The bare Falcon Model outputting raw hidden-states without any specific head on top.",
     FALCON_VLM_START_DOCSTRING,
 )
 # Copied from transformers.models.llava.modeling_llava.LlavaPreTrainedModel with Llava->FalconVlm,llava->falcon_vlm
@@ -133,7 +133,7 @@ class FalconVlmPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["FalconVlmVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
     # Ignore copy
-    _supports_flash_attn_2 = False
+    _supports_flash_attn_2 = True
 
     def _init_weights(self, module):
         # important: this ported version of FalconVlm isn't meant for training from scratch - only

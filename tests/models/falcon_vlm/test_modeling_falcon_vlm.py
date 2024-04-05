@@ -230,7 +230,7 @@ class FalconVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
         self.image = Image.open(requests.get(url, stream=True).raw)
 
-        self.prompt = "What is shown in this image?"
+        self.prompt = "what is shown in the image"
 
     def tearDown(self):
         gc.collect()
@@ -245,7 +245,7 @@ class FalconVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         inputs = self.processor(self.prompt, images=cats_image, return_tensors="pt", padding=True).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=20)
+        output = model.generate(**inputs, max_new_tokens=64)
 
-        EXPECTED_DECODED_TEXT = ["\n\nThis image shows two cats lying on a pink blanket on a couch."]
+        EXPECTED_DECODED_TEXT = ["\nwhat is shown in the image?\n\nthe image shows two cats lying on a pink blanket."]
         self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
