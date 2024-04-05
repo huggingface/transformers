@@ -1153,10 +1153,10 @@ class WhisperGenerationMixin:
                     f"You are using token ids in `forced_decoder_ids` that do not seem to correctly follow the prompt pattern of Whisper. Make sure that {forced_decoder_ids} has an entry for all indices >= 1 and < {forced_decoder_ids[0][0]}.",
                 )
 
-        is_lang_id_undefined = len(init_tokens) <= 1 or (len(init_tokens) > 1 and init_tokens[1] is None)
-
         # from v4.39 the forced decoder ids are always None in favour of decoder input ids
         generation_config.forced_decoder_ids = None
+
+        is_lang_id_undefined = len(init_tokens) <= 1 or (len(init_tokens) > 1 and init_tokens[1] is None)
 
         # Make sure language is a list of strings of the correct length
         if isinstance(language, (list, tuple)):
