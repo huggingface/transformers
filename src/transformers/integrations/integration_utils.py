@@ -26,7 +26,6 @@ import sys
 import tempfile
 from dataclasses import asdict, fields
 from pathlib import Path
-from platform import version
 from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Union
 
 import numpy as np
@@ -41,6 +40,7 @@ from ..utils import (
     is_torch_available,
     logging,
 )
+from .. import __version__ as version
 
 
 logger = logging.get_logger(__name__)
@@ -77,7 +77,7 @@ if TYPE_CHECKING and _has_neptune:
         except importlib.metadata.PackageNotFoundError:
             _has_neptune = False
 
-from .. import modelcard
+from .. import modelcard  # noqa: E402
 from ..trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
 from ..trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
 from ..training_args import ParallelMode  # noqa: E402
