@@ -860,7 +860,8 @@ if __name__ == "__main__":
     # `CI_SLACK_CHANNEL_ID`, `CI_SLACK_CHANNEL_ID_DAILY`, `CI_SLACK_CHANNEL_DUMMY_TESTS`, etc.
     ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID = os.environ["ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID"]
     # The value of `CI_SLACK_REPORT_CHANNEL_ID` is the Slack channel ID where we want to send the CI report.
-    CI_SLACK_REPORT_CHANNEL_ID = os.environ[ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID]
+    # CI_SLACK_REPORT_CHANNEL_ID = os.environ[ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID]
+    CI_SLACK_REPORT_CHANNEL_ID = ENV_NAME_FOR_CI_SLACK_REPORT_CHANNEL_ID
 
     # runner_status = os.environ.get("RUNNER_STATUS")
     # runner_env_status = os.environ.get("RUNNER_ENV_STATUS")
