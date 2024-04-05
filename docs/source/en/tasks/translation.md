@@ -350,6 +350,7 @@ The simplest way to try out your finetuned model for inference is to use it in a
 
 # Change `xx` to the language of the input and `yy` to the language of the desired output.
 # Examples: "en" for English, "fr" for French, "de" for German, "es" for Spanish, "zh" for Chinese, etc; translation_en_to_fr translates English to French
+# You can view all the lists of languages here - https://huggingface.co/languages
 >>> translator = pipeline("translation_xx_to_yy", model="my_awesome_opus_books_model")
 >>> translator(text)
 [{'translation_text': 'Legumes partagent des ressources avec des bactéries azotantes.'}]
