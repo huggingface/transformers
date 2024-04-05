@@ -636,6 +636,8 @@ class GenerationConfig(PushToHubMixin):
 
         # check watermarking arguments
         if self.watermarking_config is not None:
+            if not isinstance(self.watermarking_config, WatermarkingConfig):
+                self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
             self.watermarking_config.validate()
 
         # 5. check common issue: passing `generate` arguments inside the generation config
