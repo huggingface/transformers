@@ -968,7 +968,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
 
         if position_ids is None:
             position_ids = self.get_position_ids_from_attention_mask(
-                attention_mask, past_key_values_length, seq_length=inputs_embeds.shape[-1], device=inputs_embeds.device
+                attention_mask, past_key_values_length, seq_length=inputs_embeds.shape[1], device=inputs_embeds.device
             )
         else:
             position_ids = position_ids.view(-1, seq_length).long()
