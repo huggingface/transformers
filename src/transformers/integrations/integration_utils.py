@@ -32,6 +32,7 @@ import numpy as np
 import packaging.version
 
 from .. import PreTrainedModel, TFPreTrainedModel
+from .. import __version__ as version
 from ..utils import (
     PushToHubMixin,
     flatten_dict,
@@ -40,7 +41,6 @@ from ..utils import (
     is_torch_available,
     logging,
 )
-from .. import __version__ as version
 
 
 logger = logging.get_logger(__name__)
