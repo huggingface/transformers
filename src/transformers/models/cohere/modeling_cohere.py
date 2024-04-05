@@ -521,6 +521,39 @@ class CohereSdpaAttention(CohereAttention):
     SDPA API.
     """
 
+    def _scaled_dot_product_attention(
+        self,
+        query_states: torch.Tensor,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        causal_mask: torch.Tensor,
+        q_len: int,
+    ):
+        # This method is abstracted in order to enable Copied from statements for it.
+
+        if torch._dynamo.is_compiling():
+            # Dynamo is unable to capture `self.is_causal and attention_mask is None and q_len > 1` with `fullgraph=True`, hence the need to always
+            # pass `attn_mask=causal_mask` in this case. Ideally, if available, should use `torch._dynamo.is_fullgraph_compiling()`.
+            attn_output = torch.nn.functional.scaled_dot_product_attention(
+                query_states,
+                key_states,
+                value_states,
+                attn_mask=causal_mask,
+                dropout_p=self.attention_dropout if self.training else 0.0,
+            )
+        else:
+            # In case we are not compiling, we may set `causal_mask` to None, which is required to dispatch to SDPA's Flash Attention 2 backend, rather
+            # relying on the `is_causal` argument.
+            attn_output = torch.nn.functional.scaled_dot_product_attention(
+                query_states,
+                key_states,
+                value_states,
+                attn_mask=causal_mask,
+                dropout_p=self.attention_dropout if self.training else 0.0,
+                is_causal=self.is_causal and causal_mask is None and q_len > 1,
+            )
+        return attn_output
+
     # Ignore copy
     def forward(
         self,
@@ -590,12 +623,12 @@ class CohereSdpaAttention(CohereAttention):
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
+        attn_output = self._scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
-            attn_mask=causal_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
+            causal_mask,
+            q_len,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -908,9 +941,7 @@ class CohereModel(CoherePreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_seen_tokens
-        )
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_seen_tokens)
 
         # embed positions
         hidden_states = inputs_embeds
@@ -1008,7 +1039,9 @@ class CohereModel(CoherePreTrainedModel):
             target_length = self.config.max_position_embeddings
         else:  # dynamic cache
             target_length = (
-                attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else past_seen_tokens + sequence_length + 1
+                attention_mask.shape[-1]
+                if isinstance(attention_mask, torch.Tensor)
+                else past_seen_tokens + sequence_length + 1
             )
 
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
