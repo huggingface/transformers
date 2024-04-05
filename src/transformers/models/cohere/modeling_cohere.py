@@ -908,7 +908,7 @@ class CohereModel(CoherePreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_seen_tokens)
 
         # embed positions
         hidden_states = inputs_embeds
@@ -977,7 +977,7 @@ class CohereModel(CoherePreTrainedModel):
         attention_mask: torch.Tensor,
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
-        past_key_values_length: int,
+        past_seen_tokens: int,
     ):
         # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
         # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
@@ -993,7 +993,7 @@ class CohereModel(CoherePreTrainedModel):
             # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument,
             # in order to dispatch on Flash Attention 2.
             attention_mask, mask_none_and_is_tracing = AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask, inputs_embeds=input_tensor, past_key_values_length=past_key_values_length
+                attention_mask, inputs_embeds=input_tensor, past_key_values_length=past_seen_tokens
             )
 
             if attention_mask is None and not mask_none_and_is_tracing:
