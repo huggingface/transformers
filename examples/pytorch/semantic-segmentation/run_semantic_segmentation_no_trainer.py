@@ -57,14 +57,14 @@ logger = get_logger(__name__)
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/semantic-segmentation/requirements.txt")
 
 
-def pad_if_smaller(img, size, fill=0):
-    min_size = min(img.size)
-    if min_size < size:
-        original_width, original_height = img.size
-        pad_height = size - original_height if original_height < size else 0
-        pad_width = size - original_width if original_width < size else 0
-        img = functional.pad(img, (0, 0, pad_width, pad_height), fill=fill)
-    return img
+def pad_if_smaller(image, size, fill=0):
+    image_height, image_width = image.size
+    height, width = size
+    if image_height < height or image_width < width:
+        pad_height = height - image_height if image_height < height else 0
+        pad_width = width - image_width if image_width < width else 0
+        image = functional.pad(image, (0, 0, pad_width, pad_height), fill=fill)
+    return image
 
 
 class Compose:
@@ -95,20 +95,6 @@ class Resize:
         return image, target
 
 
-class RandomResize:
-    def __init__(self, min_size, max_size=None):
-        self.min_size = min_size
-        if max_size is None:
-            max_size = min_size
-        self.max_size = max_size
-
-    def __call__(self, image, target):
-        size = random.randint(self.min_size, self.max_size)
-        image = functional.resize(image, size)
-        target = functional.resize(target, size, interpolation=transforms.InterpolationMode.NEAREST)
-        return image, target
-
-
 class RandomCrop:
     def __init__(self, size):
         self.size = size
@@ -116,7 +102,7 @@ class RandomCrop:
     def __call__(self, image, target):
         image = pad_if_smaller(image, self.size)
         target = pad_if_smaller(target, self.size, fill=255)
-        crop_params = transforms.RandomCrop.get_params(image, (self.size, self.size))
+        crop_params = transforms.RandomCrop.get_params(image, self.size)
         image = functional.crop(image, *crop_params)
         target = functional.crop(target, *crop_params)
         return image, target
@@ -173,7 +159,7 @@ class ReduceLabels:
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune a transformers model on a text classification task")
+    parser = argparse.ArgumentParser(description="Finetune a transformers model on a image semantic segmentation task")
     parser.add_argument(
         "--model_name_or_path",
         type=str,
