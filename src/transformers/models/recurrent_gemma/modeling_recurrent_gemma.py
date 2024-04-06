@@ -144,7 +144,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 class RecurrentGemmaSdpaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: RecurrentGemmaConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: RecurrentGemmaConfig):
         super().__init__()
         self.config = config
         self.attention_dropout = config.attention_dropout
@@ -171,7 +171,6 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         use_cache: bool = False,
-        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
@@ -209,7 +208,7 @@ class RecurrentGemmaSdpaAttention(nn.Module):
             value_states.contiguous(),
             attn_mask=causal_mask,  # pretty much a must for sliding window backend
             dropout_p=self.attention_dropout if self.training else 0.0,
-            scale=(self.head_dim ** -0.5)
+            scale=(self.head_dim**-0.5),
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -234,11 +233,13 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         55, 56, 57, 58, 59, 60, 61, 62, 63,  0], device='cuda:0')
         Then update at index 64
         """
-        slicing = torch.ones(self.config.attention_window_size, dtype=torch.long,device=value_states.device).cumsum(0)
-        new_cache_positions = cache_kwargs.get("cache_position").clamp(0, self.config.attention_window_size-1) # use min?
+        slicing = torch.ones(self.config.attention_window_size, dtype=torch.long, device=value_states.device).cumsum(0)
+        new_cache_positions = cache_kwargs.get("cache_position").clamp(
+            0, self.config.attention_window_size - 1
+        )  # use min?
 
-        to_shift = new_cache_positions >= self.config.attention_window_size-1
-        indices = (slicing + to_shift[-1].int()-1) % self.config.attention_window_size
+        to_shift = new_cache_positions >= self.config.attention_window_size - 1
+        indices = (slicing + to_shift[-1].int() - 1) % self.config.attention_window_size
 
         # Slice the cache when `to_shift` has true
         k_out, v_out = self.key_states, self.value_states
@@ -282,7 +283,7 @@ class RecurrentGemmaBlockDiagonalLinear(nn.Module):
         batch, intermediate_size, conv_kernel_size = hidden_states.shape
         # hs = hidden_states.reshape(batch, conv_kernel_size, self.num_blocks, intermediate_size//self.num_blocks)
         # hidden_states.reshape(batch, self.num_blocks, intermediate_size//self.num_blocks, conv_kernel_size)
-        # vs 
+        # vs
         # hidden_states.reshape(batch, intermediate_size//self.num_blocks, self.num_blocks, conv_kernel_size)
         # hs = torch.bmm(hs, self.weight)
         hidden_states = einops.rearrange(hidden_states, "... (h i) -> ... h i", h=self.num_blocks)
@@ -360,7 +361,7 @@ class RecurrentGemmaRglru(nn.Module):
         reset = position_ids[:, :, None] == 0
 
         # vs
-        input_gate = torch.sigmoid(self.input_gate(activations)) # TODO fix me
+        input_gate = torch.sigmoid(self.input_gate(activations))  # TODO fix me
         recurrent_gate = torch.sigmoid(self.recurrent_gate(activations))
 
         # Compute the parameter `A` of the recurrence.
@@ -419,23 +420,27 @@ class RecurrentGemmaRglru(nn.Module):
 
         if hidden_states.shape[1] == 1:
             # Using scan in sampling mode.
-            if recurrent_states is None: # same here, when decoding you always have cache
+            if recurrent_states is None:  # same here, when decoding you always have cache
                 return hidden_states, hidden_states[:, 0].type(acc_dtype)
 
             else:
-                contextualized_states = recurrent_gate.type(acc_dtype) * recurrent_states[:, None] + hidden_states.type(acc_dtype)
+                contextualized_states = recurrent_gate.type(acc_dtype) * recurrent_states[
+                    :, None
+                ] + hidden_states.type(acc_dtype)
                 return contextualized_states.type(hidden_states.dtype), contextualized_states[:, -1]
 
         else:
             # Using scan in linear mode.
-            if recurrent_states is not None: # recurrent_states is self.cache, never None in transformeres
+            if recurrent_states is not None:  # recurrent_states is self.cache, never None in transformeres
                 recurrent_states = recurrent_states
             else:
                 recurrent_states = torch.zeros(hidden_states[:, 0].shape, dtype=acc_dtype, device=hidden_states.device)
 
             contextualized_states = torch.zeros_like(hidden_states)
             for t in range(hidden_states.shape[1]):
-                recurrent_states = recurrent_gate[:, t].type(acc_dtype) * recurrent_states + hidden_states[:, t].type(acc_dtype)
+                recurrent_states = recurrent_gate[:, t].type(acc_dtype) * recurrent_states + hidden_states[:, t].type(
+                    acc_dtype
+                )
                 contextualized_states[:, t] = recurrent_states.type(hidden_states.dtype)
 
         return contextualized_states, recurrent_states
@@ -484,7 +489,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
           the input sequence.
         """
         batch_size, seq_len, _ = input_states.shape
-        dtype = input_states.dtype
+        dtype = input_states.dtype # are there any casting to do?
 
         y_branch = self.linear_y(input_states)
         y_branch = self.act_fn(y_branch)
@@ -493,39 +498,28 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
 
         x_branch = x_branch.transpose(1, 2)
         if use_cache:
-            if cache_position[0] == 0: # breaks the graphs as it's a control flow
-                conv_state = nn.functional.pad(x_branch, (self.conv1d_width - x_branch.shape[-1] -1, 0))
+            if cache_position[0] == 0:  # breaks the graphs as it's a control flow
+                conv_state = nn.functional.pad(x_branch, (self.conv1d_width - x_branch.shape[-1] - 1, 0))
                 x_branch = self.conv_1d(x_branch)[..., :seq_len]
-                self.conv1d_state = conv_state
             else:
-                # x_branch = torch.concatenate([self.conv1d_state.type(x_branch.dtype), x_branch], dim=1) TODO this?
-                conv_state = self.conv1d_state  # [batch, intermediate_size, conv_kernel_size]
-                conv_state = torch.cat((conv_state, x_branch), -1)
-
-                # TODO something wrong with the following line
+                conv_state = torch.cat((self.conv1d_state, x_branch), -1)
                 x_branch = (
                     torch.sum(conv_state * self.conv_1d.weight[:, 0, :], dim=-1) + self.conv_1d.bias
                 ).unsqueeze(-1)
-
-                self.conv1d_state = conv_state[:,:,1:]
-            
+                conv_state = conv_state[:, :, 1:]
+            self.conv1d_state = conv_state
         else:
             x_branch = self.conv_1d(x_branch)[..., :seq_len]
 
-        x_branch = self.rg_lru(
-            activations=x_branch.transpose(1,2),
-            position_ids=position_ids,
-        )
+        x_branch = self.rg_lru(x_branch.transpose(1, 2), position_ids)
 
         hidden_states = x_branch * y_branch
         hidden_states = self.linear_out(hidden_states)
         return hidden_states
 
     def _setup_cache(self, batch, device, dtype):
-        self.rg_lru.recurrent_states = torch.zeros(
-            (batch, self.lru_width), device=device, dtype=torch.float32
-        )
-        self.conv1d_state = torch.zeros((batch, self.hidden_size, self.conv1d_width-1), device=device, dtype=dtype)
+        self.rg_lru.recurrent_states = torch.zeros((batch, self.lru_width), device=device, dtype=torch.float32)
+        self.conv1d_state = torch.zeros((batch, self.hidden_size, self.conv1d_width - 1), device=device, dtype=dtype)
 
 
 TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaSdpaAttention}
@@ -772,7 +766,6 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-
     def get_input_embeddings(self):
         return self.embed_tokens
 
@@ -815,7 +808,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        if use_cache and input_ids.shape[1]!=1:
+        if use_cache and input_ids.shape[1] != 1:
             self._setup_cache(self.config, hidden_states.shape[0], hidden_states.device, hidden_states.dtype)
 
         if cache_position is None:
@@ -872,7 +865,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         if sequence_length != 1:
             causal_mask = torch.triu(diagonal, diagonal=-1)
 
-        # the cache is smart, as long as you pay attention to all of it, no need to update the mask. 
+        # the cache is smart, as long as you pay attention to all of it, no need to update the mask.
         # Cache is of shape `attention_window_size`. We need to mask padding tho
         causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
         causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
@@ -1020,7 +1013,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
 
-        attention_mask = attention_mask[:, -self.config.attention_window_size:]
+        attention_mask = attention_mask[:, -self.config.attention_window_size :]
 
         past_length = cache_position[0]
         if past_length > 0:
@@ -1033,7 +1026,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
             model_inputs = {"input_ids": input_ids.contiguous()}
 
         if cache_position is not None:
-            cache_position = cache_position[-position_ids.shape[1]:]
+            cache_position = cache_position[-position_ids.shape[1] :]
 
         model_inputs.update(
             {

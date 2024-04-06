@@ -18,7 +18,7 @@ import warnings
 import torch
 from accelerate import init_empty_weights
 
-from transformers import RecurrentGemmaConfig, RecurrentGemmaForCausalLM, GemmaTokenizer
+from transformers import GemmaTokenizer, RecurrentGemmaConfig, RecurrentGemmaForCausalLM
 
 
 try:
@@ -31,6 +31,8 @@ except ImportError as e:
     GemmaTokenizerFast = None
 
 import regex as re
+
+
 """
 Sample usage:
 
@@ -58,7 +60,7 @@ gemma_2b_config = RecurrentGemmaConfig(
     hidden_size=2560,
     intermediate_size=15360,
     vocab_size=256128,
-    num_hidden_layers=26
+    num_hidden_layers=26,
 )
 
 gemma_7b_config = RecurrentGemmaConfig()
@@ -68,37 +70,31 @@ LAYER_NAME_MAPPING = {"embedder.weight": "model.embed_tokens.weight"}
 
 
 def write_model(save_path, input_base_path, config, safe_serialization=True, push_to_hub=False, dtype=torch.float32):
-    num_attn_heads = config.num_attention_heads
-    hidden_size = config.hidden_size
-    num_kv_heads = config.num_key_value_heads
-    head_dim = config.head_dim
-
     print(f"Fetching all parameters from the checkpoint at '{input_base_path}'")
     model_state_dict = torch.load(input_base_path, map_location="cpu")
 
     REPLACEMENT = {
-        "blocks.":"layers.",
-        ".ffw_down.b":".down_proj.b",
-        ".ffw_down.w":".down_proj.w",
-        ".ffw_up.b":".up_proj.bias",
-        ".ffw_up.w":".up_proj.weight",
-        "recurrent_block":"temporal_block",
-        "attention_block":"temporal_block",
-        "temporal_block.proj_final":"temporal_block.out_proj",
-        "norm.scale":"norm.weight",
-        ".proj_k":".k_proj",
-        ".proj_q":".q_proj",
-        ".proj_v":".v_proj",
-        ".proj_final":".o_proj",
-        "embedder.input_embedding":"embed_tokens.weight",
-        "conv_1d.w":"conv_1d.weight",
-        "conv_1d.b":"conv_1d.bias",
-        "input_gate.w":"input_gate.weight",
-        "input_gate.b":"input_gate.bias",
-        "a_param":"recurrent_param",
-        "a_gate.b":"recurrent_gate.bias",
-        "a_gate.w":"recurrent_gate.weight",
-    
+        "blocks.": "layers.",
+        ".ffw_down.b": ".down_proj.b",
+        ".ffw_down.w": ".down_proj.w",
+        ".ffw_up.b": ".up_proj.bias",
+        ".ffw_up.w": ".up_proj.weight",
+        "recurrent_block": "temporal_block",
+        "attention_block": "temporal_block",
+        "temporal_block.proj_final": "temporal_block.out_proj",
+        "norm.scale": "norm.weight",
+        ".proj_k": ".k_proj",
+        ".proj_q": ".q_proj",
+        ".proj_v": ".v_proj",
+        ".proj_final": ".o_proj",
+        "embedder.input_embedding": "embed_tokens.weight",
+        "conv_1d.w": "conv_1d.weight",
+        "conv_1d.b": "conv_1d.bias",
+        "input_gate.w": "input_gate.weight",
+        "input_gate.b": "input_gate.bias",
+        "a_param": "recurrent_param",
+        "a_gate.b": "recurrent_gate.bias",
+        "a_gate.w": "recurrent_gate.weight",
     }
 
     state_dict = {}
@@ -107,14 +103,14 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
         pattern = re.compile("|".join(map(re.escape, REPLACEMENT.keys())))
         key = pattern.sub(lambda match: REPLACEMENT[match.group(0)], k)
         if "conv_1d.weight" in key:
-            v = v[:,None,:].transpose(0,2)
+            v = v[:, None, :].transpose(0, 2)
         if "up_proj.weight" in key:
-            state_dict[key.replace("up_proj","gate_proj")] = v[0].T.contiguous()
+            state_dict[key.replace("up_proj", "gate_proj")] = v[0].T.contiguous()
             v = v[1].T.contiguous()
         if "up_proj.bias" in key:
-            state_dict[key.replace("up_proj","gate_proj")] = v[0,0,0].clone()
-            v = v[1,0,0].contiguous()
-        if "embed_tokens" in key :
+            state_dict[key.replace("up_proj", "gate_proj")] = v[0, 0, 0].clone()
+            v = v[1, 0, 0].contiguous()
+        if "embed_tokens" in key:
             state_dict[key] = v
             state_dict["lm_head.weight"] = v
         else:
@@ -154,7 +150,7 @@ def main():
     parser.add_argument(
         "--input_checkpoint",
         help="Absolute path to the target Gemma weights.",
-        default="/home/arthur/transformers_recurrentgemma/rg-weights/ToBeDeleted/pytorch_model.bin"
+        default="/home/arthur/transformers_recurrentgemma/rg-weights/ToBeDeleted/pytorch_model.bin",
     )
     parser.add_argument(
         "--tokenizer_checkpoint",
