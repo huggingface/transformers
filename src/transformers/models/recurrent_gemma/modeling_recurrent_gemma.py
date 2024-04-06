@@ -494,17 +494,21 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         x_branch = x_branch.transpose(1, 2)
         if use_cache:
             if cache_position[0] == 0: # breaks the graphs as it's a control flow
-                conv_state = nn.functional.pad(x_branch, (self.conv1d_width - x_branch.shape[-1], 0))
+                conv_state = nn.functional.pad(x_branch, (self.conv1d_width - x_branch.shape[-1] -1, 0))
                 x_branch = self.conv_1d(x_branch)[..., :seq_len]
-                self.conv1d_state.copy_(conv_state)
+                self.conv1d_state = conv_state
             else:
                 # x_branch = torch.concatenate([self.conv1d_state.type(x_branch.dtype), x_branch], dim=1) TODO this?
                 conv_state = self.conv1d_state  # [batch, intermediate_size, conv_kernel_size]
-                conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
-                conv_state[:, :, -1] = x_branch[:, :, 0]
+                conv_state = torch.cat((conv_state, x_branch), -1)
+
+                # TODO something wrong with the following line
                 x_branch = (
                     torch.sum(conv_state * self.conv_1d.weight[:, 0, :], dim=-1) + self.conv_1d.bias
                 ).unsqueeze(-1)
+
+                self.conv1d_state = conv_state[:,:,1:]
+            
         else:
             x_branch = self.conv_1d(x_branch)[..., :seq_len]
 
@@ -521,7 +525,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         self.rg_lru.recurrent_states = torch.zeros(
             (batch, self.lru_width), device=device, dtype=dtype
         )
-        self.conv1d_state = torch.zeros((batch, self.hidden_size, self.conv1d_width), device=device, dtype=dtype)
+        self.conv1d_state = torch.zeros((batch, self.hidden_size, self.conv1d_width-1), device=device, dtype=dtype)
 
 
 TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaSdpaAttention}
@@ -811,7 +815,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        if use_cache:
+        if use_cache and input_ids.shape[1]!=1:
             self._setup_cache(self.config, hidden_states.shape[0], hidden_states.device, hidden_states.dtype)
 
         if cache_position is None:
@@ -864,11 +868,13 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         target_length = self.config.attention_window_size
 
         diagonal = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
-        offset = cache_position[-1] - self.config.attention_window_size - 1
-        causal_mask = torch.tril(diagonal, diagonal=offset)
+        causal_mask = diagonal
         if sequence_length != 1:
-            causal_mask += torch.triu(diagonal, diagonal=1)
+            causal_mask = torch.triu(diagonal, diagonal=1)
 
+        # the cache is smart, as long as you pay attention to all of it, no need to update the mask. 
+        # Cache is of shape `attention_window_size`. We need to mask padding tho
+        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
         causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
