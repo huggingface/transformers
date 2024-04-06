@@ -33,6 +33,7 @@ from packaging import version
 
 from . import logging
 
+
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
@@ -40,8 +41,10 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 # So we need to enable fallback to CPU for those functions
 # Check https://github.com/pytorch/pytorch/issues/77764 for more details
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-warnings.filterwarnings("ignore", message=".*is not currently supported on the MPS backend and will fall back to run on the CPU. This may have performance implications.*")
-
+warnings.filterwarnings(
+    "ignore",
+    message=".*is not currently supported on the MPS backend and will fall back to run on the CPU. This may have performance implications.*",
+)
 
 
 # TODO: This doesn't work for all packages (`bs4`, `faiss`, etc.) Talk to Sylvain to see how to do with it better.
