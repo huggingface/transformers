@@ -278,7 +278,6 @@ class RecurrentGemmaBlockDiagonalLinear(nn.Module):
         """Calls the RecurrentGemmaBlockDiagonalLinear."""
         # Split x to blocks.hidden_states
         # [batch, conv_kernel_size, intermediate_size]
-        hidden_states = hidden_states.transpose(1,2)
         batch, intermediate_size, conv_kernel_size = hidden_states.shape
         # hs = hidden_states.reshape(batch, conv_kernel_size, self.num_blocks, intermediate_size//self.num_blocks)
         # hidden_states.reshape(batch, self.num_blocks, intermediate_size//self.num_blocks, conv_kernel_size)
@@ -364,7 +363,7 @@ class RecurrentGemmaRglru(nn.Module):
         recurrent_gate = torch.sigmoid(self.recurrent_gate(activations))
 
         # Compute the parameter `A` of the recurrence.
-        log_recurrent_gate = -8.0 * recurrent_gate * nn.functional.softplus(self.a_param)
+        log_recurrent_gate = -8.0 * recurrent_gate * nn.functional.softplus(self.recurrent_param)
         recurrent_gate = torch.exp(log_recurrent_gate)
         a_square = torch.exp(2 * log_recurrent_gate)
 
@@ -509,7 +508,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
             x_branch = self.conv_1d(x_branch)[..., :seq_len]
 
         x_branch = self.rg_lru(
-            activations=x_branch,
+            activations=x_branch.transpose(1,2),
             position_ids=position_ids,
         )
 
@@ -539,7 +538,10 @@ class RecurrentGemmaMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_activation]
 
     def forward(self, hidden_states):
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
+        # gate = self.gate_proj(hidden_states)
+        b, s, h = hidden_states.shape
+        hidden_states = self.up_proj(hidden_states).reshape(b,s,-1,2)
+        return self.down_proj(self.act_fn(hidden_states[...,1]) * hidden_states[...,0])
 
 
 class RecurrentGemmaDecoderLayer(nn.Module):
