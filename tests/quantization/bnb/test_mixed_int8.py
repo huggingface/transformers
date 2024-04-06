@@ -100,6 +100,8 @@ class BaseMixedInt8Test(unittest.TestCase):
     # Expected values on a A10
     EXPECTED_OUTPUTS.add("Hello my name is John.\nI am a friend of your father.\n")
     MAX_NEW_TOKENS = 10
+    # Expected values with offload
+    EXPECTED_OUTPUTS.add("Hello my name is John and I am a professional photographer based in")
 
     def setUp(self):
         # Models and tokenizer

@@ -56,19 +56,7 @@ _CHECKPOINT_FOR_DOC = "nghuyong/ernie-1.0-base-zh"
 _CONFIG_FOR_DOC = "ErnieConfig"
 
 
-ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nghuyong/ernie-1.0-base-zh",
-    "nghuyong/ernie-2.0-base-en",
-    "nghuyong/ernie-2.0-large-en",
-    "nghuyong/ernie-3.0-base-zh",
-    "nghuyong/ernie-3.0-medium-zh",
-    "nghuyong/ernie-3.0-mini-zh",
-    "nghuyong/ernie-3.0-micro-zh",
-    "nghuyong/ernie-3.0-nano-zh",
-    "nghuyong/ernie-gram-zh",
-    "nghuyong/ernie-health-zh",
-    # See all ERNIE models at https://huggingface.co/models?filter=ernie
-]
+from ..deprecated._archive_maps import ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class ErnieEmbeddings(nn.Module):
