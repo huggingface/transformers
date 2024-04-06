@@ -42,7 +42,7 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
-from ..models.auto.tokenization_auto import AutoTokenizer
+from ..tokenization_utils import Trie
 from ..utils import (
     ModelOutput,
     is_accelerate_available,
@@ -101,7 +101,6 @@ from .stopping_criteria import (
     StopStringCriteria,
 )
 
-from ..tokenization_utils import Trie
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel

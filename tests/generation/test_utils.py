@@ -3067,6 +3067,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertTrue(y_prob > 0.001 and n_prob > 0.001)
         self.assertTrue(y_prob <= 1.0 and n_prob <= 1.0)
 
+
 @require_torch
 class TokenHealingTestCase(unittest.TestCase):
     @parameterized.expand(
