@@ -1279,7 +1279,7 @@ class LayerWiseDummyOptimizer(torch.optim.Optimizer):
     def __init__(self, optimizer_dict=None, *args, **kwargs):
         dummy_tensor = torch.randn(1, 1)
         self.optimizer_dict = optimizer_dict
-        super().__init__([dummy_tensor], {"lr": kwargs.get("lr", 1e-03)})
+        super().__init__([dummy_tensor], {"lr": 1e-03})
 
     def zero_grad(self, set_to_none: bool = True) -> None:
         pass
