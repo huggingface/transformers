@@ -110,7 +110,24 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
         if "up_proj.bias" in key:
             state_dict[key.replace("up_proj", "gate_proj")] = v[0, 0, 0].clone()
             v = v[1, 0, 0].contiguous()
-        if "embed_tokens" in key:
+
+        if "recurrent_gate.bias" in key:
+            state_dict[key] = v.transpose(0,1).reshape(-1).contiguous()
+            # for i in range(v.shape[0]):
+            #     state_dict[key.replace(f"input_gate.b","input_gate.{i}.bias")] = v[i].contiguous()
+        elif "recurrent_gate.weight" in key:
+            state_dict[key] = v.transpose(0,2).reshape(v.shape[1],-1).T.contiguous()
+            # for i in range(v.shape[0]):
+            #     state_dict[key.replace(f"input_gate.w","input_gate.{i}.weight")] = v[i].contiguous()
+        elif "input_gate.b" in key:
+            state_dict[key] = v.transpose(0,1).reshape(-1).contiguous()
+            # for i in range(v.shape[0]):
+            #     state_dict[key.replace(f"input_gate.b","input_gate.{i}.bias")] = v[i].contiguous()
+        elif "input_gate.w" in key:
+            state_dict[key] = v.transpose(0,2).reshape(v.shape[1],-1).T.contiguous()
+            # for i in range(v.shape[0]):
+            #     state_dict[key.replace(f"input_gate.w","input_gate.{i}.weight")] = v[i].contiguous()
+        elif "embed_tokens" in key:
             state_dict[key] = v
             state_dict["lm_head.weight"] = v
         else:
@@ -164,7 +181,7 @@ def main():
     )
     parser.add_argument(
         "--output_dir",
-        default="google/gemma-2b",
+        default="google/recurrent-gemma-2b",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(

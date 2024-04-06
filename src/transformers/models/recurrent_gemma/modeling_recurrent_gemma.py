@@ -336,33 +336,27 @@ class RecurrentGemmaRglru(nn.Module):
         self.block_width = self.hidden_size // self.num_attention_heads
 
         self.recurrent_param = nn.Parameter(torch.empty([self.hidden_size]))
-        # self.input_gate = nn.Linear(self.block_width, self.num_attention_heads * self.block_width)
-        # self.a_gate = nn.Linear(self.block_width, self.num_attention_heads * self.block_width)
-        self.input_gate = RecurrentGemmaBlockDiagonalLinear(config)
-        self.recurrent_gate = RecurrentGemmaBlockDiagonalLinear(config)
+        self.input_gate = nn.Linear(self.block_width,self.num_attention_heads * self.block_width)
+        self.recurrent_gate = nn.Linear(self.block_width, self.num_attention_heads * self.block_width) # reset gate
+        # self.input_gate = RecurrentGemmaBlockDiagonalLinear(config)
+        # self.recurrent_gate = RecurrentGemmaBlockDiagonalLinear(config)
 
     def __call__(
         self,
         activations: torch.Tensor,
         position_ids: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Calls the RG-LRU.
-
-        Args:
-          activations: Sequence of input activations.
-          position_ids: Position of each token in the sequence.
-          prev_h: The previous hidden state of the RG-LRU.
-
-        Returns:
-          Output of the block together with the updated hidden state.
-        """
-
         batch_size, seq_len, hidden_size = activations.shape
         reset = position_ids[:, :, None] == 0
 
-        # vs
-        input_gate = torch.sigmoid(self.input_gate(activations))  # TODO fix me
-        recurrent_gate = torch.sigmoid(self.recurrent_gate(activations))
+        reshape_act = activations.reshape(batch_size * seq_len, self.num_attention_heads, self.block_width).permute(1,0,2)
+        ww = self.input_gate.weight.reshape(self.block_width, self.num_attention_heads, self.block_width).transpose(0,1) # TODO in the checkpoint
+        res = (torch.bmm(reshape_act, ww).transpose(0,1) + self.input_gate.bias.reshape(self.block_width,self.num_attention_heads).T)
+        input_gate = torch.sigmoid(res.reshape(batch_size, seq_len, hidden_size))
+
+        ww = self.recurrent_gate.weight.reshape(self.block_width, self.num_attention_heads, self.block_width).transpose(0,1) # TODO in the checkpoint
+        res = (torch.bmm(reshape_act, ww).transpose(0,1) + self.recurrent_gate.bias.reshape(self.block_width,self.num_attention_heads).T)
+        recurrent_gate = torch.sigmoid(res.reshape(batch_size, seq_len, hidden_size))
 
         # Compute the parameter `A` of the recurrence.
         log_recurrent_gate = -8.0 * recurrent_gate * nn.functional.softplus(self.recurrent_param)
@@ -379,7 +373,7 @@ class RecurrentGemmaRglru(nn.Module):
         normalized_x = gated_inputs * multiplier.type(activations.dtype)
 
         hidden_states, recurrent_states = self._rnn_scan(
-            hidden_states=normalized_x,  # TODO the output in y is wrong
+            hidden_states=normalized_x,
             recurrent_gate=recurrent_gate,
             reset=reset,
             recurrent_states=self.recurrent_states,
@@ -409,12 +403,6 @@ class RecurrentGemmaRglru(nn.Module):
         Returns:
         The output of the linear recurrence.
         """
-        assert hidden_states.ndim == 3
-        assert recurrent_gate.shape == hidden_states.shape[-recurrent_gate.ndim :]
-        assert recurrent_gate.dtype == hidden_states.dtype
-        assert type(recurrent_gate) is type(hidden_states)
-        assert recurrent_states is None or recurrent_states.dtype == acc_dtype
-
         # Multiply `a` by the reset.
         recurrent_gate = recurrent_gate * ~reset
 
@@ -475,21 +463,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         cache_position: torch.Tensor,
         use_cache: bool = True,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        """Calls the recurrent block.
-
-        Args:
-          hidden_states: Sequence of input activations.
-          position_ids: Position of each token in the sequence.
-          attention_mask: Unused attention mask.
-          cache: Optional cache with the previous state of the RG-LRU and Conv1D.
-
-        Returns:
-          Output of the block together with the updated cache. If `cache` is None
-          than the returned updated cache is empty initialized and filled in from
-          the input sequence.
-        """
-        batch_size, seq_len, _ = input_states.shape
-        dtype = input_states.dtype # are there any casting to do?
+        _, seq_len, _ = input_states.shape
 
         y_branch = self.linear_y(input_states)
         y_branch = self.act_fn(y_branch)
@@ -498,10 +472,10 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
 
         x_branch = x_branch.transpose(1, 2)
         if use_cache:
-            if cache_position[0] == 0:  # breaks the graphs as it's a control flow
+            if cache_position.shape != 1:   # prefill
                 conv_state = nn.functional.pad(x_branch, (self.conv1d_width - x_branch.shape[-1] - 1, 0))
                 x_branch = self.conv_1d(x_branch)[..., :seq_len]
-            else:
+            else:                           # decoding
                 conv_state = torch.cat((self.conv1d_state, x_branch), -1)
                 x_branch = (
                     torch.sum(conv_state * self.conv_1d.weight[:, 0, :], dim=-1) + self.conv_1d.bias
@@ -560,11 +534,9 @@ class RecurrentGemmaDecoderLayer(nn.Module):
         cache_position: torch.Tensor = None,
         use_cache: bool = None,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        raw_activations = activations
 
+        raw_activations = activations
         inputs_normalized = self.temporal_pre_norm(raw_activations)
-        # if hasattr(self.temporal_block, "q_proj") and not isinstance(self.temporal_block, torch._dynamo.eval_frame.OptimizedModule):
-        #     self.temporal_block = torch.compile(self.temporal_block, fullgraph=True)
 
         hidden_states = self.temporal_block(
             inputs_normalized, position_ids, attention_mask, cache_position=cache_position, use_cache=use_cache
@@ -576,7 +548,6 @@ class RecurrentGemmaDecoderLayer(nn.Module):
         hidden_states = self.mlp_block(hidden_states)
 
         hidden_states = hidden_states + residual
-
         return hidden_states
 
 
@@ -761,7 +732,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         self.layers = nn.ModuleList(
             [RecurrentGemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.final_norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
