@@ -2030,7 +2030,7 @@ class GenerationMixin:
         input_ids = torch.where(input_ids == bos_id, pad_id, input_ids)
 
         tail_ids = input_ids[:, -1].tolist()
-        space_tok = tokenizer.tokenize(" ")[0]
+        space_tok = tokenizer.convert_ids_to_tokens(tokenizer.encode(" ", add_special_tokens=False))[0]
         # tail tokens are used for a prefix search, thus, whitespaces are replaced with
         # their tokenization (e.g. 'Ġ') to enable search for tokens prefixed with a whitespace
         tail_toks = (tokenizer.decode(t).replace(" ", space_tok) for t in tail_ids)
