@@ -209,6 +209,7 @@ class RecurrentGemmaSdpaAttention(nn.Module):
             value_states.contiguous(),
             attn_mask=causal_mask,  # pretty much a must for sliding window backend
             dropout_p=self.attention_dropout if self.training else 0.0,
+            scale=(self.head_dim ** -0.5)
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -564,8 +565,8 @@ class RecurrentGemmaDecoderLayer(nn.Module):
         raw_activations = activations
 
         inputs_normalized = self.temporal_pre_norm(raw_activations)
-        if hasattr(self.temporal_block, "q_proj") and not isinstance(self.temporal_block, torch._dynamo.eval_frame.OptimizedModule):
-            self.temporal_block = torch.compile(self.temporal_block, fullgraph=True)
+        # if hasattr(self.temporal_block, "q_proj") and not isinstance(self.temporal_block, torch._dynamo.eval_frame.OptimizedModule):
+        #     self.temporal_block = torch.compile(self.temporal_block, fullgraph=True)
 
         hidden_states = self.temporal_block(
             inputs_normalized, position_ids, attention_mask, cache_position=cache_position, use_cache=use_cache
