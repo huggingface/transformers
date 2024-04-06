@@ -56,7 +56,7 @@ gemma_2b_config = RecurrentGemmaConfig(
     num_attention_heads=10,
     num_key_value_heads=1,
     hidden_size=2560,
-    intermediate_size=16384,
+    intermediate_size=15360,
     vocab_size=256128,
     num_hidden_layers=26
 )
@@ -105,15 +105,19 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
     for k, v in model_state_dict.items():
         pattern = re.compile("|".join(map(re.escape, REPLACEMENT.keys())))
         key = pattern.sub(lambda match: REPLACEMENT[match.group(0)], k)
-        if "ffw_down" in k:
-            i=0
-        if ".rg_lru." in k:
+        if "conv_1d.weight" in key:
+            v = v[:,None,:].transpose(0,2)
+        if "up_proj.weight" in key:
+            v = v.transpose(1,2).reshape(-1,v.shape[1])
+        if "up_proj.bias" in key:
+            v = v.transpose(2,3).reshape(-1)
+        if "down_proj.weight" in key:
             ...
         if k == "embedder.weight":
             state_dict[LAYER_NAME_MAPPING[k]] = v
             state_dict["lm_head.weight"] = v
         else:
-            state_dict[key] = v
+            state_dict[key] = v.contiguous()
 
     torch.set_default_dtype(dtype)
 
