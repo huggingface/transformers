@@ -158,7 +158,7 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         self.q_proj = nn.Linear(self.hidden_size, self.num_attention_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(self.num_attention_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
+        self.o_proj = nn.Linear(self.num_attention_heads * self.head_dim, self.hidden_size, bias=True)
         self.rotary_emb = RecurrentGemmaRotaryEmbedding(
             int(self.partial_rotary_factor * self.head_dim),
             base=config.rope_theta,
@@ -276,13 +276,22 @@ class RecurrentGemmaBlockDiagonalLinear(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """Calls the RecurrentGemmaBlockDiagonalLinear."""
-        # TODO REMOVE EINSUMS
-        # Split x to blocks.
+        # Split x to blocks.hidden_states
+        # [batch, conv_kernel_size, intermediate_size]
+        hidden_states = hidden_states.transpose(1,2)
+        batch, intermediate_size, conv_kernel_size = hidden_states.shape
+        # hs = hidden_states.reshape(batch, conv_kernel_size, self.num_blocks, intermediate_size//self.num_blocks)
+        # hidden_states.reshape(batch, self.num_blocks, intermediate_size//self.num_blocks, conv_kernel_size)
+        # vs 
+        # hidden_states.reshape(batch, intermediate_size//self.num_blocks, self.num_blocks, conv_kernel_size)
+        # hs = torch.bmm(hs, self.weight)
         hidden_states = einops.rearrange(hidden_states, "... (h i) -> ... h i", h=self.num_blocks)
 
+        # torch.nn.functional.linear(hidden_states.float(), self.weight.transpose(1,2).reshape(8,4))
         # Linear layer over each block + bias.
         y = torch.einsum("... h i, h i j -> ... h j", hidden_states, self.weight) + self.bias
-
+        # torch.bmm(hidden_states.reshape(self.num_blocks, 1, batch *seq_len * hidden_dim).float(), self.weight)
+        # torch.bmm(hidden_states.reshape(batch  * sequence_length,1,4).float(), self.weight.reshape(2,4,4)) + self.bias.cpu()[:,None,:4]
         # Flatten the output.
         return einops.rearrange(y, "... h j -> ... (h j)", h=self.num_blocks)
 
@@ -324,13 +333,12 @@ class RecurrentGemmaRglru(nn.Module):
         self.hidden_size = config.hidden_size
         self.num_attention_heads = config.num_attention_heads
         self.block_width = self.hidden_size // self.num_attention_heads
-        # Parameters and layers.
-        self.a_param = nn.Parameter(torch.empty([self.hidden_size]))
+
+        self.recurrent_param = nn.Parameter(torch.empty([self.hidden_size]))
         # self.input_gate = nn.Linear(self.block_width, self.num_attention_heads * self.block_width)
         # self.a_gate = nn.Linear(self.block_width, self.num_attention_heads * self.block_width)
-
         self.input_gate = RecurrentGemmaBlockDiagonalLinear(config)
-        self.a_gate = RecurrentGemmaBlockDiagonalLinear(config)
+        self.recurrent_gate = RecurrentGemmaBlockDiagonalLinear(config)
 
     def __call__(
         self,
@@ -352,37 +360,37 @@ class RecurrentGemmaRglru(nn.Module):
         reset = position_ids[:, :, None] == 0
 
         # vs
-        gate_x = torch.sigmoid(self.input_gate(activations)) # TODO fix me
-        gate_a = torch.sigmoid(self.a_gate(activations))
+        input_gate = torch.sigmoid(self.input_gate(activations)) # TODO fix me
+        recurrent_gate = torch.sigmoid(self.recurrent_gate(activations))
 
         # Compute the parameter `A` of the recurrence.
-        log_a = -8.0 * gate_a * nn.functional.softplus(self.a_param)
-        a_matrix = torch.exp(log_a)
-        a_square = torch.exp(2 * log_a)
+        log_recurrent_gate = -8.0 * recurrent_gate * nn.functional.softplus(self.a_param)
+        recurrent_gate = torch.exp(log_recurrent_gate)
+        a_square = torch.exp(2 * log_recurrent_gate)
 
         # Gate the input.
-        gated_x = activations * gate_x
+        gated_inputs = activations * input_gate
 
         # Apply gamma normalization to the input. We need to clip the derivatives of
         # `sqrt` in order to prevent NaNs during training in bfloat16.
         multiplier = SqrtBoundDerivative.apply(1 - a_square)
         multiplier = reset + ~reset * multiplier
-        normalized_x = gated_x * multiplier.type(activations.dtype)
+        normalized_x = gated_inputs * multiplier.type(activations.dtype)
 
-        y, recurrent_states = self._rnn_scan(
-            x=normalized_x,  # TODO the output in y is wrong
-            a=a_matrix,
+        hidden_states, recurrent_states = self._rnn_scan(
+            hidden_states=normalized_x,  # TODO the output in y is wrong
+            recurrent_gate=recurrent_gate,
             reset=reset,
             recurrent_states=self.recurrent_states,
         )
         self.recurrent_states = recurrent_states
-        return y
+        return hidden_states
 
     # TODO refactor
     def _rnn_scan(
         self,
         hidden_states: torch.Tensor,
-        a: torch.Tensor,
+        recurrent_gate: torch.Tensor,
         reset: torch.Tensor,
         recurrent_states: Union[torch.Tensor, None],
         acc_dtype: torch.dtype = torch.float32,
@@ -401,13 +409,13 @@ class RecurrentGemmaRglru(nn.Module):
         The output of the linear recurrence.
         """
         assert hidden_states.ndim == 3
-        assert a.shape == hidden_states.shape[-a.ndim :]
-        assert a.dtype == hidden_states.dtype
-        assert type(a) is type(hidden_states)
+        assert recurrent_gate.shape == hidden_states.shape[-recurrent_gate.ndim :]
+        assert recurrent_gate.dtype == hidden_states.dtype
+        assert type(recurrent_gate) is type(hidden_states)
         assert recurrent_states is None or recurrent_states.dtype == acc_dtype
 
         # Multiply `a` by the reset.
-        a = a * ~reset
+        recurrent_gate = recurrent_gate * ~reset
 
         if hidden_states.shape[1] == 1:
             # Using scan in sampling mode.
@@ -415,8 +423,8 @@ class RecurrentGemmaRglru(nn.Module):
                 return hidden_states, hidden_states[:, 0].type(acc_dtype)
 
             else:
-                y = a.type(acc_dtype) * recurrent_states[:, None] + hidden_states.type(acc_dtype)
-                return y.type(hidden_states.dtype), y[:, -1]
+                contextualized_states = recurrent_gate.type(acc_dtype) * recurrent_states[:, None] + hidden_states.type(acc_dtype)
+                return contextualized_states.type(hidden_states.dtype), contextualized_states[:, -1]
 
         else:
             # Using scan in linear mode.
@@ -425,12 +433,12 @@ class RecurrentGemmaRglru(nn.Module):
             else:
                 recurrent_states = torch.zeros(hidden_states[:, 0].shape, dtype=acc_dtype, device=hidden_states.device)
 
-            y = torch.zeros_like(hidden_states)
+            contextualized_states = torch.zeros_like(hidden_states)
             for t in range(hidden_states.shape[1]):
-                recurrent_states = a[:, t].type(acc_dtype) * recurrent_states + hidden_states[:, t].type(acc_dtype)
-                y[:, t] = recurrent_states.type(hidden_states.dtype)
+                recurrent_states = recurrent_gate[:, t].type(acc_dtype) * recurrent_states + hidden_states[:, t].type(acc_dtype)
+                contextualized_states[:, t] = recurrent_states.type(hidden_states.dtype)
 
-        return y, recurrent_states
+        return contextualized_states, recurrent_states
 
 
 class RecurrentGemmaRecurrentBlock(nn.Module):
@@ -501,7 +509,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
             x_branch = self.conv_1d(x_branch)[..., :seq_len]
 
         x_branch = self.rg_lru(
-            activations=x_branch.transpose(1, 2),
+            activations=x_branch,
             position_ids=position_ids,
         )
 
@@ -519,16 +527,15 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
 TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaSdpaAttention}
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaMLP Llama->RecurrentGemma
 class RecurrentGemmaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        # self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
         self.act_fn = ACT2FN[config.hidden_activation]
 
     def forward(self, hidden_states):
