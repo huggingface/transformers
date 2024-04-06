@@ -18,7 +18,7 @@ import warnings
 import torch
 from accelerate import init_empty_weights
 
-from transformers import GemmaConfig, GemmaForCausalLM, GemmaTokenizer
+from transformers import RecurrentGemmaConfig, RecurrentGemmaModel, GemmaTokenizer
 
 
 try:
@@ -30,6 +30,7 @@ except ImportError as e:
     )
     GemmaTokenizerFast = None
 
+import regex as re
 """
 Sample usage:
 
@@ -51,15 +52,16 @@ Important note: you need to be able to host the whole model in RAM to execute th
 come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM).
 """
 
-gemma_2b_config = GemmaConfig(
-    num_hidden_layers=18,
-    num_attention_heads=8,
+gemma_2b_config = RecurrentGemmaConfig(
+    num_attention_heads=10,
     num_key_value_heads=1,
-    hidden_size=2048,
+    hidden_size=2560,
     intermediate_size=16384,
+    vocab_size=256128,
+    num_hidden_layers=26
 )
 
-gemma_7b_config = GemmaConfig()
+gemma_7b_config = RecurrentGemmaConfig()
 
 CONFIG_MAPPING = {"2B": gemma_2b_config, "7B": gemma_7b_config}
 LAYER_NAME_MAPPING = {"embedder.weight": "model.embed_tokens.weight"}
@@ -72,73 +74,53 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
     head_dim = config.head_dim
 
     print(f"Fetching all parameters from the checkpoint at '{input_base_path}'")
-    model_state_dict = torch.load(input_base_path, map_location="cpu")["model_state_dict"]
-    model_state_dict.pop("freqs_cis")
+    model_state_dict = torch.load(input_base_path, map_location="cpu")
 
     REPLACEMENT = {
-        ".blocks.":".layers.",
-        ".ffw_down.":".down_proj.",
-        ".ffw_up.":".up_proj.",
-        "":".gate_proj.", # mmmm what
+        "blocks.":"layers.",
+        ".ffw_down.b":".down_proj.b",
+        ".ffw_down.w":".down_proj.w",
+        ".ffw_up.b":".up_proj.bias",
+        ".ffw_up.w":".up_proj.weight",
+        "recurrent_block":"temporal_block",
+        "attention_block":"temporal_block",
         "temporal_block.proj_final":"temporal_block.out_proj",
-        ".scale":".weight",
+        "norm.scale":"norm.weight",
         ".proj_k":".k_proj",
         ".proj_q":".q_proj",
         ".proj_v":".v_proj",
-
+        ".proj_final":".o_proj",
+        "embedder.input_embedding":"embed_tokens.weight",
+        "conv_1d.w":"conv_1d.weight",
+        "conv_1d.b":"conv_1d.bias",
+        "input_gate.w":"input_gate.weight",
+        "input_gate.b":"input_gate.bias",
+        "a_param":"recurrent_param",
+        "a_gate.b":"recurrent_gate.bias",
+        "a_gate.w":"recurrent_gate.weight",
+    
     }
-
 
     state_dict = {}
     for k, v in model_state_dict.items():
-        for k in state_dict.keys():
-            for old, new in REPLACEMENT.items():
-                if old in k:
-                    key = k.replace(old, new)
-            state_dict[key] = state_dict[k]
+        pattern = re.compile("|".join(map(re.escape, REPLACEMENT.keys())))
+        key = pattern.sub(lambda match: REPLACEMENT[match.group(0)], k)
         if "ffw_down" in k:
-            ...
-        
+            i=0
         if ".rg_lru." in k:
             ...
-
-        
-        # if "qkv_proj" in k:
-        #     if num_kv_heads == 1:
-        #         v = v.reshape(num_attn_heads + num_kv_heads * 2, head_dim, hidden_size)
-        #         q_proj = v[:num_attn_heads, ...]
-        #         k_proj = v[num_attn_heads : num_attn_heads + num_kv_heads, ...].repeat(num_kv_heads, 1, 1)
-        #         v_proj = v[-num_kv_heads:, ...].repeat(num_kv_heads, 1, 1)
-
-        #         state_dict[k.replace("qkv_proj", "q_proj")] = q_proj.reshape(
-        #             num_attn_heads * head_dim, hidden_size
-        #         ).clone()
-        #         state_dict[k.replace("qkv_proj", "k_proj")] = k_proj.reshape(
-        #             num_kv_heads * head_dim, hidden_size
-        #         ).clone()
-        #         state_dict[k.replace("qkv_proj", "v_proj")] = v_proj[0].clone()
-        #     else:
-        #         q_proj, k_proj, v_proj = torch.split(v, v.shape[0] // 3, 0)
-        #         state_dict[k.replace("qkv_proj", "q_proj")] = q_proj.reshape(
-        #             num_attn_heads * head_dim, hidden_size
-        #         ).clone()
-        #         state_dict[k.replace("qkv_proj", "k_proj")] = k_proj.reshape(
-        #             num_kv_heads * head_dim, hidden_size
-        #         ).clone()
-        #         state_dict[k.replace("qkv_proj", "v_proj")] = v_proj.clone()
-
-        elif k == "embedder.weight":
+        if k == "embedder.weight":
             state_dict[LAYER_NAME_MAPPING[k]] = v
             state_dict["lm_head.weight"] = v
         else:
-            state_dict[k] = v
+            state_dict[key] = v
 
     torch.set_default_dtype(dtype)
 
     print("Loading the checkpoint in a Gemma model.")
     with init_empty_weights():
-        model = GemmaForCausalLM(config)
-    model.load_state_dict(state_dict, assign=True, strict=False)
+        model = RecurrentGemmaModel(config)
+    model.load_state_dict(state_dict, assign=True, strict=True)
 
     model.config.torch_dtype = torch.float32
     del model.config._name_or_path
@@ -146,7 +128,7 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
 
     if push_to_hub:
         print(f"pushing the model to {save_path}")
-        model.push_to_hub(save_path, safe_serialization=safe_serialization, private=True)
+        # model.push_to_hub(save_path, safe_serialization=safe_serialization, private=True)
     else:
         model.save_pretrained(save_path, safe_serialization=safe_serialization)
 
@@ -167,7 +149,7 @@ def main():
     parser.add_argument(
         "--input_checkpoint",
         help="Absolute path to the target Gemma weights.",
-        required=True,
+        default="/home/arthur/transformers_recurrentgemma/rg-weights/ToBeDeleted/pytorch_model.bin"
     )
     parser.add_argument(
         "--tokenizer_checkpoint",
@@ -175,13 +157,13 @@ def main():
     )
     parser.add_argument(
         "--model_size",
-        default="7B",
+        default="2B",
         choices=["2B", "7B", "tokenizer_only"],
         help="'f' models correspond to the finetuned versions, and are specific to the Gemma2 official release. For more details on Gemma2, checkout the original repo: https://huggingface.co/google/gemma-7b",
     )
     parser.add_argument(
         "--output_dir",
-        default="google/gemma-7b",
+        default="google/gemma-2b",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
