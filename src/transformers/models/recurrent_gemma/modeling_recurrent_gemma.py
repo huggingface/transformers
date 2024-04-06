@@ -15,7 +15,6 @@
 # limitations under the License.
 """ PyTorch RecurrentGemma model."""
 
-import math
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -26,103 +25,21 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_utils import ModelOutput, PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
     logging,
     replace_return_docstrings,
 )
 from .configuration_recurrent_gemma import RecurrentGemmaConfig
 
 
-if is_flash_attn_2_available():
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
-
 logger = logging.get_logger(__name__)
-
 _CONFIG_FOR_DOC = "RecurrentGemmaConfig"
-
 _MAX_SQRT_GRADIENT = 1000.0
-
-
-class HybridCache(Cache):
-    """
-    Hybrid Sliding window Cache class to be used with `torch.compile(model)`.
-
-    Parameters:
-        config (`PretrainedConfig):
-            The configuration file defining the `window_length`, `hidden_size` and `num_attention_heads`
-            required to initialize the static cache.
-        max_batch_size (`int`):
-            The maximum batch size with which the model will be used.
-        max_cache_len (`int`):
-            The maximum sequence length with which the model will be used.
-        device (`torch.device`):
-            The device on which the cache should be initialized. Should be the same as the layer.
-        dtype (*optional*, defaults to `torch.float32`):
-            The default `dtype` to use when initializing the layer.
-    """
-
-    def __init__(self, config, max_batch_size, window_length: int, device, dtype=None) -> None:
-        super().__init__()
-        self.max_batch_size = max_batch_size
-        self.max_cache_len = window_length
-        # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
-        self.head_dim = (
-            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
-        )
-
-        self.dtype = dtype if dtype is not None else torch.float32
-        self.num_key_value_heads = (
-            config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
-        )
-
-        cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
-        self.key_cache: torch.Tensor = []
-        self.value_cache: torch.Tensor = []
-        self.rg_lru_state: torch.Tensor = []
-        self.conv1d_state: torch.Tensor = []
-
-        for i in range(config.num_hidden_layers):
-            if config.block_types[i] == "recurrent":
-                self.rg_lru_state.append(torch.zeros((max_batch_size, config.lru_width), dtype=config.torch_dtype,device=device))
-                self.conv1d_state.append(torch.zeros((max_batch_size, config.hidden_size, config.conv1d_width), dtype=config.torch_dtype,device=device))
-                self.value_cache.append([])
-                self.key_cache.append([])
-            else:
-                self.value_cache.append(torch.zeros(cache_shape, dtype=self.dtype, device=device))
-                self.key_cache.append(torch.zeros(cache_shape, dtype=self.dtype, device=device))
-                self.rg_lru_state.append([])
-                self.conv1d_state.append([])
-
-    def update(self, key_states, value_states, layer_idx, **cache_kwargs):
-        new_cache_positions = cache_kwargs.get("cache_position")
-        k_out = self.key_cache[layer_idx]
-        v_out = self.value_cache[layer_idx]
-
-        # Shift the cache
-        if new_cache_positions[-1] >= self.max_cache_len:
-            k_out = torch.roll(k_out, shifts=-1, dim=2)
-            v_out = torch.roll(v_out, shifts=-1, dim=2)
-
-        k_out[:, :, new_cache_positions] = key_states
-        v_out[:, :, new_cache_positions] = value_states
-
-        return k_out, v_out
-
-    def reorder_cache(self, beam_idx: torch.LongTensor):
-        """Reorders the cache for beam search, given the selected beam indices."""
-        for layer_idx in range(len(self.key_cache)):
-            device = self.key_cache[layer_idx].device
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-            device = self.value_cache[layer_idx].device
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
 
 # Copied from transformers.models.gemma.modeling_gemma.GemmaRMSNorm with Gemma->RecurrentGemma
@@ -224,35 +141,19 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class RecurrentGemmaAttention(nn.Module):
+class RecurrentGemmaSdpaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    # Ignore copy
     def __init__(self, config: RecurrentGemmaConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
-        self.layer_idx = layer_idx
-        if layer_idx is None:
-            logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
-                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
-
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_attention_heads = config.num_attention_heads
         self.head_dim = config.head_dim
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_attention_heads // self.num_key_value_heads
-        self.rope_theta = config.rope_theta
-
-        self.partial_rotary_factor = 0.5
-        if self.hidden_size % self.num_attention_heads != 0:
-            raise ValueError(
-                f"hidden_size must be divisible by num_attention_heads (got `hidden_size`: {self.hidden_size}"
-                f" and `num_attention_heads`: {self.num_attention_heads})."
-            )
+        self.partial_rotary_factor = config.partial_rotary_factor
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_attention_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
@@ -260,7 +161,7 @@ class RecurrentGemmaAttention(nn.Module):
         self.o_proj = nn.Linear(self.num_attention_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
         self.rotary_emb = RecurrentGemmaRotaryEmbedding(
             int(self.partial_rotary_factor * self.head_dim),
-            base=self.rope_theta,
+            base=config.rope_theta,
         )
 
     def forward(
@@ -268,10 +169,8 @@ class RecurrentGemmaAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         use_cache: bool = False,
-        output_attentions: bool = False,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
@@ -284,159 +183,70 @@ class RecurrentGemmaAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        past_key_value = getattr(self, "past_key_value", past_key_value)
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
 
         # Partial rotary embedding
-        query_rot, query_pass = torch.chunk(query_states, int(1/self.partial_rotary_factor), dim=-1)
-        key_rot, key_pass = torch.chunk(key_states, int(1/self.partial_rotary_factor), dim=-1)
+        query_rot, query_pass = torch.chunk(query_states, int(1 / self.partial_rotary_factor), dim=-1)
+        key_rot, key_pass = torch.chunk(key_states, int(1 / self.partial_rotary_factor), dim=-1)
         query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
         query_states = torch.cat((query_rot, query_pass), dim=-1)
         key_states = torch.cat((key_rot, key_pass), dim=-1)
 
-        if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, **cache_kwargs)
+        if use_cache:
+            cache_kwargs = {"cache_position": cache_position}
+            key_states, value_states = self._update_cache(key_states, value_states, **cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+        causal_mask = attention_mask
+        if attention_mask is not None:
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
 
-        if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-            attn_weights = attn_weights + causal_mask
-
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        if attn_output.size() != (bsz, self.num_attention_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_attention_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states.contiguous(),
+            key_states.contiguous(),
+            value_states.contiguous(),
+            attn_mask=causal_mask,  # pretty much a must for sliding window backend
+            dropout_p=self.attention_dropout if self.training else 0.0,
+        )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
-
-        attn_output = attn_output.view(bsz, q_len, -1)
+        attn_output = attn_output.view(bsz, q_len, self.hidden_size)
         attn_output = self.o_proj(attn_output)
+        return attn_output
 
-        if not output_attentions:
-            attn_weights = None
+    def _setup_cache(self, batch_size, device, dtype=None):
+        self.dtype = dtype if dtype is not None else torch.float32
+        cache_shape = (batch_size, self.num_key_value_heads, self.config.attention_window_size, self.head_dim)
+        self.value_states = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+        self.key_states = torch.zeros(cache_shape, dtype=self.dtype, device=device)
 
-        return attn_output, past_key_value
-
-
-class RecurrentGemmaRecurrentBlock(nn.Module):
-    """Griffin and Hawk's recurrent block."""
-
-    def __init__(self, config, layer_idx):
-        super().__init__()
-        self.linear_y = nn.Linear(in_features=config.hidden_size, out_features=config.lru_width)
-        self.linear_x = nn.Linear(in_features=config.hidden_size, out_features=config.lru_width)
-        self.linear_out = nn.Linear(in_features=config.lru_width, out_features=config.hidden_size)
-        self.conv1d_width = config.conv1d_width
-        self.conv_1d = nn.Conv1d(
-            config.lru_width,
-            config.lru_width,
-            kernel_size=config.conv1d_width,
-            groups=config.lru_width,
-            padding=config.conv1d_width - 1,
-        )
-        self.rg_lru = RecurrentGemmaRglru(config)
-        self.act_fn = ACT2FN[config.hidden_activation]
-        self.layer_idx = layer_idx
-
-    def forward(
-        self,
-        input_states: torch.Tensor,
-        position_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
-        cache: Union[dict[str, torch.Tensor], None],
-        cache_position: torch.Tensor,
-    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        """Calls the recurrent block.
-
-        Args:
-          hidden_states: Sequence of input activations.
-          position_ids: Position of each token in the sequence.
-          attention_mask: Unused attention mask.
-          cache: Optional cache with the previous state of the RG-LRU and Conv1D.
-
-        Returns:
-          Output of the block together with the updated cache. If `cache` is None
-          than the returned updated cache is empty initialized and filled in from
-          the input sequence.
+    @torch.no_grad()
+    def _update_cache(self, key_states, value_states, **cache_kwargs):
         """
-        batch_size, seq_len, _ = input_states.shape
-        dtype = input_states.dtype
+        torch.compile compatible sliding window?
+        (slicing + to_shift[-1].int()-1) % self.config.attention_window_size
+        tensor([ 1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+        19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+        37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54,
+        55, 56, 57, 58, 59, 60, 61, 62, 63,  0], device='cuda:0')
+        Then update at index 64
+        """
+        slicing = torch.ones(self.config.attention_window_size, dtype=torch.long,device=value_states.device).cumsum(0)
+        new_cache_positions = cache_kwargs.get("cache_position").clamp(0, self.config.attention_window_size) # use min?
 
-        y_branch = self.linear_y(input_states)
-        y_branch = self.act_fn(y_branch)
+        to_shift = new_cache_positions >= self.config.attention_window_size
+        indices = (slicing + to_shift[-1].int()-1) % self.config.attention_window_size
 
-        x_branch = self.linear_x(input_states)
+        # Slice the cache when `to_shift` has true
+        k_out, v_out = self.key_states, self.value_states
+        k_out = k_out[:, :, indices]
+        v_out = v_out[:, :, indices]
 
-        hidden_states = self.conv_1d(x_branch.transpose(1,2))
-
-        if cache is not None:
-            if cache_position[0] == 0:
-                conv_state = nn.functional.pad( 
-                    hidden_states, (self.conv1d_width - hidden_states.shape[-1], 0)
-                )
-                hidden_states = self.conv_1d(hidden_states)[..., :seq_len]
-            else:
-                conv_state = cache.conv1d_state[self.layer_idx]                # [batch, intermediate_size, conv_kernel_size]
-                conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
-                conv_state[:, :, -1] = hidden_states[:, :, 0]
-                hidden_states = torch.sum(conv_state * self.conv_1d.weight[:, 0, :], dim=-1) + self.conv_1d.bias
-
-            cache.conv1d_state[self.layer_idx].copy_(conv_state)
-        
-            rg_lru_state = cache.rg_lru_state[self.layer_idx]
-        else:
-            hidden_states = self.act(self.conv_1d(hidden_states)[..., :seq_len])  
-        
-            rg_lru_state = torch.zeros(
-                (batch_size, self.intermediate_size, self.ssm_state_size), device=hidden_states.device, dtype=dtype
-            )
-
-
-        hidden_states, rg_lru_state = self.rg_lru(
-            activations=y_branch,
-            position_ids=position_ids,
-            prev_h=rg_lru_state,
-        )
-
-        # Join branches.
-        hidden_states = hidden_states * y_branch
-        hidden_states = self.linear_out(hidden_states)
-
-        cache.rg_lru_state = rg_lru_state
-
-        return hidden_states, cache
-
-
-TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaAttention}
-
-
-# TODO copied from mistral or whatever
-class RecurrentGemmaMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_activation]
-
-    def forward(self, hidden_states):
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
-
+        v_out[:, :, new_cache_positions] = value_states
+        k_out[:, :, new_cache_positions] = key_states
+        return k_out, v_out
 
 
 # TODO remove einops from this one
@@ -457,16 +267,12 @@ class RecurrentGemmaBlockDiagonalLinear(nn.Module):
         """
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.num_blocks = config.num_blocks
-        self.w_init_variance_scale = config.w_init_variance_scale
+        self.num_blocks = config.num_attention_heads
         self.block_width = self.hidden_size // self.num_blocks
 
         # Parameters.
         self.weight = nn.Parameter(torch.empty([self.num_blocks, self.block_width, self.block_width]))
         self.bias = nn.Parameter(torch.empty([self.num_blocks, self.block_width]))
-
-        # Initialization.
-        self.reset_parameters()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """Calls the RecurrentGemmaBlockDiagonalLinear."""
@@ -479,60 +285,6 @@ class RecurrentGemmaBlockDiagonalLinear(nn.Module):
 
         # Flatten the output.
         return einops.rearrange(y, "... h j -> ... (h j)", h=self.num_blocks)
-
-
-# TODO to refactor
-def rnn_scan(
-    x: torch.Tensor,
-    a: torch.Tensor,
-    reset: torch.Tensor,
-    h0: Union[torch.Tensor, None],
-    acc_dtype: torch.dtype = torch.float32,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Runs the recurrence of a linear RNN.
-
-    Args:
-      x: The input sequence.
-      a: The diagonal of the recurrence matrix `A`.
-      reset: Indicator of document boundaries, e.g. when to reset the hidden state
-        of the RNN.
-      h0: The initial hidden state.
-      acc_dtype: The data type for the accumulation.
-
-    Returns:
-      The output of the linear recurrence.
-    """
-    assert x.ndim == 3
-    assert a.shape == x.shape[-a.ndim :]
-    assert a.dtype == x.dtype
-    assert type(a) is type(x)
-    assert h0 is None or h0.dtype == acc_dtype
-
-    # Multiply `a` by the reset.
-    a = a * ~reset
-
-    if x.shape[1] == 1:
-        # Using scan in sampling mode.
-        if h0 is None:
-            return x, x[:, 0].type(acc_dtype)
-
-        else:
-            y = a.type(acc_dtype) * h0[:, None] + x.type(acc_dtype)
-            return y.type(x.dtype), y[:, -1]
-
-    else:
-        # Using scan in linear mode.
-        if h0 is not None:
-            h_t = h0
-        else:
-            h_t = torch.zeros(x[:, 0].shape, dtype=acc_dtype, device=x.device)
-
-        y = torch.zeros_like(x)
-        for t in range(x.shape[1]):
-            h_t = a[:, t].type(acc_dtype) * h_t + x[:, t].type(acc_dtype)
-            y[:, t] = h_t.type(x.dtype)
-
-    return y, h_t
 
 
 class SqrtBoundDerivative(torch.autograd.Function):
@@ -574,14 +326,16 @@ class RecurrentGemmaRglru(nn.Module):
         self.block_width = self.hidden_size // self.num_attention_heads
         # Parameters and layers.
         self.a_param = nn.Parameter(torch.empty([self.hidden_size]))
-        self.input_gate = nn.Linear(self.num_attention_heads * self.block_width, self.block_width) 
-        self.a_gate =  nn.Linear(self.num_attention_heads * self.block_width, self.block_width) 
+        # self.input_gate = nn.Linear(self.block_width, self.num_attention_heads * self.block_width)
+        # self.a_gate = nn.Linear(self.block_width, self.num_attention_heads * self.block_width)
+
+        self.input_gate = RecurrentGemmaBlockDiagonalLinear(config)
+        self.a_gate = RecurrentGemmaBlockDiagonalLinear(config)
 
     def __call__(
         self,
         activations: torch.Tensor,
         position_ids: torch.Tensor,
-        prev_h: Union[torch.Tensor, None] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calls the RG-LRU.
 
@@ -597,18 +351,9 @@ class RecurrentGemmaRglru(nn.Module):
         batch_size, seq_len, hidden_size = activations.shape
         reset = position_ids[:, :, None] == 0
 
-        x = activations.reshape(batch_size, seq_len, self.num_attention_heads, hidden_size//self.num_attention_heads)
-        y = torch.einsum("... h i, h i j -> ... h j", x, self.input_gate.weight.reshape(self.num_attention_heads, self.block_width, self.block_width).transpose(1,2))
-        y += self.input_gate.bias
-        gate_x = torch.sigmoid(einops.rearrange(y, "... h j -> ... (h j)", h=self.num_attention_heads))
-
-        y = torch.einsum("... h i, h i j -> ... h j", x, self.a_gate.weight.reshape(self.num_attention_heads, self.block_width, self.block_width).transpose(1,2))
-        y += self.a_gate.bias
-        gate_a = torch.sigmoid(einops.rearrange(y, "... h j -> ... (h j)", h=self.num_attention_heads))
-
         # vs
-        # gate_x = torch.sigmoid(self.input_gate(activations)) # TODO fix me
-        # gate_a = torch.sigmoid(self.a_gate(activations))
+        gate_x = torch.sigmoid(self.input_gate(activations)) # TODO fix me
+        gate_a = torch.sigmoid(self.a_gate(activations))
 
         # Compute the parameter `A` of the recurrence.
         log_a = -8.0 * gate_a * nn.functional.softplus(self.a_param)
@@ -624,13 +369,170 @@ class RecurrentGemmaRglru(nn.Module):
         multiplier = reset + ~reset * multiplier
         normalized_x = gated_x * multiplier.type(activations.dtype)
 
-        y, last_h = rnn_scan(
-            x=normalized_x,
+        y, last_h = self._rnn_scan(
+            x=normalized_x,  # TODO the output in y is wrong
             a=a_matrix,
             reset=reset,
-            h0=prev_h,
+            h0=self.cache,
         )
-        return y, last_h
+        self.cache = last_h
+        return y
+
+    # TODO refactor
+    def _rnn_scan(
+        self,
+        x: torch.Tensor,
+        a: torch.Tensor,
+        reset: torch.Tensor,
+        h0: Union[torch.Tensor, None],
+        acc_dtype: torch.dtype = torch.float32,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Runs the recurrence of a linear RNN.
+
+        Args:
+        x: The input sequence.
+        a: The diagonal of the recurrence matrix `A`.
+        reset: Indicator of document boundaries, e.g. when to reset the hidden state
+            of the RNN.
+        h0: The initial hidden state.
+        acc_dtype: The data type for the accumulation.
+
+        Returns:
+        The output of the linear recurrence.
+        """
+        assert x.ndim == 3
+        assert a.shape == x.shape[-a.ndim :]
+        assert a.dtype == x.dtype
+        assert type(a) is type(x)
+        assert h0 is None or h0.dtype == acc_dtype
+
+        # Multiply `a` by the reset.
+        a = a * ~reset
+
+        if x.shape[1] == 1:
+            # Using scan in sampling mode.
+            if h0 is None:
+                return x, x[:, 0].type(acc_dtype)
+
+            else:
+                y = a.type(acc_dtype) * h0[:, None] + x.type(acc_dtype)
+                return y.type(x.dtype), y[:, -1]
+
+        else:
+            # Using scan in linear mode.
+            if h0 is not None:
+                h_t = h0
+            else:
+                h_t = torch.zeros(x[:, 0].shape, dtype=acc_dtype, device=x.device)
+
+            y = torch.zeros_like(x)
+            for t in range(x.shape[1]):
+                h_t = a[:, t].type(acc_dtype) * h_t + x[:, t].type(acc_dtype)
+                y[:, t] = h_t.type(x.dtype)
+
+        return y, h_t
+
+
+class RecurrentGemmaRecurrentBlock(nn.Module):
+    """Griffin and Hawk's recurrent block."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.lru_width = config.lru_width
+        self.hidden_size = config.hidden_size
+        self.linear_y = nn.Linear(in_features=config.hidden_size, out_features=config.lru_width)
+        self.linear_x = nn.Linear(in_features=config.hidden_size, out_features=config.lru_width)
+        self.linear_out = nn.Linear(in_features=config.lru_width, out_features=config.hidden_size)
+        self.conv1d_width = config.conv1d_width
+        self.conv_1d = nn.Conv1d(
+            config.lru_width,
+            config.lru_width,
+            kernel_size=config.conv1d_width,
+            groups=config.lru_width,
+            padding=config.conv1d_width - 1,
+        )
+        self.rg_lru = RecurrentGemmaRglru(config)
+        self.act_fn = ACT2FN[config.hidden_activation]
+
+    def forward(
+        self,
+        input_states: torch.Tensor,
+        position_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        cache_position: torch.Tensor,
+        use_cache: bool = True,
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        """Calls the recurrent block.
+
+        Args:
+          hidden_states: Sequence of input activations.
+          position_ids: Position of each token in the sequence.
+          attention_mask: Unused attention mask.
+          cache: Optional cache with the previous state of the RG-LRU and Conv1D.
+
+        Returns:
+          Output of the block together with the updated cache. If `cache` is None
+          than the returned updated cache is empty initialized and filled in from
+          the input sequence.
+        """
+        batch_size, seq_len, _ = input_states.shape
+        dtype = input_states.dtype
+
+        y_branch = self.linear_y(input_states)
+        y_branch = self.act_fn(y_branch)
+
+        x_branch = self.linear_x(input_states)
+
+        x_branch = x_branch.transpose(1, 2)
+        if use_cache:
+            if cache_position[0] == 0: # breaks the graphs as it's a control flow
+                conv_state = nn.functional.pad(x_branch, (self.conv1d_width - x_branch.shape[-1], 0))
+                x_branch = self.conv_1d(x_branch)[..., :seq_len]
+                self.conv1d_state.copy_(conv_state)
+            else:
+                # x_branch = torch.concatenate([self.conv1d_state.type(x_branch.dtype), x_branch], dim=1) TODO this?
+                conv_state = self.conv1d_state  # [batch, intermediate_size, conv_kernel_size]
+                conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
+                conv_state[:, :, -1] = x_branch[:, :, 0]
+                x_branch = (
+                    torch.sum(conv_state * self.conv_1d.weight[:, 0, :], dim=-1) + self.conv_1d.bias
+                ).unsqueeze(-1)
+        else:
+            x_branch = self.conv_1d(x_branch)[..., :seq_len]
+
+        x_branch = self.rg_lru(
+            activations=x_branch.transpose(1, 2),
+            position_ids=position_ids,
+        )
+
+        hidden_states = x_branch * y_branch
+        hidden_states = self.linear_out(hidden_states)
+        return hidden_states
+
+    def _setup_cache(self, batch, device, dtype):
+        self.rg_lru.cache = torch.zeros(
+            (batch, self.lru_width), device=device, dtype=dtype
+        )
+        self.conv1d_state = torch.zeros((batch, self.hidden_size, self.conv1d_width), device=device, dtype=dtype)
+
+
+TEMPORAL_BLOCK_CLASSES = {"recurrent": RecurrentGemmaRecurrentBlock, "attention": RecurrentGemmaSdpaAttention}
+
+
+# Copied from transformers.models.llama.modeling_llama.LlamaMLP Llama->RecurrentGemma
+class RecurrentGemmaMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_activation]
+
+    def forward(self, hidden_states):
+        return self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
 
 
 class RecurrentGemmaDecoderLayer(nn.Module):
@@ -638,9 +540,8 @@ class RecurrentGemmaDecoderLayer(nn.Module):
 
     def __init__(self, config, layer_idx):
         super().__init__()
-        # Sub-blocks and layers.
         self.temporal_pre_norm = RecurrentGemmaRMSNorm(config.hidden_size)
-        self.temporal_block = TEMPORAL_BLOCK_CLASSES[config.block_types[layer_idx]](config, layer_idx)
+        self.temporal_block = TEMPORAL_BLOCK_CLASSES[config.block_types[layer_idx]](config)
         self.channel_pre_norm = RecurrentGemmaRMSNorm(config.hidden_size)
         self.mlp_block = RecurrentGemmaMLP(config)
 
@@ -650,17 +551,16 @@ class RecurrentGemmaDecoderLayer(nn.Module):
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         cache_position: torch.Tensor = None,
-        cache: Union[dict[str, torch.Tensor], None] = None,
+        use_cache: bool = None,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         raw_activations = activations
 
         inputs_normalized = self.temporal_pre_norm(raw_activations)
-        hidden_states, cache = self.temporal_block(
-            inputs_normalized,
-            position_ids,
-            attention_mask,
-            cache,
-            cache_position=cache_position,
+        if hasattr(self.temporal_block, "q_proj") and cache_position[0] == 0:
+            self.temporal_block = torch.compile(self.temporal_block, fullgraph=True)
+
+        hidden_states = self.temporal_block(
+            inputs_normalized, position_ids, attention_mask, cache_position=cache_position, use_cache=use_cache
         )
 
         residual = hidden_states + raw_activations
@@ -681,11 +581,6 @@ class GriffinOutput(ModelOutput):
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        cache (`HybridCache`):
-            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
-            avoid providing the old `input_ids`.
-
-            Includes both the State space model state matrices after the selective scan, and the Convolutional states
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -694,7 +589,6 @@ class GriffinOutput(ModelOutput):
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
-    cache: Optional[HybridCache] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -708,11 +602,6 @@ class GriffinCausalLMOutput(ModelOutput):
             Language modeling loss (for next-token prediction).
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        cache (`HybridCache`):
-            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
-            avoid providing the old `input_ids`.
-
-            Includes both the State space model state matrices after the selective scan, and the Convolutional states
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -722,12 +611,8 @@ class GriffinCausalLMOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    cache: Optional[HybridCache] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Union[tuple, None] = None
 
-
-# TODO(lberrada, botev): adapt all doctsrings.
 
 RECURRENTGEMMA_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -756,15 +641,21 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["RecurrentGemmaDecoderLayer"]
     _skip_keys_device_placement = ["cache"]
-    # TODO(lberrada, botev): decide whether we want to support the various implementations of attention
-    # in first version.
     _supports_flash_attn_2 = False
-    _supports_sdpa = False
-    _supports_cache_class = False
+    _supports_sdpa = True
+    _supports_cache_class = True
 
     def _init_weights(self, module):
         pass
         # TODO add the missing init schemes
+
+    def _setup_cache(self, config, batch, device, dtype):
+        for layer in self.layers:
+            layer.temporal_block._setup_cache(batch, device, dtype)
+
+    # def reset_cache(self, batch, device, dtype):
+    #     for layer in self.layers:
+    #         layer.temporal_block.rest_cache(batch, device, dtype)
 
 
 RECURRENTGEMMA_INPUTS_DOCSTRING = r"""
@@ -866,9 +757,8 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         )
         self.final_norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
-
-        # Initialize weights and apply final processing
         self.post_init()
+
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -884,7 +774,6 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        cache: Optional[HybridCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -911,10 +800,10 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache is None:
-            cache = HybridCache(self.config, inputs_embeds.shape[0], self.config.attention_window_size, inputs_embeds.device)
-
         hidden_states = inputs_embeds
+
+        if use_cache:
+            self._setup_cache(self.config, hidden_states.shape[0], hidden_states.device, hidden_states.dtype)
 
         if cache_position is None:
             cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)
@@ -923,7 +812,8 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
 
-        # normalized
+        # TODO refactor this? -> can't be put in the embeding as someone that passes embeddings needs this
+        # but in the first layer
         if self.config.embeddings_scale_by_sqrt_dim:
             normalizer = torch.tensor(self.config.hidden_size**0.5)
             hidden_states = hidden_states * normalizer.type(torch.bfloat16)
@@ -934,10 +824,10 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
                 all_hidden_states += (hidden_states,)
             if self.gradient_checkpointing and self.training:
                 hidden_states = self._gradient_checkpointing_func(
-                    residual_block.__call__, hidden_states, position_ids, causal_mask, cache_position, cache
+                    residual_block.__call__, hidden_states, position_ids, causal_mask, cache_position, use_cache
                 )
             else:
-                hidden_states = residual_block(hidden_states, position_ids, causal_mask, cache_position, cache)
+                hidden_states = residual_block(hidden_states, position_ids, causal_mask, cache_position, use_cache)
 
         hidden_states = self.final_norm(hidden_states)
 
@@ -946,11 +836,10 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, cache, all_hidden_states] if v is not None)
+            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
         return GriffinOutput(
             last_hidden_state=hidden_states,
-            cache=cache,
             hidden_states=all_hidden_states,
         )
 
@@ -960,11 +849,6 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
     # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
     # Ignore copy
     def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
-        if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
-                return attention_mask
-            return None
-
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
@@ -984,12 +868,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
                 padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
                 causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
 
-        # Sliding window:
-        if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type == "cuda"
-        ):
+        if attention_mask is not None and attention_mask.device.type == "cuda":
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
@@ -1038,7 +917,6 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[HybridCache] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1075,12 +953,10 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
             cache_position=cache_position,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_hidden_states=output_hidden_states,
@@ -1116,85 +992,39 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         return GriffinCausalLMOutput(
             loss=loss,
             logits=logits,
-            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
-            attentions=(),
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, cache_position=None, **kwargs
+        self, input_ids, attention_mask=None, inputs_embeds=None, cache_position=None, use_cache=None, **kwargs
     ):
-        # With static cache, the `past_key_values` is None
-        # TODO joao: standardize interface for the different Cache classes and remove of this if
-        has_static_cache = False
-        past_length = 0
-        if past_key_values is not None:
-            past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
-            max_cache_length = self.config.attention_window_size
-            cache_length = torch.min(max_cache_length, past_length)
-
-            # Keep only the unprocessed tokens:
-            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
-            # input)
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-            # input_ids based on the past_length.
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
-            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
-
-            # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
-            if (
-                max_cache_length is not None
-                and attention_mask is not None
-                and cache_length + input_ids.shape[1] > max_cache_length
-            ):
-                attention_mask = attention_mask[:, -max_cache_length:]
-
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
 
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
+        attention_mask = attention_mask[:, -self.config.attention_window_size:]
+
+        past_length = cache_position[0]
+        if past_length > 0:
+            input_ids = input_ids[:, past_length:]
+            position_ids = position_ids[:, past_length:]
+
+        if inputs_embeds is not None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise
-            # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
-            # TODO: use `next_tokens` directly instead.
             model_inputs = {"input_ids": input_ids.contiguous()}
 
-        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
-        if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
-        else:
-            cache_position = cache_position[-input_length:]
-
-        if has_static_cache:
-            past_key_values = None
+        if cache_position is not None:
+            cache_position = cache_position[-position_ids.shape[1]:]
 
         model_inputs.update(
             {
                 "position_ids": position_ids,
-                "cache_position": cache_position,
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
+                "cache_position": cache_position,
+                "use_cache": use_cache,
             }
         )
         return model_inputs
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past

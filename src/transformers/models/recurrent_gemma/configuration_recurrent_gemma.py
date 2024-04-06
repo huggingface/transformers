@@ -23,6 +23,7 @@ logger = logging.get_logger(__name__)
 
 from ..deprecated._archive_maps import GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
+
 _PATTERN = ("recurrent", "recurrent", "attention")
 
 
@@ -90,6 +91,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "recurrent_gemma"
     # keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -112,6 +114,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
         bos_token_id=2,
         tie_word_embeddings=True,
         hidden_activation="gelu_pytorch_tanh",
+        partial_rotary_factor=0.5,
         rope_theta=10000.0,
         block_types=("recurrent", "recurrent", "attention"),
         attention_dropout=0.0,
@@ -132,6 +135,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
+        self.partial_rotary_factor = partial_rotary_factor
         self._block_types = list(block_types)
         self.hidden_activation = hidden_activation
         self.head_dim = self.hidden_size // self.num_attention_heads
@@ -149,4 +153,4 @@ class RecurrentGemmaConfig(PretrainedConfig):
 
     @property
     def block_types(self) -> tuple[str, ...]:
-        return (self._block_types * 100)[:self.num_hidden_layers]
+        return (self._block_types * 100)[: self.num_hidden_layers]
