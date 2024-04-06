@@ -178,6 +178,8 @@ class OptimizerNames(ExplicitEnum):
     LOMO = "lomo"
     ADALOMO = "adalomo"
     GROKADAMW = "grokadamw"
+    SCHEDULE_FREE_ADAMW_32BIT = "schedule_free_adamw_32bit"
+    SCHEDULE_FREE_SGD_32BIT = "schedule_free_adamw_32bit"
 
 
 # Sometimes users will pass in a `str` repr of a dict in the CLI
