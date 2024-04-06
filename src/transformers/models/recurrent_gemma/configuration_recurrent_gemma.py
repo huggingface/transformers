@@ -76,9 +76,14 @@ class RecurrentGemmaConfig(PretrainedConfig):
             Beginning of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
+        hidden_activation (`<fill_type>`, *optional*, defaults to `"gelu_pytorch_tanh"`): <fill_docstring>
+        partial_rotary_factor (`<fill_type>`, *optional*, defaults to 0.5): <fill_docstring>
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         block_types (`<fill_type>`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`): <fill_docstring>
+        attention_dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
+        num_key_value_heads (`<fill_type>`, *optional*, defaults to 16): <fill_docstring>
+        attention_bias (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
     ```python
     >>> from transformers import RecurrentGemmaModel, RecurrentGemmaConfig
 

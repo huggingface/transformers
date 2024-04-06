@@ -63,7 +63,6 @@ class RecurrentGemmaRMSNorm(nn.Module):
 ALL_LAYERNORM_LAYERS.append(RecurrentGemmaRMSNorm)
 
 
-# Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with Gemma->RecurrentGemma
 class RecurrentGemmaRotaryEmbedding(nn.Module):
     def __init__(self, dim, base=10000, device=None):
         super().__init__()
@@ -72,6 +71,7 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", None, persistent=False)
 
     @torch.no_grad()
+    # Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding.forward with Gemma->RecurrentGemma
     def forward(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
         if self.inv_freq is None:
@@ -743,7 +743,7 @@ RECURRENTGEMMA_INPUTS_DOCSTRING = r"""
     "The bare RecurrentGemma Model outputting raw hidden-states without any specific head on top.",
     RECURRENTGEMMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaModel with LLAMA->RECURRENTGEMMA,Llama->RecurrentGemma
+# Copied from transformers.models.llama.modeling_llama.LlamaModel with LLAMA->RECURRENTGEMMA,Llama->RecurrentGemma,self.norm->self.final_norm
 class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`RecurrentGemmaDecoderLayer`]
@@ -754,7 +754,6 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
     def __init__(self, config: RecurrentGemmaConfig):
         super().__init__(config)
-        self.config = config
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
@@ -762,8 +761,10 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         self.layers = nn.ModuleList(
             [RecurrentGemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.final_norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1004,6 +1005,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
+    # Ignore copy
     def prepare_inputs_for_generation(
         self, input_ids, attention_mask=None, inputs_embeds=None, cache_position=None, use_cache=None, **kwargs
     ):
@@ -1037,3 +1039,13 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
             }
         )
         return model_inputs
+
+    # TODO beam with static cache ?
+    @staticmethod
+    def _reorder_cache(past_key_values, beam_idx):
+        reordered_past = ()
+        for layer_past in past_key_values:
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
+        return reordered_past
