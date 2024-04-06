@@ -982,12 +982,7 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = [
-                "input_ids",
-                "attention_mask",
-                "position_ids",
-            ]
-
+            expected_arg_names = ["input_ids", "attention_mask", "position_ids"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     @slow
@@ -1043,9 +1038,7 @@ class Blip2VisionModelWithProjectionTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        inputs_dict = {
-            "pixel_values": pixel_values,
-        }
+        inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
     def create_and_check_model(self, config, pixel_values):
@@ -1155,10 +1148,7 @@ class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = [
-                "pixel_values",
-            ]
-
+            expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     @slow
@@ -1285,12 +1275,7 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = [
-                "pixel_values",
-                "input_ids",
-                "attention_mask",
-            ]
-
+            expected_arg_names = ["pixel_values", "input_ids", "attention_mask"]
             expected_arg_names.extend(["use_itm_head"] if "use_itm_head" in arg_names else [])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
