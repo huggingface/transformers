@@ -235,9 +235,9 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         Then update at index 64
         """
         slicing = torch.ones(self.config.attention_window_size, dtype=torch.long,device=value_states.device).cumsum(0)
-        new_cache_positions = cache_kwargs.get("cache_position").clamp(0, self.config.attention_window_size) # use min?
+        new_cache_positions = cache_kwargs.get("cache_position").clamp(0, self.config.attention_window_size-1) # use min?
 
-        to_shift = new_cache_positions >= self.config.attention_window_size
+        to_shift = new_cache_positions >= self.config.attention_window_size-1
         indices = (slicing + to_shift[-1].int()-1) % self.config.attention_window_size
 
         # Slice the cache when `to_shift` has true
