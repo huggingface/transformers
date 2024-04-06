@@ -523,7 +523,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
 
     def _setup_cache(self, batch, device, dtype):
         self.rg_lru.recurrent_states = torch.zeros(
-            (batch, self.lru_width), device=device, dtype=dtype
+            (batch, self.lru_width), device=device, dtype=torch.float32
         )
         self.conv1d_state = torch.zeros((batch, self.hidden_size, self.conv1d_width-1), device=device, dtype=dtype)
 
