@@ -369,22 +369,22 @@ class RecurrentGemmaRglru(nn.Module):
         multiplier = reset + ~reset * multiplier
         normalized_x = gated_x * multiplier.type(activations.dtype)
 
-        y, last_h = self._rnn_scan(
+        y, recurrent_states = self._rnn_scan(
             x=normalized_x,  # TODO the output in y is wrong
             a=a_matrix,
             reset=reset,
-            h0=self.cache,
+            recurrent_states=self.recurrent_states,
         )
-        self.cache = last_h
+        self.recurrent_states = recurrent_states
         return y
 
     # TODO refactor
     def _rnn_scan(
         self,
-        x: torch.Tensor,
+        hidden_states: torch.Tensor,
         a: torch.Tensor,
         reset: torch.Tensor,
-        h0: Union[torch.Tensor, None],
+        recurrent_states: Union[torch.Tensor, None],
         acc_dtype: torch.dtype = torch.float32,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Runs the recurrence of a linear RNN.
@@ -394,43 +394,43 @@ class RecurrentGemmaRglru(nn.Module):
         a: The diagonal of the recurrence matrix `A`.
         reset: Indicator of document boundaries, e.g. when to reset the hidden state
             of the RNN.
-        h0: The initial hidden state.
+        recurrent_states: The initial hidden state.
         acc_dtype: The data type for the accumulation.
 
         Returns:
         The output of the linear recurrence.
         """
-        assert x.ndim == 3
-        assert a.shape == x.shape[-a.ndim :]
-        assert a.dtype == x.dtype
-        assert type(a) is type(x)
-        assert h0 is None or h0.dtype == acc_dtype
+        assert hidden_states.ndim == 3
+        assert a.shape == hidden_states.shape[-a.ndim :]
+        assert a.dtype == hidden_states.dtype
+        assert type(a) is type(hidden_states)
+        assert recurrent_states is None or recurrent_states.dtype == acc_dtype
 
         # Multiply `a` by the reset.
         a = a * ~reset
 
-        if x.shape[1] == 1:
+        if hidden_states.shape[1] == 1:
             # Using scan in sampling mode.
-            if h0 is None:
-                return x, x[:, 0].type(acc_dtype)
+            if recurrent_states is None: # same here, when decoding you always have cache
+                return hidden_states, hidden_states[:, 0].type(acc_dtype)
 
             else:
-                y = a.type(acc_dtype) * h0[:, None] + x.type(acc_dtype)
-                return y.type(x.dtype), y[:, -1]
+                y = a.type(acc_dtype) * recurrent_states[:, None] + hidden_states.type(acc_dtype)
+                return y.type(hidden_states.dtype), y[:, -1]
 
         else:
             # Using scan in linear mode.
-            if h0 is not None:
-                h_t = h0
+            if recurrent_states is not None: # recurrent_states is self.cache, never None in transformeres
+                recurrent_states = recurrent_states
             else:
-                h_t = torch.zeros(x[:, 0].shape, dtype=acc_dtype, device=x.device)
+                recurrent_states = torch.zeros(hidden_states[:, 0].shape, dtype=acc_dtype, device=hidden_states.device)
 
-            y = torch.zeros_like(x)
-            for t in range(x.shape[1]):
-                h_t = a[:, t].type(acc_dtype) * h_t + x[:, t].type(acc_dtype)
-                y[:, t] = h_t.type(x.dtype)
+            y = torch.zeros_like(hidden_states)
+            for t in range(hidden_states.shape[1]):
+                recurrent_states = a[:, t].type(acc_dtype) * recurrent_states + hidden_states[:, t].type(acc_dtype)
+                y[:, t] = recurrent_states.type(hidden_states.dtype)
 
-        return y, h_t
+        return y, recurrent_states
 
 
 class RecurrentGemmaRecurrentBlock(nn.Module):
@@ -510,7 +510,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         return hidden_states
 
     def _setup_cache(self, batch, device, dtype):
-        self.rg_lru.cache = torch.zeros(
+        self.rg_lru.recurrent_states = torch.zeros(
             (batch, self.lru_width), device=device, dtype=dtype
         )
         self.conv1d_state = torch.zeros((batch, self.hidden_size, self.conv1d_width), device=device, dtype=dtype)
@@ -556,7 +556,7 @@ class RecurrentGemmaDecoderLayer(nn.Module):
         raw_activations = activations
 
         inputs_normalized = self.temporal_pre_norm(raw_activations)
-        if hasattr(self.temporal_block, "q_proj") and cache_position[0] == 0:
+        if hasattr(self.temporal_block, "q_proj") and not isinstance(self.temporal_block, torch._dynamo.eval_frame.OptimizedModule):
             self.temporal_block = torch.compile(self.temporal_block, fullgraph=True)
 
         hidden_states = self.temporal_block(
