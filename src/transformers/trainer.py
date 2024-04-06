@@ -4370,8 +4370,9 @@ class Trainer:
                 even_batches=accelerator_config.pop("even_batches"),
                 use_seedable_sampler=accelerator_config.pop("use_seedable_sampler"),
             )
-            # this would have been updated above, no need for it anymore
-            accelerator_config.pop("gradient_accumulation_kwargs")
+        # this would have been updated above, no need for it anymore
+        accelerator_config.pop("gradient_accumulation_kwargs")
+
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
             "gradient_accumulation_plugin": gradient_accumulation_plugin,
