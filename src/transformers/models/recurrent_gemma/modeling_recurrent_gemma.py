@@ -531,17 +531,16 @@ class RecurrentGemmaMLP(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        # self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
+        self.intermediate_size = config.intermediate_size // 2
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
-        self.down_proj = nn.Linear(self.intermediate_size//2, self.hidden_size, bias=True)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
         self.act_fn = ACT2FN[config.hidden_activation]
 
     def forward(self, hidden_states):
         # gate = self.gate_proj(hidden_states)
-        b, s, h = hidden_states.shape
-        hidden_states = self.up_proj(hidden_states).reshape(b,s,-1,2)
-        return self.down_proj(self.act_fn(hidden_states[...,1]) * hidden_states[...,0])
+        gate = self.act_fn(self.gate_proj(hidden_states))
+        return self.down_proj(gate * self.up_proj(hidden_states))
 
 
 class RecurrentGemmaDecoderLayer(nn.Module):

@@ -108,9 +108,11 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
         if "conv_1d.weight" in key:
             v = v[:,None,:].transpose(0,2)
         if "up_proj.weight" in key:
-            v = v.transpose(1,2).reshape(-1,v.shape[1])
+            state_dict[key.replace("up_proj","gate_proj")] = v[0].T.contiguous()
+            v = v[1].T.contiguous()
         if "up_proj.bias" in key:
-            v = v.transpose(2,3).reshape(-1)
+            state_dict[key.replace("up_proj","gate_proj")] = v[0,0,0].clone()
+            v = v[1,0,0].contiguous()
         if "down_proj.weight" in key:
             ...
         if k == "embedder.weight":
