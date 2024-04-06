@@ -249,8 +249,11 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         k_out = k_out[:, :, indices]
         v_out = v_out[:, :, indices]
 
-        v_out[:, :, cache_position] = value_states
         k_out[:, :, cache_position] = key_states
+        v_out[:, :, cache_position] = value_states
+
+        self.key_states, self.value_states = k_out, v_out
+
         return k_out, v_out
 
 
@@ -293,8 +296,11 @@ class RecurrentGemmaRglru(nn.Module):
         self.block_width = self.hidden_size // self.num_attention_heads
 
         self.recurrent_param = nn.Parameter(torch.empty([self.hidden_size]))
-        self.input_gate = nn.Linear(self.block_width, self.num_attention_heads * self.block_width)
-        self.recurrent_gate = nn.Linear(self.block_width, self.num_attention_heads * self.block_width)
+        self.input_gate_weight = nn.Parameter(torch.empty([self.num_attention_heads, self.block_width, self.block_width]))
+        self.input_gate_bias = nn.Parameter(torch.empty([self.num_attention_heads, self.block_width]))
+
+        self.recurrent_gate_weight = nn.Parameter(torch.empty([self.num_attention_heads, self.block_width, self.block_width]))
+        self.recurrent_gate_bias = nn.Parameter(torch.empty([self.num_attention_heads, self.block_width]))
 
     def __call__(
         self,
@@ -304,26 +310,15 @@ class RecurrentGemmaRglru(nn.Module):
         batch_size, seq_len, hidden_size = activations.shape
         reset = position_ids[:, :, None] == 0
 
-        reshape_act = activations.reshape(batch_size * seq_len, self.num_attention_heads, self.block_width).permute(
-            1, 0, 2
-        )
-        ww = self.input_gate.weight.reshape(self.block_width, self.num_attention_heads, self.block_width).transpose(
-            0, 1
-        )  # TODO in the checkpoint
-        res = (
-            torch.bmm(reshape_act, ww).transpose(0, 1)
-            + self.input_gate.bias.reshape(self.block_width, self.num_attention_heads).T
-        )
-        input_gate = torch.sigmoid(res.reshape(batch_size, seq_len, hidden_size))
+        reshape_act = activations.reshape(batch_size * seq_len, self.num_attention_heads, self.block_width)
+        reshape_act = reshape_act.permute(1, 0, 2)
 
-        ww = self.recurrent_gate.weight.reshape(
-            self.block_width, self.num_attention_heads, self.block_width
-        ).transpose(0, 1)  # TODO in the checkpoint
-        res = (
-            torch.bmm(reshape_act, ww).transpose(0, 1)
-            + self.recurrent_gate.bias.reshape(self.block_width, self.num_attention_heads).T
-        )
-        recurrent_gate = torch.sigmoid(res.reshape(batch_size, seq_len, hidden_size))
+        res = torch.baddbmm(self.input_gate_bias[:,None,:], reshape_act, self.input_gate_weight)
+        input_gate = torch.sigmoid(res.transpose(0, 1).reshape(batch_size, seq_len, hidden_size))
+
+        res = torch.baddbmm(self.recurrent_gate_bias[:,None,:], reshape_act, self.recurrent_gate_weight)
+        recurrent_gate = torch.sigmoid(res.transpose(0, 1).reshape(batch_size, seq_len, hidden_size))
+
 
         # Compute the parameter `A` of the recurrence.
         log_recurrent_gate = -8.0 * recurrent_gate * nn.functional.softplus(self.recurrent_param)
@@ -439,7 +434,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
 
         x_branch = x_branch.transpose(1, 2)
         if use_cache:
-            if cache_position.shape != 1:  # prefill
+            if cache_position.shape[0] != 1:  # prefill
                 conv_state = nn.functional.pad(x_branch, (self.conv1d_width - x_branch.shape[-1] - 1, 0))
                 x_branch = self.conv_1d(x_branch)[..., :seq_len]
             else:  # decoding
@@ -478,7 +473,6 @@ class RecurrentGemmaMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_activation]
 
     def forward(self, hidden_states):
-        # gate = self.gate_proj(hidden_states)
         gate = self.act_fn(self.gate_proj(hidden_states))
         return self.down_proj(gate * self.up_proj(hidden_states))
 
@@ -488,9 +482,9 @@ class RecurrentGemmaDecoderLayer(nn.Module):
 
     def __init__(self, config, layer_idx):
         super().__init__()
-        self.temporal_pre_norm = RecurrentGemmaRMSNorm(config.hidden_size)
+        self.temporal_pre_norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.temporal_block = TEMPORAL_BLOCK_CLASSES[config.block_types[layer_idx]](config)
-        self.channel_pre_norm = RecurrentGemmaRMSNorm(config.hidden_size)
+        self.channel_pre_norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp_block = RecurrentGemmaMLP(config)
 
     def forward(
@@ -714,7 +708,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             hidden_states = hidden_states * normalizer.type(torch.bfloat16)
 
         all_hidden_states = () if output_hidden_states else None
-        for residual_block in self.layers:
+        for i, residual_block in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.gradient_checkpointing and self.training:
@@ -847,7 +841,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        output_hidden_states = True
         outputs = self.model(
             input_ids=input_ids,
             cache_position=cache_position,
@@ -859,8 +853,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        logits = hidden_states @ self.model.embed_tokens.weight.T  # TODO conversion seems to break the lm head
-        # logits = self.lm_head(hidden_states) # hidden_states @ self.model.embed_tokens.weight.T
+        logits = self.lm_head(hidden_states)
 
         # Soft-cap the logits TODO remove if always done.
         if self.config.logits_soft_cap is not None:

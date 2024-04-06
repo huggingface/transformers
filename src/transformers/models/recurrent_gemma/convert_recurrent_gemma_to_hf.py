@@ -59,7 +59,7 @@ gemma_2b_config = RecurrentGemmaConfig(
     num_key_value_heads=1,
     hidden_size=2560,
     intermediate_size=15360,
-    vocab_size=256128,
+    vocab_size=256000,
     num_hidden_layers=26,
 )
 
@@ -110,26 +110,17 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
         if "up_proj.bias" in key:
             state_dict[key.replace("up_proj", "gate_proj")] = v[0, 0, 0].clone()
             v = v[1, 0, 0].contiguous()
-
         if "recurrent_gate.bias" in key:
-            state_dict[key] = v.transpose(0,1).reshape(-1).contiguous()
-            # for i in range(v.shape[0]):
-            #     state_dict[key.replace(f"input_gate.b","input_gate.{i}.bias")] = v[i].contiguous()
+            state_dict[key.replace("gate.","gate_")] = v.contiguous().clone()
         elif "recurrent_gate.weight" in key:
-            state_dict[key] = v.transpose(0,2).reshape(v.shape[1],-1).T.contiguous()
-            # for i in range(v.shape[0]):
-            #     state_dict[key.replace(f"input_gate.w","input_gate.{i}.weight")] = v[i].contiguous()
+            state_dict[key.replace("gate.","gate_")] = v.contiguous().clone()
         elif "input_gate.b" in key:
-            state_dict[key] = v.transpose(0,1).reshape(-1).contiguous()
-            # for i in range(v.shape[0]):
-            #     state_dict[key.replace(f"input_gate.b","input_gate.{i}.bias")] = v[i].contiguous()
+            state_dict[key.replace("gate.","gate_")] = v.contiguous().clone()
         elif "input_gate.w" in key:
-            state_dict[key] = v.transpose(0,2).reshape(v.shape[1],-1).T.contiguous()
-            # for i in range(v.shape[0]):
-            #     state_dict[key.replace(f"input_gate.w","input_gate.{i}.weight")] = v[i].contiguous()
+            state_dict[key.replace("gate.","gate_")] = v.contiguous().clone()
         elif "embed_tokens" in key:
-            state_dict[key] = v
-            state_dict["lm_head.weight"] = v
+            state_dict[key] = v[:config.vocab_size,:].contiguous().clone()
+            state_dict["lm_head.weight"] = v[:config.vocab_size, :].contiguous().clone()
         else:
             state_dict[key] = v.contiguous()
 
