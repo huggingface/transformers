@@ -18,7 +18,7 @@ import warnings
 import torch
 from accelerate import init_empty_weights
 
-from transformers import RecurrentGemmaConfig, RecurrentGemmaModel, GemmaTokenizer
+from transformers import RecurrentGemmaConfig, RecurrentGemmaForCausalLM, GemmaTokenizer
 
 
 try:
@@ -103,6 +103,7 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
 
     state_dict = {}
     for k, v in model_state_dict.items():
+        k = "model." + k
         pattern = re.compile("|".join(map(re.escape, REPLACEMENT.keys())))
         key = pattern.sub(lambda match: REPLACEMENT[match.group(0)], k)
         if "conv_1d.weight" in key:
@@ -113,10 +114,8 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
         if "up_proj.bias" in key:
             state_dict[key.replace("up_proj","gate_proj")] = v[0,0,0].clone()
             v = v[1,0,0].contiguous()
-        if "down_proj.weight" in key:
-            ...
-        if k == "embedder.weight":
-            state_dict[LAYER_NAME_MAPPING[k]] = v
+        if "embed_tokens" in key :
+            state_dict[key] = v
             state_dict["lm_head.weight"] = v
         else:
             state_dict[key] = v.contiguous()
@@ -125,7 +124,7 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
 
     print("Loading the checkpoint in a Gemma model.")
     with init_empty_weights():
-        model = RecurrentGemmaModel(config)
+        model = RecurrentGemmaForCausalLM(config)
     model.load_state_dict(state_dict, assign=True, strict=True)
 
     model.config.torch_dtype = torch.float32

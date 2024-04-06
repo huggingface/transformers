@@ -870,7 +870,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         diagonal = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
         causal_mask = diagonal
         if sequence_length != 1:
-            causal_mask = torch.triu(diagonal, diagonal=1)
+            causal_mask = torch.triu(diagonal, diagonal=-1)
 
         # the cache is smart, as long as you pay attention to all of it, no need to update the mask. 
         # Cache is of shape `attention_window_size`. We need to mask padding tho
@@ -979,7 +979,8 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
+        logits = hidden_states @ self.model.embed_tokens.weight.T
+        # logits = self.lm_head(hidden_states) # hidden_states @ self.model.embed_tokens.weight.T
 
         # Soft-cap the logits
         if self.config.logits_soft_cap is not None:
