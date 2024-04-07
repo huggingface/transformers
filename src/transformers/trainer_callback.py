@@ -17,12 +17,14 @@ Callbacks to use with the Trainer class and customize the training loop.
 """
 import dataclasses
 import json
+import warnings
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
 import numpy as np
 from tqdm.auto import tqdm
 
+from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_utils import IntervalStrategy, has_length
 from .training_args import TrainingArguments
 from .utils import logging
@@ -187,10 +189,8 @@ class TrainerCallback:
             The object that is returned to the [`Trainer`] and can be used to make some decisions.
         model ([`PreTrainedModel`] or `torch.nn.Module`):
             The model being trained.
-        tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer used for encoding the data.
-        image_processor ([`BaseImageProcessor`]):
-            The image processor used for encoding the images.
+        processor ([`PreTrainedTokenizer` or `BaseImageProcessor` or `SequenceFeatureExtractor` or `ProcessorMixin`]):
+            The processor used to preprocess the data. Can be a tokenizer, image processor, feature extractor or multimodal processor.
         optimizer (`torch.optim.Optimizer`):
             The optimizer used for the training steps.
         lr_scheduler (`torch.optim.lr_scheduler.LambdaLR`):
@@ -309,13 +309,20 @@ class TrainerCallback:
 class CallbackHandler(TrainerCallback):
     """Internal class that just calls the list of callbacks in order."""
 
-    def __init__(self, callbacks, model, tokenizer, image_processor, optimizer, lr_scheduler):
+    def __init__(self, callbacks, model, processor, optimizer, lr_scheduler, tokenizer):
+        if tokenizer is not None and not isinstance(tokenizer, PreTrainedTokenizerBase):
+            warnings.warn(
+                "The `tokenizer` argument is deprecated and will be removed in v5 of Transformers. You can use `processor` "
+                "instead to pass your tokenizer/image processor/feature extractor/multimodal processor object.",
+                FutureWarning,
+            )
+            processor = tokenizer
+
         self.callbacks = []
         for cb in callbacks:
             self.add_callback(cb)
         self.model = model
-        self.tokenizer = tokenizer
-        self.image_processor = image_processor
+        self.processor = processor
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
         self.train_dataloader = None
@@ -419,8 +426,7 @@ class CallbackHandler(TrainerCallback):
                 state,
                 control,
                 model=self.model,
-                tokenizer=self.tokenizer,
-                image_processor=self.image_processor,
+                processor=self.processor,
                 optimizer=self.optimizer,
                 lr_scheduler=self.lr_scheduler,
                 train_dataloader=self.train_dataloader,
