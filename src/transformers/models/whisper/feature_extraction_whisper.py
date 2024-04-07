@@ -99,6 +99,12 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         Compute the log-mel spectrogram of the provided audio, gives similar results to Whisper's original torch
         implementation with 1e-5 tolerance.
         """
+        if device != "cpu":
+            raise ValueError(
+                f"Got device `{device}` for feature extraction, but feature extraction on CUDA accelerator "
+                "devices requires torch, which is not installed. Either set `device='cpu'`, or "
+                "install torch according to the official instructions: https://pytorch.org/get-started/locally/"
+            )
         log_spec_batch = []
         for waveform in waveform_batch:
             log_spec = spectrogram(
@@ -228,6 +234,9 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             do_normalize (`bool`, *optional*, defaults to `False`):
                 Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
                 improve the performance of the model.
+            device (`str`, *optional*, defaults to `'cpu'`):
+                Specifies the device for computation of the log-mel spectrogram of audio signals in the
+                `_torch_extract_fbank_features` method. (e.g., "cpu", "cuda")
         """
 
         if sampling_rate is not None:
