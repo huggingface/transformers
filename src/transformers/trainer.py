@@ -303,7 +303,7 @@ class Trainer:
              The dataset to use for evaluation. If it is a [`~datasets.Dataset`], columns not accepted by the
              `model.forward()` method are automatically removed. If it is a dictionary, it will evaluate on each
              dataset prepending the dictionary key to the metric name.
-        processor ([`PreTrainedTokenizerBase` or `BaseImageProcessor`], *optional*):
+        processor ([`PreTrainedTokenizer` or `BaseImageProcessor` or `SequenceFeatureExtractor` or `ProcessorMixin`], *optional*):
             The processor used to preprocess the data. Can be a tokenizer, image processor, feature extractor or multimodal processor.
 
             If a tokenizer is provided, it will be used to automatically pad the inputs to the
