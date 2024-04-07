@@ -687,7 +687,7 @@ class Trainer:
     @property
     def tokenizer(self):
         warnings.warn(
-            "The 'tokenizer' is deprecated and will be removed in a future version. Use `processor` instead",
+            "The 'tokenizer' attribute is deprecated and will be removed in a future version. Use `processor` instead",
             FutureWarning,
         )
         return self.processor
