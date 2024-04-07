@@ -309,7 +309,7 @@ class TrainerCallback:
 class CallbackHandler(TrainerCallback):
     """Internal class that just calls the list of callbacks in order."""
 
-    def __init__(self, callbacks, model, processor, optimizer, lr_scheduler, tokenizer):
+    def __init__(self, callbacks, model, processor, optimizer, lr_scheduler, tokenizer=None):
         if tokenizer is not None and not isinstance(tokenizer, PreTrainedTokenizerBase):
             warnings.warn(
                 "The `tokenizer` argument is deprecated and will be removed in v5 of Transformers. You can use `processor` "
