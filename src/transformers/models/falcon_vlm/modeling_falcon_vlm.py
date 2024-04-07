@@ -242,6 +242,7 @@ FALCON_VLM_INPUTS_DOCSTRING = r"""
     """The FalconVlm model which consists of a vision backbone and a language model.""",
     FALCON_VLM_START_DOCSTRING,
 )
+# Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration with LlavaNext->FalconVlm,llava_next->falcon_vlm
 class FalconVlmForConditionalGeneration(FalconVlmPreTrainedModel):
     # Ignore copy
     def __init__(self, config: FalconVlmConfig):
@@ -288,6 +289,15 @@ class FalconVlmForConditionalGeneration(FalconVlmPreTrainedModel):
     def tie_weights(self):
         return self.language_model.tie_weights()
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.resize_token_embeddings
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
+        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        # update vocab size
+        self.config.text_config.vocab_size = model_embeds.num_embeddings
+        self.vocab_size = model_embeds.num_embeddings
+        return model_embeds
+
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration._merge_input_ids_with_image_features
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
         num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
@@ -362,40 +372,6 @@ class FalconVlmForConditionalGeneration(FalconVlmPreTrainedModel):
             final_labels = None
 
         return final_embedding, final_attention_mask, final_labels, position_ids
-
-    def encode_images(self, images):
-        image_features = self.vision_tower(images, output_hidden_states=True).last_hidden_state[:, 1:]
-        image_features = self.mm_projector(image_features)
-        return image_features
-
-    def get_image_features(self, images):
-        concat_images = torch.cat(list(images), dim=0)
-
-        image_features = self.encode_images(concat_images)
-
-        split_sizes = [image.shape[0] for image in images]
-        image_features = torch.split(image_features, split_sizes, dim=0)
-        image_features = [x.flatten(0, 1) for x in image_features]
-        image_features = torch.stack(image_features, dim=0)
-
-        return image_features
-
-    def get_input_embeds(self, input_ids):
-        # Find the index of the image token
-        index_image_token = torch.nonzero(input_ids == self.config.image_token_index, as_tuple=False).squeeze()
-
-        # Create a mask to replace the 65024 value
-        mask = torch.ones_like(input_ids, dtype=torch.bool)
-        mask[:, index_image_token] = 0
-
-        # Replace the image token with the padding token
-        input_ids_with_padding_token = input_ids.clone()
-        input_ids_with_padding_token[~mask] = self.pad_token_id
-
-        # Get the input embeddings
-        input_embeddings = self.get_input_embeddings()(input_ids_with_padding_token)
-
-        return input_embeddings
 
     @add_start_docstrings_to_model_forward(FALCON_VLM_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=FalconVlmCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -581,6 +557,43 @@ class FalconVlmForConditionalGeneration(FalconVlmPreTrainedModel):
         )
         return model_inputs
 
-    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration._reorder_cache
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration._reorder_cache
     def _reorder_cache(self, *args, **kwargs):
         return self.language_model._reorder_cache(*args, **kwargs)
+
+    # Ignore copy
+    def encode_images(self, images):
+        image_features = self.vision_tower(images, output_hidden_states=True).last_hidden_state[:, 1:]
+        image_features = self.mm_projector(image_features)
+        return image_features
+
+    # Ignore copy
+    def get_image_features(self, images):
+        concat_images = torch.cat(list(images), dim=0)
+
+        image_features = self.encode_images(concat_images)
+
+        split_sizes = [image.shape[0] for image in images]
+        image_features = torch.split(image_features, split_sizes, dim=0)
+        image_features = [x.flatten(0, 1) for x in image_features]
+        image_features = torch.stack(image_features, dim=0)
+
+        return image_features
+
+    # Ignore copy
+    def get_input_embeds(self, input_ids):
+        # Find the index of the image token
+        index_image_token = torch.nonzero(input_ids == self.config.image_token_index, as_tuple=False).squeeze()
+
+        # Create a mask to replace the 65024 value
+        mask = torch.ones_like(input_ids, dtype=torch.bool)
+        mask[:, index_image_token] = 0
+
+        # Replace the image token with the padding token
+        input_ids_with_padding_token = input_ids.clone()
+        input_ids_with_padding_token[~mask] = self.pad_token_id
+
+        # Get the input embeddings
+        input_embeddings = self.get_input_embeddings()(input_ids_with_padding_token)
+
+        return input_embeddings
