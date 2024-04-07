@@ -278,24 +278,11 @@ class RecurrentGemmaRglru(nn.Module):
     """A Real-Gated Linear Recurrent Unit (RG-LRU) layer."""
 
     def __init__(self, config):
-        """Initializes the RG-LRU.
-
-        Args:
-          width: The number of dimensions of the input and output.
-          num_attention_heads: The number of diagonal blocks in the input and A gate layers.
-          w_init_variance_scale: Initialization parameter for the
-            RecurrentGemmaBlockDiagonalLinear layers of the gates. See the `RecurrentGemmaBlockDiagonalLinear`
-            layer for details.
-          device: On what device to initialize parameters. Needed to allow for
-            initializing the module without parameter initialization.
-          dtype: What dtype to use for initialization.
-        """
         super().__init__()
-        self.hidden_size = config.hidden_size
         self.num_attention_heads = config.num_attention_heads
-        self.block_width = self.hidden_size // self.num_attention_heads
+        self.block_width = config.lru_width // self.num_attention_heads
 
-        self.recurrent_param = nn.Parameter(torch.empty([self.hidden_size]))
+        self.recurrent_param = nn.Parameter(torch.empty([config.lru_width]))
         self.input_gate_weight = nn.Parameter(torch.empty([self.num_attention_heads, self.block_width, self.block_width]))
         self.input_gate_bias = nn.Parameter(torch.empty([self.num_attention_heads, self.block_width]))
 
@@ -307,17 +294,17 @@ class RecurrentGemmaRglru(nn.Module):
         activations: torch.Tensor,
         position_ids: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size, seq_len, hidden_size = activations.shape
+        batch_size, seq_len, lru_width = activations.shape
         reset = position_ids[:, :, None] == 0
 
         reshape_act = activations.reshape(batch_size * seq_len, self.num_attention_heads, self.block_width)
         reshape_act = reshape_act.permute(1, 0, 2)
 
         res = torch.baddbmm(self.input_gate_bias[:,None,:], reshape_act, self.input_gate_weight)
-        input_gate = torch.sigmoid(res.transpose(0, 1).reshape(batch_size, seq_len, hidden_size))
+        input_gate = torch.sigmoid(res.transpose(0, 1).reshape(batch_size, seq_len, lru_width))
 
         res = torch.baddbmm(self.recurrent_gate_bias[:,None,:], reshape_act, self.recurrent_gate_weight)
-        recurrent_gate = torch.sigmoid(res.transpose(0, 1).reshape(batch_size, seq_len, hidden_size))
+        recurrent_gate = torch.sigmoid(res.transpose(0, 1).reshape(batch_size, seq_len, lru_width))
 
 
         # Compute the parameter `A` of the recurrence.
@@ -355,8 +342,8 @@ class RecurrentGemmaRglru(nn.Module):
         """Runs the recurrence of a linear RNN.
 
         Args:
-        x: The input sequence.
-        a: The diagonal of the recurrence matrix `A`.
+        hidden_states: The input sequence.
+        recurrent_gate: The diagonal of the recurrence matrix `A`.
         reset: Indicator of document boundaries, e.g. when to reset the hidden state
             of the RNN.
         recurrent_states: The initial hidden state.
@@ -374,9 +361,8 @@ class RecurrentGemmaRglru(nn.Module):
                 return hidden_states, hidden_states[:, 0].type(acc_dtype)
 
             else:
-                contextualized_states = recurrent_gate.type(acc_dtype) * recurrent_states[
-                    :, None
-                ] + hidden_states.type(acc_dtype)
+                contextualized_states = recurrent_gate.type(acc_dtype) * recurrent_states[:, None]
+                contextualized_states += hidden_states.type(acc_dtype)
                 return contextualized_states.type(hidden_states.dtype), contextualized_states[:, -1]
 
         else:
@@ -388,9 +374,8 @@ class RecurrentGemmaRglru(nn.Module):
 
             contextualized_states = torch.zeros_like(hidden_states)
             for t in range(hidden_states.shape[1]):
-                recurrent_states = recurrent_gate[:, t].type(acc_dtype) * recurrent_states + hidden_states[:, t].type(
-                    acc_dtype
-                )
+                recurrent_states = recurrent_gate[:, t].type(acc_dtype) * recurrent_states
+                recurrent_states += hidden_states[:, t].type(acc_dtype)
                 contextualized_states[:, t] = recurrent_states.type(hidden_states.dtype)
 
         return contextualized_states, recurrent_states
@@ -431,8 +416,8 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         y_branch = self.act_fn(y_branch)
 
         x_branch = self.linear_x(input_states)
-
         x_branch = x_branch.transpose(1, 2)
+
         if use_cache:
             if cache_position.shape[0] != 1:  # prefill
                 conv_state = nn.functional.pad(x_branch, (self.conv1d_width - x_branch.shape[-1] - 1, 0))
@@ -572,9 +557,8 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
         for layer in self.layers:
             layer.temporal_block._setup_cache(batch, device, dtype)
 
-    # def reset_cache(self, batch, device, dtype):
-    #     for layer in self.layers:
-    #         layer.temporal_block.rest_cache(batch, device, dtype)
+    def reset_cache(self, batch, device, dtype):
+        pass
 
 
 RECURRENTGEMMA_INPUTS_DOCSTRING = r"""
@@ -741,7 +725,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        target_length = self.config.attention_window_size
+        target_length = max(self.config.attention_window_size, sequence_length)
 
         diagonal = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
         causal_mask = diagonal

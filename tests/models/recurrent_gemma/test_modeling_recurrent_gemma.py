@@ -291,16 +291,15 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     all_generative_model_classes = (RecurrentGemmaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            # "feature-extraction": RecurrentGemmaModel,
-            # "text-classification": RecurrentGemmaForSequenceClassification,
+            "feature-extraction": RecurrentGemmaModel,
             "text-generation": RecurrentGemmaForCausalLM,
-            # "zero-shot": RecurrentGemmaForSequenceClassification,
         }
         if is_torch_available()
         else {}
     )
     test_headmasking = False
     test_pruning = False
+    fx_compatible = True
 
     # Need to remove 0.9 in `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -331,209 +330,17 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # def test_RecurrentGemma_sequence_classification_model(self):
-    #     config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    #     config.num_labels = 3
-    #     input_ids = input_dict["input_ids"]
-    #     attention_mask = input_ids.ne(1).to(torch_device)
-    #     sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-    #     model = RecurrentGemmaForSequenceClassification(config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-    #     self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    # def test_RecurrentGemma_sequence_classification_model_for_single_label(self):
-    #     config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    #     config.num_labels = 3
-    #     config.problem_type = "single_label_classification"
-    #     input_ids = input_dict["input_ids"]
-    #     attention_mask = input_ids.ne(1).to(torch_device)
-    #     sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-    #     model = RecurrentGemmaForSequenceClassification(config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-    #     self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    # def test_RecurrentGemma_sequence_classification_model_for_multi_label(self):
-    #     config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    #     config.num_labels = 3
-    #     config.problem_type = "multi_label_classification"
-    #     input_ids = input_dict["input_ids"]
-    #     attention_mask = input_ids.ne(1).to(torch_device)
-    #     sequence_labels = ids_tensor(
-    #         [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
-    #     ).to(torch.float)
-    #     model = RecurrentGemmaForSequenceClassification(config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-    #     self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    @unittest.skip("TODO @gante fix this for Llama")
+    @unittest.skip("Rucurrent gemma does not use legacy cache")
     @parameterized.expand([(1, False), (1, True), (4, False)])
     def test_new_cache_format(self, num_beams, do_sample):
         pass
 
-    @unittest.skip("RecurrentGemma buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("RecurrentGemma uses GQA on all models so the KV cache is a non standard format")
+    @unittest.skip("RecurrentGemma does not return pkv")
     def test_past_key_values_format(self):
         pass
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_padding_right(self):
-        import torch
-
-        for model_class in self.all_generative_model_classes:
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
-                    torch_device
-                )
-
-                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [1, 1, 1, 0]]).to(torch_device)
-
-                model.generate(dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False)
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                with self.assertRaises(ValueError):
-                    _ = model.generate(
-                        dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
-                    )
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_use_cache(self):
-        import torch
-
-        max_new_tokens = 30
-
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
-
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # NOTE: RecurrentGemma apparently does not support right padding + use_cache with FA2.
-                dummy_attention_mask[:, -1] = 1
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                # Just test that a large cache works as expected
-                _ = model.generate(
-                    dummy_input,
-                    attention_mask=dummy_attention_mask,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    use_cache=True,
-                )
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_padding_right(self):
-        self.skipTest("RecurrentGemma flash attention does not support right padding")
-
-    @require_torch_sdpa
-    @require_torch_gpu
-    @slow
-    def test_sdpa_equivalence(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_sdpa:
-                return
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="sdpa"
-                )
-                model_sdpa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
-                model.to(torch_device)
-
-                dummy_input = inputs_dict[model_class.main_input_name]
-                dummy_input = dummy_input.to(torch_device)
-                outputs = model(dummy_input, output_hidden_states=True)
-                outputs_sdpa = model_sdpa(dummy_input, output_hidden_states=True)
-
-                logits = outputs.hidden_states[-1]
-                logits_sdpa = outputs_sdpa.hidden_states[-1]
-
-                # gemma sdpa needs a high tolerance
-                assert torch.allclose(logits_sdpa, logits, atol=3e-3)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_equivalence(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
-                return
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
-                model.to(torch_device)
-
-                dummy_input = inputs_dict[model_class.main_input_name]
-                dummy_input = dummy_input.to(torch_device)
-                outputs = model(dummy_input, output_hidden_states=True)
-                outputs_fa = model_fa(dummy_input, output_hidden_states=True)
-
-                logits = outputs.hidden_states[-1]
-                logits_fa = outputs_fa.hidden_states[-1]
-
-                # gemma flash attention 2 needs a high tolerance
-                assert torch.allclose(logits_fa, logits, atol=3e-3)
 
 
 @require_torch_gpu
