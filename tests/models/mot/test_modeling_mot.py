@@ -81,7 +81,7 @@ class MoTModelTester:
         type_sequence_label_size=2,
         initializer_range=0.02,
         num_labels=3,
-        num_choices=4
+        num_choices=4,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -173,8 +173,8 @@ class MoTModelTester:
             n_layer=self.num_hidden_layers,
             n_head=self.num_attention_heads,
             n_inner=self.intermediate_size,
-            group_size = self.group_size,
-            expert_size = self.expert_size,
+            group_size=self.group_size,
+            expert_size=self.expert_size,
             activation_function=self.hidden_act,
             resid_pdrop=self.hidden_dropout_prob,
             attn_pdrop=self.attention_probs_dropout_prob,
@@ -938,6 +938,7 @@ class MoTModelLanguageGenerationTest(unittest.TestCase):
                 "but said in a statement to The Associated Press that"
             ],
         )
+
 
 @require_torch
 class MoTMLPTest(unittest.TestCase):

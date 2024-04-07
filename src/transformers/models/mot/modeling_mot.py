@@ -64,7 +64,7 @@ MOT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 def with_batch_size_alignment(forward_fn):
     def _forward(self, x):
-        """ assumed ordering (batch, seq_len, dmodel) """
+        """assumed ordering (batch, seq_len, dmodel)"""
         size = x.size(self.sparsity_dim)
         if size % self.group_size != 0:
             if self.sparsity_dim == 1:
@@ -80,6 +80,7 @@ def with_batch_size_alignment(forward_fn):
                 return x[:size, :, :]
         else:
             return forward_fn(self, x)
+
     return _forward
 
 
@@ -363,13 +364,7 @@ class MoTAttention(nn.Module):
 
 
 class MoTMLP(nn.Module):
-    def __init__(
-            self,
-            inner_dim: int,
-            config: MoTConfig,
-            sparsity_dim: int = 0,
-            init_type: str = "kaiming_uniform"
-    ):
+    def __init__(self, inner_dim: int, config: MoTConfig, sparsity_dim: int = 0, init_type: str = "kaiming_uniform"):
         super().__init__()
 
         self.d_model: int = config.n_embd
@@ -387,11 +382,15 @@ class MoTMLP(nn.Module):
         self.emit_softmax_over_experts: bool = config.emit_softmax_over_experts
         self.use_discrete_routing: bool = config.use_discrete_routing
 
-        assert self.d_ff % self.group_size == 0, f"d_ff = {self.d_ff} should be divisible by group size = {self.group_size}"
+        assert (
+            self.d_ff % self.group_size == 0
+        ), f"d_ff = {self.d_ff} should be divisible by group size = {self.group_size}"
         self.d_ff *= self.group_size
 
         if self.expert_size is None:
-            assert self.d_ff % self.n_experts == 0, f"dff = {self.d_ff} is not divisible by n_experts = {self.n_experts}"
+            assert (
+                self.d_ff % self.n_experts == 0
+            ), f"dff = {self.d_ff} is not divisible by n_experts = {self.n_experts}"
             self.expert_size = self.d_ff // self.n_experts
 
         self.lin1 = nn.Parameter(
@@ -434,13 +433,9 @@ class MoTMLP(nn.Module):
 
     def get_init_weight(self, shape, fan_in, init_type, scale, dtype=torch.float32):
         if init_type == "kaiming_uniform":
-            return self.init_kaiming_uniform(
-                shape=shape, fan_in=fan_in, scale=scale, dtype=dtype
-            )
+            return self.init_kaiming_uniform(shape=shape, fan_in=fan_in, scale=scale, dtype=dtype)
         elif init_type == "truncated_normal":
-            return self.init_truncated_normal(
-                shape=shape, fan_in=fan_in, scale=scale, dtype=dtype
-            )
+            return self.init_truncated_normal(shape=shape, fan_in=fan_in, scale=scale, dtype=dtype)
         else:
             raise ValueError(f"Unknown init_type: {init_type}")
 
@@ -497,7 +492,9 @@ class MoTMLP(nn.Module):
         :return: x of shape (free_dimension, split_dimension // group_size, group_size , dmodel)
         """
         assert len(x.shape) == 3, "incorrect shape of a tensor, expected a 3D tensor"
-        assert x.size(-1) == self.d_model, f"expected the last dimension of input tensor to be d_model = {self.d_model}"
+        assert (
+            x.size(-1) == self.d_model
+        ), f"expected the last dimension of input tensor to be d_model = {self.d_model}"
 
         if self.sparsity_dim == 0:
             x = x.transpose(0, 1)
@@ -505,7 +502,9 @@ class MoTMLP(nn.Module):
             raise NotImplementedError
 
         free_dimension = x.size(1)
-        assert free_dimension % self.group_size == 0, f"free dimension = {free_dimension} should be divisible by group size = {self.group_size}"
+        assert (
+            free_dimension % self.group_size == 0
+        ), f"free dimension = {free_dimension} should be divisible by group size = {self.group_size}"
 
         x = x.view(x.size(0), -1, self.group_size, self.d_model)
         return x
@@ -542,15 +541,11 @@ class MoTMLP(nn.Module):
         merge_softmax_dim = -2
         emit_softmax_dim = -1 if self.emit_softmax_over_experts else -2
 
-        merge_weights = self.stable_softmax_temperature(
-            merge_logits, temp_merge, dim=merge_softmax_dim
-        )
+        merge_weights = self.stable_softmax_temperature(merge_logits, temp_merge, dim=merge_softmax_dim)
 
         # by default we use the same weights for emitting and merging, but if the temperature is learnable or we want to take softmax over experts for emitting, we will use different weights
         if isinstance(temp_merge, torch.nn.Parameter) or self.emit_softmax_over_experts:
-            emit_weights = self.stable_softmax_temperature(
-                merge_logits, temp_emit, dim=emit_softmax_dim
-            )
+            emit_weights = self.stable_softmax_temperature(merge_logits, temp_emit, dim=emit_softmax_dim)
         else:
             emit_weights = merge_weights
 
