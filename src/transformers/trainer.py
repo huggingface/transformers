@@ -4067,7 +4067,7 @@ class Trainer:
             logger.info("Waiting for the current checkpoint push to be finished, this might take a couple of minutes.")
             self.push_in_progress.wait_until_done()
 
-    def push_to_hub(self, commit_message: Optional[str] = "End of training", blocking: bool = True, **kwargs) -> str:
+    def push_to_hub(self, commit_message: Optional[str] = "End of training", blocking: bool = True, token: Optional[str] = None, **kwargs) -> str:
         """
         Upload `self.model` and `self.tokenizer` or `self.image_processor` to the 🤗 model hub on the repo `self.args.hub_model_id`.
 
@@ -4076,6 +4076,8 @@ class Trainer:
                 Message to commit while pushing.
             blocking (`bool`, *optional*, defaults to `True`):
                 Whether the function should return only when the `git push` has finished.
+            token (`str`, *optional*, defaults to `None`):
+                Token with write permission to overwrite Trainer's original args.
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to [`~Trainer.create_model_card`].
 
@@ -4089,6 +4091,8 @@ class Trainer:
                 model_name = Path(self.args.output_dir).name
             else:
                 model_name = self.args.hub_model_id.split("/")[-1]
+        if token is not None:
+            self.args.hub_token = token
 
         # In case the user calls this method with args.push_to_hub = False
         if self.hub_model_id is None:
