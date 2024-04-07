@@ -132,7 +132,6 @@ class FalconVlmPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["FalconVlmVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
-    # Ignore copy
     _supports_flash_attn_2 = True
 
     def _init_weights(self, module):
@@ -289,162 +288,114 @@ class FalconVlmForConditionalGeneration(FalconVlmPreTrainedModel):
     def tie_weights(self):
         return self.language_model.tie_weights()
 
+    def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
+        num_images, num_image_patches, embed_dim = image_features.shape
+        batch_size, sequence_length = input_ids.shape
+        left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
+        # 1. Create a mask to know where special image tokens are
+        special_image_token_mask = input_ids == self.config.image_token_index
+        num_special_image_tokens = torch.sum(special_image_token_mask, dim=-1)
+        # Compute the maximum embed dimension
+        max_embed_dim = (num_special_image_tokens.max() * (num_image_patches - 1)) + sequence_length
+        batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
+
+        # 2. Compute the positions where text should be written
+        # Calculate new positions for text tokens in merged image-text sequence.
+        # `special_image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images - 1` text tokens.
+        # `torch.cumsum` computes how each image token shifts subsequent text token positions.
+        # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
+        new_token_positions = torch.cumsum((special_image_token_mask * (num_image_patches - 1) + 1), -1) - 1
+        nb_image_pad = max_embed_dim - 1 - new_token_positions[:, -1]
+        if left_padding:
+            new_token_positions += nb_image_pad[:, None]  # offset for left padding
+        text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
+
+        # 3. Create the full embedding, already padded to the maximum position
+        final_embedding = torch.zeros(
+            batch_size, max_embed_dim, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
+        )
+        final_attention_mask = torch.zeros(
+            batch_size, max_embed_dim, dtype=attention_mask.dtype, device=inputs_embeds.device
+        )
+        if labels is not None:
+            final_labels = torch.full(
+                (batch_size, max_embed_dim), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
+            )
+        # In case the Vision model or the Language model has been offloaded to CPU, we need to manually
+        # set the corresponding tensors into their correct target device.
+        target_device = inputs_embeds.device
+        batch_indices, non_image_indices, text_to_overwrite = (
+            batch_indices.to(target_device),
+            non_image_indices.to(target_device),
+            text_to_overwrite.to(target_device),
+        )
+        attention_mask = attention_mask.to(target_device)
+
+        # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
+        # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
+        final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
+        final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
+        if labels is not None:
+            final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
+
+        # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
+        image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
+        image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
+
+        if image_to_overwrite.sum() != image_features.shape[:-1].numel():
+            raise ValueError(
+                f"The input provided to the model are wrong. The number of image tokens is {torch.sum(special_image_token_mask)} while"
+                f" the number of image given to the model is {num_images}. This prevents correct indexing and breaks batch generation."
+            )
+
+        final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
+        final_attention_mask |= image_to_overwrite
+        position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
+
+        # 6. Mask out the embedding at padding positions, as we later use the past_key_value value to determine the non-attended tokens.
+        batch_indices, pad_indices = torch.where(input_ids == self.pad_token_id)
+        indices_to_mask = new_token_positions[batch_indices, pad_indices]
+
+        final_embedding[batch_indices, indices_to_mask] = 0
+
+        if labels is None:
+            final_labels = None
+
+        return final_embedding, final_attention_mask, final_labels, position_ids
+
     def encode_images(self, images):
         image_features = self.vision_tower(images, output_hidden_states=True).last_hidden_state[:, 1:]
         image_features = self.mm_projector(image_features)
         return image_features
 
-    def prepare_inputs_labels_for_multimodal(self, input_ids, position_ids, attention_mask, labels, images):
+    def get_image_features(self, images):
         concat_images = torch.cat(list(images), dim=0)
 
         image_features = self.encode_images(concat_images)
+
         split_sizes = [image.shape[0] for image in images]
         image_features = torch.split(image_features, split_sizes, dim=0)
         image_features = [x.flatten(0, 1) for x in image_features]
+        image_features = torch.stack(image_features, dim=0)
 
-        _labels = labels
-        _position_ids = position_ids
-        _attention_mask = attention_mask
-        if attention_mask is None:
-            attention_mask = torch.ones_like(input_ids, dtype=torch.bool)
-        else:
-            attention_mask = attention_mask.bool()
-        if position_ids is None:
-            position_ids = torch.arange(0, input_ids.shape[1], dtype=torch.long, device=input_ids.device)
-        if labels is None:
-            labels = torch.full_like(input_ids, self.config.ignore_index)
+        return image_features
 
-        _input_ids = input_ids
-        input_ids = [
-            cur_input_ids[cur_attention_mask] for cur_input_ids, cur_attention_mask in zip(input_ids, attention_mask)
-        ]
-        labels = [cur_labels[cur_attention_mask] for cur_labels, cur_attention_mask in zip(labels, attention_mask)]
+    def get_input_embeds(self, input_ids):
+        # Find the index of the image token
+        index_image_token = torch.nonzero(input_ids == self.config.image_token_index, as_tuple=False).squeeze()
 
-        new_input_embeds = []
-        new_labels = []
-        cur_image_idx = 0
-        for batch_idx, cur_input_ids in enumerate(input_ids):
-            num_images = (cur_input_ids == self.config.image_token_index).sum()
-            if num_images == 0:
-                cur_image_features = image_features[cur_image_idx]
-                cur_input_embeds_1 = self.language_model.transformer.word_embeddings(cur_input_ids)
-                cur_input_embeds = torch.cat([cur_input_embeds_1, cur_image_features[0:0]], dim=0)
-                new_input_embeds.append(cur_input_embeds)
-                new_labels.append(labels[batch_idx])
-                cur_image_idx += 1
-                continue
+        # Create a mask to replace the 65024 value
+        mask = torch.ones_like(input_ids, dtype=torch.bool)
+        mask[:, index_image_token] = 0
 
-            image_token_indices = (
-                [-1]
-                + torch.where(cur_input_ids == self.config.image_token_index)[0].tolist()
-                + [cur_input_ids.shape[0]]
-            )
-            cur_input_ids_noim = []
-            cur_labels = labels[batch_idx]
-            cur_labels_noim = []
-            for i in range(len(image_token_indices) - 1):
-                cur_input_ids_noim.append(cur_input_ids[image_token_indices[i] + 1 : image_token_indices[i + 1]])
-                cur_labels_noim.append(cur_labels[image_token_indices[i] + 1 : image_token_indices[i + 1]])
-            split_sizes = [x.shape[0] for x in cur_labels_noim]
-            cur_input_embeds = self.language_model.transformer.word_embeddings(torch.cat(cur_input_ids_noim))
-            cur_input_embeds_no_im = torch.split(cur_input_embeds, split_sizes, dim=0)
-            cur_new_input_embeds = []
-            cur_new_labels = []
+        # Replace the image token with the padding token
+        input_ids_with_padding_token = input_ids.clone()
+        input_ids_with_padding_token[~mask] = self.pad_token_id
 
-            for i in range(num_images + 1):
-                cur_new_input_embeds.append(cur_input_embeds_no_im[i])
-                cur_new_labels.append(cur_labels_noim[i])
-                if i < num_images:
-                    cur_image_features = image_features[cur_image_idx]
-                    cur_image_idx += 1
-                    cur_new_input_embeds.append(cur_image_features)
-                    cur_new_labels.append(
-                        torch.full(
-                            (cur_image_features.shape[0],),
-                            self.config.ignore_index,
-                            device=cur_labels.device,
-                            dtype=cur_labels.dtype,
-                        )
-                    )
+        # Get the input embeddings
+        input_embeddings = self.get_input_embeddings()(input_ids_with_padding_token)
 
-            cur_new_input_embeds = [x.to(self.device) for x in cur_new_input_embeds]
-
-            cur_new_input_embeds = torch.cat(cur_new_input_embeds)
-            cur_new_labels = torch.cat(cur_new_labels)
-
-            new_input_embeds.append(cur_new_input_embeds)
-            new_labels.append(cur_new_labels)
-
-        # Combine them
-        max_len = max(x.shape[0] for x in new_input_embeds)
-        batch_size = len(new_input_embeds)
-
-        new_input_embeds_padded = []
-        new_labels_padded = torch.full(
-            (batch_size, max_len), self.config.ignore_index, dtype=new_labels[0].dtype, device=new_labels[0].device
-        )
-        attention_mask = torch.zeros((batch_size, max_len), dtype=attention_mask.dtype, device=attention_mask.device)
-        position_ids = torch.zeros((batch_size, max_len), dtype=position_ids.dtype, device=position_ids.device)
-
-        for i, (cur_new_embed, cur_new_labels) in enumerate(zip(new_input_embeds, new_labels)):
-            cur_len = cur_new_embed.shape[0]
-            if getattr(self.config, "tokenizer_padding_side", "right") == "left":
-                new_input_embeds_padded.append(
-                    torch.cat(
-                        (
-                            torch.zeros(
-                                (max_len - cur_len, cur_new_embed.shape[1]),
-                                dtype=cur_new_embed.dtype,
-                                device=cur_new_embed.device,
-                            ),
-                            cur_new_embed,
-                        ),
-                        dim=0,
-                    )
-                )
-                if cur_len > 0:
-                    new_labels_padded[i, -cur_len:] = cur_new_labels
-                    attention_mask[i, -cur_len:] = True
-                    position_ids[i, -cur_len:] = torch.arange(
-                        0, cur_len, dtype=position_ids.dtype, device=position_ids.device
-                    )
-            else:
-                new_input_embeds_padded.append(
-                    torch.cat(
-                        (
-                            cur_new_embed,
-                            torch.zeros(
-                                (max_len - cur_len, cur_new_embed.shape[1]),
-                                dtype=cur_new_embed.dtype,
-                                device=cur_new_embed.device,
-                            ),
-                        ),
-                        dim=0,
-                    )
-                )
-                if cur_len > 0:
-                    new_labels_padded[i, :cur_len] = cur_new_labels
-                    attention_mask[i, :cur_len] = True
-                    position_ids[i, :cur_len] = torch.arange(
-                        0, cur_len, dtype=position_ids.dtype, device=position_ids.device
-                    )
-
-        new_input_embeds = torch.stack(new_input_embeds_padded, dim=0)
-
-        if _labels is None:
-            new_labels = None
-        else:
-            new_labels = new_labels_padded
-
-        if _attention_mask is None:
-            attention_mask = None
-        else:
-            attention_mask = attention_mask.to(dtype=_attention_mask.dtype)
-
-        if _position_ids is None:
-            position_ids = None
-
-        return None, position_ids, attention_mask, new_input_embeds, new_labels
+        return input_embeddings
 
     @add_start_docstrings_to_model_forward(FALCON_VLM_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=FalconVlmCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -483,17 +434,19 @@ class FalconVlmForConditionalGeneration(FalconVlmPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if inputs_embeds is None:
-            # 1. Merge text and images
+            # 1. Get input emebeddings
+            inputs_embeds = self.get_input_embeds(input_ids)
+
             if pixel_values is not None and input_ids.shape[1] != 1:
-                (
-                    input_ids,
-                    position_ids,
-                    attention_mask,
-                    inputs_embeds,
-                    labels,
-                ) = self.prepare_inputs_labels_for_multimodal(
-                    input_ids, position_ids, attention_mask, labels, pixel_values
+                # 2. Get image features
+                image_features = self.get_image_features(pixel_values)
+
+                # 3. Merge text and images embeddings
+                inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
+                    image_features, inputs_embeds, input_ids, attention_mask, labels
                 )
+                if labels is None:
+                    labels = torch.full_like(attention_mask, self.config.ignore_index).to(torch.long)
 
             # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
             # generation with cache
@@ -528,7 +481,6 @@ class FalconVlmForConditionalGeneration(FalconVlmPreTrainedModel):
                 position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
         outputs = self.language_model(
-            input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
