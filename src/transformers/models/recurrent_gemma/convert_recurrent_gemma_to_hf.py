@@ -111,16 +111,16 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
             state_dict[key.replace("up_proj", "gate_proj")] = v[0, 0, 0].clone()
             v = v[1, 0, 0].contiguous()
         if "recurrent_gate.bias" in key:
-            state_dict[key.replace("gate.","gate_")] = v.contiguous().clone()
+            state_dict[key.replace("gate.", "gate_")] = v.contiguous().clone()
         elif "recurrent_gate.weight" in key:
-            state_dict[key.replace("gate.","gate_")] = v.contiguous().clone()
+            state_dict[key.replace("gate.", "gate_")] = v.contiguous().clone()
         elif "input_gate.b" in key:
-            state_dict[key.replace("gate.","gate_")] = v.contiguous().clone()
+            state_dict[key.replace("gate.", "gate_")] = v.contiguous().clone()
         elif "input_gate.w" in key:
-            state_dict[key.replace("gate.","gate_")] = v.contiguous().clone()
+            state_dict[key.replace("gate.", "gate_")] = v.contiguous().clone()
         elif "embed_tokens" in key:
-            state_dict[key] = v[:config.vocab_size,:].contiguous().clone()
-            state_dict["lm_head.weight"] = v[:config.vocab_size, :].contiguous().clone()
+            state_dict[key] = v[: config.vocab_size, :].contiguous().clone()
+            state_dict["lm_head.weight"] = v[: config.vocab_size, :].contiguous().clone()
         else:
             state_dict[key] = v.contiguous()
 

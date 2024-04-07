@@ -364,13 +364,6 @@ else:
             ("rag", ("RagTokenizer", None)),
             ("realm", ("RealmTokenizer", "RealmTokenizerFast" if is_tokenizers_available() else None)),
             (
-                "recurrent-gemma",
-                (
-                    "GemmaTokenizer" if is_sentencepiece_available() else None,
-                    "GemmaTokenizerFast" if is_tokenizers_available() else None,
-                ),
-            ),
-            (
                 "recurrent_gemma",
                 (
                     "GemmaTokenizer" if is_sentencepiece_available() else None,

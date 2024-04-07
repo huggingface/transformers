@@ -21,12 +21,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
-_PATTERN = ("recurrent", "recurrent", "attention")
-
-
 class RecurrentGemmaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RecurrentGemmaModel`]. It is used to instantiate an RecurrentGemma
@@ -125,6 +119,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
         attention_dropout=0.0,
         num_key_value_heads=None,
         attention_bias=False,
+        w_init_variance_scale=0.01,
         **kwargs,
     ):
         self.num_hidden_layers = num_hidden_layers
@@ -145,11 +140,12 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.hidden_activation = hidden_activation
         self.head_dim = self.hidden_size // self.num_attention_heads
         self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else num_attention_heads
-        if self.num_key_value_heads < self.num_attention_heads:
+        if self.num_key_value_heads > self.num_attention_heads:
             raise ValueError("The number of `num_key_value_heads` must be smaller than `num_attention_heads`")
         self.attention_dropout = attention_dropout
         self.attention_bias = attention_bias
 
+        self.final_w_init_variance_scale = 2.0 / self.num_hidden_layers
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

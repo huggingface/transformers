@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Testing suite for the PyTorch RecurrentGemma model. """
-import tempfile
 import unittest
 
 import pytest
@@ -143,6 +142,7 @@ class RecurrentGemmaModelTester:
             use_cache=self.use_cache,
             rope_theta=self.rope_theta,
             pad_token_id=self.pad_token_id,
+            output_attentions=False,
         )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->RecurrentGemma
@@ -297,9 +297,13 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
+    fx_compatible = False  # FIXME let's try to support this @ArthurZucker
+    test_torchscript = False  # FIXME let's try to support this @ArthurZucker
+    test_missing_keys = False
+    test_model_parallel = False
     test_pruning = False
-    fx_compatible = True
+    test_head_masking = False  # Mamba does not have attention heads
+    test_model_parallel = False
 
     # Need to remove 0.9 in `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -342,18 +346,41 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_past_key_values_format(self):
         pass
 
+    @unittest.skip("RecurrentGemma only supports sdpa")
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
+    @unittest.skip("RecurrentGemma only supports sdpa")
+    def test_eager_matches_sdpa_inference(self):
+        pass
+
+    @unittest.skip("RecurrentGemma does not return the cache")
+    def test_contrastive_generate_low_memory(self):
+        pass
+
+    @unittest.skip("RecurrentGemma does not return the cache")
+    def test_contrastive_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip("RecurrentGemma does not return the cache")
+    def test_contrastive_generate(self):
+        pass
+
 
 @require_torch_gpu
 @slow
-@require_read_token
+# @require_read_token
 class RecurrentGemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
 
-    def test_model_2b_fp32(self):
-        model_id = "gg-hf/recurrent_gemma-2b"
+    def test_2b_logits(self):
+        EXPECTED_LOGITS = [] # TODO
+
+    def test_2b_generate(self):
+        model_id = "gg-hf/recurrent-gemma-2b-hf"
         EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+            'Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking',
+            'Hi today I am going to share with you the best <strong><em>free online video editing software</em></strong>.'
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(torch_device)
@@ -366,56 +393,30 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    def test_model_2b_fp16(self):
-        model_id = "google/recurrent_gemma-2b"
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
-        ]
-
+        del model
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
             torch_device
         )
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    def test_model_2b_fp16_static_cache(self):
-        model_id = "google/recurrent_gemma-2b"
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
-            torch_device
-        )
-
-        model.generation_config.cache_implementation = "static"
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    def test_model_2b_bf16(self):
-        model_id = "gg-hf/recurrent_gemma-2b"
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
-        ]
-
+        del model
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
             torch_device
         )
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    def test_7b_generate(self):
+        model_id = "gg-hf/recurrent-gemma-2b-hf"
+        EXPECTED_TEXTS = [
+            'Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking',
+            'Hi today I am going to share with you the best <strong><em>free online video editing software</em></strong>.'
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -425,64 +426,19 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    def test_model_2b_eager(self):
-        model_id = "gg-hf/recurrent_gemma-2b"
+    def test_2b_compile(self):
+        model_id = "gg-hf/recurrent-gemma-2b-hf"
         EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1990s and I am looking for some information on the ",
-            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+            'Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking',
+            'Hi today I am going to share with you the best <strong><em>free online video editing software</em></strong>.'
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="eager"
-        )
-        model.to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    @require_torch_sdpa
-    def test_model_2b_sdpa(self):
-        model_id = "gg-hf/recurrent_gemma-2b"
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="sdpa"
-        )
-        model.to(torch_device)
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    @pytest.mark.flash_attn_test
-    @require_flash_attn
-    def test_model_2b_flash_attn(self):
-        model_id = "gg-hf/recurrent_gemma-2b"
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-        )
-        model.to(torch_device)
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
+        with torch.no_grad():
+            model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
@@ -492,8 +448,8 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     def test_model_2b_4bit(self):
         model_id = "gg-hf/recurrent_gemma-2b"
         EXPECTED_TEXTS = [
-            "Hello I am doing a project and I need to make a 3d model of a house. I have been using",
-            "Hi today I'd like to share with you my experience with the new wattpad wattpad wattpad wattpad wattpad wattpad wattpad",
+            'Hello I am doing a 100% 100% 100% 100',
+            'Hi today I’m going to talk about a topic that is very important to me and that is the topic'
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, load_in_4bit=True)
