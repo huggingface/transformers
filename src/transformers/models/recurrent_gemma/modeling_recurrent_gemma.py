@@ -302,7 +302,7 @@ class RecurrentGemmaRglru(nn.Module):
         self.recurrent_gate_weight = nn.Parameter(torch.empty([self.num_attention_heads, self.block_width, self.block_width]))
         self.recurrent_gate_bias = nn.Parameter(torch.empty([self.num_attention_heads, self.block_width]))
 
-    def __call__(
+    def forward(
         self,
         activations: torch.Tensor,
         position_ids: torch.Tensor,
