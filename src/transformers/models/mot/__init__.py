@@ -70,8 +70,8 @@ if TYPE_CHECKING:
             MoTForSequenceClassification,
             MoTForTokenClassification,
             MoTLMHeadModel,
-            MoTModel,
             MoTMLP,
+            MoTModel,
             MoTPreTrainedModel,
             load_tf_weights_in_mot,
         )

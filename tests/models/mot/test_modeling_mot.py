@@ -16,22 +16,26 @@
 
 import datetime
 import gc
-import math
-import unittest
-import tempfile
 import itertools
+import math
+import tempfile
+import unittest
 
-from transformers import MoTConfig, is_torch_available
-from transformers.testing_utils import backend_empty_cache, require_torch, slow, torch_device
+from transformers import AutoModelForSequenceClassification, MoTConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
-from transformers import AutoModelForSequenceClassification
-from transformers.testing_utils import CaptureLogger
+from transformers.testing_utils import CaptureLogger, backend_empty_cache, require_torch, slow, torch_device
 from transformers.utils import logging
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask, _config_zero_init
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    _config_zero_init,
+    floats_tensor,
+    ids_tensor,
+    random_attention_mask,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -46,8 +50,8 @@ if is_torch_available():
         MoTForSequenceClassification,
         MoTForTokenClassification,
         MoTLMHeadModel,
-        MoTModel,
         MoTMLP,
+        MoTModel,
     )
 
 
