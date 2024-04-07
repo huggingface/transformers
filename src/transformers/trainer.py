@@ -504,7 +504,7 @@ class Trainer:
             self.place_model_on_device = False
 
         default_collator = (
-            DataCollatorWithPadding(tokenizer)
+            DataCollatorWithPadding(processor)
             if processor is not None and isinstance(processor, PreTrainedTokenizerBase)
             else default_data_collator
         )
