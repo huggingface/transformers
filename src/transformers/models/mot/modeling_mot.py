@@ -365,6 +365,7 @@ class MoTAttention(nn.Module):
 class MoTMLP(nn.Module):
     def __init__(
             self,
+            inner_dim: int,
             config: MoTConfig,
             sparsity_dim: int = 0,
             init_type: str = "kaiming_uniform"
@@ -372,7 +373,7 @@ class MoTMLP(nn.Module):
         super().__init__()
 
         self.d_model: int = config.n_embd
-        self.d_ff: int = config.n_inner
+        self.d_ff: int = config.n_inner if inner_dim is None else inner_dim
         self.n_experts: int = config.n_head
         self.group_size: int = config.group_size
         self.sparsity_dim: int = sparsity_dim
@@ -592,6 +593,7 @@ class MoTBlock(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         hidden_size = config.hidden_size
+        inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.attn = MoTAttention(config, layer_idx=layer_idx)
@@ -601,7 +603,7 @@ class MoTBlock(nn.Module):
             self.crossattention = MoTAttention(config, is_cross_attention=True, layer_idx=layer_idx)
             self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
-        self.mlp = MoTMLP(config)
+        self.mlp = MoTMLP(inner_dim, config)
 
     def forward(
         self,

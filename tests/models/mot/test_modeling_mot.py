@@ -958,7 +958,7 @@ class MoTMLPTest(unittest.TestCase):
                 config.group_size = group_size
                 config.n_inner = group_size * config.n_head
 
-                model = MoTMLP(config=config)
+                model = MoTMLP(config.n_inner, config=config)
                 model.to(torch_device)
                 model.eval()
 
