@@ -72,7 +72,6 @@ class Idefics2VisionText2TextModelTester:
             "resampler_n_heads": 2,
             "num_key_value_heads": 1,
             "resampler_head_dim": 12,
-            "qk_layer_norms": False,
             "attention_dropout": 0.0,
         },
         text_config={

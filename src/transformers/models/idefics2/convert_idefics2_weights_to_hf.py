@@ -111,7 +111,6 @@ def get_config(checkpoint):
             eos_token_id=config.eos_token_id,
         )
         perceiver_config = config.perceiver_config.to_dict()
-        perceiver_config["qk_layer_norms"] = perceiver_config.pop("qk_layer_norms_perceiver", False)
         config = Idefics2Config(
             text_config=text_config.to_dict(),
             vision_config=config.vision_config,
