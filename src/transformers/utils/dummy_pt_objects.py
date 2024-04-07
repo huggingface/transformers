@@ -5630,6 +5630,13 @@ class MoTLMHeadModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MoTMLP(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MoTModel(metaclass=DummyObject):
     _backends = ["torch"]
 

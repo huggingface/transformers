@@ -59,8 +59,7 @@ class MoTConfig(PretrainedConfig):
             Dimensionality of the inner feed-forward layers. `None` will set it to 4 times n_embd
         group_size (`int`, *optional*, defaults to 32):
             The number of tokens per expert.
-        temperature (`float`, *optional*, defaults to 1.0):
-            The temperature for the softmax over experts.
+        expert_size (`<fill_type>`, *optional*): <fill_docstring>
         init_scale (`float`, *optional*, defaults to 1.0):
             # TODO: Add description
         activation_function (`str`, *optional*, defaults to `"gelu_new"`):
