@@ -132,6 +132,7 @@ class VitDetEmbeddings(nn.Module):
 
         return embeddings
 
+
 @torch.jit.script_if_tracing  # nn.functional.interpolate's `size` needs to be dynamic.
 def get_rel_pos(q_size, k_size, rel_pos):
     """
@@ -406,7 +407,10 @@ def window_partition(hidden_state, window_size):
 
     pad_height = (window_size - height % window_size) % window_size
     pad_width = (window_size - width % window_size) % window_size
-    hidden_state = nn.functional.pad(hidden_state, (0, 0, 0, pad_width, 0, pad_height))  # Noop in case pad_width == 0 and pad_height == 0.
+
+    # Noop in case pad_width == 0 and pad_height == 0.
+    hidden_state = nn.functional.pad(hidden_state, (0, 0, 0, pad_width, 0, pad_height))
+
     padded_height, padded_width = height + pad_height, width + pad_width
 
     hidden_state = hidden_state.view(
@@ -439,7 +443,8 @@ def window_unpartition(windows, window_size, pad_height_width, height_width):
     hidden_state = windows.view(
         batch_size, padded_height // window_size, padded_width // window_size, window_size, window_size, -1
     )
-    hidden_state = hidden_state.permute(0, 1, 3, 2, 4, 5).contiguous().view(batch_size, padded_height, padded_width, -1)
+    hidden_state = hidden_state.permute(0, 1, 3, 2, 4, 5).contiguous()
+    hidden_state = hidden_state.view(batch_size, padded_height, padded_width, -1)
 
     # We always have height <= padded_height and width <= padded_width
     hidden_state = hidden_state[:, :height, :width, :].contiguous()
