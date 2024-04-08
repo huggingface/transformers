@@ -88,15 +88,14 @@ class GenerationTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict[self.input_name]
 
-        sequence_length = input_ids.shape[-1]
-        input_ids = input_ids[:batch_size, :sequence_length]
+        input_ids = input_ids[:batch_size]
 
         if config.eos_token_id is not None and config.pad_token_id is None:
             # hack to allow generate for models such as GPT2 as is done in `generate()`
             if isinstance(config.eos_token_id, int):
                 config.eos_token_id = [config.eos_token_id]
             config.pad_token_id = config.eos_token_id[0]
-        attention_mask = torch.ones_like(input_ids, dtype=torch.long)[:batch_size, :sequence_length]
+        attention_mask = torch.ones_like(input_ids, dtype=torch.long)
 
         # It is important set set the eos_token_id to None to ensure that no sequences
         # shorter than `max_length` can be generated
