@@ -555,6 +555,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 patches_lengths = torch.argmax(mask.to(torch.int), dim=1)
                 img_idcs_with_no_pad = ~mask.any(dim=1) 
                 patches_lengths[img_idcs_with_no_pad] = max_num_patches
+                print("these are the patches lengths: ", patches_lengths)
 
                 # Each image in pixel_values is a 336x336 image
                 # We need to remove the images which are just padded tokens
@@ -569,7 +570,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 unpadded_pixel_values = torch.cat(unpadded_pixel_values, dim=0)
                 # Use the mask to index the original tensor, filtering out the rows with pad_token
 
-                reshaped_pixel_values = pixel_values.view(batch_size * total_patches, num_channels, height, width)
+                reshaped_pixel_values = unpadded_pixel_values.view(batch_size * total_patches, num_channels, height, width)
                 image_features = self.vision_tower(reshaped_pixel_values, output_hidden_states=True)
 
                 selected_image_feature = image_features.hidden_states[vision_feature_layer]
