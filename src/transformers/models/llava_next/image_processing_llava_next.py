@@ -612,7 +612,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         self,
         pixel_values: List,  # list of np.array(PIL.Image) objects ; list(num_patches, num_channels, image_height, image_width)
         max_num_patches: Optional[int] = None,
-        pad_token_id: int = 0, 
+        pad_token_id: int = 32001, 
     ) -> torch.FloatTensor:
         """
         Args:
