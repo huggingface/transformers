@@ -587,7 +587,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 # split up image_features for each of the individual images
                 # hence we get a list of image_features, each of shape (5, num_patches, hidden_size)
                 # if we assume each image has 5 image features (base image + 4 patches)
-                image_features = torch.split(image_features, patches_lengths, dim=0)
+                image_features = torch.split(image_features, patches_lengths.to(torch.int).tolist(), dim=0)
 
                 # NOTE we only support multimodal_patch_merge_type == "spatial_unpad"
                 height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
