@@ -59,6 +59,7 @@ from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
+from .image_processing_utils import BaseImageProcessor
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
@@ -303,6 +304,9 @@ class Trainer:
             The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs to the
             maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
             interrupted training or reuse the fine-tuned model.
+        image_processor ([`BaseImageProcessor`], *optional*):
+            The image processor used to preprocess the data. If provided, it will be saved along the model to make it easier
+            to rerun an interrupted training or reuse the fine-tuned model.
         model_init (`Callable[[], PreTrainedModel]`, *optional*):
             A function that instantiates the model to be used. If provided, each call to [`~Trainer.train`] will start
             from a new instance of the model as given by this function.
@@ -357,6 +361,7 @@ class Trainer:
         train_dataset: Optional[Union[Dataset, IterableDataset]] = None,
         eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
+        image_processor: Optional["BaseImageProcessor"] = None,
         model_init: Optional[Callable[[], PreTrainedModel]] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         callbacks: Optional[List[TrainerCallback]] = None,
@@ -485,11 +490,12 @@ class Trainer:
         ):
             self.place_model_on_device = False
 
-        default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
+        default_collator = DataCollatorWithPadding(tokenizer) if tokenizer is not None else default_data_collator
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
+        self.image_processor = image_processor
 
         # Bnb Quantized models doesn't support `.to` operation.
         if (
@@ -541,7 +547,7 @@ class Trainer:
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
         callbacks = default_callbacks if callbacks is None else default_callbacks + callbacks
         self.callback_handler = CallbackHandler(
-            callbacks, self.model, self.tokenizer, self.optimizer, self.lr_scheduler
+            callbacks, self.model, self.tokenizer, self.image_processor, self.optimizer, self.lr_scheduler
         )
         self.add_callback(PrinterCallback if self.args.disable_tqdm else DEFAULT_PROGRESS_CALLBACK)
 
@@ -1565,23 +1571,28 @@ class Trainer:
             "logging_steps": "logging_steps",
             "eval_steps": "eval_steps",
             "save_steps": "save_steps",
-            "per_device_train_batch_size": "train_batch_size",
         }
 
-        warnings_list = []
+        has_warning = False
+        warning_str = "Warning: The following arguments do not match the ones in the `trainer_state.json` within the checkpoint directory: "
         for arg_attr, state_attr in attributes_map.items():
             arg_value = getattr(training_args, arg_attr, None)
             state_value = getattr(trainer_state, state_attr, None)
 
             if arg_value is not None and state_value is not None and arg_value != state_value:
-                warnings_list.append(
-                    f"Warning: The training argument '{arg_attr}' value ({arg_value}) does not match the trainer state '{state_attr}' value ({state_value}). "
-                    f"This argument will be overridden by the one found in trainer_state.json within the checkpoint directory."
-                )
+                warning_str += f"\n\t{arg_attr}: {arg_value} (from args) != {state_value} (from trainer_state.json)"
+                has_warning = True
 
-        if warnings_list:
-            for warning in warnings_list:
-                logger.warning(warning)
+        # train bs is special as we need to account for multi-GPU
+        train_bs_args = training_args.per_device_train_batch_size
+        train_bs_state = trainer_state.train_batch_size // max(1, training_args.n_gpu)
+
+        if train_bs_args != train_bs_state:
+            warning_str += f"\n\tper_device_train_batch_size: {train_bs_args} (from args) != {train_bs_state} (from trainer_state.json)"
+            has_warning = True
+
+        if has_warning:
+            logger.warning_once(warning_str)
 
     def _wrap_model(self, model, training=True, dataloader=None):
         if self.args.use_ipex:
@@ -3271,6 +3282,8 @@ class Trainer:
             )
         if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
+        if self.image_processor is not None and self.args.should_save:
+            self.image_processor.save_pretrained(output_dir)
 
         # We moved the model from TPU -> CPU for saving the weights.
         # Now we should move it back to subsequent compute still works.
@@ -3308,6 +3321,8 @@ class Trainer:
 
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
+        if self.image_processor is not None:
+            self.image_processor.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
@@ -4004,6 +4019,9 @@ class Trainer:
         # Saving the tokenizer is fast and we don't know how many files it may have spawned, so we resave it to be sure.
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
+        # Same for the image processor
+        if self.image_processor is not None:
+            self.image_processor.save_pretrained(output_dir)
         # Same for the training arguments
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
 
@@ -4051,7 +4069,7 @@ class Trainer:
 
     def push_to_hub(self, commit_message: Optional[str] = "End of training", blocking: bool = True, **kwargs) -> str:
         """
-        Upload `self.model` and `self.tokenizer` to the 🤗 model hub on the repo `self.args.hub_model_id`.
+        Upload `self.model` and `self.tokenizer` or `self.image_processor` to the 🤗 model hub on the repo `self.args.hub_model_id`.
 
         Parameters:
             commit_message (`str`, *optional*, defaults to `"End of training"`):
