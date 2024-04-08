@@ -478,6 +478,11 @@ class Data2VecAudioAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
+DATA2VEC2AUDIO_ATTENTION_CLASSES = {
+    "eager": Data2VecAudioAttention,
+}
+
+
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward with Wav2Vec2->Data2VecAudio
 class Data2VecAudioFeedForward(nn.Module):
     def __init__(self, config):
@@ -503,16 +508,17 @@ class Data2VecAudioFeedForward(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayer with Wav2Vec2->Data2VecAudio
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayer with Wav2Vec2->Data2VecAudio, WAV2VEC2->DATA2VEC2AUDIO
 class Data2VecAudioEncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = Data2VecAudioAttention(
+        self.attention = DATA2VEC2AUDIO_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=config.hidden_size,
             num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=False,
         )
+
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = Data2VecAudioFeedForward(config)

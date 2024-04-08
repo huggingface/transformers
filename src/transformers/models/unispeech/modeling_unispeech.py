@@ -577,6 +577,9 @@ class UniSpeechAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
+UNISPEECH_ATTENTION_CLASSES = {"eager": UniSpeechAttention}
+
+
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward with Wav2Vec2->UniSpeech
 class UniSpeechFeedForward(nn.Module):
     def __init__(self, config):
@@ -602,16 +605,17 @@ class UniSpeechFeedForward(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayer with Wav2Vec2->UniSpeech
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayer with Wav2Vec2->UniSpeech, WAV2VEC2->UNISPEECH
 class UniSpeechEncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = UniSpeechAttention(
+        self.attention = UNISPEECH_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=config.hidden_size,
             num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=False,
         )
+
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = UniSpeechFeedForward(config)
@@ -663,11 +667,11 @@ class UniSpeechAttnAdapterLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayerStableLayerNorm with Wav2Vec2->UniSpeech
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayerStableLayerNorm with Wav2Vec2->UniSpeech, WAV2VEC2->UNISPEECH
 class UniSpeechEncoderLayerStableLayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = UniSpeechAttention(
+        self.attention = UNISPEECH_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=config.hidden_size,
             num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,

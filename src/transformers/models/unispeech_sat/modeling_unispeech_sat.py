@@ -594,6 +594,9 @@ class UniSpeechSatAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
+UNISPEECHSAT_ATTENTION_CLASSES = {"eager": UniSpeechSatAttention}
+
+
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward with Wav2Vec2->UniSpeechSat
 class UniSpeechSatFeedForward(nn.Module):
     def __init__(self, config):
@@ -619,16 +622,17 @@ class UniSpeechSatFeedForward(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayer with Wav2Vec2->UniSpeechSat
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayer with Wav2Vec2->UniSpeechSat, WAV2VEC2->UNISPEECHSAT
 class UniSpeechSatEncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = UniSpeechSatAttention(
+        self.attention = UNISPEECHSAT_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=config.hidden_size,
             num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=False,
         )
+
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = UniSpeechSatFeedForward(config)
@@ -680,11 +684,11 @@ class UniSpeechSatAttnAdapterLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayerStableLayerNorm with Wav2Vec2->UniSpeechSat
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayerStableLayerNorm with Wav2Vec2->UniSpeechSat, WAV2VEC2->UNISPEECHSAT
 class UniSpeechSatEncoderLayerStableLayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = UniSpeechSatAttention(
+        self.attention = UNISPEECHSAT_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=config.hidden_size,
             num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
