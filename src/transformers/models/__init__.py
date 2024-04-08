@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from . import (
-    llamavid,
     albert,
     align,
     altclip,
@@ -124,6 +123,7 @@ from . import (
     levit,
     lilt,
     llama,
+    llamavid,
     llava,
     llava_next,
     longformer,

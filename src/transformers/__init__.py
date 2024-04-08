@@ -131,7 +131,6 @@ _import_structure = {
     ],
     "models": [],
     # Models
-    "models.llamavid": ["LLAMAVID_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaVidConfig", "LlamaVidTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -553,6 +552,10 @@ _import_structure = {
     "models.levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig"],
     "models.lilt": ["LILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LiltConfig"],
     "models.llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaConfig"],
+    "models.llamavid": [
+        "LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "LLaMAVIDLlavaConfig",
+    ],
     "models.llava": [
         "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LlavaConfig",
@@ -1183,7 +1186,6 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
-    _import_structure["models.llamavid"].append("LlamaVidTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -1224,6 +1226,7 @@ else:
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizerFast")
     _import_structure["models.led"].append("LEDTokenizerFast")
     _import_structure["models.llama"].append("LlamaTokenizerFast")
+    _import_structure["models.llamavid"].append("LlamaVidTokenizerFast")
     _import_structure["models.longformer"].append("LongformerTokenizerFast")
     _import_structure["models.lxmert"].append("LxmertTokenizerFast")
     _import_structure["models.markuplm"].append("MarkupLMTokenizerFast")
@@ -1443,22 +1446,6 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
-
-    _import_structure["models.llamavid"].extend(
-        [
-            "LLAMAVID_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "LlamaVidForMaskedLM",
-            "LlamaVidForCausalLM",
-            "LlamaVidForMultipleChoice",
-            "LlamaVidForQuestionAnswering",
-            "LlamaVidForSequenceClassification",
-            "LlamaVidForTokenClassification",
-            "LlamaVidLayer",
-            "LlamaVidModel",
-            "LlamaVidPreTrainedModel",
-            "load_tf_weights_in_llamavid",
-        ]
-    )
 
     _import_structure["models.albert"].extend(
         [
@@ -2560,6 +2547,14 @@ else:
             "LlamaPreTrainedModel",
         ]
     )
+    _import_structure["models.llamavid"].extend(
+        [
+            "LLAMAVID_LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LLaMAVIDLlavaForConditionalGeneration",
+            "LLaMAVIDLlavaPreTrainedModel",
+            "LLaMAVIDLlavaProcessor",
+        ]
+    )
     _import_structure["models.llava"].extend(
         [
             "LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2567,6 +2562,7 @@ else:
             "LlavaPreTrainedModel",
         ]
     )
+
     _import_structure["models.llava_next"].extend(
         [
             "LLAVA_NEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2574,6 +2570,7 @@ else:
             "LlavaNextPreTrainedModel",
         ]
     )
+
     _import_structure["models.longformer"].extend(
         [
             "LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5043,7 +5040,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.llamavid import LLAMAVID_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaVidConfig, LlamaVidTokenizer
     from .models.align import (
         ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AlignConfig,
@@ -5455,6 +5451,7 @@ if TYPE_CHECKING:
     from .models.levit import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, LevitConfig
     from .models.lilt import LILT_PRETRAINED_CONFIG_ARCHIVE_MAP, LiltConfig
     from .models.llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaConfig
+    from .models.llamavid import LLAMAVID_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaVidConfig, LlamaVidTokenizer
     from .models.llava import (
         LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LlavaConfig,
@@ -6070,7 +6067,6 @@ if TYPE_CHECKING:
         from .utils.dummy_tokenizers_objects import *
     else:
         # Fast tokenizers imports
-        from .models.llamavid import LlamaVidTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -6109,6 +6105,7 @@ if TYPE_CHECKING:
         from .models.layoutxlm import LayoutXLMTokenizerFast
         from .models.led import LEDTokenizerFast
         from .models.llama import LlamaTokenizerFast
+        from .models.llamavid import LlamaVidTokenizerFast
         from .models.longformer import LongformerTokenizerFast
         from .models.lxmert import LxmertTokenizerFast
         from .models.markuplm import MarkupLMTokenizerFast
@@ -7243,6 +7240,25 @@ if TYPE_CHECKING:
             LlamaModel,
             LlamaPreTrainedModel,
         )
+
+        # PyTorch model imports
+        from .models.llamavid import (
+            LLAMAVID_LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LLAMAVID_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LlamaVidForCausalLM,
+            LlamaVidForMaskedLM,
+            LlamaVidForMultipleChoice,
+            LlamaVidForQuestionAnswering,
+            LlamaVidForSequenceClassification,
+            LlamaVidForTokenClassification,
+            LlamaVidLayer,
+            LLaMAVIDLlavaForConditionalGeneration,
+            LLaMAVIDLlavaPreTrainedModel,
+            LLaMAVIDLlavaProcessor,
+            LlamaVidModel,
+            LlamaVidPreTrainedModel,
+            load_tf_weights_in_llamavid,
+        )
         from .models.llava import (
             LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
             LlavaForConditionalGeneration,
@@ -7803,22 +7819,6 @@ if TYPE_CHECKING:
             SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
             SamModel,
             SamPreTrainedModel,
-        )
-
-        # PyTorch model imports
-
-        from .models.llamavid import (
-            LLAMAVID_PRETRAINED_MODEL_ARCHIVE_LIST,
-            LlamaVidForMaskedLM,
-            LlamaVidForCausalLM,
-            LlamaVidForMultipleChoice,
-            LlamaVidForQuestionAnswering,
-            LlamaVidForSequenceClassification,
-            LlamaVidForTokenClassification,
-            LlamaVidLayer,
-            LlamaVidModel,
-            LlamaVidPreTrainedModel,
-            load_tf_weights_in_llamavid,
         )
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,

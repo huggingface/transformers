@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,470 +12,593 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch LlamaVID model. """
+""" Testing suite for the PyTorch Llava model. """
 
-
+import copy
+import gc
 import unittest
 
-from ...test_modeling_common import floats_tensor
-from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+import requests
 
-from transformers import LlamaVidConfig
+from transformers import (
+    AutoProcessor,
+    AutoTokenizer,
+    LLaMAVIDLlavaConfig,
+    LLaMAVIDLlavaForConditionalGeneration,
+    is_torch_available,
+    is_vision_available,
+)
+from transformers.testing_utils import (
+    require_bitsandbytes,
+    require_torch,
+    require_torch_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
+
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
     import torch
+else:
+    is_torch_greater_or_equal_than_2_0 = False
 
-    from transformers import (
-        LlamaVidForCausalLM,
-        LlamaVidForMaskedLM,
-        LlamaVidForMultipleChoice,
-        LlamaVidForQuestionAnswering,
-        LlamaVidForSequenceClassification,
-        LlamaVidForTokenClassification,
-        LlamaVidModel,
-    )
-    from transformers.models.llamavid.modeling_llamavid import (
-        LLAMAVID_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
+if is_vision_available():
+    from PIL import Image
 
 
-class LlamaVidModelTester:
+class LLaMAVIDLlavaVisionText2TextModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_token_type_ids=True,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            scope=None,
+        self,
+        parent,
+        ignore_index=-100,
+        image_token_index=0,
+        projector_hidden_act="gelu",
+        seq_length=7,
+        vision_feature_select_strategy="default",
+        vision_feature_layer=-1,
+        text_config={
+            "model_type": "llama",
+            "seq_length": 7,
+            "is_training": True,
+            "use_input_mask": True,
+            "use_token_type_ids": False,
+            "use_labels": True,
+            "vocab_size": 99,
+            "hidden_size": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 37,
+            "hidden_act": "gelu",
+            "hidden_dropout_prob": 0.1,
+            "attention_probs_dropout_prob": 0.1,
+            "max_position_embeddings": 512,
+            "type_vocab_size": 16,
+            "type_sequence_label_size": 2,
+            "initializer_range": 0.02,
+            "num_labels": 3,
+            "num_choices": 4,
+            "pad_token_id": 0,
+        },
+        is_training=True,
+        vision_config={
+            "image_size": 30,
+            "patch_size": 2,
+            "num_channels": 3,
+            "is_training": True,
+            "hidden_size": 32,
+            "projection_dim": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 37,
+            "dropout": 0.1,
+            "attention_dropout": 0.1,
+            "initializer_range": 0.02,
+        },
     ):
         self.parent = parent
-        self.batch_size = batch_size
+        self.ignore_index = ignore_index
+        self.image_token_index = image_token_index
+        self.projector_hidden_act = projector_hidden_act
+        self.vision_feature_select_strategy = vision_feature_select_strategy
+        self.vision_feature_layer = vision_feature_layer
+        self.text_config = text_config
+        self.vision_config = vision_config
         self.seq_length = seq_length
+
+        self.num_hidden_layers = text_config["num_hidden_layers"]
+        self.vocab_size = text_config["vocab_size"]
+        self.hidden_size = text_config["hidden_size"]
+        self.num_attention_heads = text_config["num_attention_heads"]
         self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
 
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
-
-        config = self.get_config()
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self.batch_size = 3
+        self.num_channels = 3
+        self.image_size = 336
+        self.encoder_seq_length = 231
 
     def get_config(self):
-        return LlamaVidConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
+        return LLaMAVIDLlavaConfig(
+            text_config=self.text_config,
+            vision_config=self.vision_config,
+            ignore_index=self.ignore_index,
+            image_token_index=self.image_token_index,
+            projector_hidden_act=self.projector_hidden_act,
+            vision_feature_select_strategy=self.vision_feature_select_strategy,
+            vision_feature_layer=self.vision_feature_layer,
         )
 
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        config.is_decoder = True
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
+    def prepare_config_and_inputs(self):
+        pixel_values = floats_tensor(
+            [
+                self.batch_size,
+                self.vision_config["num_channels"],
+                self.vision_config["image_size"],
+                self.vision_config["image_size"],
+            ]
         )
+        config = self.get_config()
 
-    def create_and_check_model(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = LlamaVidModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_model_as_decoder(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-    ):
-        config.add_cross_attention = True
-        model = LlamaVidModel(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-        )
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            encoder_hidden_states=encoder_hidden_states,
-        )
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_for_causal_lm(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-    ):
-        model = LlamaVidForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_for_masked_lm(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = LlamaVidForMaskedLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_decoder_model_past_large_inputs(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.is_decoder = True
-        config.add_cross_attention = True
-        model = LlamaVidForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        # first forward pass
-        outputs = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            use_cache=True,
-        )
-        past_key_values = outputs.past_key_values
-
-        # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
-
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
-
-        output_from_no_past = model(
-            next_input_ids,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-        output_from_past = model(
-            next_tokens,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
-
-        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
-
-    def create_and_check_for_question_answering(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = LlamaVidForQuestionAnswering(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            start_positions=sequence_labels,
-            end_positions=sequence_labels,
-        )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
-
-    def create_and_check_for_sequence_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_labels = self.num_labels
-        model = LlamaVidForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-
-    def create_and_check_for_token_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_labels = self.num_labels
-        model = LlamaVidForTokenClassification(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
-
-    def create_and_check_for_multiple_choice(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_choices = self.num_choices
-        model = LlamaVidForMultipleChoice(config=config)
-        model.to(torch_device)
-        model.eval()
-        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        result = model(
-            multiple_choice_inputs_ids,
-            attention_mask=multiple_choice_input_mask,
-            token_type_ids=multiple_choice_token_type_ids,
-            labels=choice_labels,
-        )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+        return config, pixel_values
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        config, pixel_values = config_and_inputs
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
+        attention_mask = input_ids.ne(1).to(torch_device)
+        # we are giving 3 images let's make sure we pass in 3 image tokens
+        input_ids[:, 1] = config.image_token_index
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
         return config, inputs_dict
 
 
 @require_torch
-class LlamaVidModelTest(ModelTesterMixin, unittest.TestCase):
+class LLaMAVIDLlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
+    """
+    Model tester for `LlavaForConditionalGeneration`.
+    """
 
-    all_model_classes = (
-        (
-            LlamaVidModel,
-            LlamaVidForMaskedLM,
-            LlamaVidForCausalLM,
-            LlamaVidForMultipleChoice,
-            LlamaVidForQuestionAnswering,
-            LlamaVidForSequenceClassification,
-            LlamaVidForTokenClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
-    all_generative_model_classes = (LlamaVidForCausalLM,) if is_torch_available() else ()
+    all_model_classes = (LLaMAVIDLlavaForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-to-text": LLaMAVIDLlavaForConditionalGeneration} if is_torch_available() else {}
+    test_pruning = False
+    test_head_masking = False
 
     def setUp(self):
-        self.model_tester = LlamaVidModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LlamaVidConfig, hidden_size=37)
+        self.model_tester = LLaMAVIDLlavaVisionText2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=LLaMAVIDLlavaConfig, has_text_modality=False)
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
 
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
 
-    def test_for_masked_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
-
-    def test_for_multiple_choice(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
-
-    def test_decoder_model_past_with_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    def test_for_question_answering(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
-
-    def test_for_sequence_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
-
-    def test_for_token_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
-
-    def test_model_as_decoder(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
-
-    def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_resize_tokens_embeddings with config.vocab_size->config.text_config.vocab_size
+    def test_resize_tokens_embeddings(self):
         (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        ) = self.model_tester.prepare_config_and_inputs_for_decoder()
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
 
-        input_mask = None
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
 
-        self.model_tester.create_and_check_model_as_decoder(
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
+            if self.model_tester.is_training is False:
+                model.eval()
 
-    @slow
-    def test_model_from_pretrained(self):
-        for model_name in LLAMAVID_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = LlamaVidModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+            model_vocab_size = config.text_config.vocab_size
+            # Retrieve the embeddings and clone theme
+            model_embed = model.resize_token_embeddings(model_vocab_size)
+            cloned_embeddings = model_embed.weight.clone()
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size + 10)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            # Input ids should be clamped to the maximum size of the vocabulary
+            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+
+            # make sure that decoder_input_ids are resized as well
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
+            models_equal = True
+            for p1, p2 in zip(cloned_embeddings, model_embed.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+
+            self.assertTrue(models_equal)
+
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+
+            model_vocab_size = config.text_config.vocab_size
+            model.resize_token_embeddings(model_vocab_size + 10, pad_to_multiple_of=1)
+            self.assertTrue(model.config.text_config.vocab_size + 10, model_vocab_size)
+
+            model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
+            self.assertTrue(model_embed.weight.shape[0] // 64, 0)
+
+            self.assertTrue(model_embed.weight.shape[0], model.config.text_config.vocab_size)
+            self.assertTrue(model.config.text_config.vocab_size, model.vocab_size)
+
+            model_embed = model.resize_token_embeddings(model_vocab_size + 13, pad_to_multiple_of=64)
+            self.assertTrue(model_embed.weight.shape[0] // 64, 0)
+
+            # Check that resizing a model to a multiple of pad_to_multiple leads to a model of exactly that size
+            target_dimension = 128
+            model_embed = model.resize_token_embeddings(target_dimension, pad_to_multiple_of=64)
+            self.assertTrue(model_embed.weight.shape[0], target_dimension)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "Asking to pad the embedding matrix to a multiple of `1.3`, which is not and integer. Please make sure to pass an integer",
+            ):
+                model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=1.3)
+
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_resize_embeddings_untied with config.vocab_size->config.text_config.vocab_size
+    def test_resize_embeddings_untied(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
+
+        original_config.tie_word_embeddings = False
+
+        # if model cannot untied embeddings -> leave test
+        if original_config.tie_word_embeddings:
+            return
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config).to(torch_device)
+
+            # if no output embeddings -> leave test
+            if model.get_output_embeddings() is None:
+                continue
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_vocab_size = config.text_config.vocab_size
+            model.resize_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size + 10)
+            output_embeds = model.get_output_embeddings()
+            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
+            # Check bias if present
+            if output_embeds.bias is not None:
+                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model.resize_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            output_embeds = model.get_output_embeddings()
+            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size - 15)
+            # Check bias if present
+            if output_embeds.bias is not None:
+                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            # Input ids should be clamped to the maximum size of the vocabulary
+            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_tie_model_weights with config.vocab_size->config.text_config.vocab_size
+    def test_tie_model_weights(self):
+        if not self.test_torchscript:
+            return
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def check_same_values(layer_1, layer_2):
+            equal = True
+            for p1, p2 in zip(layer_1.weight, layer_2.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    equal = False
+            return equal
+
+        for model_class in self.all_model_classes:
+            config.torchscript = True
+            model_not_tied = model_class(config)
+            if model_not_tied.get_output_embeddings() is None:
+                continue
+
+            config_tied = copy.deepcopy(config)
+            config_tied.torchscript = False
+            model_tied = model_class(config_tied)
+            params_tied = list(model_tied.parameters())
+            # Check that the embedding layer and decoding layer are the same in size and in value
+            # self.assertTrue(check_same_values(embeddings, decoding))
+
+            # Check that after resize they remain tied.
+            model_tied.resize_token_embeddings(config.text_config.vocab_size + 10)
+            params_tied_2 = list(model_tied.parameters())
+            self.assertEqual(len(params_tied_2), len(params_tied))
 
 
 @require_torch
-class LlamaVidModelIntegrationTest(unittest.TestCase):
+class LLaMAVIDLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        self.processor = AutoProcessor.from_pretrained("llava-hf/bakLlava-v1-hf")
+
+    def tearDown(self):
+        gc.collect()
+        torch.cuda.empty_cache()
+
     @slow
-    def test_inference_masked_lm(self):
-        model = LlamaVidForMaskedLM.from_pretrained("dvlab-llama-vid")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
+    @require_bitsandbytes
+    def test_small_model_integration_test(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", load_in_4bit=True)
 
-        # TODO Replace vocab size
-        vocab_size = 32000
+        prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
+        image_file = "https://llava-vl.github.io/static/images/view.jpg"
+        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        inputs = self.processor(prompt, raw_image, return_tensors="pt")
 
-        expected_shape = torch.Size((1, 6, vocab_size))
-        self.assertEqual(output.shape, expected_shape)
+        EXPECTED_INPUT_IDS = torch.tensor([[1, 32000, 28705, 13, 11123, 28747, 1824, 460, 272, 1722,315, 1023, 347, 13831, 925, 684, 739, 315, 3251, 456,1633, 28804, 13, 4816, 8048, 12738, 28747]])  # fmt: skip
+        self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
 
-        # TODO Replace values below with what was printed above.
-        expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
+        output = model.generate(**inputs, max_new_tokens=20)
+        EXPECTED_DECODED_TEXT = "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,"  # fmt: skip
+
+        self.assertEqual(
+            self.processor.decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+    @slow
+    @require_bitsandbytes
+    def test_small_model_integration_test_llama(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+        model_id = "llava-hf/llava-1.5-7b-hf"
 
+        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
+        processor = AutoProcessor.from_pretrained(model_id)
 
+        prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place?\nASSISTANT:"
+        image_file = "https://llava-vl.github.io/static/images/view.jpg"
+        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
+
+        output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
+        EXPECTED_DECODED_TEXT = "USER:  \nWhat are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the presence of wildlife, such as birds or fish, and avoid disturbing their natural habitats. Lastly, be aware of any local regulations or guidelines for the use of the pier, as some areas may be restricted or prohibited for certain activities."  # fmt: skip
+
+        self.assertEqual(
+            processor.decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    @require_bitsandbytes
+    def test_small_model_integration_test_llama_batched(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+        model_id = "llava-hf/llava-1.5-7b-hf"
+
+        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        prompts = [
+            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
+            "USER: <image>\nWhat is this?\nASSISTANT:",
+        ]
+        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
+        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+
+        inputs = processor(prompts, images=[image1, image2], return_tensors="pt", padding=True)
+
+        output = model.generate(**inputs, max_new_tokens=20)
+
+        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a body of water', 'USER:  \nWhat is this?\nASSISTANT: The image features two cats lying down on a pink couch. One cat is located on']  # fmt: skip
+
+        self.assertEqual(processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
+
+    @slow
+    @require_bitsandbytes
+    def test_small_model_integration_test_batch(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", load_in_4bit=True)
+        # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
+        prompts = [
+            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
+            "USER: <image>\nWhat is this?\nASSISTANT:",
+        ]
+        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
+        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+
+        inputs = self.processor(prompts, images=[image1, image2], return_tensors="pt", padding=True)
+
+        output = model.generate(**inputs, max_new_tokens=20)
+
+        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along', 'USER:  \nWhat is this?\nASSISTANT: Cats']  # fmt: skip
+        self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
+
+    @slow
+    @require_bitsandbytes
+    def test_small_model_integration_test_llama_batched_regression(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+        model_id = "llava-hf/llava-1.5-7b-hf"
+
+        # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
+        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-1.5-7b-hf", load_in_4bit=True, attn_implementation="eager"
+        )
+        processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
+
+        prompts = [
+            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
+            "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
+        ]
+        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
+        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+
+        inputs = processor(prompts, images=[image1, image2, image1], return_tensors="pt", padding=True)
+
+        output = model.generate(**inputs, max_new_tokens=20)
+
+        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a body of water', 'USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.']  # fmt: skip
+
+        self.assertEqual(processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
+
+    @slow
+    @require_torch
+    @require_vision
+    def test_batched_generation(self):
+        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf").to(torch_device)
+
+        processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+
+        prompt1 = "<image>\n<image>\nUSER: What's the the difference of two images?\nASSISTANT:"
+        prompt2 = "<image>\nUSER: Describe the image.\nASSISTANT:"
+        prompt3 = "<image>\nUSER: Describe the image.\nASSISTANT:"
+        url1 = "https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=3062&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+        url2 = "https://images.unsplash.com/photo-1617258683320-61900b281ced?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+        image1 = Image.open(requests.get(url1, stream=True).raw)
+        image2 = Image.open(requests.get(url2, stream=True).raw)
+
+        inputs = processor(
+            text=[prompt1, prompt2, prompt3],
+            images=[image1, image2, image1, image2],
+            return_tensors="pt",
+            padding=True,
+        ).to(torch_device)
+
+        model = model.eval()
+
+        EXPECTED_OUTPUT = [
+            "\n \nUSER: What's the the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a small dog holding a flower in one",
+            "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
+            "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
+        ]
+
+        generate_ids = model.generate(**inputs, max_new_tokens=20)
+        outputs = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        self.assertEqual(outputs, EXPECTED_OUTPUT)
+
+    @slow
+    @require_bitsandbytes
+    def test_llava_index_error_bug(self):
+        # This is a reproducer of https://github.com/huggingface/transformers/pull/28032 and makes sure it does not happen anymore
+        # Please refer to that PR, or specifically https://github.com/huggingface/transformers/pull/28032#issuecomment-1860650043 for
+        # more details
+        model_id = "llava-hf/llava-1.5-7b-hf"
+        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        # Simulate a super long prompt
+        user_prompt = "Describe the image:?\n" * 200
+        prompt = f"USER: <image>\n{user_prompt}ASSISTANT:"
+        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
+
+        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
+
+        # Make sure that `generate` works
+        _ = model.generate(**inputs, max_new_tokens=20)
+
+    @slow
+    @require_torch_gpu
+    def test_llava_merge_inputs_error_bug(self):
+        # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
+        model_id = "llava-hf/llava-1.5-7b-hf"
+        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained(
+            model_id, torch_dtype=torch.float16, low_cpu_mem_usage=True
+        ).to(torch_device)
+
+        # Simulate some user inputs
+        pixel_values = torch.randn(
+            (2, 3, 336, 336),
+            dtype=torch.float,
+            device=torch_device,
+        )
+        input_ids = torch.tensor(
+            [
+                [32001, 32001, 1, 15043, 7084, 32000, 29871, 13, 7900],
+                [1, 15043, 7084, 29901, 29871, 32000, 29871, 13, 7900],
+            ],
+            dtype=torch.long,
+            device=torch_device,
+        )
+        attention_mask = torch.tensor(
+            [[0, 0, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1]],
+            dtype=torch.long,
+            device=torch_device,
+        )
+
+        # Make sure that the loss is properly computed
+        loss = model(
+            pixel_values=pixel_values,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            labels=input_ids,
+        ).loss
+        loss.backward()
+
+    def test_tokenizer_integration(self):
+        slow_tokenizer = AutoTokenizer.from_pretrained("liuhaotian/llava-v1.6-34b", use_fast=False)
+        slow_tokenizer.add_tokens("<image>", True)
+
+        fast_tokenizer = AutoTokenizer.from_pretrained(
+            "liuhaotian/llava-v1.6-34b",
+            bos_token="<|startoftext|>",
+            eos_token="<|endoftext|>",
+            from_slow=True,
+            legacy=False,
+        )
+        fast_tokenizer.add_tokens("<image>", True)
+
+        prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
+        # If the token is added as special, it's not normalized, and the only diff is the extra space after special tokens.
+        # https://github.com/huggingface/transformers/pull/28881 is the fix for this.
+        self.assertEqual(
+            slow_tokenizer.tokenize(prompt),
+            ['<|im_start|>', 'system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', 'user', '\n', '<image>', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', 'ass', 'istant', '\n']
+        )  # fmt: skip
+
+        self.assertEqual(
+            fast_tokenizer.tokenize(prompt),
+            ['<|im_start|>', '▁system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', '▁user', '\n', '<image>', '▁', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', '▁assistant', '\n']
+        )  # fmt: skip

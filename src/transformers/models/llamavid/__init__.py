@@ -1,4 +1,4 @@
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,24 +13,11 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import  _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
-from ...utils import is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
+_import_structure = {"configuration_llamavid": ["LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LLaMAVIDLlavaConfig"]}
 
-
-_import_structure = {
-    "configuration_llamavid": ["LLAMAVID_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaVidConfig"],
-    "tokenization_llamavid": ["LlamaVidTokenizer"],
-}
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_llamavid_fast"] = ["LlamaVidTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -39,33 +26,15 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_llamavid"] = [
-        "LLAMAVID_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "LlamaVidForMaskedLM",
-        "LlamaVidForCausalLM",
-        "LlamaVidForMultipleChoice",
-        "LlamaVidForQuestionAnswering",
-        "LlamaVidForSequenceClassification",
-        "LlamaVidForTokenClassification",
-        "LlamaVidLayer",
-        "LlamaVidModel",
-        "LlamaVidPreTrainedModel",
-        "load_tf_weights_in_llamavid",
+        "LLAMAVID_LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "LLaMAVIDLlavaForConditionalGeneration",
+        "LLaMAVIDLlavaPreTrainedModel",
     ]
-
-
+    _import_structure["processing_llava"] = ["LLaMAVIDLlavaProcessor"]
 
 
 if TYPE_CHECKING:
-    from .configuration_llamavid import LLAMAVID_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaVidConfig
-    from .tokenization_llamavid import LlamaVidTokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_llamavid_fast import LlamaVidTokenizerFast
+    from .configuration_llamavid import LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP, LLaMAVIDLlavaConfig
 
     try:
         if not is_torch_available():
@@ -74,22 +43,14 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_llamavid import (
-            LLAMAVID_PRETRAINED_MODEL_ARCHIVE_LIST,
-            LlamaVidForMaskedLM,
-            LlamaVidForCausalLM,
-            LlamaVidForMultipleChoice,
-            LlamaVidForQuestionAnswering,
-            LlamaVidForSequenceClassification,
-            LlamaVidForTokenClassification,
-            LlamaVidLayer,
-            LlamaVidModel,
-            LlamaVidPreTrainedModel,
-            load_tf_weights_in_llamavid,
+            LLAMAVID_LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LLaMAVIDLlavaForConditionalGeneration,
+            LLaMAVIDLlavaPreTrainedModel,
         )
-
+        from .processing_llamavid import LLaMAVIDLlavaProcessor
 
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)

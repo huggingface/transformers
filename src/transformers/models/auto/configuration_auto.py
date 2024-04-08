@@ -28,13 +28,12 @@ from ...utils import CONFIG_NAME, logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import CONFIG_ARCHIVE_MAP_MAPPING_NAMES  # noqa: F401, E402
+# from ..deprecated._archive_maps import CONFIG_ARCHIVE_MAP_MAPPING_NAMES  # noqa: F401, E402
 
 
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
-        ("llamavid", "LlamaVidConfig"),
         ("albert", "AlbertConfig"),
         ("align", "AlignConfig"),
         ("altclip", "AltCLIPConfig"),
@@ -137,6 +136,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("levit", "LevitConfig"),
         ("lilt", "LiltConfig"),
         ("llama", "LlamaConfig"),
+        ("llamavid", " LLaMAVIDLlavaConfig"),
         ("llava", "LlavaConfig"),
         ("llava_next", "LlavaNextConfig"),
         ("longformer", "LongformerConfig"),
@@ -285,7 +285,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
-        ("llamavid", "LLAMAVID_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("align", "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("altclip", "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -379,6 +378,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("levit", "LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("lilt", "LILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("llama", "LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("llamavid", "LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("llava", "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("longformer", "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("longt5", "LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -499,7 +499,6 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("llamavid", "LlamaVid"),
         ("albert", "ALBERT"),
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),
@@ -617,6 +616,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("lilt", "LiLT"),
         ("llama", "LLaMA"),
         ("llama2", "Llama2"),
+        ("llamavid", " LLaMAVID"),
         ("llava", "LLaVa"),
         ("llava_next", "LLaVA-NeXT"),
         ("longformer", "Longformer"),
