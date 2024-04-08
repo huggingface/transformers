@@ -370,6 +370,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         num_images = len(image_features)
 
         patches_lengths = [x.shape[0] for x in image_features] # list[int]
+        print("received these patches lens: ", patches_lengths)
         max_num_patches  = max(patches_lengths) # int
 
         # Each patch should have the same image embedding dimension
@@ -409,11 +410,11 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         if left_padding:
             new_token_positions += nb_image_pad[:, None]  # offset for left padding
             print("shape of new_token_positions: L402", new_token_positions.shape)
-            print("new_token_positions: L402", new_token_positions[0])
+            # print("new_token_positions: L402", new_token_positions[0])
         
         text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
         print("text to overwrite shape: ", text_to_overwrite.shape)
-        print("text to overwrite: ", text_to_overwrite)
+        # print("text to overwrite: ", text_to_overwrite)
  
 
         # 3. Create the full embedding, already padded to the maximum position
@@ -632,7 +633,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                             dim=-1,
                         )
                         image_feature = image_feature.flatten(1, 2).transpose(0, 1)
+                        print("print final image feature shape: ", image_feature.shape)
                         image_feature = torch.cat((base_image_feature, image_feature), dim=0)
+                        print("print final image feature shape after catting with base: ", image_feature.shape)
                     else:
                         image_feature = image_feature[0]
                         image_feature = torch.cat((image_feature, self.image_newline[None]), dim=0)
@@ -640,7 +643,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 # image_features = torch.stack(new_image_features, dim=0)
 
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
-                    image_features, inputs_embeds, input_ids, attention_mask, labels
+                    new_image_features, inputs_embeds, input_ids, attention_mask, labels
                 )
                 if labels is None:
                     labels = torch.full_like(attention_mask, self.config.ignore_index).to(torch.long)
