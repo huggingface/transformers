@@ -342,10 +342,10 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
 
     image_processor = ZoeDepthImageProcessor(size={"height": image_size, "width": image_size})
     pixel_values = image_processor(image, return_tensors="pt").pixel_values
-    # TODO verify pixel values
-    # filepath =  hf_hub_download(repo_id="nielsr/test-image", filename="zoedepth_pixel_values.pt", repo_type="dataset")
-    # original_pixel_values = torch.load(filepath, map_location="cpu")
-    print("Shape of HF pixel values:", pixel_values.shape)
+    # verify pixel values
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="zoedepth_pixel_values.pt", repo_type="dataset")
+    original_pixel_values = torch.load(filepath, map_location="cpu")
+    assert torch.allclose(pixel_values, original_pixel_values, atol=1e-4)
 
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="zoedepth_pixel_values.pt", repo_type="dataset")
     pixel_values = torch.load(filepath)
