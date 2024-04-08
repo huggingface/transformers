@@ -564,10 +564,12 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 total_patches = 0
                 for idx, img in enumerate(pixel_values):
                     unpadded_patches = patches_lengths[idx]
+                    print("Length of unpadded patches: ", unpadded_patches)
                     total_patches += unpadded_patches
                     unpadded_pixel_values.append(img[:unpadded_patches])
 
                 unpadded_pixel_values = torch.cat(unpadded_pixel_values, dim=0)
+                print("shape of unpadded pixel values : ", unpadded_pixel_values.shape)
                 # Use the mask to index the original tensor, filtering out the rows with pad_token
 
                 reshaped_pixel_values = unpadded_pixel_values.view(batch_size * total_patches, num_channels, height, width)
