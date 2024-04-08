@@ -65,15 +65,24 @@ def get_zoedepth_config(model_name):
 
     neck_hidden_sizes = [256, 512, 1024, 1024]
     bin_centers_type = "softplus" if model_name == "ZoeD_N" else "normed"
+    use_multiple_heads = model_name == "ZoeD_NK"
+    bin_conf = [
+        {"name": "nyu", "n_bins": 64, "min_depth": 1e-3, "max_depth": 10.0},
+        {"name": "kitti", "n_bins": 64, "min_depth": 1e-3, "max_depth": 80.0},
+    ]
     config = ZoeDepthConfig(
-        backbone_config=backbone_config, neck_hidden_sizes=neck_hidden_sizes, bin_centers_type=bin_centers_type
+        backbone_config=backbone_config,
+        neck_hidden_sizes=neck_hidden_sizes,
+        bin_centers_type=bin_centers_type,
+        use_multiple_heads=use_multiple_heads,
+        bin_conf=bin_conf,
     )
 
     return config, image_size
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config):
+def create_rename_keys(config, model_name):
     rename_keys = []
 
     # fmt: off
@@ -143,57 +152,125 @@ def create_rename_keys(config):
     rename_keys.append(("conv2.weight", "metric_head.conv2.weight"))
     rename_keys.append(("conv2.bias", "metric_head.conv2.bias"))
 
-    # seed regressor and projector
-    rename_keys.append(("seed_bin_regressor._net.0.weight", "metric_head.seed_bin_regressor.conv1.weight"))
-    rename_keys.append(("seed_bin_regressor._net.0.bias", "metric_head.seed_bin_regressor.conv1.bias"))
-    rename_keys.append(("seed_bin_regressor._net.2.weight", "metric_head.seed_bin_regressor.conv2.weight"))
-    rename_keys.append(("seed_bin_regressor._net.2.bias", "metric_head.seed_bin_regressor.conv2.bias"))
-    rename_keys.append(("seed_projector._net.0.weight", "metric_head.seed_projector.conv1.weight"))
-    rename_keys.append(("seed_projector._net.0.bias", "metric_head.seed_projector.conv1.bias"))
-    rename_keys.append(("seed_projector._net.2.weight", "metric_head.seed_projector.conv2.weight"))
-    rename_keys.append(("seed_projector._net.2.bias", "metric_head.seed_projector.conv2.bias"))
+    if model_name == "ZoeD_NK":
+        # patch transformer
+        for i in range(4):
+            rename_keys.append((f"patch_transformer.transformer_encoder.layers.{i}.self_attn.in_proj_weight", f"metric_head.patch_transformer.transformer_encoder.layers.{i}.self_attn.in_proj_weight"))
+            rename_keys.append((f"patch_transformer.transformer_encoder.layers.{i}.self_attn.in_proj_bias", f"metric_head.patch_transformer.transformer_encoder.layers.{i}.self_attn.in_proj_bias"))
+            rename_keys.append((f"patch_transformer.transformer_encoder.layers.{i}.self_attn.out_proj.weight", f"metric_head.patch_transformer.transformer_encoder.layers.{i}.self_attn.out_proj.weight"))
+            rename_keys.append((f"patch_transformer.transformer_encoder.layers.{i}.self_attn.out_proj.bias", f"metric_head.patch_transformer.transformer_encoder.layers.{i}.self_attn.out_proj.bias"))
+            rename_keys.append((f"patch_transformer.transformer_encoder.layers.{i}.linear1.weight", f"metric_head.patch_transformer.transformer_encoder.layers.{i}.linear1.weight"))
+            rename_keys.append((f"patch_transformer.transformer_encoder.layers.{i}.linear1.bias", f"metric_head.patch_transformer.transformer_encoder.layers.{i}.linear1.bias"))
+            rename_keys.append((f"patch_transformer.transformer_encoder.layers.{i}.linear2.weight", f"metric_head.patch_transformer.transformer_encoder.layers.{i}.linear2.weight"))
+            rename_keys.append((f"patch_transformer.transformer_encoder.layers.{i}.linear2.bias", f"metric_head.patch_transformer.transformer_encoder.layers.{i}.linear2.bias"))
+            rename_keys.append((f"patch_transformer.transformer_encoder.layers.{i}.norm1.weight", f"metric_head.patch_transformer.transformer_encoder.layers.{i}.norm1.weight"))
+            rename_keys.append((f"patch_transformer.transformer_encoder.layers.{i}.norm1.bias", f"metric_head.patch_transformer.transformer_encoder.layers.{i}.norm1.bias"))
+            rename_keys.append((f"patch_transformer.transformer_encoder.layers.{i}.norm2.weight", f"metric_head.patch_transformer.transformer_encoder.layers.{i}.norm2.weight"))
+            rename_keys.append((f"patch_transformer.transformer_encoder.layers.{i}.norm2.bias", f"metric_head.patch_transformer.transformer_encoder.layers.{i}.norm2.bias"))
+        
+        rename_keys.append(("patch_transformer.embedding_convPxP.weight", "metric_head.patch_transformer.embedding_convPxP.weight"))
+        rename_keys.append(("patch_transformer.embedding_convPxP.bias", "metric_head.patch_transformer.embedding_convPxP.bias"))
 
-    rename_keys.append(("projectors.0._net.0.weight", "metric_head.projectors.0.conv1.weight"))
-    rename_keys.append(("projectors.0._net.0.bias", "metric_head.projectors.0.conv1.bias"))
-    rename_keys.append(("projectors.0._net.2.weight", "metric_head.projectors.0.conv2.weight"))
-    rename_keys.append(("projectors.0._net.2.bias", "metric_head.projectors.0.conv2.bias"))
-    rename_keys.append(("projectors.1._net.0.weight", "metric_head.projectors.1.conv1.weight"))
-    rename_keys.append(("projectors.1._net.0.bias", "metric_head.projectors.1.conv1.bias"))
-    rename_keys.append(("projectors.1._net.2.weight", "metric_head.projectors.1.conv2.weight"))
-    rename_keys.append(("projectors.1._net.2.bias", "metric_head.projectors.1.conv2.bias"))
-    rename_keys.append(("projectors.2._net.0.weight", "metric_head.projectors.2.conv1.weight"))
-    rename_keys.append(("projectors.2._net.0.bias", "metric_head.projectors.2.conv1.bias"))
-    rename_keys.append(("projectors.2._net.2.weight", "metric_head.projectors.2.conv2.weight"))
-    rename_keys.append(("projectors.2._net.2.bias", "metric_head.projectors.2.conv2.bias"))
-    rename_keys.append(("projectors.3._net.0.weight", "metric_head.projectors.3.conv1.weight"))
-    rename_keys.append(("projectors.3._net.0.bias", "metric_head.projectors.3.conv1.bias"))
-    rename_keys.append(("projectors.3._net.2.weight", "metric_head.projectors.3.conv2.weight"))
-    rename_keys.append(("projectors.3._net.2.bias", "metric_head.projectors.3.conv2.bias"))
+        # MLP classifier
+        rename_keys.append(("mlp_classifier.0.weight", "metric_head.mlp_classifier.0.weight"))
+        rename_keys.append(("mlp_classifier.0.bias", "metric_head.mlp_classifier.0.bias"))
+        rename_keys.append(("mlp_classifier.2.weight", "metric_head.mlp_classifier.2.weight"))
+        rename_keys.append(("mlp_classifier.2.bias", "metric_head.mlp_classifier.2.bias"))
 
-    rename_keys.append(("attractors.0._net.0.weight", "metric_head.attractors.0.conv1.weight"))
-    rename_keys.append(("attractors.0._net.0.bias", "metric_head.attractors.0.conv1.bias"))
-    rename_keys.append(("attractors.0._net.2.weight", "metric_head.attractors.0.conv2.weight"))
-    rename_keys.append(("attractors.0._net.2.bias", "metric_head.attractors.0.conv2.bias"))
-    rename_keys.append(("attractors.1._net.0.weight", "metric_head.attractors.1.conv1.weight"))
-    rename_keys.append(("attractors.1._net.0.bias", "metric_head.attractors.1.conv1.bias"))
-    rename_keys.append(("attractors.1._net.2.weight", "metric_head.attractors.1.conv2.weight"))
-    rename_keys.append(("attractors.1._net.2.bias", "metric_head.attractors.1.conv2.bias"))
-    rename_keys.append(("attractors.2._net.0.weight", "metric_head.attractors.2.conv1.weight"))
-    rename_keys.append(("attractors.2._net.0.bias", "metric_head.attractors.2.conv1.bias"))
-    rename_keys.append(("attractors.2._net.2.weight", "metric_head.attractors.2.conv2.weight"))
-    rename_keys.append(("attractors.2._net.2.bias", "metric_head.attractors.2.conv2.bias"))
-    rename_keys.append(("attractors.3._net.0.weight", "metric_head.attractors.3.conv1.weight"))
-    rename_keys.append(("attractors.3._net.0.bias", "metric_head.attractors.3.conv1.bias"))
-    rename_keys.append(("attractors.3._net.2.weight", "metric_head.attractors.3.conv2.weight"))
-    rename_keys.append(("attractors.3._net.2.bias", "metric_head.attractors.3.conv2.bias"))
+        # NYU and KITTI seed regressors
+        for i in ["nyu", "kitti"]:
+            rename_keys.append((f"seed_bin_regressors.{i}._net.0.weight", f"metric_head.seed_bin_regressors.{i}.conv1.weight"))
+            rename_keys.append((f"seed_bin_regressors.{i}._net.0.bias", f"metric_head.seed_bin_regressors.{i}.conv1.bias"))
+            rename_keys.append((f"seed_bin_regressors.{i}._net.2.weight", f"metric_head.seed_bin_regressors.{i}.conv2.weight"))
+            rename_keys.append((f"seed_bin_regressors.{i}._net.2.bias", f"metric_head.seed_bin_regressors.{i}.conv2.bias"))
 
-    # conditional log binomial
-    rename_keys.append(("conditional_log_binomial.mlp.0.weight", "metric_head.conditional_log_binomial.mlp.0.weight"))
-    rename_keys.append(("conditional_log_binomial.mlp.0.bias", "metric_head.conditional_log_binomial.mlp.0.bias"))
-    rename_keys.append(("conditional_log_binomial.mlp.2.weight", "metric_head.conditional_log_binomial.mlp.2.weight"))
-    rename_keys.append(("conditional_log_binomial.mlp.2.bias", "metric_head.conditional_log_binomial.mlp.2.bias"))
-    # rename_keys.append(("conditional_log_binomial.log_binomial_transform.k_idxt", "metric_head.conditional_log_binomial.log_binomial_transform.k_idx"))
-    # rename_keys.append(("conditional_log_binomial.log_binomial_transform.K_minus_1", "metric_head.conditional_log_binomial.log_binomial_transform.K_minus_1"))
+        # seed projector
+        rename_keys.append(("seed_projector._net.0.weight", "metric_head.seed_projector.conv1.weight"))
+        rename_keys.append(("seed_projector._net.0.bias", "metric_head.seed_projector.conv1.bias"))
+        rename_keys.append(("seed_projector._net.2.weight", "metric_head.seed_projector.conv2.weight"))
+        rename_keys.append(("seed_projector._net.2.bias", "metric_head.seed_projector.conv2.bias"))
+
+        # projectors
+        rename_keys.append(("projectors.0._net.0.weight", "metric_head.projectors.0.conv1.weight"))
+        rename_keys.append(("projectors.0._net.0.bias", "metric_head.projectors.0.conv1.bias"))
+        rename_keys.append(("projectors.0._net.2.weight", "metric_head.projectors.0.conv2.weight"))
+        rename_keys.append(("projectors.0._net.2.bias", "metric_head.projectors.0.conv2.bias"))
+        rename_keys.append(("projectors.1._net.0.weight", "metric_head.projectors.1.conv1.weight"))
+        rename_keys.append(("projectors.1._net.0.bias", "metric_head.projectors.1.conv1.bias"))
+        rename_keys.append(("projectors.1._net.2.weight", "metric_head.projectors.1.conv2.weight"))
+        rename_keys.append(("projectors.1._net.2.bias", "metric_head.projectors.1.conv2.bias"))
+        rename_keys.append(("projectors.2._net.0.weight", "metric_head.projectors.2.conv1.weight"))
+        rename_keys.append(("projectors.2._net.0.bias", "metric_head.projectors.2.conv1.bias"))
+        rename_keys.append(("projectors.2._net.2.weight", "metric_head.projectors.2.conv2.weight"))
+        rename_keys.append(("projectors.2._net.2.bias", "metric_head.projectors.2.conv2.bias"))
+        rename_keys.append(("projectors.3._net.0.weight", "metric_head.projectors.3.conv1.weight"))
+        rename_keys.append(("projectors.3._net.0.bias", "metric_head.projectors.3.conv1.bias"))
+        rename_keys.append(("projectors.3._net.2.weight", "metric_head.projectors.3.conv2.weight"))
+        rename_keys.append(("projectors.3._net.2.bias", "metric_head.projectors.3.conv2.bias"))
+
+        # TODO NYU and kitti attractors
+        # rename_keys.append(("attractors.nyu.0._net.0.weight", "metric_head.attractors.nyu.0.conv1.weight"))
+        # rename_keys.append(("attractors.nyu.0._net.0.bias", "metric_head.attractors.nyu.0.conv1.bias"))
+        # rename_keys.append(("attractors.nyu.0._net.2.weight", "metric_head.attractors.nyu.0.conv2.weight"))
+        # rename_keys.append(("attractors.nyu.0._net.2.bias", "metric_head.attractors.nyu.0.conv2.bias"))
+
+        # conditional log binomial
+        for i in ["nyu", "kitti"]:
+            rename_keys.append((f"conditional_log_binomial.{i}.mlp.0.weight", f"metric_head.conditional_log_binomial.{i}.mlp.0.weight"))
+            rename_keys.append((f"conditional_log_binomial.{i}.mlp.0.bias", f"metric_head.conditional_log_binomial.{i}.mlp.0.bias"))
+            rename_keys.append((f"conditional_log_binomial.{i}.mlp.2.weight", f"metric_head.conditional_log_binomial.{i}.mlp.2.weight"))
+            rename_keys.append((f"conditional_log_binomial.{i}.mlp.2.bias", f"metric_head.conditional_log_binomial.{i}.mlp.2.bias"))
+
+    else:
+        # seed regressor and projector
+        rename_keys.append(("seed_bin_regressor._net.0.weight", "metric_head.seed_bin_regressor.conv1.weight"))
+        rename_keys.append(("seed_bin_regressor._net.0.bias", "metric_head.seed_bin_regressor.conv1.bias"))
+        rename_keys.append(("seed_bin_regressor._net.2.weight", "metric_head.seed_bin_regressor.conv2.weight"))
+        rename_keys.append(("seed_bin_regressor._net.2.bias", "metric_head.seed_bin_regressor.conv2.bias"))
+        rename_keys.append(("seed_projector._net.0.weight", "metric_head.seed_projector.conv1.weight"))
+        rename_keys.append(("seed_projector._net.0.bias", "metric_head.seed_projector.conv1.bias"))
+        rename_keys.append(("seed_projector._net.2.weight", "metric_head.seed_projector.conv2.weight"))
+        rename_keys.append(("seed_projector._net.2.bias", "metric_head.seed_projector.conv2.bias"))
+
+        rename_keys.append(("projectors.0._net.0.weight", "metric_head.projectors.0.conv1.weight"))
+        rename_keys.append(("projectors.0._net.0.bias", "metric_head.projectors.0.conv1.bias"))
+        rename_keys.append(("projectors.0._net.2.weight", "metric_head.projectors.0.conv2.weight"))
+        rename_keys.append(("projectors.0._net.2.bias", "metric_head.projectors.0.conv2.bias"))
+        rename_keys.append(("projectors.1._net.0.weight", "metric_head.projectors.1.conv1.weight"))
+        rename_keys.append(("projectors.1._net.0.bias", "metric_head.projectors.1.conv1.bias"))
+        rename_keys.append(("projectors.1._net.2.weight", "metric_head.projectors.1.conv2.weight"))
+        rename_keys.append(("projectors.1._net.2.bias", "metric_head.projectors.1.conv2.bias"))
+        rename_keys.append(("projectors.2._net.0.weight", "metric_head.projectors.2.conv1.weight"))
+        rename_keys.append(("projectors.2._net.0.bias", "metric_head.projectors.2.conv1.bias"))
+        rename_keys.append(("projectors.2._net.2.weight", "metric_head.projectors.2.conv2.weight"))
+        rename_keys.append(("projectors.2._net.2.bias", "metric_head.projectors.2.conv2.bias"))
+        rename_keys.append(("projectors.3._net.0.weight", "metric_head.projectors.3.conv1.weight"))
+        rename_keys.append(("projectors.3._net.0.bias", "metric_head.projectors.3.conv1.bias"))
+        rename_keys.append(("projectors.3._net.2.weight", "metric_head.projectors.3.conv2.weight"))
+        rename_keys.append(("projectors.3._net.2.bias", "metric_head.projectors.3.conv2.bias"))
+
+        rename_keys.append(("attractors.0._net.0.weight", "metric_head.attractors.0.conv1.weight"))
+        rename_keys.append(("attractors.0._net.0.bias", "metric_head.attractors.0.conv1.bias"))
+        rename_keys.append(("attractors.0._net.2.weight", "metric_head.attractors.0.conv2.weight"))
+        rename_keys.append(("attractors.0._net.2.bias", "metric_head.attractors.0.conv2.bias"))
+        rename_keys.append(("attractors.1._net.0.weight", "metric_head.attractors.1.conv1.weight"))
+        rename_keys.append(("attractors.1._net.0.bias", "metric_head.attractors.1.conv1.bias"))
+        rename_keys.append(("attractors.1._net.2.weight", "metric_head.attractors.1.conv2.weight"))
+        rename_keys.append(("attractors.1._net.2.bias", "metric_head.attractors.1.conv2.bias"))
+        rename_keys.append(("attractors.2._net.0.weight", "metric_head.attractors.2.conv1.weight"))
+        rename_keys.append(("attractors.2._net.0.bias", "metric_head.attractors.2.conv1.bias"))
+        rename_keys.append(("attractors.2._net.2.weight", "metric_head.attractors.2.conv2.weight"))
+        rename_keys.append(("attractors.2._net.2.bias", "metric_head.attractors.2.conv2.bias"))
+        rename_keys.append(("attractors.3._net.0.weight", "metric_head.attractors.3.conv1.weight"))
+        rename_keys.append(("attractors.3._net.0.bias", "metric_head.attractors.3.conv1.bias"))
+        rename_keys.append(("attractors.3._net.2.weight", "metric_head.attractors.3.conv2.weight"))
+        rename_keys.append(("attractors.3._net.2.bias", "metric_head.attractors.3.conv2.bias"))
+
+        # conditional log binomial
+        rename_keys.append(("conditional_log_binomial.mlp.0.weight", "metric_head.conditional_log_binomial.mlp.0.weight"))
+        rename_keys.append(("conditional_log_binomial.mlp.0.bias", "metric_head.conditional_log_binomial.mlp.0.bias"))
+        rename_keys.append(("conditional_log_binomial.mlp.2.weight", "metric_head.conditional_log_binomial.mlp.2.weight"))
+        rename_keys.append(("conditional_log_binomial.mlp.2.bias", "metric_head.conditional_log_binomial.mlp.2.bias"))
 
     return rename_keys
 
@@ -250,13 +327,13 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     original_model.eval()
     state_dict = original_model.state_dict()
 
-    # for name, param in original_model.named_parameters():
-    #     print(name, param.shape)
+    for name, param in original_model.named_parameters():
+        print(name, param.shape)
 
     # remove certain keys
     remove_ignore_keys_(state_dict)
     # rename keys
-    rename_keys = create_rename_keys(config)
+    rename_keys = create_rename_keys(config, model_name)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
     # read in qkv matrices
@@ -319,7 +396,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_name",
         default="ZoeD_N",
-        choices=["ZoeD_N", "ZoeD_K"],
+        choices=["ZoeD_N", "ZoeD_K", "ZoeD_NK"],
         type=str,
         help="Name of the original ZoeDepth checkpoint you'd like to convert.",
     )

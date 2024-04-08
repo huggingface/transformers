@@ -104,6 +104,10 @@ class ZoeDepthConfig(PretrainedConfig):
         bin_centers_type (`str`, *optional*, defaults to `"softplus"`):
             Activation type used for bin centers. Can be "normed" or "softplus". For "normed" bin centers, linear normalization trick
             is applied. This results in bounded bin centers. For "softplus", softplus activation is used and thus are unbounded.
+        use_multiple_heads (`bool`, *optional*, defaults to `False`):
+            Whether to use multiple heads in the depth estimation head.
+        bin_conf (`List[dict]`, *optional*):
+            Configuration for the bin heads. Only used in case `use_multiple_heads` is `True`.
 
     Example:
 
@@ -151,6 +155,8 @@ class ZoeDepthConfig(PretrainedConfig):
         min_temp=0.0212,
         max_temp=50.0,
         bin_centers_type="softplus",
+        use_multiple_heads=False,
+        bin_conf=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -201,3 +207,7 @@ class ZoeDepthConfig(PretrainedConfig):
         self.min_temp = min_temp
         self.max_temp = max_temp
         self.bin_centers_type = bin_centers_type
+        self.use_multiple_heads = use_multiple_heads
+        if use_multiple_heads and bin_conf is None:
+            raise ValueError("bin_conf must be specified when use_multiple_heads is True.")
+        self.bin_conf = bin_conf

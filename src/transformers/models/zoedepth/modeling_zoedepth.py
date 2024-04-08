@@ -877,6 +877,7 @@ class ZoeDepthPatchTransformerEncoder(nn.Module):
         super().__init__()
         encoder_layers = nn.TransformerEncoderLayer(embedding_dim, num_heads, dim_feedforward=1024)
         self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers=4)  # takes shape S,N,E
+        self.use_class_token = use_class_token
 
         self.embedding_convPxP = nn.Conv2d(
             in_channels, embedding_dim, kernel_size=patch_size, stride=patch_size, padding=0
@@ -924,10 +925,12 @@ class ZoeDepthPatchTransformerEncoder(nn.Module):
 
 class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
     """
-    Multiple metric depth estimation heads. Each head consists of a transformer encoder and a linear classifier.
+    Multiple metric depth estimation heads. A transformer encoder is used to route between 2 different heads.
     """
 
     def __init__(self, config):
+        super().__init__()
+
         bin_embedding_dim = config.bin_embedding_dim
         min_depth = config.min_depth
         max_depth = config.max_depth
@@ -937,10 +940,15 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         attractor_gamma = config.attractor_gamma
         attractor_kind = config.attractor_kind
         bin_centers_type = config.bin_centers_type
+        min_temp = config.min_temp
+        max_temp = config.max_temp
 
         self.min_depth = min_depth
         self.max_depth = max_depth
         self.bin_centers_type = bin_centers_type
+        self.min_temp = min_temp
+        self.max_temp = max_temp
+        self.bin_conf = config.bin_conf
 
         # Bottleneck convolution
         bottleneck_features = config.bottleneck_features
@@ -1037,7 +1045,7 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         bin_conf_name = ["nyu", "kitti"][torch.argmax(domain_vote, dim=-1).squeeze().item()]
 
         try:
-            conf = [c for c in self.bin_conf if c.name == bin_conf_name][0]
+            conf = [config for config in self.bin_conf if config["name"] == bin_conf_name][0]
         except IndexError:
             raise ValueError(f"bin_conf_name {bin_conf_name} not found in bin_confs")
 
@@ -1193,7 +1201,11 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         self.neck = ZoeDepthNeck(config)
         self.relative_head = ZoeDepthRelativeDepthEstimationHead(config)
 
-        self.metric_head = ZoeDepthMetricDepthEstimationHead(config)
+        self.metric_head = (
+            ZoeDepthMultipleMetricDepthEstimationHeads(config)
+            if config.use_multiple_heads
+            else ZoeDepthMetricDepthEstimationHead(config)
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
