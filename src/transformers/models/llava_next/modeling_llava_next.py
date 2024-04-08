@@ -313,7 +313,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         self.language_model = AutoModelForCausalLM.from_config(
             config.text_config, attn_implementation=config._attn_implementation
         )
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        self.pad_token_id = 32001
+        # self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_input_embeddings
@@ -373,10 +374,6 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
 
         # Each patch should have the same image embedding dimension
         embed_dim = image_features[0].shape[1]
-        for idx in range(num_images):
-            # merge input ID with input_ids of the input
-            jsncdjnldsnlc
-        
         # num_images, num_image_patches, embed_dim = image_features.shape
 
         batch_size, sequence_length = input_ids.shape
@@ -552,7 +549,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 mask = pixel_values[:, :, 0, 0, 0] == self.pad_token_id
                 # patches_lengths is a list contaning the lengths of the patches
                 # contained in every image 
-                print("pixel values first row, ", pixel_values[0][-1])
+                # print("pixel values first row, ", pixel_values[0][-1])
                 print("mask: ", mask)
                 patches_lengths = torch.argmax(mask.to(torch.int), dim=1)
                 img_idcs_with_no_pad = ~mask.any(dim=1) 
