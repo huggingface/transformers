@@ -631,7 +631,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
                             {max_patches_in_batch}")
             max_patches_in_batch = max_num_patches
         
-        padded_images = [
+        padded_images = np.array([
             np.concatenate(
                 [
                     x, 
@@ -645,6 +645,6 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             if x.shape[0] < max_patches_in_batch
             else x
             for x in pixel_values 
-        ]
+        ])
         return torch.FloatTensor(padded_images)
  
