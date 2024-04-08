@@ -460,7 +460,8 @@ class Idefics2ImageProcessor(BaseImageProcessor):
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
                 Whether or not to pad the images to the largest height and width in the batch.
             do_image_splitting (`bool`, *optional*, defaults to `self.do_image_splitting`):
-                Whether to split the image into a sequence 4 equal sub-images concatenated with the original image.
+                Whether to split the image into a sequence 4 equal sub-images concatenated with the original image. That
+                strategy was first introduced in https://arxiv.org/abs/2311.06607.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
