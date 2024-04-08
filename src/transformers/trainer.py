@@ -373,7 +373,7 @@ class Trainer:
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
     ):
-        if tokenizer is not None and not isinstance(tokenizer, PreTrainedTokenizerBase):
+        if tokenizer is not None:
             warnings.warn(
                 "The `tokenizer` argument is deprecated and will be removed in v5 of Transformers. You can use `processor` "
                 "instead to pass your tokenizer/image processor/feature extractor/multimodal processor object.",
@@ -687,7 +687,7 @@ class Trainer:
     @property
     def tokenizer(self):
         warnings.warn(
-            "The 'tokenizer' attribute is deprecated and will be removed in a future version. Use `processor` instead",
+            "The 'tokenizer' attribute is deprecated and will be removed in v5 of Transformers. Use `processor` instead",
             FutureWarning,
         )
         return self.processor

@@ -24,7 +24,6 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 from tqdm.auto import tqdm
 
-from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_utils import IntervalStrategy, has_length
 from .training_args import TrainingArguments
 from .utils import logging
@@ -310,7 +309,7 @@ class CallbackHandler(TrainerCallback):
     """Internal class that just calls the list of callbacks in order."""
 
     def __init__(self, callbacks, model, processor, optimizer, lr_scheduler, tokenizer=None):
-        if tokenizer is not None and not isinstance(tokenizer, PreTrainedTokenizerBase):
+        if tokenizer is not None:
             warnings.warn(
                 "The `tokenizer` argument is deprecated and will be removed in v5 of Transformers. You can use `processor` "
                 "instead to pass your tokenizer/image processor/feature extractor/multimodal processor object.",
