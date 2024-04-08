@@ -1287,6 +1287,7 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
 
         out = self.metric_head(out, relative_depth)
         metric_depth = out["metric_depth"] if isinstance(out, dict) else out
+        metric_depth = metric_depth.squeeze(dim=1)
 
         loss = None
         if labels is not None:

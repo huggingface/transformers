@@ -356,20 +356,20 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     # Verify logits
     # These were obtained by inserting the pixel_values at the patch embeddings of BEiT
     if model_name == "ZoeD_N":
-        expected_shape = torch.Size([1, 1, 384, 384])
+        expected_shape = torch.Size([1, 384, 384])
         expected_slice = torch.tensor([[1.0328, 1.0604, 1.0747], [1.0816, 1.1293, 1.1456], [1.1117, 1.1629, 1.1766]])
     elif model_name == "ZoeD_K":
-        expected_shape = torch.Size([1, 1, 384, 384])
+        expected_shape = torch.Size([1, 384, 384])
         expected_slice = torch.tensor([[1.6567, 1.6852, 1.7065], [1.6707, 1.6764, 1.6713], [1.7195, 1.7166, 1.7118]])
     elif model_name == "ZoeD_NK":
-        expected_shape = torch.Size([1, 1, 384, 384])
+        expected_shape = torch.Size([1, 384, 384])
         expected_slice = torch.tensor([[1.1228, 1.1079, 1.1382], [1.1807, 1.1658, 1.1891], [1.2344, 1.2094, 1.2317]])
 
     print("Shape of depth:", depth.shape)
-    print("First 3x3 slice of depth:", depth[0, 0, :3, :3])
+    print("First 3x3 slice of depth:", depth[0, :3, :3])
 
     assert depth.shape == torch.Size(expected_shape)
-    assert torch.allclose(depth[0, 0, :3, :3], expected_slice, atol=1e-4)
+    assert torch.allclose(depth[0, :3, :3], expected_slice, atol=1e-4)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
