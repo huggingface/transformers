@@ -64,7 +64,7 @@ def get_zoedepth_config(model_name):
     )
 
     neck_hidden_sizes = [256, 512, 1024, 1024]
-    bin_centers_type = "softplus" if model_name == "ZoeD_N" else "normed"
+    bin_centers_type = "softplus" if model_name in ["ZoeD_N", "ZoeD_NK"] else "normed"
     use_multiple_heads = model_name == "ZoeD_NK"
     bin_conf = [
         {"name": "nyu", "n_bins": 64, "min_depth": 1e-3, "max_depth": 10.0},
@@ -167,7 +167,7 @@ def create_rename_keys(config, model_name):
             rename_keys.append((f"patch_transformer.transformer_encoder.layers.{i}.norm1.bias", f"metric_head.patch_transformer.transformer_encoder.layers.{i}.norm1.bias"))
             rename_keys.append((f"patch_transformer.transformer_encoder.layers.{i}.norm2.weight", f"metric_head.patch_transformer.transformer_encoder.layers.{i}.norm2.weight"))
             rename_keys.append((f"patch_transformer.transformer_encoder.layers.{i}.norm2.bias", f"metric_head.patch_transformer.transformer_encoder.layers.{i}.norm2.bias"))
-        
+
         rename_keys.append(("patch_transformer.embedding_convPxP.weight", "metric_head.patch_transformer.embedding_convPxP.weight"))
         rename_keys.append(("patch_transformer.embedding_convPxP.bias", "metric_head.patch_transformer.embedding_convPxP.bias"))
 
@@ -208,11 +208,14 @@ def create_rename_keys(config, model_name):
         rename_keys.append(("projectors.3._net.2.weight", "metric_head.projectors.3.conv2.weight"))
         rename_keys.append(("projectors.3._net.2.bias", "metric_head.projectors.3.conv2.bias"))
 
-        # TODO NYU and kitti attractors
-        # rename_keys.append(("attractors.nyu.0._net.0.weight", "metric_head.attractors.nyu.0.conv1.weight"))
-        # rename_keys.append(("attractors.nyu.0._net.0.bias", "metric_head.attractors.nyu.0.conv1.bias"))
-        # rename_keys.append(("attractors.nyu.0._net.2.weight", "metric_head.attractors.nyu.0.conv2.weight"))
-        # rename_keys.append(("attractors.nyu.0._net.2.bias", "metric_head.attractors.nyu.0.conv2.bias"))
+        # NYU and kitti attractors
+        for i in ["nyu", "kitti"]:
+            for j in range(len(config.num_out_features)):
+                rename_keys.append((f"attractors.{i}.{j}._net.0.weight", f"metric_head.attractors.{i}.{j}.conv1.weight"))
+                rename_keys.append((f"attractors.{i}.{j}._net.0.bias", f"metric_head.attractors.{i}.{j}.conv1.bias"))
+                rename_keys.append((f"attractors.{i}.{j}._net.2.weight", f"metric_head.attractors.{i}.{j}.conv2.weight"))
+                rename_keys.append((f"attractors.{i}.{j}._net.2.bias", f"metric_head.attractors.{i}.{j}.conv2.bias"))
+
 
         # conditional log binomial
         for i in ["nyu", "kitti"]:
@@ -220,6 +223,8 @@ def create_rename_keys(config, model_name):
             rename_keys.append((f"conditional_log_binomial.{i}.mlp.0.bias", f"metric_head.conditional_log_binomial.{i}.mlp.0.bias"))
             rename_keys.append((f"conditional_log_binomial.{i}.mlp.2.weight", f"metric_head.conditional_log_binomial.{i}.mlp.2.weight"))
             rename_keys.append((f"conditional_log_binomial.{i}.mlp.2.bias", f"metric_head.conditional_log_binomial.{i}.mlp.2.bias"))
+            rename_keys.append((f"conditional_log_binomial.{i}.log_binomial_transform.k_idx", f"metric_head.conditional_log_binomial.{i}.log_binomial_transform.k_idx"))
+            rename_keys.append((f"conditional_log_binomial.{i}.log_binomial_transform.K_minus_1", f"metric_head.conditional_log_binomial.{i}.log_binomial_transform.K_minus_1"))
 
     else:
         # seed regressor and projector
@@ -327,8 +332,8 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     original_model.eval()
     state_dict = original_model.state_dict()
 
-    for name, param in original_model.named_parameters():
-        print(name, param.shape)
+    # for name, param in original_model.named_parameters():
+    #     print(name, param.shape)
 
     # remove certain keys
     remove_ignore_keys_(state_dict)
@@ -370,6 +375,9 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     elif model_name == "ZoeD_K":
         expected_shape = torch.Size([1, 1, 384, 384])
         expected_slice = torch.tensor([[1.6567, 1.6852, 1.7065], [1.6707, 1.6764, 1.6713], [1.7195, 1.7166, 1.7118]])
+    elif model_name == "ZoeD_NK":
+        expected_shape = torch.Size([1, 1, 384, 384])
+        expected_slice = torch.tensor([[1.1228, 1.1079, 1.1382], [1.1807, 1.1658, 1.1891], [1.2344, 1.2094, 1.2317]])
 
     print("Shape of depth:", depth.shape)
     print("First 3x3 slice of depth:", depth[0, 0, :3, :3])
