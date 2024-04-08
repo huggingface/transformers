@@ -1270,7 +1270,7 @@ class Idefics2PerceiverResampler(nn.Module):
         attention_mask,
     ) -> torch.Tensor:
         # seq embed -> bsz seq embed
-        latents = self.latents.repeat((context.shape[0], 1, 1))
+        latents = self.latents.unsqueeze(0).expand((context.shape[0], 1, 1))
 
         latent_attention_mask = torch.ones(
             (attention_mask.size(0), latents.size(1)), dtype=attention_mask.dtype, device=attention_mask.device
@@ -1281,9 +1281,11 @@ class Idefics2PerceiverResampler(nn.Module):
             if not self._use_flash_attention_2
             else attention_mask
         )
+
+        compressed_context = latents
         for perceiver_layer in self.layers:
             layer_outputs = perceiver_layer(
-                latents,
+                compressed_context,
                 context,
                 attention_mask=attention_mask,
                 position_ids=None,
@@ -1292,11 +1294,11 @@ class Idefics2PerceiverResampler(nn.Module):
                 use_cache=False,
             )
 
-            latents = layer_outputs[0]
+            compressed_context = layer_outputs[0]
 
-        latents = self.norm(latents)
+        compressed_context = self.norm(compressed_context)
 
-        return latents
+        return compressed_context
 
 
 IDEFICS2_START_DOCSTRING = r"""
