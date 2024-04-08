@@ -281,7 +281,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         num_images, num_image_patches, embed_dim = visual_features.shape
         batch_size, sequence_length = input_ids.shape
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
-        visual_type = "videos" if num_frames == 8 else "images"
         special_vision_token = self.config.video_token_index if num_frames == 8 else self.config.image_token_index
 
         # 1. Create a mask to know where special image tokens are
@@ -297,7 +296,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         # `torch.cumsum` computes how each image token shifts subsequent text token positions.
         # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
         new_token_positions = (
-            torch.cumsum((special_image_token_mask * (num_image_patches * num_frames - 1) + 1), -1) - 1
+            torch.cumsum((special_image_token_mask * (num_image_patches * num_frames - 1) + 1), dim=-1) - 1
         )
         nb_image_pad = max_seq_len - 1 - new_token_positions[:, -1]
         if left_padding:
@@ -313,7 +312,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
             batch_size, max_seq_len, dtype=attention_mask.dtype, device=inputs_embeds.device
         )
         final_input_ids = torch.full(
-            (batch_size, max_seq_len), special_vision_token, dtype=input_ids.dtype, device=inputs_embeds.device
+            (batch_size, max_seq_len), self.pad_token_id, dtype=input_ids.dtype, device=inputs_embeds.device
         )
         # In case the Vision model or the Language model has been offloaded to CPU, we need to manually
         # set the corresponding tensors into their correct target device.
@@ -339,10 +338,13 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
             final_labels = None
 
         # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
-        image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
+        image_to_overwrite = torch.full((batch_size, max_seq_len), True, dtype=torch.bool, device=inputs_embeds.device)
+        image_to_overwrite[batch_indices, text_to_overwrite] = False
         image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
 
         if image_to_overwrite.sum() != visual_features.shape[:-1].numel():
+            visual_type = "videos" if num_frames == 8 else "images"
+            num_images //= num_frames
             raise ValueError(
                 f"The input provided to the model are wrong. The number of {visual_type} tokens is {torch.sum(special_image_token_mask)} while"
                 f" the number of {visual_type} given to the model is {num_images}. This prevents correct indexing and breaks batch generation."
