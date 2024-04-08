@@ -1181,7 +1181,7 @@ class TrainingArguments:
         default="length",
         metadata={"help": "Column name with precomputed lengths to use when grouping by length."},
     )
-    report_to: Optional[Union[List[str], str]] = field(
+    report_to: Union[None, str, List[str]] = field(
         default=None, metadata={"help": "The list of integrations to report the results and logs to."}
     )
     ddp_find_unused_parameters: Optional[bool] = field(
