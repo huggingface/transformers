@@ -31,7 +31,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import ViTMSNForImageClassification, ViTMSNModel
-    from transformers.models.vit_msn.modeling_vit_msn import VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -192,9 +191,9 @@ class ViTMSNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ViTMSNModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/vit-msn-small"
+        model = ViTMSNModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

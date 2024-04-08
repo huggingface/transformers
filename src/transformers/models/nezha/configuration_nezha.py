@@ -1,9 +1,5 @@
 from ... import PretrainedConfig
-
-
-NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "sijunhe/nezha-cn-base": "https://huggingface.co/sijunhe/nezha-cn-base/resolve/main/config.json",
-}
+from ..deprecated._archive_maps import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class NezhaConfig(PretrainedConfig):
@@ -64,7 +60,6 @@ class NezhaConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    pretrained_config_archive_map = NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "nezha"
 
     def __init__(

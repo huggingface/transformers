@@ -20,6 +20,7 @@ import os
 import os.path
 import sys
 import tempfile
+import threading
 import unittest
 import unittest.mock as mock
 import uuid
@@ -85,7 +86,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         AutoModelForCausalLM,
         AutoTokenizer,
         BertConfig,
@@ -101,7 +101,7 @@ if is_torch_available():
         _prepare_4d_attention_mask,
         _prepare_4d_causal_attention_mask,
     )
-    from transformers.modeling_utils import shard_checkpoint
+    from transformers.modeling_utils import _find_disjoint, _find_identical, shard_checkpoint
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
@@ -217,29 +217,29 @@ def check_models_equal(model1, model2):
 class ModelUtilsTest(TestCasePlus):
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            config = BertConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, PretrainedConfig)
+        model_name = "google-bert/bert-base-uncased"
+        config = BertConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, PretrainedConfig)
 
-            model = BertModel.from_pretrained(model_name)
-            model, loading_info = BertModel.from_pretrained(model_name, output_loading_info=True)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, PreTrainedModel)
+        model = BertModel.from_pretrained(model_name)
+        model, loading_info = BertModel.from_pretrained(model_name, output_loading_info=True)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, PreTrainedModel)
 
-            self.assertEqual(len(loading_info["missing_keys"]), 0)
-            self.assertEqual(len(loading_info["unexpected_keys"]), 8)
-            self.assertEqual(len(loading_info["mismatched_keys"]), 0)
-            self.assertEqual(len(loading_info["error_msgs"]), 0)
+        self.assertEqual(len(loading_info["missing_keys"]), 0)
+        self.assertEqual(len(loading_info["unexpected_keys"]), 8)
+        self.assertEqual(len(loading_info["mismatched_keys"]), 0)
+        self.assertEqual(len(loading_info["error_msgs"]), 0)
 
-            config = BertConfig.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
+        config = BertConfig.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
 
-            # Not sure this is the intended behavior. TODO fix Lysandre & Thom
-            config.name_or_path = model_name
+        # Not sure this is the intended behavior. TODO fix Lysandre & Thom
+        config.name_or_path = model_name
 
-            model = BertModel.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
-            self.assertEqual(model.config.output_hidden_states, True)
-            self.assertEqual(model.config, config)
+        model = BertModel.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
+        self.assertEqual(model.config.output_hidden_states, True)
+        self.assertEqual(model.config, config)
 
     def test_model_from_pretrained_subfolder(self):
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -253,6 +253,26 @@ class ModelUtilsTest(TestCasePlus):
                 _ = BertModel.from_pretrained(tmp_dir)
 
             model_loaded = BertModel.from_pretrained(tmp_dir, subfolder=subfolder)
+
+        self.assertTrue(check_models_equal(model, model_loaded))
+
+    def test_model_manually_shared_disjointed_tensors_optimum(self):
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+        model = BertModel(config)
+
+        # Let's fuse qkv
+        attn = model.encoder.layer[0].attention.self
+        q = attn.query.weight
+        k = attn.key.weight
+        v = attn.value.weight
+        # Force some shared storage
+        qkv = torch.stack([q, k, v], dim=0)
+        attn.query.weight = torch.nn.Parameter(qkv[0])
+        attn.key.weight = torch.nn.Parameter(qkv[1])
+        attn.value.weight = torch.nn.Parameter(qkv[2])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            model_loaded = BertModel.from_pretrained(tmp_dir)
 
         self.assertTrue(check_models_equal(model, model_loaded))
 
@@ -1429,7 +1449,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             bot_opened_pr_title = None
 
             for discussion in discussions:
-                if discussion.author == "SFconvertBot":
+                if discussion.author == "SFconvertbot":
                     bot_opened_pr = True
                     bot_opened_pr_title = discussion.title
 
@@ -1451,6 +1471,51 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         # Try to convert the model on that revision should raise
         with self.assertRaises(EnvironmentError):
             BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token, revision="new-branch")
+
+    def test_absence_of_safetensors_triggers_conversion(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        # Push a model on `main`
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+
+        # Download the model that doesn't have safetensors
+        BertModel.from_pretrained(self.repo_name, token=self.token)
+
+        for thread in threading.enumerate():
+            if thread.name == "Thread-autoconversion":
+                thread.join(timeout=10)
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+
+            bot_opened_pr = None
+            bot_opened_pr_title = None
+
+            for discussion in discussions:
+                if discussion.author == "SFconvertbot":
+                    bot_opened_pr = True
+                    bot_opened_pr_title = discussion.title
+
+            self.assertTrue(bot_opened_pr)
+            self.assertEqual(bot_opened_pr_title, "Adding `safetensors` variant of this model")
+
+    @mock.patch("transformers.safetensors_conversion.spawn_conversion")
+    def test_absence_of_safetensors_triggers_conversion_failed(self, spawn_conversion_mock):
+        spawn_conversion_mock.side_effect = HTTPError()
+
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        # Push a model on `main`
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+
+        # The auto conversion is mocked to always raise; ensure that it doesn't raise in the main thread
+        BertModel.from_pretrained(self.repo_name, token=self.token)
 
 
 @require_torch
@@ -1956,7 +2021,6 @@ class TestAttentionImplementation(unittest.TestCase):
         self.assertTrue("PyTorch SDPA requirements in Transformers are not met" in str(cm.exception))
 
 
-@slow
 @require_torch_gpu
 class Mask4DTestBase(unittest.TestCase):
     def tearDown(self):
@@ -2011,6 +2075,7 @@ class Mask4DTestFP32(Mask4DTestBase):
 
     def test_attention(self):
         """comparing outputs of attention layer"""
+        # Input 0: one row per sentence; Input 1: same data, but stacked into a single row with custom attention
         input_0, position_ids_0, input_1, mask_1, position_ids_1 = self.get_test_data()
         causal_mask_1 = (1 - mask_1).to(self.model_dtype) * torch.finfo(self.model_dtype).min
 
@@ -2030,6 +2095,7 @@ class Mask4DTestFP32(Mask4DTestBase):
 
     def test_causal_model_logits(self):
         """comparing logits outputs of whole inner model"""
+        # Input 0: one row per sentence; Input 1: same data, but stacked into a single row with custom attention
         input_0, position_ids_0, input_1, mask_1, position_ids_1 = self.get_test_data()
 
         logits_0 = self.model.forward(input_0, position_ids=position_ids_0).logits
@@ -2052,6 +2118,7 @@ class Mask4DTestFP16(Mask4DTestBase):
 
     def test_causal_model_logits(self):
         """comparing logits outputs of whole inner model"""
+        # Input 0: one row per sentence; Input 1: same data, but stacked into a single row with custom attention
         input_0, position_ids_0, input_1, mask_1, position_ids_1 = self.get_test_data()
 
         logits_0 = self.model.forward(input_0, position_ids=position_ids_0).logits
@@ -2069,3 +2136,146 @@ class Mask4DTestFP16(Mask4DTestBase):
         # checking tokens order for the top tokens
         for token_ids_0, token_ids_1 in zip(indices_0, indices_1):
             self.assertTrue(torch.equal(token_ids_0[:128], token_ids_1[:128]))
+
+
+@slow
+@require_torch_gpu
+class Mask4DTestHard(unittest.TestCase):
+    def tearDown(self):
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    def setUp(self):
+        model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        self.model_dtype = torch.float32
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
+
+    def get_test_data(self):
+        template = "my favorite {}"
+        items = ("pet is a", "artist plays a", "name is L")  # same number of tokens in each item
+
+        batch_0 = [template.format(x) for x in items]  # 3 separate lines
+        batch_1 = template.format(" ".join(items))  # 1 line with options concatenated
+
+        input_0 = self.tokenizer(batch_0, return_tensors="pt").input_ids.to(torch_device)
+        input_1 = self.tokenizer(batch_1, return_tensors="pt").input_ids.to(torch_device)
+
+        mask_1 = torch.tensor(
+            [
+                [
+                    [
+                        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                        [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+                        [1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+                        [1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0],
+                        [1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0],
+                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0],
+                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+                    ]
+                ]
+            ],
+            device=torch_device,
+            dtype=torch.int64,
+        )
+
+        position_ids_0 = torch.arange(input_0.shape[1]).tile(input_0.shape[0], 1).to(torch_device)
+        # equivalent: position_ids_1 = torch.tensor([[0, 1, 2, 3, 4, 5, 3, 4, 5, 3, 4, 5]]).to(device)
+        position_ids_1 = (mask_1.sum(dim=-1) - 1).reshape(1, -1)  # same but nicer
+
+        return input_0, position_ids_0, input_1, mask_1, position_ids_1
+
+    def test_stacked_causal_mask(self):
+        # Input 0: one row per sentence; Input 1: same data, but stacked into a single row with custom attention
+        input_0, position_ids_0, input_1, mask_1, position_ids_1 = self.get_test_data()
+
+        # regular batch
+        logits_0 = self.model.forward(input_0, position_ids=position_ids_0).logits
+        logits_0_last = logits_0[:, -1, :]  # last tokens in each batch line
+        decoded_0 = [self.tokenizer.decode(t) for t in logits_0_last.argmax(dim=-1)]
+
+        # single forward run with 4D custom mask
+        logits_1 = self.model.forward(input_1, attention_mask=mask_1.bool(), position_ids=position_ids_1).logits
+        logits_1_last = logits_1[0, torch.where(position_ids_1 == position_ids_1.max())[1], :]  # last three tokens
+        decoded_1 = [self.tokenizer.decode(t) for t in logits_1_last.argmax(dim=-1)]
+
+        self.assertEqual(decoded_0, decoded_1)
+
+    def test_partial_stacked_causal_mask(self):
+        # Same as the test above, but the input is passed in two groups. It tests that we can pass partial 4D attention
+        # masks
+
+        # Input 0: one row per sentence; Input 1: same data, but stacked into a single row with custom attention
+        input_0, position_ids_0, input_1, mask_1, position_ids_1 = self.get_test_data()
+
+        # regular batch
+        logits_0 = self.model.forward(input_0, position_ids=position_ids_0).logits
+        logits_0_last = logits_0[:, -1, :]  # last tokens in each batch line
+        decoded_0 = [self.tokenizer.decode(t) for t in logits_0_last.argmax(dim=-1)]
+
+        # 2 forward runs with custom 4D masks
+        part_a = 3  # split point
+
+        input_1a = input_1[:, :part_a]
+        position_ids_1a = position_ids_1[:, :part_a]
+        mask_1a = mask_1[:, :, :part_a, :part_a]
+
+        outs_1a = self.model.forward(input_1a, attention_mask=mask_1a.bool(), position_ids=position_ids_1a)
+        past_key_values_a = outs_1a["past_key_values"]
+
+        input_1b = input_1[:, part_a:]
+        position_ids_1b = position_ids_1[:, part_a:]
+        mask_1b = mask_1[:, :, part_a:, :]
+
+        outs_1b = self.model.forward(
+            input_1b, attention_mask=mask_1b.bool(), position_ids=position_ids_1b, past_key_values=past_key_values_a
+        )
+
+        decoded_1b = [
+            self.tokenizer.decode(t)
+            for t in outs_1b.logits.argmax(-1)[0, torch.where(position_ids_1 == position_ids_1.max())[1] - part_a]
+        ]
+
+        self.assertEqual(decoded_0, decoded_1b)
+
+
+@require_torch
+class TestTensorSharing(TestCasePlus):
+    def test_disjoint(self):
+        main = torch.zeros(10)
+        a = main[:5]
+        b = main[5:]
+        state_dict = {"a": a, "b": b}
+
+        shared_names, disjoint_names = _find_disjoint([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [])
+        self.assertEqual(disjoint_names, ["a", "b"])
+
+        a = main[::2]
+        b = main[1::2]
+        state_dict = {"a": a, "b": b}
+
+        shared_names, disjoint_names = _find_disjoint([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [{"a", "b"}])
+        self.assertEqual(disjoint_names, [])
+
+    def test_identical(self):
+        a = torch.zeros(10)
+        b = a
+        state_dict = {"a": a, "b": b}
+
+        shared_names, identical_names = _find_identical([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [])
+        self.assertEqual(identical_names, [{"a", "b"}])
+
+        b = a[:5]
+        state_dict = {"a": a, "b": b}
+
+        shared_names, identical_names = _find_identical([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [{"a", "b"}])
+        self.assertEqual(identical_names, [])

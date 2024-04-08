@@ -22,12 +22,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "huggingface/time-series-transformer-tourism-monthly": (
-        "https://huggingface.co/huggingface/time-series-transformer-tourism-monthly/resolve/main/config.json"
-    ),
-    # See all TimeSeriesTransformer models at https://huggingface.co/models?filter=time_series_transformer
-}
+
+from ..deprecated._archive_maps import TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class TimeSeriesTransformerConfig(PretrainedConfig):

@@ -20,9 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "weiweishi/roc-bert-base-zh": "https://huggingface.co/weiweishi/roc-bert-base-zh/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class RoCBertConfig(PretrainedConfig):
