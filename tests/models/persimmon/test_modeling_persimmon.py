@@ -466,6 +466,7 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 @require_torch
 class PersimmonIntegrationTest(unittest.TestCase):
     @slow
+    @require_torch_accelerator
     @require_bitsandbytes
     def test_model_8b_chat_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
