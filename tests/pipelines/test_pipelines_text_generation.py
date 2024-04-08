@@ -268,6 +268,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         text_generator = TextGenerationPipeline(model=model, tokenizer=tokenizer)
         return text_generator, ["This is a test", "Another test"]
 
+    @require_torch  # See https://github.com/huggingface/transformers/issues/30117
     def test_stop_sequence_stopping_criteria(self):
         prompt = """Hello I believe in"""
         text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2")
