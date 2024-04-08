@@ -604,39 +604,6 @@ class LlamaSdpaAttention(LlamaAttention):
     SDPA API.
     """
 
-    def _scaled_dot_product_attention(
-        self,
-        query_states: torch.Tensor,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        causal_mask: torch.Tensor,
-        q_len: int,
-    ):
-        # This method is abstracted in order to enable Copied from statements for it.
-
-        if torch._dynamo.is_compiling():
-            # Dynamo is unable to capture `self.is_causal and attention_mask is None and q_len > 1` with `fullgraph=True`, hence the need to always
-            # pass `attn_mask=causal_mask` in this case. Ideally, if available, should use `torch._dynamo.is_fullgraph_compiling()`.
-            attn_output = torch.nn.functional.scaled_dot_product_attention(
-                query_states,
-                key_states,
-                value_states,
-                attn_mask=causal_mask,
-                dropout_p=self.attention_dropout if self.training else 0.0,
-            )
-        else:
-            # In case we are not compiling, we may set `causal_mask` to None, which is required to dispatch to SDPA's Flash Attention 2 backend, rather
-            # relying on the `is_causal` argument.
-            attn_output = torch.nn.functional.scaled_dot_product_attention(
-                query_states,
-                key_states,
-                value_states,
-                attn_mask=causal_mask,
-                dropout_p=self.attention_dropout if self.training else 0.0,
-                is_causal=self.is_causal and causal_mask is None and q_len > 1,
-            )
-        return attn_output
-
     # Adapted from LlamaAttention.forward
     def forward(
         self,
@@ -699,7 +666,16 @@ class LlamaSdpaAttention(LlamaAttention):
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
-        attn_output = self._scaled_dot_product_attention(query_states, key_states, value_states, causal_mask, q_len)
+        # In case we are not compiling, we may set `causal_mask` to None, which is required to dispatch to SDPA's Flash Attention 2 backend, rather
+        # relying on the `is_causal` argument.
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=causal_mask,
+            dropout_p=self.attention_dropout if self.training else 0.0,
+            is_causal=self.is_causal and causal_mask is None and q_len > 1,
+        )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(bsz, q_len, self.hidden_size)
@@ -1094,14 +1070,15 @@ class LlamaModel(LlamaPreTrainedModel):
                 return attention_mask
             return None
 
+        ignore_causal_mask = False
         if self.config._attn_implementation == "sdpa":
             # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument,
             # in order to dispatch on Flash Attention 2.
-            attention_mask, mask_none_and_is_tracing = AttentionMaskConverter._ignore_causal_mask_sdpa(
+            ignore_causal_mask = AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask, inputs_embeds=input_tensor, past_key_values_length=past_seen_tokens
             )
 
-            if attention_mask is None and not mask_none_and_is_tracing:
+            if ignore_causal_mask:
                 return None
 
         dtype, device = input_tensor.dtype, input_tensor.device

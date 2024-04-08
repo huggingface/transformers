@@ -244,7 +244,7 @@ class AttentionMaskConverter:
         attention_mask: Optional[torch.Tensor],
         inputs_embeds: torch.Tensor,
         past_key_values_length: int,
-    ) -> Tuple[torch.Tensor, bool]:
+    ) -> bool:
         """
         In case no token is masked in the `attention_mask` argument, we simply set it to `None` for the cases `query_length == 1` and
         `key_value_length == query_length`, and rely instead on SDPA `is_causal` argument to use causal/non-causal masks,
@@ -263,8 +263,12 @@ class AttentionMaskConverter:
             or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
         )
 
-        mask_none_and_is_tracing = False
-        if attention_mask is not None:
+        ignore_causal_mask = False
+
+        if attention_mask is None:
+            # TODO: Once torch._dynamo.is_fullgraph_compiling, we may want to allow to ignore the causal mask as well in case we use fullgraph=False.
+            ignore_causal_mask = not is_tracing
+        else:
             if len(attention_mask.shape) == 4:
                 expected_shape = (batch_size, 1, query_length, key_value_length)
                 if tuple(attention_mask.shape) != expected_shape:
@@ -274,20 +278,16 @@ class AttentionMaskConverter:
             elif not is_tracing and torch.all(attention_mask == 1):
                 if query_length == 1:
                     # For query_length == 1, causal attention and bi-directional attention are the same.
-                    attention_mask = None
+                    ignore_causal_mask = True
                 elif key_value_length == query_length:
-                    attention_mask = None
-                else:
-                    # Unfortunately, for query_length > 1 and key_value_length != query_length, we cannot generally ignore the attention mask, as SDPA causal mask generation
-                    # may be wrong. We will set `is_causal=False` in SDPA and rely on Transformers attention_mask instead, hence not setting it to None here.
-                    # Reference: https://github.com/pytorch/pytorch/issues/108108
-                    pass
-        elif is_tracing:
-            logger.warning(
-                "Tracing a model using SDPA (https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) without an `attention_mask` input. This may result in wrong results for batched inference, as it is then assumed that no padding is used. If you intend to use the traced model with batched inputs, please make sure to pass an `attention_mask` input to torch.jit.trace, torch.fx.symbolic_trace before tracing, or to your TorchDynamo `OptimizedModule` model."
-            )
+                    ignore_causal_mask = True
 
-        return attention_mask, mask_none_and_is_tracing
+                # Unfortunately, for query_length > 1 and key_value_length != query_length, we cannot generally ignore the attention mask, as SDPA causal mask generation
+                # may be wrong. We will set `is_causal=False` in SDPA and rely on Transformers attention_mask instead, hence not setting it to None here.
+                # Reference: https://github.com/pytorch/pytorch/issues/108108
+                # TODO: Revisit this with https://github.com/pytorch/pytorch/pull/114823 in PyTorch 2.3.
+
+        return ignore_causal_mask
 
 
 def _prepare_4d_causal_attention_mask(
