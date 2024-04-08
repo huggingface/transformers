@@ -214,6 +214,8 @@ class Bnb8BitHfQuantizer(HfQuantizer):
                 unexpected_keys.remove(fp16_statistics_key)
 
         if fp16_weights_format is not None:
+            # We just need to pop the `weight_format` keys from the state dict to remove unneeded
+            # messages. The correct format is correctly retrieved during the first forward pass.
             if unexpected_keys is not None:
                 unexpected_keys.remove(fp16_weights_format_key)
 
