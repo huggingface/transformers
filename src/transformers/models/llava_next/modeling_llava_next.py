@@ -552,7 +552,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 mask = pixel_values[:, :, 0, 0, 0] == self.pad_token_id
                 # patches_lengths is a list contaning the lengths of the patches
                 # contained in every image 
-                patches_lengths = torch.argmax(mask, dim=1)
+                patches_lengths = torch.argmax(mask.to(torch.int), dim=1)
                 img_idcs_with_no_pad = ~mask.any(dim=1) 
                 patches_lengths[img_idcs_with_no_pad] = max_num_patches
 
@@ -568,8 +568,6 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
 
                 unpadded_pixel_values = torch.cat(unpadded_pixel_values, dim=0)
                 # Use the mask to index the original tensor, filtering out the rows with pad_token
-
-                print(filtered_tensor)
 
                 reshaped_pixel_values = pixel_values.view(batch_size * total_patches, num_channels, height, width)
                 image_features = self.vision_tower(reshaped_pixel_values, output_hidden_states=True)
@@ -594,6 +592,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 new_image_features = []
                 for image_idx, image_feature in enumerate(image_features):
                     num_unpadded_patches = image_feature.shape[0]
+                    print("num _unpadded patches: ", num_unpadded_patches)
                     if image_feature.shape[0] > 1:
                         base_image_feature = image_feature[0]
                         image_feature = image_feature[1:]
