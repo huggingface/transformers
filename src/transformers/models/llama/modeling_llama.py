@@ -674,7 +674,7 @@ class LlamaSdpaAttention(LlamaAttention):
             value_states,
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=self.is_causal and causal_mask is None and q_len > 1,
+            is_causal=causal_mask is None and q_len > 1,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
