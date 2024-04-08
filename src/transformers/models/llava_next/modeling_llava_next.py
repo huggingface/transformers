@@ -572,7 +572,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 print("shape of unpadded pixel values : ", unpadded_pixel_values.shape)
                 # Use the mask to index the original tensor, filtering out the rows with pad_token
 
-                reshaped_pixel_values = unpadded_pixel_values.view(batch_size * total_patches, num_channels, height, width)
+                reshaped_pixel_values = unpadded_pixel_values.view(total_patches, num_channels, height, width)
                 image_features = self.vision_tower(reshaped_pixel_values, output_hidden_states=True)
 
                 selected_image_feature = image_features.hidden_states[vision_feature_layer]
