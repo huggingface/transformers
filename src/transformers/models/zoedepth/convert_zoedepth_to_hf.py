@@ -340,7 +340,15 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     # Check outputs on an image
     image = prepare_img()
 
-    image_processor = ZoeDepthImageProcessor(size={"height": image_size, "width": image_size})
+    # TODO image processor should default to keep_aspect_ratio=True, do_pad=True as well
+    # and verify pixel values on this large image:
+    # filepath = hf_hub_download(repo_id="shariqfarooq/ZoeDepth", filename="examples/person_1.jpeg", repo_type="space")
+    # image = Image.open(filepath).convert("RGB")
+
+    # for now we'll default to this (for some reason this passes with bicubic):
+    image_processor = ZoeDepthImageProcessor(
+        size={"height": image_size, "width": image_size}, keep_aspect_ratio=False, do_pad=False, resample=Image.BICUBIC
+    )
     pixel_values = image_processor(image, return_tensors="pt").pixel_values
     # verify pixel values
     filepath = hf_hub_download(
@@ -351,8 +359,6 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     )
     original_pixel_values = torch.load(filepath, map_location="cpu")
     assert torch.allclose(pixel_values, original_pixel_values)
-
-    # pixel_values = torch.randn(1, 3, 768, 512)
 
     # forward pass HF model
     depth = model(pixel_values).predicted_depth

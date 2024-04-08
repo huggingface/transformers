@@ -20,7 +20,7 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import pad, resize, to_channel_dimension_format
+from ...image_transforms import PaddingMode, pad, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -93,18 +93,8 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
     Constructs a ZoeDepth image processor.
 
     Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions. Can be overidden by `do_resize` in `preprocess`.
-        size (`Dict[str, int]` *optional*, defaults to `{"height": 384, "width": 384}`):
-            Size of the image after resizing. Can be overidden by `size` in `preprocess`.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Defines the resampling filter to use if resizing the image. Can be overidden by `resample` in `preprocess`.
-        keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
-            If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
-            be overidden by `keep_aspect_ratio` in `preprocess`.
-        ensure_multiple_of (`int`, *optional*, defaults to 1):
-            If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
-            by `ensure_multiple_of` in `preprocess`.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to apply pad the input.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overidden by `do_rescale` in
             `preprocess`.
@@ -119,29 +109,44 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `False`):
-            Whether to apply center padding. This was introduced in the DINOv2 paper, which uses the model in
-            combination with DPT.
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the image's (height, width) dimensions. Can be overidden by `do_resize` in `preprocess`.
+        size (`Dict[str, int]` *optional*, defaults to `{"height": 384, "width": 384}`):
+            Size of the image after resizing. Can be overidden by `size` in `preprocess`.
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+            Defines the resampling filter to use if resizing the image. Can be overidden by `resample` in `preprocess`.
+        keep_aspect_ratio (`bool`, *optional*, defaults to `True`):
+            If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
+            be overidden by `keep_aspect_ratio` in `preprocess`.
+        ensure_multiple_of (`int`, *optional*, defaults to 32):
+            If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
+            by `ensure_multiple_of` in `preprocess`.
     """
 
     model_input_names = ["pixel_values"]
 
     def __init__(
         self,
-        do_resize: bool = True,
-        size: Dict[str, int] = None,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        keep_aspect_ratio: bool = False,
-        ensure_multiple_of: int = 1,
+        do_pad: bool = True,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_pad: bool = False,
+        do_resize: bool = True,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        keep_aspect_ratio: bool = True,
+        ensure_multiple_of: int = 32,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
+        self.do_pad = do_pad
+        self.do_normalize = do_normalize
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         size = size if size is not None else {"height": 384, "width": 384}
         size = get_size_dict(size)
         self.do_resize = do_resize
@@ -149,12 +154,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         self.keep_aspect_ratio = keep_aspect_ratio
         self.ensure_multiple_of = ensure_multiple_of
         self.resample = resample
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-        self.do_pad = do_pad
+
         self._valid_processor_keys = [
             "images",
             "do_resize",
@@ -231,15 +231,28 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
     def pad_image(
         self,
         image: np.array,
+        mode: PaddingMode = PaddingMode.REFLECT,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         """
         Pad an image as done in the original ZoeDepth implementation.
 
+        Padding fixes the boundary artifacts in the output depth map.
+        Boundary artifacts are sometimes caused by the fact that the model is trained on NYU raw dataset
+        which has a black or white border around the image. This function pads the input image and crops
+        the prediction back to the original size / view.
+
         Args:
             image (`np.ndarray`):
                 Image to pad.
+            mode (`PaddingMode`):
+            The padding mode to use. Can be one of:
+                - `"constant"`: pads with a constant value.
+                - `"reflect"`: pads with the reflection of the vector mirrored on the first and last values of the
+                  vector along each axis.
+                - `"replicate"`: pads with the replication of the last value on the edge of the array along each axis.
+                - `"symmetric"`: pads with the reflection of the vector mirrored along the edge of the array.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -260,26 +273,28 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         pad_height = int(np.sqrt(height / 2) * 3)
         pad_width = int(np.sqrt(width / 2) * 3)
 
-        padding = [pad_width, pad_width]
-        if pad_height > 0:
-            padding += [pad_height, pad_height]
-
-        return pad(image, tuple(padding), data_format=data_format, input_data_format=input_data_format)
+        return pad(
+            image,
+            padding=((pad_height, pad_height), (pad_width, pad_width)),
+            mode=mode,
+            data_format=data_format,
+            input_data_format=input_data_format,
+        )
 
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
-        size: int = None,
-        keep_aspect_ratio: bool = None,
-        ensure_multiple_of: int = None,
-        resample: PILImageResampling = None,
+        do_pad: bool = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_pad: bool = None,
+        do_resize: bool = None,
+        size: int = None,
+        keep_aspect_ratio: bool = None,
+        ensure_multiple_of: int = None,
+        resample: PILImageResampling = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -292,6 +307,18 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
+                Whether to pad the input image.
+            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+                Whether to rescale the image values between [0 - 1].
+            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
+                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
+                Whether to normalize the image.
+            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+                Image mean.
+            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+                Image standard deviation.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -306,16 +333,6 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
                 has an effect if `do_resize` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
@@ -362,7 +379,6 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_pad=do_pad,
             do_resize=do_resize,
             size=size,
             resample=resample,
@@ -380,6 +396,15 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
+        if do_pad:
+            images = [self.pad_image(image=image, input_data_format=input_data_format) for image in images]
+
+        if do_rescale:
+            images = [
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                for image in images
+            ]
+
         if do_resize:
             images = [
                 self.resize(
@@ -393,20 +418,11 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
                 for image in images
             ]
 
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
-
         if do_normalize:
             images = [
                 self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
                 for image in images
             ]
-
-        if do_pad:
-            images = [self.pad_image(image=image, input_data_format=input_data_format) for image in images]
 
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
