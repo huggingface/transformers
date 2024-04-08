@@ -36,6 +36,7 @@ from ...utils import (
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_mamba import MambaConfig
 
+from .pscan import pscan
 
 logger = logging.get_logger(__name__)
 
@@ -68,6 +69,7 @@ class MambaMixer(nn.Module):
 
     def __init__(self, config: MambaConfig, layer_idx: int):
         super().__init__()
+        self.usemambapy = config.usemambapy
         self.hidden_size = config.hidden_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
@@ -257,14 +259,25 @@ class MambaMixer(nn.Module):
         deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
-        scan_outputs = []
-        for i in range(seq_len):
-            ssm_state = discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]      # [batch, intermediate_size, ssm_state]
-            scan_output = torch.matmul(ssm_state.to(dtype), C[:, i, :].unsqueeze(-1))  # [batch, intermediate_size, 1]
-            scan_outputs.append(scan_output[:, :, 0])
-        scan_output = torch.stack(scan_outputs, dim=-1)                                # [batch, intermediate_size, seq_len]
-        scan_output = scan_output + (hidden_states * self.D[None, :, None])
-        scan_output = (scan_output * self.act(gate))
+        if self.usemambapy:
+            hs = pscan(discrete_A, deltaB_u) # [batch, intermediate_size, seq_len, ssm_state_size]
+
+            scan_output = (hs.transpose(1, 2) @ C.unsqueeze(-1)).squeeze(3).transpose(1, 2) # [batch, intermediate_size, seq_len]
+            scan_output = scan_output + hidden_states * self.D[None, :, None]
+            scan_output = scan_output * self.act(gate)
+
+            # pas sur, todo
+            ssm_state = hs[:, -1]
+
+        else:
+            scan_outputs = []
+            for i in range(seq_len):
+                ssm_state = discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]      # [batch, intermediade_size, ssm_state]
+                scan_output = torch.matmul(ssm_state.to(dtype), C[:, i, :].unsqueeze(-1))  # [batch, intermediade_size, 1]
+                scan_outputs.append(scan_output[:, :, 0])
+            scan_output = torch.stack(scan_outputs, dim=-1)                                # [batch, seq_len, intermediade_size]
+            scan_output = scan_output + (hidden_states * self.D[None, :, None])
+            scan_output = (scan_output * self.act(gate))
 
         if cache_params is not None:
             cache_params.update_ssm_state(self.layer_idx, ssm_state)
