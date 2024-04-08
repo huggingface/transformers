@@ -23,10 +23,6 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-IDEFICS2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "HuggingFaceM4": "https://huggingface.co/HuggingFaceM4/resolve/main/config.json",
-}
-
 
 class Idefics2VisionConfig(PretrainedConfig):
     r"""
@@ -149,8 +145,6 @@ class Idefics2PerceiverConfig(PretrainedConfig):
             Number of key-value heads in the perceiver attention block.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        qk_layer_norms (`bool`, *optional*, defaults to `False`):
-            Whether to apply layer normalization to the query and key tensors before the attention computation.
     """
 
     model_type = "idefics2"
@@ -164,7 +158,6 @@ class Idefics2PerceiverConfig(PretrainedConfig):
         resampler_head_dim=96,
         num_key_value_heads=4,
         attention_dropout=0.0,
-        qk_layer_norms=False,
         **kwargs,
     ):
         self.hidden_act = hidden_act
@@ -174,7 +167,6 @@ class Idefics2PerceiverConfig(PretrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.resampler_head_dim = resampler_head_dim
         self.attention_dropout = attention_dropout
-        self.qk_layer_norms = qk_layer_norms
         if self.num_key_value_heads > self.resampler_n_heads:
             raise ValueError(
                 f"num_key_value_heads={self.num_key_value_heads} must be less than or equal to"
@@ -219,7 +211,7 @@ class Idefics2Config(PretrainedConfig):
     ```"""
 
     model_type = "idefics2"
-    is_composition = False
+    is_composition = True
 
     def __init__(
         self,

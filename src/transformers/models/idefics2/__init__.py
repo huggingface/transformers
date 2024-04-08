@@ -43,7 +43,7 @@ else:
     _import_structure["processing_idefics2"] = ["Idefics2Processor"]
 
 if TYPE_CHECKING:
-    from .configuration_idefics2 import IDEFICS2_PRETRAINED_CONFIG_ARCHIVE_MAP, Idefics2Config
+    from .configuration_idefics2 import Idefics2Config
 
     try:
         if not is_vision_available():

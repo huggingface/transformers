@@ -505,10 +505,7 @@ _import_structure = {
         "IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "IdeficsConfig",
     ],
-    "models.idefics2": [
-        "IDEFICS2_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Idefics2Config",
-    ],
+    "models.idefics2": ["Idefics2Config"],
     "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
     "models.informer": ["INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "InformerConfig"],
     "models.instructblip": [
@@ -5403,10 +5400,7 @@ if TYPE_CHECKING:
         IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         IdeficsConfig,
     )
-    from .models.idefics2 import (
-        IDEFICS2_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Idefics2Config,
-    )
+    from .models.idefics2 import Idefics2Config
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
     from .models.informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
     from .models.instructblip import (

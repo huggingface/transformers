@@ -99,8 +99,8 @@ class Idefics2Processor(ProcessorMixin):
     Args:
         image_processor (`Idefics2ImageProcessor`):
             An instance of [`Idefics2ImageProcessor`]. The image processor is a required input.
-        tokenizer (`LlamaTokenizerFast`, *optional*):
-            An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
+        tokenizer (`PreTrainedTokenizerBase`, *optional*):
+            An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
         image_seq_len (`int`, *optional*, defaults to 64):
             The length of the image sequence i.e. the number of <image> tokens per image in the input.
             This parameter is used to build the string from the input prompt and image tokens and should match the
@@ -109,7 +109,7 @@ class Idefics2Processor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "Idefics2ImageProcessor"
-    tokenizer_class = "LlamaTokenizerFast"
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer=None, image_seq_len: int = 64, **kwargs):
         if image_processor is None:
