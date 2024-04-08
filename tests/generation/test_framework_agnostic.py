@@ -111,7 +111,7 @@ class GenerationIntegrationTestsMixin:
         article = """Justin Timberlake."""
         gpt2_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
-        gpt2_model = model_cls.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        gpt2_model = model_cls.from_pretrained("hf-internal-testing/tiny-random-gpt2", use_safetensors=is_pt)
         input_ids = gpt2_tokenizer(article, return_tensors=return_tensors).input_ids
         if is_pt:
             gpt2_model = gpt2_model.to(torch_device)
