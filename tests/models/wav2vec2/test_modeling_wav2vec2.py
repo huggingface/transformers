@@ -24,6 +24,7 @@ import traceback
 import unittest
 
 import numpy as np
+import pytest
 from datasets import load_dataset
 
 from transformers import Wav2Vec2Config, is_torch_available
@@ -33,9 +34,11 @@ from transformers.testing_utils import (
     is_pt_flax_cross_test,
     is_pyctcdecode_available,
     is_torchaudio_available,
+    require_flash_attn,
     require_pyctcdecode,
     require_soundfile,
     require_torch,
+    require_torch_gpu,
     require_torchaudio,
     run_test_in_subprocess,
     slow,
@@ -1995,3 +1998,50 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         for lang in LANG_MAP.keys():
             assert run_model(lang) == TRANSCRIPTIONS[lang]
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    def test_flash_attn_2_inference_equivalence(self):
+        import torch
+
+        model = Wav2Vec2Model.from_pretrained(
+            "facebook/wav2vec2-base-960h", attn_implementation="eager", torch_dtype=torch.bfloat16
+        ).to(torch_device)
+        model_sdpa = Wav2Vec2Model.from_pretrained(
+            "facebook/wav2vec2-base-960h", attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16
+        ).to(torch_device)
+
+        # random 1-second speech signal
+        random_inputs = torch.ones(1, 16000).to(torch.bfloat16).to(torch_device)
+
+        # # forward pass
+        with torch.no_grad():
+            outputs = model(random_inputs).last_hidden_state
+            outputs_sdpa = model_sdpa(random_inputs).last_hidden_state
+
+        # check equivalence
+        max_diff = (outputs - outputs_sdpa).abs().max()
+        print(max_diff)
+        assert max_diff < 0.07, f"Equivalence failed: got max diff {max_diff}"
+
+    # @require_flash_attn
+    @require_torch_gpu
+    # @pytest.mark.flash_attn_test
+    def test_sdpa_inference_equivalence(self):
+        import torch
+
+        model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h", attn_implementation="eager")
+        model_sdpa = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h", attn_implementation="sdpa")
+
+        # random 1-second speech signal
+        random_inputs = torch.ones(1, 16000)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(random_inputs).last_hidden_state
+            outputs_sdpa = model_sdpa(random_inputs).last_hidden_state
+
+        # check equivalence
+        max_diff = (outputs - outputs_sdpa).abs().max()
+        assert max_diff < 1e-5, f"Equivalence failed: got max diff {max_diff}"
