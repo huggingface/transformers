@@ -552,8 +552,13 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 mask = pixel_values[:, :, 0, 0, 0] == self.pad_token_id
                 # patches_lengths is a list contaning the lengths of the patches
                 # contained in every image 
+                print("pixel values first row, ", pixel_values[0][-1])
+                print("mask: ", mask)
                 patches_lengths = torch.argmax(mask.to(torch.int), dim=1)
                 img_idcs_with_no_pad = ~mask.any(dim=1) 
+                print("patches_ lengths before setting others", patches_lengths)
+                print("pad token id in model: ", self.pad_token_id)
+                print("img indices without padding: ", img_idcs_with_no_pad)
                 patches_lengths[img_idcs_with_no_pad] = max_num_patches
                 print("these are the patches lengths: ", patches_lengths)
 
@@ -607,10 +612,15 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                             self.config.image_grid_pinpoints,
                             self.config.vision_config.image_size,
                         )
+                        print("these are the num patch  and num ht: ", num_patch_height, num_patch_width)
                         image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
                         image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
                         image_feature = image_feature.flatten(1, 2).flatten(2, 3)
+                        print("shape of image feature: before unpadding: ", image_feature.shape)
                         image_feature = unpad_image(image_feature, image_sizes[image_idx])
+                        print("shape of image feature: before catting: ", image_feature.shape)
+                        print("shape of image newline: ", self.image_newline.shape)
+                        print("after transform: ", self.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1).shape)
                         image_feature = torch.cat(
                             (
                                 image_feature,
