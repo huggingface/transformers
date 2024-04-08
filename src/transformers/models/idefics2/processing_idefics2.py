@@ -353,7 +353,7 @@ class Idefics2Processor(ProcessorMixin):
         rendered = rendered.replace(
             f"{self.fake_image_token.content}{self.fake_image_token.content}", f"{self.fake_image_token.content}"
         )
-        # We do another hack here - for image splitting
+        # We do another hack here - if the image_processor splitted the image, then reflect it in the rendered string
         if self.image_processor.do_image_splitting:
             image_seq_string = f"{self.fake_image_token.content}{self.image_token.content * self.image_seq_len}"
             rendered = rendered.replace(
