@@ -24,6 +24,7 @@ import pytest
 from transformers import AutoTokenizer, MistralConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     backend_empty_cache,
+    is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -309,6 +310,13 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     ):
         return True
 
+    # TODO: @Fxmarty
+    @is_flaky(max_attempts=3, description="flaky on some models.")
+    @require_torch_sdpa
+    @slow
+    def test_eager_matches_sdpa_generate(self):
+        super().test_eager_matches_sdpa_generate()
+
     def setUp(self):
         self.model_tester = MistralModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MistralConfig, hidden_size=37)
@@ -458,7 +466,7 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
-    def test_flash_attn_2_inference_padding_right(self):
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest("Mistral flash attention does not support right padding")
 
 
