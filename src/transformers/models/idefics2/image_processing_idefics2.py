@@ -183,7 +183,8 @@ class Idefics2ImageProcessor(BaseImageProcessor):
             Whether or not to pad the images to the largest height and width in the batch and number of images per
             sample in the batch, such that the returned tensor is of shape (batch_size, max_num_images, num_channels, max_height, max_width).
         do_image_splitting (`bool`, *optional*, defaults to `False`):
-            Whether or not to split the image in 4 + original image.
+            Whether to split the image into a sequence 4 equal sub-images concatenated with the original image. That
+            strategy was first introduced in https://arxiv.org/abs/2311.06607.
     """
 
     model_input_names = ["pixel_values"]
