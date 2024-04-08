@@ -271,6 +271,7 @@ def make_task_cmds():
             --remove_unused_columns False
             --max_steps 10
             --image_processor_name {DS_TESTS_DIRECTORY}/vit_feature_extractor.json
+            --label_column_name labels
         """,
     }
 
