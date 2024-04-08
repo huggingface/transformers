@@ -564,8 +564,8 @@ class Trainer:
         if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
             raise ValueError("The `data_collator` should be a simple callable (function, class with `__call__`).")
 
-        if args.max_steps > 0:
-            logger.info("max_steps is given, it will override any value given in num_train_epochs")
+        if args.max_steps > 0 and args.num_train_epochs > 0:
+            logger.warning("max_steps is given, it will override any value given in num_train_epochs")
 
         if train_dataset is not None and not has_length(train_dataset) and args.max_steps <= 0:
             raise ValueError(
