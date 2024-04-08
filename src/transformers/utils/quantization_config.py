@@ -218,7 +218,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             This flag runs LLM.int8() with 16-bit main weights. This is useful for fine-tuning as the weights do not
             have to be converted back and forth for the backward pass.
         bnb_4bit_compute_dtype (`torch.dtype` or str, *optional*, defaults to `torch.float32`):
-            This sets the computational type which might be different than the input time. For example, inputs might be
+            This sets the computational type which might be different than the input type. For example, inputs might be
             fp32, but computation can be set to bf16 for speedups.
         bnb_4bit_quant_type (`str`,  *optional*, defaults to `"fp4"`):
             This sets the quantization data type in the bnb.nn.Linear4Bit layers. Options are FP4 and NF4 data types
@@ -278,6 +278,9 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         else:
             raise ValueError("bnb_4bit_quant_storage must be a string or a torch.dtype")
 
+        if kwargs:
+            logger.warning(f"Unused kwargs: {list(kwargs.keys())}. These kwargs are not used in {self.__class__}.")
+
         self.post_init()
 
     @property
@@ -286,6 +289,9 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
 
     @load_in_4bit.setter
     def load_in_4bit(self, value: bool):
+        if not isinstance(value, bool):
+            raise ValueError("load_in_4bit must be a boolean")
+
         if self.load_in_8bit and value:
             raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")
         self._load_in_4bit = value
@@ -296,6 +302,9 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
 
     @load_in_8bit.setter
     def load_in_8bit(self, value: bool):
+        if not isinstance(value, bool):
+            raise ValueError("load_in_8bit must be a boolean")
+
         if self.load_in_4bit and value:
             raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")
         self._load_in_8bit = value
@@ -304,6 +313,12 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
+        if not isinstance(self.load_in_4bit, bool):
+            raise ValueError("load_in_4bit must be a boolean")
+
+        if not isinstance(self.load_in_8bit, bool):
+            raise ValueError("load_in_8bit must be a boolean")
+
         if not isinstance(self.llm_int8_threshold, float):
             raise ValueError("llm_int8_threshold must be a float")
 

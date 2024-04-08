@@ -30,7 +30,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.models.distilbert.modeling_tf_distilbert import (
-        TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFDistilBertForMaskedLM,
         TFDistilBertForMultipleChoice,
         TFDistilBertForQuestionAnswering,
@@ -233,9 +232,9 @@ class TFDistilBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]):
-            model = TFDistilBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "distilbert/distilbert-base-cased"
+        model = TFDistilBertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_tf

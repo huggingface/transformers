@@ -42,10 +42,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "VitDetConfig"
 
 
-VITDET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/vit-det-base",
-    # See all ViTDet models at https://huggingface.co/models?filter=vitdet
-]
+from ..deprecated._archive_maps import VITDET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class VitDetEmbeddings(nn.Module):

@@ -49,10 +49,7 @@ _CHECKPOINT_FOR_DOC = "caidas/swin2SR-classical-sr-x2-64"
 _EXPECTED_OUTPUT_SHAPE = [1, 180, 488, 648]
 
 
-SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "caidas/swin2SR-classical-sr-x2-64",
-    # See all Swin2SR models at https://huggingface.co/models?filter=swin2sr
-]
+from ..deprecated._archive_maps import SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -301,7 +298,7 @@ class Swin2SRSelfAttention(nn.Module):
         if pretrained_window_size[0] > 0:
             relative_coords_table[:, :, :, 0] /= pretrained_window_size[0] - 1
             relative_coords_table[:, :, :, 1] /= pretrained_window_size[1] - 1
-        else:
+        elif window_size > 1:
             relative_coords_table[:, :, :, 0] /= self.window_size[0] - 1
             relative_coords_table[:, :, :, 1] /= self.window_size[1] - 1
         relative_coords_table *= 8  # normalize to -8, 8

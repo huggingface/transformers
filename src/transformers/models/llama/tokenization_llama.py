@@ -37,17 +37,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "hf-internal-testing/llama-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer.model",
-    },
-    "tokenizer_file": {
-        "hf-internal-testing/llama-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer_config.json",
-    },
-}
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "hf-internal-testing/llama-tokenizer": 2048,
-}
 SPIECE_UNDERLINE = "▁"
 
 B_INST, E_INST = "[INST]", "[/INST]"
@@ -137,8 +126,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -308,6 +295,8 @@ class LlamaTokenizer(PreTrainedTokenizer):
                 prev_is_special = True
                 current_sub_tokens = []
             else:
+                if prev_is_special and i == 1 and self.add_prefix_space and not token.startswith(SPIECE_UNDERLINE):
+                    out_string += " "
                 current_sub_tokens.append(token)
                 prev_is_special = False
         out_string += self.sp_model.decode(current_sub_tokens)
