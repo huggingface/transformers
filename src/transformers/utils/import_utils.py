@@ -37,16 +37,6 @@ from . import logging
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
-# Some functions in torch don't support MPS,
-# So we need to enable fallback to CPU for those functions
-# Check https://github.com/pytorch/pytorch/issues/77764 for more details
-os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-warnings.filterwarnings(
-    "ignore",
-    message=".*is not currently supported on the MPS backend and will fall back to run on the CPU. This may have performance implications.*",
-)
-
-
 # TODO: This doesn't work for all packages (`bs4`, `faiss`, etc.) Talk to Sylvain to see how to do with it better.
 def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[Tuple[bool, str], bool]:
     # Check if the package spec exists and grab its version to avoid importing a local directory
