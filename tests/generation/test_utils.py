@@ -88,7 +88,6 @@ class GenerationTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict[self.input_name]
 
-        # cut to half length & take max batch_size 3
         sequence_length = input_ids.shape[-1]
         input_ids = input_ids[:batch_size, :sequence_length]
 
