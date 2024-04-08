@@ -422,6 +422,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
 
         image_size = get_image_size(image, channel_dim=input_data_format)
         best_resolution = select_best_resolution(image_size, possible_resolutions)
+        print("found this best resolution within image processing: ", best_resolution)
         resized_image = self._resize_for_patching(
             image, best_resolution, resample=resample, input_data_format=input_data_format
         )
@@ -572,6 +573,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
 
         new_images = []
         image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
+        print("within the processor I got these image sizes: ", image_sizes)
         for image in images:
             # convert image into a list of patches
             # we intentially use the same data format as the input data format
@@ -584,6 +586,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
                 data_format=input_data_format,
                 input_data_format=input_data_format,
             )
+            print("within the processor I got these number of patches: ", len(image_patches))
 
             # preprocess patches
             pixel_values = self._preprocess(
