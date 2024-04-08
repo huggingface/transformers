@@ -304,9 +304,6 @@ class Trainer:
             The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs to the
             maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
             interrupted training or reuse the fine-tuned model.
-        image_processor ([`BaseImageProcessor`], *optional*):
-            The image processor used to preprocess the data. If provided, it will be saved along the model to make it easier
-            to rerun an interrupted training or reuse the fine-tuned model.
         model_init (`Callable[[], PreTrainedModel]`, *optional*):
             A function that instantiates the model to be used. If provided, each call to [`~Trainer.train`] will start
             from a new instance of the model as given by this function.
@@ -331,6 +328,9 @@ class Trainer:
             by this function will be reflected in the predictions received by `compute_metrics`.
 
             Note that the labels (second parameter) will be `None` if the dataset does not have them.
+        image_processor ([`BaseImageProcessor`], *optional*):
+            The image processor used to preprocess the data. If provided, it will be saved along the model to make it easier
+            to rerun an interrupted training or reuse the fine-tuned model.
 
     Important attributes:
 
@@ -361,12 +361,12 @@ class Trainer:
         train_dataset: Optional[Union[Dataset, IterableDataset]] = None,
         eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
-        image_processor: Optional["BaseImageProcessor"] = None,
         model_init: Optional[Callable[[], PreTrainedModel]] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         callbacks: Optional[List[TrainerCallback]] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
+        image_processor: Optional["BaseImageProcessor"] = None,
     ):
         if args is None:
             output_dir = "tmp_trainer"
