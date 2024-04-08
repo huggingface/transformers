@@ -84,10 +84,6 @@ results = processor.post_process_grounded_object_detection(
 [[autodoc]] GroundingDinoProcessor
     - post_process_grounded_object_detection
 
-## GroundingDinoTextConfig
-
-[[autodoc]] GroundingDinoTextConfig
-
 ## GroundingDinoConfig
 
 [[autodoc]] GroundingDinoConfig

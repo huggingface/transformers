@@ -22,7 +22,6 @@ import unittest
 
 from transformers import (
     GroundingDinoConfig,
-    GroundingDinoTextConfig,
     SwinConfig,
     is_torch_available,
     is_vision_available,
@@ -144,9 +143,14 @@ class GroundingDinoModelTester:
             out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
         )
-        text_backbone = GroundingDinoTextConfig(
-            hidden_size=8, num_hidden_layers=2, num_attention_heads=2, intermediate_size=8, max_position_embeddings=8
-        )
+        text_backbone = {
+            "hidden_size": 8,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 2,
+            "intermediate_size": 8,
+            "max_position_embeddings": 8,
+            "model_type": "bert",
+        }
         return GroundingDinoConfig(
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,

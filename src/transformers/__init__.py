@@ -493,7 +493,6 @@ _import_structure = {
         "GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroundingDinoConfig",
         "GroundingDinoProcessor",
-        "GroundingDinoTextConfig",
     ],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -5389,7 +5388,6 @@ if TYPE_CHECKING:
         GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GroundingDinoConfig,
         GroundingDinoProcessor,
-        GroundingDinoTextConfig,
     )
     from .models.groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,

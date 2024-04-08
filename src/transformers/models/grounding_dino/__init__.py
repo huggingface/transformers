@@ -21,7 +21,6 @@ _import_structure = {
     "configuration_grounding_dino": [
         "GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroundingDinoConfig",
-        "GroundingDinoTextConfig",
     ],
     "processing_grounding_dino": ["GroundingDinoProcessor"],
 }
@@ -52,7 +51,6 @@ if TYPE_CHECKING:
     from .configuration_grounding_dino import (
         GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GroundingDinoConfig,
-        GroundingDinoTextConfig,
     )
     from .processing_grounding_dino import GroundingDinoProcessor
 
