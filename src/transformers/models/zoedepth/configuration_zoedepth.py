@@ -166,7 +166,16 @@ class ZoeDepthConfig(PretrainedConfig):
 
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-            backbone_config = CONFIG_MAPPING["beit"](out_features=["stage1", "stage2", "stage3", "stage4"])
+            backbone_config = CONFIG_MAPPING["beit"](
+                image_size=384,
+                num_hidden_layers=24,
+                hidden_size=1024,
+                intermediate_size=4096,
+                num_attention_heads=16,
+                use_relative_position_bias=True,
+                reshape_hidden_states=False,
+                out_features=["stage6", "stage12", "stage18", "stage24"],
+            )
         elif isinstance(backbone_config, dict):
             backbone_model_type = backbone_config.get("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]

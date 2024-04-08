@@ -17,6 +17,7 @@
 
 
 import math
+from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -31,7 +32,7 @@ from ...file_utils import (
 )
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import ModelOutput, logging
 from ...utils.backbone_utils import load_backbone
 from .configuration_zoedepth import ZoeDepthConfig
 
@@ -46,6 +47,40 @@ _CHECKPOINT_FOR_DOC = "Intel/zoedepth-nyu"
 _EXPECTED_OUTPUT_SHAPE = [1, 577, 1024]
 
 N_MIDAS_OUT = 32
+
+
+@dataclass
+class ZoeDepthDepthEstimatorOutput(ModelOutput):
+    """
+    Extension of `DepthEstimatorOutput` to include domain logits (ZoeDepth specific).
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Classification (or regression if config.num_labels==1) loss.
+        predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
+            Predicted depth for each pixel.
+
+        domain_logits (`torch.FloatTensor` of shape `(batch_size, num_domains)`):
+            Logits for each domain (e.g. NYU and KITTI) in case multiple metric heads are used.
+
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, num_channels, height, width)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, patch_size,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    predicted_depth: torch.FloatTensor = None
+    domain_logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 class ZoeDepthReassembleStage(nn.Module):
@@ -1079,8 +1114,7 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         # Now depth value is Sum px * cx , where cx are bin_centers from the last bin tensor
         out = torch.sum(x * bin_centers, dim=1, keepdim=True)
 
-        output = dict(domain_logits=domain_logits, metric_depth=out)
-        return output
+        return out, domain_logits
 
 
 class ZoeDepthMetricDepthEstimationHead(nn.Module):
@@ -1185,7 +1219,7 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
         bin_centers = nn.functional.interpolate(bin_centers, x.shape[-2:], mode="bilinear", align_corners=True)
         out = torch.sum(x * bin_centers, dim=1, keepdim=True)
 
-        return out
+        return out, None
 
 
 @add_start_docstrings(
@@ -1285,8 +1319,7 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
 
         out = [features] + out
 
-        out = self.metric_head(out, relative_depth)
-        metric_depth = out["metric_depth"] if isinstance(out, dict) else out
+        metric_depth, domain_logits = self.metric_head(out, relative_depth)
         metric_depth = metric_depth.squeeze(dim=1)
 
         loss = None
@@ -1294,15 +1327,21 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
             raise NotImplementedError("Training is not implemented yet")
 
         if not return_dict:
-            if output_hidden_states:
-                output = (metric_depth,) + outputs[1:]
-            else:
-                output = (metric_depth,) + outputs[2:]
+            output = (
+                (
+                    metric_depth,
+                    domain_logits,
+                )
+                + outputs[1:]
+                if domain_logits is not None
+                else (metric_depth,) + outputs[1:]
+            )
             return ((loss,) + output) if loss is not None else output
 
-        return DepthEstimatorOutput(
+        return ZoeDepthDepthEstimatorOutput(
             loss=loss,
             predicted_depth=metric_depth,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            domain_logits=domain_logits,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
