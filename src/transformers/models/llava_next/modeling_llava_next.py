@@ -370,7 +370,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         num_images = len(image_features)
 
         patches_lengths = [x.shape[0] for x in image_features] # list[int]
-        print("received these patches lens: ", patches_lengths)
+        # print("received these patches lens: ", patches_lengths)
         max_num_patches  = max(patches_lengths) # int
 
         # Each patch should have the same image embedding dimension
@@ -381,20 +381,20 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
         # 1. Create a mask to know where special image tokens are
         special_image_token_mask = input_ids == self.config.image_token_index
-        print("special image_token_index num: ", self.config.image_token_index)
-        print("special image token_mask shape: ", special_image_token_mask.shape)
-        print("input embeds shape: ", inputs_embeds.shape)
+        # print("special image_token_index num: ", self.config.image_token_index)
+        # print("special image token_mask shape: ", special_image_token_mask.shape)
+        # print("input embeds shape: ", inputs_embeds.shape)
 
-        print("input ids shape: ", input_ids.shape)
+        # print("input ids shape: ", input_ids.shape)
         num_special_image_tokens = torch.sum(special_image_token_mask, dim=-1)
-        print("num of special image tokens found in each ", num_special_image_tokens)
+        # print("num of special image tokens found in each ", num_special_image_tokens)
         # Compute the maximum embed dimension
         max_embed_dim = (num_special_image_tokens.max().item() * (max_num_patches - 1)) + sequence_length # int
-        print("max embed dim found: ", max_embed_dim)
+        # print("max embed dim found: ", max_embed_dim)
 
         batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
-        print("batch_indices shape: ", batch_indices.shape)
-        print("non_image_indices shape: ", non_image_indices.shape)
+        # print("batch_indices shape: ", batch_indices.shape)
+        # print("non_image_indices shape: ", non_image_indices.shape)
 
         # 2. Compute the positions where text should be written
         # Calculate new positions for text tokens in merged image-text sequence.
@@ -404,16 +404,16 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         patches_lengths = torch.tensor(patches_lengths, device=inputs_embeds.device).unsqueeze(dim=1)
         repeated_patches = patches_lengths.repeat(1, special_image_token_mask.shape[1]) 
         new_token_positions = torch.cumsum(special_image_token_mask * (repeated_patches - 1) + 1, -1) - 1
-        print("shape of new_token_positions: ", new_token_positions.shape)
+        # print("shape of new_token_positions: ", new_token_positions.shape)
         nb_image_pad = max_embed_dim - 1 - new_token_positions[:, -1]
-        print("value of nb_image_pad: ", nb_image_pad)
+        # print("value of nb_image_pad: ", nb_image_pad)
         if left_padding:
             new_token_positions += nb_image_pad[:, None]  # offset for left padding
-            print("shape of new_token_positions: L402", new_token_positions.shape)
+            # print("shape of new_token_positions: L402", new_token_positions.shape)
             # print("new_token_positions: L402", new_token_positions[0])
         
         text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
-        print("text to overwrite shape: ", text_to_overwrite.shape)
+        # print("text to overwrite shape: ", text_to_overwrite.shape)
         # print("text to overwrite: ", text_to_overwrite)
  
 
@@ -461,7 +461,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         
         
         contiguous_img_ftrs = torch.cat(image_features, dim=0)
-        print("shape pf contiguous image ftrs: ", contiguous_img_ftrs.shape)
+        # print("shape pf contiguous image ftrs: ", contiguous_img_ftrs.shape)
 
 
         final_embedding[image_to_overwrite] = contiguous_img_ftrs.to(target_device)
@@ -557,14 +557,14 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 # patches_lengths is a list contaning the lengths of the patches
                 # contained in every image 
                 # print("pixel values first row, ", pixel_values[0][-1])
-                print("mask: ", mask)
+                # print("mask: ", mask)
                 patches_lengths = torch.argmax(mask.to(torch.int), dim=1)
                 img_idcs_with_no_pad = ~mask.any(dim=1) 
-                print("patches_ lengths before setting others", patches_lengths)
-                print("pad token id in model: ", self.pad_token_id)
-                print("img indices without padding: ", img_idcs_with_no_pad)
+                # print("patches_ lengths before setting others", patches_lengths)
+                # print("pad token id in model: ", self.pad_token_id)
+                # print("img indices without padding: ", img_idcs_with_no_pad)
                 patches_lengths[img_idcs_with_no_pad] = max_num_patches
-                print("these are the patches lengths: ", patches_lengths)
+                # print("these are the patches lengths: ", patches_lengths)
 
                 # Each image in pixel_values is a 336x336 image
                 # We need to remove the images which are just padded tokens
@@ -573,12 +573,12 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 total_patches = 0
                 for idx, img in enumerate(pixel_values):
                     unpadded_patches = patches_lengths[idx]
-                    print("Length of unpadded patches: ", unpadded_patches)
+                    # print("Length of unpadded patches: ", unpadded_patches)
                     total_patches += unpadded_patches
                     unpadded_pixel_values.append(img[:unpadded_patches])
 
                 unpadded_pixel_values = torch.cat(unpadded_pixel_values, dim=0)
-                print("shape of unpadded pixel values : ", unpadded_pixel_values.shape)
+                # print("shape of unpadded pixel values : ", unpadded_pixel_values.shape)
                 # Use the mask to index the original tensor, filtering out the rows with pad_token
 
                 reshaped_pixel_values = unpadded_pixel_values.view(total_patches, num_channels, height, width)
@@ -604,7 +604,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 new_image_features = []
                 for image_idx, image_feature in enumerate(image_features):
                     num_unpadded_patches = image_feature.shape[0]
-                    print("num _unpadded patches: ", num_unpadded_patches)
+                    # print("num _unpadded patches: ", num_unpadded_patches)
                     # image feature has shape; 5/3/4 (num_patches), 3, 336, 336
                     if image_feature.shape[0] > 1:
                         base_image_feature = image_feature[0]
@@ -617,22 +617,22 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                             self.config.image_grid_pinpoints,
                             self.config.vision_config.image_size,
                         )
-                        print("the image sizes I used to obtain these num_patches: ", image_sizes[image_idx])
-                        print("these are the num patch  and num ht: ", num_patch_height, num_patch_width)
-                        print("shape of image ftrs before view: ", image_feature.shape)
+                        # print("the image sizes I used to obtain these num_patches: ", image_sizes[image_idx])
+                        # print("these are the num patch  and num ht: ", num_patch_height, num_patch_width)
+                        # print("shape of image ftrs before view: ", image_feature.shape)
                         image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1) # divide 5 - 1 
                         # patches into 2x2 grid for num_patch_height, 
                         # num_patch_width  and 336x336x3
-                        print("shape of image ftrs before permute: ", image_feature.shape)
+                        # print("shape of image ftrs before permute: ", image_feature.shape)
                         image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous() # concatenate all the features
                         # 3x
-                        print("shape of image ftrs before flatten: ", image_feature.shape)
+                        # print("shape of image ftrs before flatten: ", image_feature.shape)
                         image_feature = image_feature.flatten(1, 2).flatten(2, 3)
-                        print("shape of image feature: before unpadding: ", image_feature.shape)
+                        # print("shape of image feature: before unpadding: ", image_feature.shape)
                         image_feature = unpad_image(image_feature, image_sizes[image_idx])
-                        print("shape of image feature: before catting: ", image_feature.shape)
-                        print("shape of image newline: ", self.image_newline.shape)
-                        print("after transform: ", self.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1).shape)
+                        # print("shape of image feature: before catting: ", image_feature.shape)
+                        # print("shape of image newline: ", self.image_newline.shape)
+                        # print("after transform: ", self.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1).shape)
                         image_feature = torch.cat(
                             (
                                 image_feature,
@@ -641,9 +641,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                             dim=-1,
                         )
                         image_feature = image_feature.flatten(1, 2).transpose(0, 1)
-                        print("print final image feature shape: ", image_feature.shape)
+                        # print("print final image feature shape: ", image_feature.shape)
                         image_feature = torch.cat((base_image_feature, image_feature), dim=0)
-                        print("print final image feature shape after catting with base: ", image_feature.shape)
+                        # print("print final image feature shape after catting with base: ", image_feature.shape)
                     else:
                         image_feature = image_feature[0]
                         image_feature = torch.cat((image_feature, self.image_newline[None]), dim=0)
