@@ -203,6 +203,21 @@ class StableLmMLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
+class StableLmLayerNormPerHead(nn.Module):
+    def __init__(self, dim, num_heads, eps=1e-5, bias=False):
+        super().__init__()
+        self.dim = dim
+        self.num_heads = num_heads
+        self.norms = nn.ModuleList([nn.LayerNorm(dim, eps=eps, bias=bias) for _ in range(self.num_heads)])
+
+    def forward(self, hidden_states: torch.Tensor):
+        # Split along the num_heads axis to get per-head inputs
+        # [batch_size, num_heads, seq_len, head_dim] -> [batch_size, 1, seq_len, head_dim] * num_heads
+        states_per_heads = torch.split(hidden_states, 1, dim=1)
+        # Normalize and merge the heads back together
+        return torch.cat([norm(hidden_states) for norm, hidden_states in zip(self.norms, states_per_heads)], dim=1)
+
+
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -249,6 +264,13 @@ class StableLmAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.use_qkv_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.use_qkv_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+
+        self.qk_layernorm = config.qk_layernorm
+        if self.qk_layernorm:
+            self.q_layernorm = StableLmLayerNormPerHead(self.head_dim, self.num_heads, eps=config.layer_norm_eps)
+            self.k_layernorm = StableLmLayerNormPerHead(
+                self.head_dim, self.num_key_value_heads, eps=config.layer_norm_eps
+            )
 
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self._init_rope()
@@ -299,6 +321,10 @@ class StableLmAttention(nn.Module):
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        if self.qk_layernorm:
+            query_states = self.q_layernorm(query_states)
+            key_states = self.k_layernorm(key_states)
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
@@ -409,6 +435,10 @@ class StableLmSdpaAttention(StableLmAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
+        if self.qk_layernorm:
+            query_states = self.q_layernorm(query_states)
+            key_states = self.k_layernorm(key_states)
+
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             if self.layer_idx is None:
@@ -512,6 +542,10 @@ class StableLmFlashAttention2(StableLmAttention):
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        if self.qk_layernorm:
+            query_states = self.q_layernorm(query_states)
+            key_states = self.k_layernorm(key_states)
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
@@ -678,11 +712,14 @@ ATTENTION_CLASSES = {
 class StableLmDecoderLayer(nn.Module):
     def __init__(self, config: StableLmConfig, layer_idx: int):
         super().__init__()
+        self.use_parallel_residual = config.use_parallel_residual
         self.hidden_size = config.hidden_size
         self.self_attn = ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
         self.mlp = StableLmMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = None
+        if not self.use_parallel_residual:
+            self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
 
     def forward(
@@ -719,7 +756,7 @@ class StableLmDecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        self_attn_output, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -727,15 +764,22 @@ class StableLmDecoderLayer(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
         )
-        hidden_states = residual + hidden_states
 
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = hidden_states + residual
+        # copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXLayer.forward
+        if self.use_parallel_residual:
+            # x = x + attn(ln1(x)) + mlp(ln1(x))
+            # Fully Connected
+            mlp_output = self.mlp(hidden_states)
+            mlp_output = self.dropout(mlp_output)
+            hidden_states = residual + self_attn_output + mlp_output
+        else:
+            # x = x + attn(ln1(x))
+            # x = x + mlp(ln2(x))
+            residual = residual + self_attn_output
+            # Fully Connected
+            mlp_output = self.mlp(self.post_attention_layernorm(residual))
+            mlp_output = self.dropout(mlp_output)
+            hidden_states = residual + mlp_output
 
         outputs = (hidden_states,)
 
