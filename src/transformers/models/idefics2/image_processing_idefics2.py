@@ -182,6 +182,8 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether or not to pad the images to the largest height and width in the batch and number of images per
             sample in the batch, such that the returned tensor is of shape (batch_size, max_num_images, num_channels, max_height, max_width).
+        do_image_splitting (`bool`, *optional*, defaults to `False`):
+            Whether or not to split the image in 4 + original image.
     """
 
     model_input_names = ["pixel_values"]
@@ -198,6 +200,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: bool = True,
+        do_image_splitting = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -211,6 +214,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_pad = do_pad
+        self.do_image_splitting = do_image_splitting
 
     def resize(
         self,
@@ -346,6 +350,68 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         padded_masks = padded_masks if return_pixel_mask else None
         return padded_images_list, padded_masks
 
+    def _crop(
+        self,
+        im: np.ndarray,
+        w1: int,
+        h1: int,
+        w2: int,
+        h2: int,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.ndarray:
+        if input_data_format == ChannelDimension.FIRST:
+            return im[:, h1:h2, w1:w2]
+        elif input_data_format == ChannelDimension.LAST:
+            return im[h1:h2, w1:w2, :]
+
+    def _split_image(
+        self,
+        image: np.ndarray,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ):
+        if input_data_format == ChannelDimension.FIRST:
+            _, height, width = image.shape
+        elif input_data_format == ChannelDimension.LAST:
+            height, width, _ = image.shape
+        else:
+            raise ValueError("Invalid channel dimension format.")
+
+        mid_width = width // 2
+        mid_height = height // 2
+        return [
+            self._crop(image, 0, 0, mid_width, mid_height, input_data_format),
+            self._crop(image, mid_width, 0, width, mid_height, input_data_format),
+            self._crop(image, 0, mid_height, mid_width, height, input_data_format),
+            self._crop(image, mid_width, mid_height, width, height, input_data_format),
+            image
+        ]
+
+    def split_images(
+        self,
+        images_list: List[List[np.ndarray]],
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> List[List[np.ndarray]]:
+        """
+        For a list of images, for each images, split the image into 4 equal sub-images, and the concatenate that sequence with the original image.
+        That means that a single image becomes a sequence of 5 images.
+        This is a "trick" to spend more compute on each image with no changes in the vision encoder.
+
+        Args:
+            images (`np.ndarray`):
+                List of list of images to split.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
+        """
+        new_images_list = []
+
+        for images in images_list:
+            new_images = []
+            for image in images:
+                new_images.extend(self._split_image(image, input_data_format=input_data_format))
+            new_images_list.append(new_images)
+
+        return new_images_list
+
     def preprocess(
         self,
         images: ImageInput,
@@ -359,6 +425,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: Optional[bool] = None,
+        do_image_splitting: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         input_data_format: Optional[ChannelDimension] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
@@ -392,6 +459,8 @@ class Idefics2ImageProcessor(BaseImageProcessor):
                 `True`.
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
                 Whether or not to pad the images to the largest height and width in the batch.
+            do_image_splitting (`bool`, *optional*, defaults to `self.do_image_splitting`):
+                Whether to split the image into a sequence 4 equal sub-images concatenated with the original image.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
@@ -421,6 +490,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         do_pad = do_pad if do_pad is not None else self.do_pad
+        do_image_splitting = do_image_splitting if do_image_splitting is not None else self.do_image_splitting
 
         images_list = make_list_of_images(images)
 
@@ -456,6 +526,9 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images_list[0][0])
+
+        if do_image_splitting:
+            images_list = self.split_images(images_list, input_data_format=input_data_format)
 
         if do_resize:
             images_list = [

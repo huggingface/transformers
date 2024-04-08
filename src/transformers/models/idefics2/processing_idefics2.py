@@ -47,7 +47,7 @@ def _is_str_or_image(elem):
     return isinstance(elem, (str)) or is_image_or_image_url(elem)
 
 
-def build_string_from_input(prompt, image_seq_len, bos_token, image_token, fake_image_token):
+def build_string_from_input(prompt, image_seq_len, bos_token, image_token, fake_image_token, do_image_splitting):
     """
     Builds a string from the input prompt and image tokens.
 
@@ -77,7 +77,8 @@ def build_string_from_input(prompt, image_seq_len, bos_token, image_token, fake_
     open_image_tag = False
     for elem in prompt:
         if is_image_or_image_url(elem):
-            input_strings.append(f"{fake_image_token}{image_token * image_seq_len}")
+            image_string = f"{fake_image_token}{image_token * image_seq_len}" * (5 if do_image_splitting else 1)
+            input_strings.append(image_string)
             open_image_tag = True
         else:
             if open_image_tag:
@@ -216,6 +217,7 @@ class Idefics2Processor(ProcessorMixin):
                 bos_token=self.tokenizer.bos_token,
                 image_token=self.image_token.content,
                 fake_image_token=self.fake_image_token.content,
+                do_image_splitting=self.image_processor.do_image_splitting
             )
             for prompt in prompts
         ]
@@ -351,6 +353,12 @@ class Idefics2Processor(ProcessorMixin):
         rendered = rendered.replace(
             f"{self.fake_image_token.content}{self.fake_image_token.content}", f"{self.fake_image_token.content}"
         )
+        # We do another hack here - for image splitting
+        if self.image_processor.do_image_splitting:
+            image_seq_string = f"{self.fake_image_token.content}{self.image_token.content * self.image_seq_len}"
+            rendered = rendered.replace(
+                image_seq_string, image_seq_string * 5
+            )
 
         if padding is True:
             padding = "max_length"  # There's only one sequence here, so "longest" makes no sense

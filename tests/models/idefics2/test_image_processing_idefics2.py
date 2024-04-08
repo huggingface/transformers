@@ -53,6 +53,7 @@ class Idefics2ImageProcessingTester(unittest.TestCase):
         image_std=[0.5, 0.5, 0.5],
         do_convert_rgb=True,
         do_pad=True,
+        do_image_splitting=True,
     ):
         size = size if size is not None else {"shortest_edge": 378, "longest_edge": 980}
         self.parent = parent
@@ -71,6 +72,7 @@ class Idefics2ImageProcessingTester(unittest.TestCase):
         self.rescale_factor = rescale_factor
         self.do_convert_rgb = do_convert_rgb
         self.do_pad = do_pad
+        self.do_image_splitting = do_image_splitting
 
     def prepare_image_processor_dict(self):
         return {
@@ -83,6 +85,7 @@ class Idefics2ImageProcessingTester(unittest.TestCase):
             "image_mean": self.image_mean,
             "image_std": self.image_std,
             "do_pad": self.do_pad,
+            "do_image_splitting": self.do_image_splitting,
         }
 
     def get_expected_values(self, image_inputs, batched=False):
@@ -123,7 +126,8 @@ class Idefics2ImageProcessingTester(unittest.TestCase):
 
     def expected_output_image_shape(self, images):
         height, width = self.get_expected_values(images, batched=True)
-        return self.num_images, self.num_channels, height, width
+        effective_nb_images = self.num_images * 5 if self.do_image_splitting else 1
+        return effective_nb_images, self.num_channels, height, width
 
     def prepare_image_inputs(
         self,
@@ -198,6 +202,7 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "image_mean"))
         self.assertTrue(hasattr(image_processing, "image_std"))
         self.assertTrue(hasattr(image_processing, "do_pad"))
+        self.assertTrue(hasattr(image_processing, "do_image_splitting"))
 
     def test_call_numpy(self):
         # Initialize image_processing
