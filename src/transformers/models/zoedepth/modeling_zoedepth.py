@@ -935,20 +935,20 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         min_depth = config.min_depth
         max_depth = config.max_depth
         n_attractors = config.num_attractors
-        num_out_features = config.num_out_features
         attractor_alpha = config.attractor_alpha
         attractor_gamma = config.attractor_gamma
         attractor_kind = config.attractor_kind
         bin_centers_type = config.bin_centers_type
         min_temp = config.min_temp
         max_temp = config.max_temp
+        bin_configurations = config.bin_configurations
 
         self.min_depth = min_depth
         self.max_depth = max_depth
         self.bin_centers_type = bin_centers_type
         self.min_temp = min_temp
         self.max_temp = max_temp
-        self.bin_conf = config.bin_conf
+        self.bin_configurations = bin_configurations
 
         # Bottleneck convolution
         bottleneck_features = config.bottleneck_features
@@ -967,7 +967,7 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
             Attractor = ZoeDepthAttractorLayerUnnormed
 
         self.bin_centers_type = bin_centers_type
-        # We have bins for each bin conf.
+        # We have bins for each bin configuration
         # Create a map (ModuleDict) of 'name' -> seed_bin_regressor
         self.seed_bin_regressors = nn.ModuleDict(
             {
@@ -978,22 +978,22 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
                     min_depth=conf["min_depth"],
                     max_depth=conf["max_depth"],
                 )
-                for conf in config.bin_conf
+                for conf in config.bin_configurations
             }
         )
 
         self.seed_projector = ZoeDepthProjector(bottleneck_features, bin_embedding_dim, mlp_dim=bin_embedding_dim // 2)
         self.projectors = nn.ModuleList(
             [
-                ZoeDepthProjector(num_out, bin_embedding_dim, mlp_dim=bin_embedding_dim // 2)
-                for num_out in num_out_features
+                ZoeDepthProjector(config.fusion_hidden_size, bin_embedding_dim, mlp_dim=bin_embedding_dim // 2)
+                for i in range(4)
             ]
         )
 
         # Create a map (ModuleDict) of 'name' -> attractors (ModuleList)
         self.attractors = nn.ModuleDict(
             {
-                conf["name"]: nn.ModuleList(
+                configuration["name"]: nn.ModuleList(
                     [
                         Attractor(
                             bin_embedding_dim,
@@ -1002,29 +1002,29 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
                             alpha=attractor_alpha,
                             gamma=attractor_gamma,
                             kind=attractor_kind,
-                            min_depth=conf["min_depth"],
-                            max_depth=conf["max_depth"],
+                            min_depth=configuration["min_depth"],
+                            max_depth=configuration["max_depth"],
                         )
                         for i in range(len(n_attractors))
                     ]
                 )
-                for conf in config.bin_conf
+                for configuration in config.bin_configurations
             }
         )
 
         last_in = N_MIDAS_OUT
-        # conditional log binomial for each bin conf
+        # conditional log binomial for each bin configuration
         self.conditional_log_binomial = nn.ModuleDict(
             {
-                conf["name"]: ZoeDepthConditionalLogBinomial(
+                configuration["name"]: ZoeDepthConditionalLogBinomial(
                     last_in,
                     bin_embedding_dim,
-                    conf["n_bins"],
+                    configuration["n_bins"],
                     bottleneck_factor=4,
                     min_temp=self.min_temp,
                     max_temp=self.max_temp,
                 )
-                for conf in config.bin_conf
+                for configuration in config.bin_configurations
             }
         )
 
@@ -1042,17 +1042,18 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         domain_vote = torch.softmax(domain_logits.sum(dim=0, keepdim=True), dim=-1)  # 1, 2
 
         # Get the path
-        bin_conf_name = ["nyu", "kitti"][torch.argmax(domain_vote, dim=-1).squeeze().item()]
+        names = [configuration["name"] for configuration in self.bin_configurations]
+        bin_configurations_name = names[torch.argmax(domain_vote, dim=-1).squeeze().item()]
 
         try:
-            conf = [config for config in self.bin_conf if config["name"] == bin_conf_name][0]
+            conf = [config for config in self.bin_configurations if config["name"] == bin_configurations_name][0]
         except IndexError:
-            raise ValueError(f"bin_conf_name {bin_conf_name} not found in bin_confs")
+            raise ValueError(f"bin_configurations_name {bin_configurations_name} not found in bin_configurationss")
 
         min_depth = conf["min_depth"]
         max_depth = conf["max_depth"]
 
-        seed_bin_regressor = self.seed_bin_regressors[bin_conf_name]
+        seed_bin_regressor = self.seed_bin_regressors[bin_configurations_name]
         _, seed_bin_centers = seed_bin_regressor(x)
         if self.bin_centers_type == "normed" or self.bin_centers_type == "hybrid2":
             prev_bin = (seed_bin_centers - min_depth) / (max_depth - min_depth)
@@ -1060,7 +1061,7 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
             prev_bin = seed_bin_centers
         prev_bin_embedding = self.seed_projector(x)
 
-        attractors = self.attractors[bin_conf_name]
+        attractors = self.attractors[bin_configurations_name]
         for projector, attractor, feature in zip(self.projectors, attractors, feature_blocks):
             bin_embedding = projector(feature)
             bin, bin_centers = attractor(bin_embedding, prev_bin, prev_bin_embedding, interpolate=True)
@@ -1072,7 +1073,7 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         bin_centers = nn.functional.interpolate(bin_centers, last.shape[-2:], mode="bilinear", align_corners=True)
         bin_embedding = nn.functional.interpolate(bin_embedding, last.shape[-2:], mode="bilinear", align_corners=True)
 
-        clb = self.conditional_log_binomial[bin_conf_name]
+        clb = self.conditional_log_binomial[bin_configurations_name]
         x = clb(last, bin_embedding)
 
         # Now depth value is Sum px * cx , where cx are bin_centers from the last bin tensor
@@ -1091,7 +1092,6 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
         min_depth = config.min_depth
         max_depth = config.max_depth
         n_attractors = config.num_attractors
-        num_out_features = config.num_out_features
         attractor_alpha = config.attractor_alpha
         attractor_gamma = config.attractor_gamma
         attractor_kind = config.attractor_kind
@@ -1121,7 +1121,7 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
         self.seed_projector = ZoeDepthProjector(bottleneck_features, bin_embedding_dim)
 
         self.projectors = nn.ModuleList(
-            [ZoeDepthProjector(num_out, bin_embedding_dim) for num_out in num_out_features]
+            [ZoeDepthProjector(config.fusion_hidden_size, bin_embedding_dim) for _ in range(4)]
         )
         self.attractors = nn.ModuleList(
             [
@@ -1135,7 +1135,7 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
                     gamma=attractor_gamma,
                     kind=attractor_kind,
                 )
-                for i in range(len(num_out_features))
+                for i in range(4)
             ]
         )
 
@@ -1172,9 +1172,11 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
         last = outconv_activation
 
         # concatenative relative depth with last. First interpolate relative depth to last size
-        rel_cond = rel_depth.unsqueeze(1)
-        rel_cond = nn.functional.interpolate(rel_cond, size=last.shape[2:], mode="bilinear", align_corners=True)
-        last = torch.cat([last, rel_cond], dim=1)
+        relative_conditioning = rel_depth.unsqueeze(1)
+        relative_conditioning = nn.functional.interpolate(
+            relative_conditioning, size=last.shape[2:], mode="bilinear", align_corners=True
+        )
+        last = torch.cat([last, relative_conditioning], dim=1)
 
         bin_embedding = nn.functional.interpolate(bin_embedding, last.shape[-2:], mode="bilinear", align_corners=True)
         x = self.conditional_log_binomial(last, bin_embedding)
@@ -1188,7 +1190,7 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
 
 @add_start_docstrings(
     """
-    ZoeDepth model with a metric depth estimation head on top.
+    ZoeDepth model with one or multiple metric depth estimation head(s) on top.
     """,
     ZOEDEPTH_START_DOCSTRING,
 )
@@ -1196,7 +1198,6 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        # TODO perhaps just use AutoModelForDepthEstimation?
         self.backbone = load_backbone(config)
         self.neck = ZoeDepthNeck(config)
         self.relative_head = ZoeDepthRelativeDepthEstimationHead(config)

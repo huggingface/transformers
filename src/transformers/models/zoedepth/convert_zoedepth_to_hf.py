@@ -37,36 +37,22 @@ logger = logging.get_logger(__name__)
 
 
 def get_zoedepth_config(model_name):
-    # hidden_size = 768
-    # num_hidden_layers = 12
-    # num_attention_heads = 12
-    # intermediate_size = 3072
-    # out_features = ["stage3", "stage6", "stage9", "stage12"]  # beit-base-384 uses [2, 5, 8, 11]
-
-    # if "large" in model_name:
-    hidden_size = 1024
-    num_hidden_layers = 24
-    num_attention_heads = 16
-    intermediate_size = 4096
-    out_features = ["stage6", "stage12", "stage18", "stage24"]  # beit-large-512 uses [5, 11, 17, 23]
-
     image_size = 384
-
     backbone_config = BeitConfig(
         image_size=image_size,
-        num_hidden_layers=num_hidden_layers,
-        hidden_size=hidden_size,
-        intermediate_size=intermediate_size,
-        num_attention_heads=num_attention_heads,
+        num_hidden_layers=24,
+        hidden_size=1024,
+        intermediate_size=4096,
+        num_attention_heads=16,
         use_relative_position_bias=True,
         reshape_hidden_states=False,
-        out_features=out_features,
+        out_features=["stage6", "stage12", "stage18", "stage24"],  # beit-large-512 uses [5, 11, 17, 23],
     )
 
     neck_hidden_sizes = [256, 512, 1024, 1024]
     bin_centers_type = "softplus" if model_name in ["ZoeD_N", "ZoeD_NK"] else "normed"
     use_multiple_heads = model_name == "ZoeD_NK"
-    bin_conf = [
+    bin_configurations = [
         {"name": "nyu", "n_bins": 64, "min_depth": 1e-3, "max_depth": 10.0},
         {"name": "kitti", "n_bins": 64, "min_depth": 1e-3, "max_depth": 80.0},
     ]
@@ -75,7 +61,7 @@ def get_zoedepth_config(model_name):
         neck_hidden_sizes=neck_hidden_sizes,
         bin_centers_type=bin_centers_type,
         use_multiple_heads=use_multiple_heads,
-        bin_conf=bin_conf,
+        bin_configurations=bin_configurations,
     )
 
     return config, image_size
@@ -210,7 +196,7 @@ def create_rename_keys(config, model_name):
 
         # NYU and kitti attractors
         for i in ["nyu", "kitti"]:
-            for j in range(len(config.num_out_features)):
+            for j in range(4):
                 rename_keys.append((f"attractors.{i}.{j}._net.0.weight", f"metric_head.attractors.{i}.{j}.conv1.weight"))
                 rename_keys.append((f"attractors.{i}.{j}._net.0.bias", f"metric_head.attractors.{i}.{j}.conv1.bias"))
                 rename_keys.append((f"attractors.{i}.{j}._net.2.weight", f"metric_head.attractors.{i}.{j}.conv2.weight"))

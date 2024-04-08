@@ -89,8 +89,6 @@ class ZoeDepthConfig(PretrainedConfig):
             The number of attractors to use in each stage.
         bin_embedding_dim (`int`, *optional*, defaults to 128):
             The dimension of the bin embeddings.
-        num_out_features (`List[int]`, *optional*, defaults to `[256, 256, 256, 256]`):
-            The number of output features for each stage.
         attractor_alpha (`int`, *optional*, defaults to 1000):
             The alpha value to use in the attractor.
         attractor_gamma (`int`, *optional*, defaults to 2):
@@ -106,7 +104,7 @@ class ZoeDepthConfig(PretrainedConfig):
             is applied. This results in bounded bin centers. For "softplus", softplus activation is used and thus are unbounded.
         use_multiple_heads (`bool`, *optional*, defaults to `False`):
             Whether to use multiple heads in the depth estimation head.
-        bin_conf (`List[dict]`, *optional*):
+        bin_configurations (`List[dict]`, *optional*):
             Configuration for the bin heads. Only used in case `use_multiple_heads` is `True`.
 
     Example:
@@ -148,7 +146,6 @@ class ZoeDepthConfig(PretrainedConfig):
         max_depth=10,
         num_attractors=[16, 8, 4, 1],
         bin_embedding_dim=128,
-        num_out_features=[256, 256, 256, 256],
         attractor_alpha=1000,
         attractor_gamma=2,
         attractor_kind="mean",
@@ -156,7 +153,7 @@ class ZoeDepthConfig(PretrainedConfig):
         max_temp=50.0,
         bin_centers_type="softplus",
         use_multiple_heads=False,
-        bin_conf=None,
+        bin_configurations=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -200,7 +197,6 @@ class ZoeDepthConfig(PretrainedConfig):
         self.max_depth = max_depth
         self.num_attractors = num_attractors
         self.bin_embedding_dim = bin_embedding_dim
-        self.num_out_features = num_out_features
         self.attractor_alpha = attractor_alpha
         self.attractor_gamma = attractor_gamma
         self.attractor_kind = attractor_kind
@@ -208,6 +204,6 @@ class ZoeDepthConfig(PretrainedConfig):
         self.max_temp = max_temp
         self.bin_centers_type = bin_centers_type
         self.use_multiple_heads = use_multiple_heads
-        if use_multiple_heads and bin_conf is None:
-            raise ValueError("bin_conf must be specified when use_multiple_heads is True.")
-        self.bin_conf = bin_conf
+        if use_multiple_heads and bin_configurations is None:
+            raise ValueError("bin_configurations must be specified when use_multiple_heads is True.")
+        self.bin_configurations = bin_configurations
