@@ -251,9 +251,6 @@ class AttentionMaskConverter:
         batch_size, query_length = inputs_embeds.shape[0], inputs_embeds.shape[1]
         key_value_length = query_length + past_key_values_length
 
-        # torch.jit.trace, symbolic_trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
-        # used as an SDPA argument. We keep compatibility with these tracing tools by always using SDPA's `attn_mask` argument in case we are tracing.
-        # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
         is_tracing = (
             torch.jit.is_tracing()
             or isinstance(inputs_embeds, torch.fx.Proxy)
@@ -263,7 +260,11 @@ class AttentionMaskConverter:
         ignore_causal_mask = False
 
         if attention_mask is None:
-            # TODO: Once torch._dynamo.is_fullgraph_compiling, we may want to allow to ignore the causal mask as well in case we use fullgraph=False.
+            # TODO: When tracing with TorchDynamo with fullgraph=True, the model is recompiled depending on the input shape, thus SDPA's `is_causal` argument is rightfully updated (see https://gist.github.com/fxmarty/1313f39037fc1c112508989628c57363). However, when using `torch.export` or
+            # or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is hard-coded. If a user exports a model with q_len > 1, the exported model will hard-code `is_causal=True` which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108).
+            # Thus, we currently can NOT set `ignore_causal_mask = True` here. We would need a `torch._dynamo.is_exporting()` flag.
+            #
+            # Besides, jit.trace can not handle the `q_len > 1` condition for `is_causal` (`TypeError: scaled_dot_product_attention(): argument 'is_causal' must be bool, not Tensor`).
             ignore_causal_mask = not is_tracing
         else:
             if len(attention_mask.shape) == 4:
@@ -282,7 +283,7 @@ class AttentionMaskConverter:
                 # Unfortunately, for query_length > 1 and key_value_length != query_length, we cannot generally ignore the attention mask, as SDPA causal mask generation
                 # may be wrong. We will set `is_causal=False` in SDPA and rely on Transformers attention_mask instead, hence not setting it to None here.
                 # Reference: https://github.com/pytorch/pytorch/issues/108108
-                # TODO: Revisit this with https://github.com/pytorch/pytorch/pull/114823 in PyTorch 2.3.
+                # TODO: maybe revisit this with https://github.com/pytorch/pytorch/pull/114823 in PyTorch 2.3.
 
         return ignore_causal_mask
 
