@@ -255,6 +255,7 @@ class BeitSelfAttention(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         relative_position_bias: Optional["BeitRelativePositionBias"] = None,
+        resolution: Optional = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
@@ -269,7 +270,9 @@ class BeitSelfAttention(nn.Module):
 
         # Add relative position bias if present.
         if self.relative_position_bias is not None:
-            attention_scores = attention_scores + self.relative_position_bias().unsqueeze(0)
+            import numpy as np
+            window_size = tuple(np.array(resolution) // 16)
+            attention_scores = attention_scores + self.relative_position_bias(window_size)
 
         # Add shared relative position bias if provided.
         if relative_position_bias is not None:
@@ -346,8 +349,9 @@ class BeitAttention(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         relative_position_bias: Optional["BeitRelativePositionBias"] = None,
+        resolution: Optional = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions, relative_position_bias)
+        self_outputs = self.attention(hidden_states, head_mask, output_attentions, relative_position_bias, resolution)
 
         attention_output = self.output(self_outputs[0], hidden_states)
 
@@ -411,12 +415,14 @@ class BeitLayer(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         relative_position_bias: Optional["BeitRelativePositionBias"] = None,
+        resolution: Optional = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in BEiT, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
             relative_position_bias=relative_position_bias,
+            resolution=resolution,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -443,6 +449,50 @@ class BeitLayer(nn.Module):
         outputs = (layer_output,) + outputs
 
         return outputs
+
+
+def ndgrid(*tensors) -> Tuple[torch.Tensor, ...]:
+    """generate N-D grid in dimension order.
+
+    The ndgrid function is like meshgrid except that the order of the first two input arguments are switched.
+
+    That is, the statement
+    [X1,X2,X3] = ndgrid(x1,x2,x3)
+
+    produces the same result as
+
+    [X2,X1,X3] = meshgrid(x2,x1,x3)
+
+    This naming is based on MATLAB, the purpose is to avoid confusion due to torch's change to make
+    torch.meshgrid behaviour move from matching ndgrid ('ij') indexing to numpy meshgrid defaults of ('xy').
+
+    """
+    try:
+        return torch.meshgrid(*tensors, indexing='ij')
+    except TypeError:
+        # old PyTorch < 1.10 will follow this path as it does not have indexing arg,
+        # the old behaviour of meshgrid was 'ij'
+        return torch.meshgrid(*tensors)
+
+
+def gen_relative_position_index(window_size: Tuple[int, int]) -> torch.Tensor:
+    num_relative_distance = (2 * window_size[0] - 1) * (2 * window_size[1] - 1) + 3
+    # cls to token & token 2 cls & cls to cls
+    # get pair-wise relative position index for each token inside the window
+    window_area = window_size[0] * window_size[1]
+    coords = torch.stack(ndgrid(torch.arange(window_size[0]), torch.arange(window_size[1])))  # 2, Wh, Ww
+    coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
+    relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
+    relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
+    relative_coords[:, :, 0] += window_size[0] - 1  # shift to start from 0
+    relative_coords[:, :, 1] += window_size[1] - 1
+    relative_coords[:, :, 0] *= 2 * window_size[1] - 1
+    relative_position_index = torch.zeros(size=(window_area + 1,) * 2, dtype=relative_coords.dtype)
+    relative_position_index[1:, 1:] = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
+    relative_position_index[0, 0:] = num_relative_distance - 3
+    relative_position_index[0:, 0] = num_relative_distance - 2
+    relative_position_index[0, 0] = num_relative_distance - 1
+    return relative_position_index
 
 
 class BeitRelativePositionBias(nn.Module):
@@ -474,13 +524,44 @@ class BeitRelativePositionBias(nn.Module):
         relative_position_index[0, 0] = self.num_relative_distance - 1
 
         self.register_buffer("relative_position_index", relative_position_index, persistent=False)
+        self.relative_position_indices = {}
 
-    def forward(self) -> torch.Tensor:
-        relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
-            self.window_size[0] * self.window_size[1] + 1, self.window_size[0] * self.window_size[1] + 1, -1
-        )  # Wh*Ww,Wh*Ww,nH
+    def forward(self, window_size) -> torch.Tensor:
+        """
+        Modification of timm.models.beit.py: Attention._get_rel_pos_bias to support arbitrary window sizes.
+        """
+        import torch.nn.functional as F
 
-        return relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
+        old_height = 2 * self.window_size[0] - 1
+        old_width = 2 * self.window_size[1] - 1
+
+        new_height = 2 * window_size[0] - 1
+        new_width = 2 * window_size[1] - 1
+
+        old_relative_position_bias_table = self.relative_position_bias_table
+
+        old_num_relative_distance = self.num_relative_distance
+        new_num_relative_distance = new_height * new_width + 3
+
+        old_sub_table = old_relative_position_bias_table[:old_num_relative_distance - 3]
+
+        old_sub_table = old_sub_table.reshape(1, old_width, old_height, -1).permute(0, 3, 1, 2)
+        new_sub_table = F.interpolate(old_sub_table, size=(int(new_height), int(new_width)), mode="bilinear")
+        new_sub_table = new_sub_table.permute(0, 2, 3, 1).reshape(new_num_relative_distance - 3, -1)
+
+        new_relative_position_bias_table = torch.cat(
+            [new_sub_table, old_relative_position_bias_table[old_num_relative_distance - 3:]])
+
+        key = str(window_size[1]) + "," + str(window_size[0])
+        if key not in self.relative_position_indices.keys():
+            self.relative_position_indices[key] = gen_relative_position_index(window_size)
+
+        relative_position_bias = new_relative_position_bias_table[
+            self.relative_position_indices[key].view(-1)].view(
+            window_size[0] * window_size[1] + 1,
+            window_size[0] * window_size[1] + 1, -1)  # Wh*Ww,Wh*Ww,nH
+        relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
+        return relative_position_bias.unsqueeze(0)
 
 
 class BeitEncoder(nn.Module):
@@ -512,6 +593,7 @@ class BeitEncoder(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        resolution: Optional = None,
         return_dict: bool = True,
     ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
@@ -534,7 +616,7 @@ class BeitEncoder(nn.Module):
                 relative_position_bias = (
                     self.relative_position_bias() if self.relative_position_bias is not None else None
                 )
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions, relative_position_bias)
+                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions, relative_position_bias, resolution)
 
             hidden_states = layer_outputs[0]
 
@@ -684,12 +766,14 @@ class BeitModel(BeitPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output, (patch_height, patch_width) = self.embeddings(pixel_values, bool_masked_pos)
+        resolution = pixel_values.shape[2:]
 
         encoder_outputs = self.encoder(
             embedding_output,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            resolution=resolution,
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
@@ -1385,9 +1469,10 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
 
         batch_size = pixel_values.shape[0]
         embedding_output, (patch_height, patch_width) = self.embeddings(pixel_values)
+        resolution = pixel_values.shape[2:]
 
         outputs = self.encoder(
-            embedding_output, output_hidden_states=True, output_attentions=output_attentions, return_dict=return_dict
+            embedding_output, output_hidden_states=True, output_attentions=output_attentions, resolution=resolution, return_dict=return_dict
         )
 
         hidden_states = outputs.hidden_states if return_dict else outputs[1]

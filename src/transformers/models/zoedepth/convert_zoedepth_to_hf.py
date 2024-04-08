@@ -343,12 +343,16 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     image_processor = ZoeDepthImageProcessor(size={"height": image_size, "width": image_size})
     pixel_values = image_processor(image, return_tensors="pt").pixel_values
     # verify pixel values
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="zoedepth_pixel_values.pt", repo_type="dataset")
+    filepath = hf_hub_download(
+        repo_id="nielsr/test-image",
+        filename="zoedepth_pixel_values.pt",
+        repo_type="dataset",
+        revision="1865dbb81984f01c89e83eec10f8d07efd10743d",
+    )
     original_pixel_values = torch.load(filepath, map_location="cpu")
     assert torch.allclose(pixel_values, original_pixel_values)
 
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="zoedepth_pixel_values.pt", repo_type="dataset")
-    pixel_values = torch.load(filepath)
+    # pixel_values = torch.randn(1, 3, 768, 512)
 
     # forward pass HF model
     depth = model(pixel_values).predicted_depth

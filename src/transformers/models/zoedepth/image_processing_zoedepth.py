@@ -122,9 +122,6 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         do_pad (`bool`, *optional*, defaults to `False`):
             Whether to apply center padding. This was introduced in the DINOv2 paper, which uses the model in
             combination with DPT.
-        size_divisor (`int`, *optional*):
-            If `do_pad` is `True`, pads the image dimensions to be divisible by this value. This was introduced in the
-            DINOv2 paper, which uses the model in combination with DPT.
     """
 
     model_input_names = ["pixel_values"]
@@ -142,7 +139,6 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: bool = False,
-        size_divisor: int = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -159,7 +155,6 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_pad = do_pad
-        self.size_divisor = size_divisor
         self._valid_processor_keys = [
             "images",
             "do_resize",
@@ -173,7 +168,6 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             "image_mean",
             "image_std",
             "do_pad",
-            "size_divisor",
             "return_tensors",
             "data_format",
             "input_data_format",
@@ -286,7 +280,6 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: bool = None,
-        size_divisor: int = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -353,7 +346,6 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_pad = do_pad if do_pad is not None else self.do_pad
-        size_divisor = size_divisor if size_divisor is not None else self.size_divisor
 
         images = make_list_of_images(images)
 
@@ -371,7 +363,6 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             image_mean=image_mean,
             image_std=image_std,
             do_pad=do_pad,
-            size_divisibility=size_divisor,
             do_resize=do_resize,
             size=size,
             resample=resample,
@@ -415,10 +406,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             ]
 
         if do_pad:
-            images = [
-                self.pad_image(image=image, size_divisor=size_divisor, input_data_format=input_data_format)
-                for image in images
-            ]
+            images = [self.pad_image(image=image, input_data_format=input_data_format) for image in images]
 
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
