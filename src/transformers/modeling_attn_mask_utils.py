@@ -319,7 +319,7 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
     ignore_causal_mask = False
 
     if attention_mask is None:
-        if key_value_length < sliding_window:
+        if sliding_window is None or key_value_length < sliding_window:
             ignore_causal_mask = not is_tracing
     elif sliding_window is None or key_value_length < sliding_window:
         # 4d mask is passed through
