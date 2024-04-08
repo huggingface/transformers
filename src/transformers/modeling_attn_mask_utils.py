@@ -16,11 +16,6 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 
-from .utils import logging
-
-
-logger = logging.get_logger(__name__)
-
 
 @dataclass
 class AttentionMaskConverter:
@@ -246,8 +241,10 @@ class AttentionMaskConverter:
         past_key_values_length: int,
     ) -> bool:
         """
-        In case no token is masked in the `attention_mask` argument, we simply set it to `None` for the cases `query_length == 1` and
-        `key_value_length == query_length`, and rely instead on SDPA `is_causal` argument to use causal/non-causal masks,
+        Detects whether the attention_mask can be ignored in case we use PyTorch's SDPA.
+
+        In case no token is masked in the `attention_mask` argument, if `query_length == 1` or
+        `key_value_length == query_length`, we rather rely on SDPA `is_causal` argument to use causal/non-causal masks,
         allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is passed).
         """
 
