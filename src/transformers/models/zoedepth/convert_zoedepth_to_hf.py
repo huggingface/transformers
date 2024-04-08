@@ -340,7 +340,8 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     # Check outputs on an image
     image = prepare_img()
 
-    # TODO image processor should default to keep_aspect_ratio=True, do_pad=True as well
+    # TODO we should default to this:
+    # image_processor = ZoeDepthImageProcessor()
     # and verify pixel values on this large image:
     # filepath = hf_hub_download(repo_id="shariqfarooq/ZoeDepth", filename="examples/person_1.jpeg", repo_type="space")
     # image = Image.open(filepath).convert("RGB")

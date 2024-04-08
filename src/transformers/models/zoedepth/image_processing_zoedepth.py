@@ -111,7 +111,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions. Can be overidden by `do_resize` in `preprocess`.
-        size (`Dict[str, int]` *optional*, defaults to `{"height": 384, "width": 384}`):
+        size (`Dict[str, int]` *optional*, defaults to `{"height": 384, "width": 512}`):
             Size of the image after resizing. Can be overidden by `size` in `preprocess`.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Defines the resampling filter to use if resizing the image. Can be overidden by `resample` in `preprocess`.
@@ -147,7 +147,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-        size = size if size is not None else {"height": 384, "width": 384}
+        size = size if size is not None else {"height": 384, "width": 512}
         size = get_size_dict(size)
         self.do_resize = do_resize
         self.size = size
