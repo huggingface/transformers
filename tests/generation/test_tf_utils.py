@@ -194,7 +194,7 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         text = """Hello, my dog is cute and"""
         tokens = tokenizer(text, return_tensors="tf")
-        model = TFAutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2", use_safetensors=False)
+        model = TFAutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2", revision="pr/4")
 
         eos_token_id = 638
         # forces the generation to happen on CPU, to avoid GPU-related quirks
