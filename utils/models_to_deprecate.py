@@ -148,7 +148,7 @@ def get_list_of_models_to_deprecate(
         with open("models_info.json", "w") as f:
             json.dump(models_info, f, indent=4)
 
-    print("\nModels to deprecate:")
+    print("\nFinding models to deprecate:")
     n_models_to_deprecate = 0
     models_to_deprecate = {}
     for model, info in models_info.items():
@@ -159,9 +159,9 @@ def get_list_of_models_to_deprecate(
             print(f"\nModel: {model}")
             print(f"Downloads: {n_downloads}")
             print(f"Date: {info['first_commit_datetime']}")
+    print("\nModels to deprecate: ", list(models_to_deprecate.keys()))
     print(f"\nNumber of models to deprecate: {n_models_to_deprecate}")
     print("Before deprecating make sure to verify the models, including if they're used as a module in other models.")
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
