@@ -158,7 +158,7 @@ def main():
     parser.add_argument(
         "--input_checkpoint",
         help="Absolute path to the target Gemma weights.",
-        default="/home/arthur/transformers_recurrentgemma/rg-weights/ToBeDeleted/pytorch_model.bin",
+        default="/home/arthur/transformers_recurrentgemma/google/recurrent-gemma-2b-it/ToBeDeleted/2b-it.pt",
     )
     parser.add_argument(
         "--tokenizer_checkpoint",
@@ -172,7 +172,7 @@ def main():
     )
     parser.add_argument(
         "--output_dir",
-        default="google/recurrent-gemma-2b",
+        default="google/recurrent-gemma-2b-it-hf",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(

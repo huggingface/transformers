@@ -144,7 +144,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
             raise ValueError("The number of `num_key_value_heads` must be smaller than `num_attention_heads`")
         self.attention_dropout = attention_dropout
         self.attention_bias = attention_bias
-
+        self.w_init_variance_scale = w_init_variance_scale
         self.final_w_init_variance_scale = 2.0 / self.num_hidden_layers
         super().__init__(
             pad_token_id=pad_token_id,
