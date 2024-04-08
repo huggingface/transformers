@@ -345,7 +345,7 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     # verify pixel values
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="zoedepth_pixel_values.pt", repo_type="dataset")
     original_pixel_values = torch.load(filepath, map_location="cpu")
-    assert torch.allclose(pixel_values, original_pixel_values, atol=1e-4)
+    assert torch.allclose(pixel_values, original_pixel_values)
 
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="zoedepth_pixel_values.pt", repo_type="dataset")
     pixel_values = torch.load(filepath)

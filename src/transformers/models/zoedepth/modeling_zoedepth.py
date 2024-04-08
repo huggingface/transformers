@@ -925,7 +925,7 @@ class ZoeDepthPatchTransformerEncoder(nn.Module):
 
 class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
     """
-    Multiple metric depth estimation heads. A transformer encoder is used to route between 2 different heads.
+    Multiple metric depth estimation heads. A MLP classifier is used to route between 2 different heads.
     """
 
     def __init__(self, config):
@@ -1073,8 +1073,8 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         bin_centers = nn.functional.interpolate(bin_centers, last.shape[-2:], mode="bilinear", align_corners=True)
         bin_embedding = nn.functional.interpolate(bin_embedding, last.shape[-2:], mode="bilinear", align_corners=True)
 
-        clb = self.conditional_log_binomial[bin_configurations_name]
-        x = clb(last, bin_embedding)
+        conditional_log_binomial = self.conditional_log_binomial[bin_configurations_name]
+        x = conditional_log_binomial(last, bin_embedding)
 
         # Now depth value is Sum px * cx , where cx are bin_centers from the last bin tensor
         out = torch.sum(x * bin_centers, dim=1, keepdim=True)
