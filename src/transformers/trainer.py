@@ -304,9 +304,6 @@ class Trainer:
             The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs to the
             maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
             interrupted training or reuse the fine-tuned model.
-        image_processor ([`BaseImageProcessor`], *optional*):
-            The image processor used to preprocess the data. If provided, it will be saved along the model to make it easier
-            to rerun an interrupted training or reuse the fine-tuned model.
         model_init (`Callable[[], PreTrainedModel]`, *optional*):
             A function that instantiates the model to be used. If provided, each call to [`~Trainer.train`] will start
             from a new instance of the model as given by this function.
@@ -331,6 +328,9 @@ class Trainer:
             by this function will be reflected in the predictions received by `compute_metrics`.
 
             Note that the labels (second parameter) will be `None` if the dataset does not have them.
+        image_processor ([`BaseImageProcessor`], *optional*):
+            The image processor used to preprocess the data. If provided, it will be saved along the model to make it easier
+            to rerun an interrupted training or reuse the fine-tuned model.
 
     Important attributes:
 
