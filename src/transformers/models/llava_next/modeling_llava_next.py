@@ -380,11 +380,16 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
         # 1. Create a mask to know where special image tokens are
         special_image_token_mask = input_ids == self.config.image_token_index
+        print("special image_token_index num: ", self.config.image_token_index)
         print("special image token_mask shape: ", special_image_token_mask.shape)
+        print("input embeds shape: ", inputs_embeds.shape)
+
         print("input ids shape: ", input_ids.shape)
         num_special_image_tokens = torch.sum(special_image_token_mask, dim=-1)
+        print("num of special image tokens found in each ", num_special_image_tokens)
         # Compute the maximum embed dimension
         max_embed_dim = (num_special_image_tokens.max().item() * (max_num_patches - 1)) + sequence_length # int
+        print("max embed dim found: ", max_embed_dim)
 
         batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
         print("batch_indices shape: ", batch_indices.shape)
@@ -397,7 +402,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
         patches_lengths = torch.tensor(patches_lengths, device=inputs_embeds.device).unsqueeze(dim=1)
         repeated_patches = patches_lengths.repeat(1, special_image_token_mask.shape[1]) 
-        new_token_positions = torch.cumsum(special_image_token_mask * repeated_patches + 1, -1) - 1
+        new_token_positions = torch.cumsum(special_image_token_mask * (repeated_patches - 1) + 1, -1) - 1
         print("shape of new_token_positions: ", new_token_positions.shape)
         nb_image_pad = max_embed_dim - 1 - new_token_positions[:, -1]
         print("value of nb_image_pad: ", nb_image_pad)
