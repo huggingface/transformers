@@ -241,7 +241,7 @@ class AttentionMaskConverter:
         past_key_values_length: int,
     ) -> bool:
         """
-        Detects whether the attention_mask can be ignored in case we use PyTorch's SDPA.
+        Detects whether the optional user-specified attention_mask & the automatically created causal mask can be ignored in case PyTorch's SDPA is used, rather relying on SDPA's `is_causal` argument.
 
         In case no token is masked in the `attention_mask` argument, if `query_length == 1` or
         `key_value_length == query_length`, we rather rely on SDPA `is_causal` argument to use causal/non-causal masks,
