@@ -18,6 +18,7 @@ import math
 from typing import Dict, List, Optional, Union
 
 import numpy as np
+import torch
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict, select_best_resolution
 from ...image_transforms import (
@@ -464,6 +465,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        max_padding_len: int = 0,
     ):
         """
         Args:
@@ -603,6 +605,54 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             pixel_values = np.array(pixel_values)
             new_images.append(pixel_values)
 
+        max_patch = max(len(x) for x in new_images) + max_padding_len
+        padded_images = [
+            np.concatenate([x, np.zeros([max_patch - x.shape[0]] + list(x.shape[1:]), dtype=x.dtype)], axis=0)
+            if x.shape[0] < max_patch
+            else x
+            for x in new_images
+        ]
         data = {"pixel_values": new_images, "image_sizes": image_sizes}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def pad(
+        self,
+        pixel_values: List,  # list of np.array(PIL.Image) objects ; list(num_patches, num_channels, image_height, image_width)
+        max_num_patches: Optional[int] = None,
+        pad_token_id: int = 0, 
+    ) -> torch.FloatTensor:
+        """
+        Args:
+            max_num_patches: If provided, pad to max_num_patches number of 
+            patches. Else, use the maximum length of images provided in the 
+            batch.
+        Returns:
+            (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size))
+        """
+        
+        max_patches_in_batch = max(len(x) for x in pixel_values)
+        if max_num_patches:
+            if max_num_patches < max_patches_in_batch:
+                raise ValueError(f"Please provide a higher max_num_patches \
+                            value since the input batch has higher patches\
+                            {max_patches_in_batch}")
+            max_patches_in_batch = max_num_patches
+        
+        padded_images = [
+            np.concatenate(
+                [
+                    x, 
+                    np.ones(
+                        [max_patches_in_batch - x.shape[0]] + list(x.shape[1:]), 
+                        dtype=x.dtype
+                    ) * pad_token_id
+                ],
+                axis=0
+            )
+            if x.shape[0] < max_patches_in_batch
+            else x
+            for x in pixel_values 
+        ]
+        return torch.FloatTensor(padded_images)
+ 
