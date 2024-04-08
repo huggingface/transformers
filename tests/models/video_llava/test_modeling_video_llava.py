@@ -232,9 +232,9 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             with torch.no_grad():
                 _ = model(**inputs)
 
-            # if we remove images from inputs, but the image tokens are in ids
+            # if we remove some images from inputs leaving only one
             # image number mismatch error should raise
-            inputs["pixel_values_images"] = None
+            inputs["pixel_values_images"] = inputs["pixel_values_images"][:1]
             with self.assertRaises(ValueError):
                 _ = model(**inputs)
 
