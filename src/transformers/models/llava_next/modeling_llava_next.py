@@ -395,9 +395,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         # `special_image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images - 1` text tokens.
         # `torch.cumsum` computes how each image token shifts subsequent text token positions.
         # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
-        patches_lengths = torch.Tensor(patches_lengths, device=inputs_embeds.device).unsqueeze(dim=1)
+        patches_lengths = torch.tensor(patches_lengths, device=inputs_embeds.device).unsqueeze(dim=1)
         repeated_patches = patches_lengths.repeat(1, special_image_token_mask.shape[1]) 
-        new_token_positions = torch.cumsum(special_image_token_mask * repeated_patches + 1, -1, device=inputs_embeds.device) - 1
+        new_token_positions = torch.cumsum(special_image_token_mask * repeated_patches + 1, -1) - 1
         print("shape of new_token_positions: ", new_token_positions.shape)
         nb_image_pad = max_embed_dim - 1 - new_token_positions[:, -1]
         print("value of nb_image_pad: ", nb_image_pad)
