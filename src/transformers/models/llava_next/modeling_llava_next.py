@@ -605,6 +605,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 for image_idx, image_feature in enumerate(image_features):
                     num_unpadded_patches = image_feature.shape[0]
                     print("num _unpadded patches: ", num_unpadded_patches)
+                    # image feature has shape; 5/3/4 (num_patches), 3, 336, 336
                     if image_feature.shape[0] > 1:
                         base_image_feature = image_feature[0]
                         image_feature = image_feature[1:]
@@ -616,9 +617,16 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                             self.config.image_grid_pinpoints,
                             self.config.vision_config.image_size,
                         )
+                        print("the image sizes I used to obtain these num_patches: ", image_sizes[image_idx])
                         print("these are the num patch  and num ht: ", num_patch_height, num_patch_width)
-                        image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
-                        image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
+                        print("shape of image ftrs before view: ", image_feature.shape)
+                        image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1) # divide 5 - 1 
+                        # patches into 2x2 grid for num_patch_height, 
+                        # num_patch_width  and 336x336x3
+                        print("shape of image ftrs before permute: ", image_feature.shape)
+                        image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous() # concatenate all the features
+                        # 3x
+                        print("shape of image ftrs before flatten: ", image_feature.shape)
                         image_feature = image_feature.flatten(1, 2).flatten(2, 3)
                         print("shape of image feature: before unpadding: ", image_feature.shape)
                         image_feature = unpad_image(image_feature, image_sizes[image_idx])
