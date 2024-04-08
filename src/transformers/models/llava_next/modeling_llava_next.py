@@ -452,7 +452,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
 
         # Compute the sum of lengths of image_features
-        total_len_img_ftrs = sum([img.shape[:-1] for img in image_features])
+        total_len_img_ftrs = sum([img.shape[0] for img in image_features])
         if image_to_overwrite.sum() != total_len_img_ftrs:
             raise ValueError(
                 f"The input provided to the model are wrong. The number of image tokens is {torch.sum(special_image_token_mask)} while"
