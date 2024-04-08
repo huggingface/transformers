@@ -153,7 +153,7 @@ class Idefics2ProcessorTest(unittest.TestCase):
         old_seq_len = processor.image_seq_len
         # Make short sequence length to test that the fake tokens are added correctly
         processor.image_seq_len = 2
-        rendered = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+        rendered = processor.apply_chat_template(messages, add_generation_prompt=True, process=False)
 
         expected_rendered = (
             "<s>User: What do these images show?<fake_token_around_image><image><image><fake_token_around_image><image><image><fake_token_around_image><end_of_utterance>\n"

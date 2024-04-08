@@ -132,6 +132,18 @@ class Idefics2Processor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
 
+    def _extract_images_from_prompts(self, prompts):
+        prompt_images = []
+        for prompt in prompts:
+            images = []
+            for elem in prompt:
+                if is_valid_image(elem):
+                    images.append(elem)
+                elif is_url(elem):
+                    images.append(load_image(elem))
+            prompt_images.append(images)
+        return prompt_images
+
     def __call__(
         self,
         prompts: Union[List[Union[TextInput, ImageInput]], List[List[Union[TextInput, ImageInput]]]],
@@ -220,15 +232,7 @@ class Idefics2Processor(ProcessorMixin):
         inputs.update(text_inputs)
 
         # Extract the images from the prompts, loading them if necessary
-        prompt_images = []
-        for prompt in prompts:
-            images = []
-            for elem in prompt:
-                if is_valid_image(elem):
-                    images.append(elem)
-                elif is_url(elem):
-                    images.append(load_image(elem))
-            prompt_images.append(images)
+        prompt_images = self._extract_images_from_prompts(prompts)
 
         image_inputs = self.image_processor(prompt_images, return_tensors=return_tensors)
         inputs.update(image_inputs)
@@ -259,28 +263,25 @@ class Idefics2Processor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
-    # Copied from transformers.tokenization_utils_base.PreTrainedTokenizerBase.apply_chat_template
     def apply_chat_template(
         self,
         conversation: Union[List[Dict[str, str]], "Conversation"],
         chat_template: Optional[str] = None,
         add_generation_prompt: bool = False,
-        tokenize: bool = True,
+        process: bool = True,
         padding: bool = False,
         truncation: bool = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        return_dict: bool = False,
-        **tokenizer_kwargs,
+        return_dict: bool = True,
+        tokenizer_kwargs=None,
+        image_processor_kwargs=None,
     ) -> Union[str, List[int]]:
         """
         Converts a Conversation object or a list of dictionaries with `"role"` and `"content"` keys to a list of token
         ids.
 
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.apply_chat_template`]. Please
-        refer to the docstring of this method for more information.
-
-        for use with chat models, and will read the tokenizer's chat_template attribute to
+        For use with chat models, and will read the tokenizer's chat_template attribute to
         determine the format and control tokens to use when converting. When chat_template is None, it will fall back
         to the default_chat_template specified at the class level.
 
@@ -293,14 +294,14 @@ class Idefics2Processor(ProcessorMixin):
                 the start of an assistant message. This is useful when you want to generate a response from the model.
                 Note that this argument will be passed to the chat template, and so it must be supported in the
                 template for this argument to have any effect.
-            tokenize (`bool`, defaults to `True`):
-                Whether to tokenize the output. If `False`, the output will be a string.
+            process (`bool`, defaults to `True`):
+                Whether to process the output. If `False`, the output will be a string and list of images.
             padding (`bool`, defaults to `False`):
-                Whether to pad sequences to the maximum length. Has no effect if tokenize is `False`.
+                Whether to pad sequences to the maximum length. Has no effect if process is `False`.
             truncation (`bool`, defaults to `False`):
-                Whether to truncate sequences at the maximum length. Has no effect if tokenize is `False`.
+                Whether to truncate sequences at the maximum length. Has no effect if process is `False`.
             max_length (`int`, *optional*):
-                Maximum length (in tokens) to use for padding or truncation. Has no effect if tokenize is `False`. If
+                Maximum length (in tokens) to use for padding or truncation. Has no effect if process is `False`. If
                 not specified, the tokenizer's `max_length` attribute will be used as a default.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Has no effect if tokenize is `False`. Acceptable
@@ -309,14 +310,20 @@ class Idefics2Processor(ProcessorMixin):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
-            return_dict (`bool`, *optional*, defaults to `False`):
-                Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
-            **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
+            return_dict (`bool`, *optional*, defaults to `True`):
+                Whether to return a dictionary with named outputs. Has no effect if process is `False`.
+            tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
+            image_processor_kwargs: Additional kwargs to pass to the image processor.
 
         Returns:
             `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
             output is ready to pass to the model, either directly or via methods like `generate()`.
         """
+        tokenizer_kwargs = tokenizer_kwargs if tokenizer_kwargs is not None else {}
+        image_processor_kwargs = image_processor_kwargs if image_processor_kwargs is not None else {}
+
+        if not return_dict and process:
+            raise ValueError("return_dict must be set to True for this processor if process is True.")
 
         if hasattr(conversation, "messages"):
             # Indicates it's a Conversation object
@@ -347,31 +354,27 @@ class Idefics2Processor(ProcessorMixin):
 
         if padding is True:
             padding = "max_length"  # There's only one sequence here, so "longest" makes no sense
-        if tokenize:
-            if return_dict:
-                # Ignore copy
-                return self.tokenizer(
-                    rendered,
-                    padding=padding,
-                    truncation=truncation,
-                    max_length=max_length,
-                    add_special_tokens=False,
-                    return_tensors=return_tensors,
-                    **tokenizer_kwargs,
-                )
-            else:
-                # Ignore copy
-                return self.tokenizer.encode(
-                    rendered,
-                    padding=padding,
-                    truncation=truncation,
-                    max_length=max_length,
-                    add_special_tokens=False,
-                    return_tensors=return_tensors,
-                    **tokenizer_kwargs,
-                )
+
+        prompts = [message.get("content", []) for message in conversation]
+        prompt_images = self._extract_images_from_prompts(prompts)
+
+        if process:
+            tokenized = self.tokenizer(
+                rendered,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                add_special_tokens=False,
+                return_tensors=return_tensors,
+                **tokenizer_kwargs,
+            )
+            processed_images = self.image_processor(
+                prompt_images, return_tensors=return_tensors, **image_processor_kwargs
+            )
+            tokenized.update(processed_images)
+            return tokenized
         else:
-            return rendered
+            return rendered, prompt_images
 
     @lru_cache
     # Copied from transformers.tokenization_utils_base.PreTrainedTokenizerBase._compile_jinja_template
