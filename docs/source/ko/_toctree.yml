@@ -138,7 +138,7 @@
   - local: hf_quantizer
     title: Contribute new quantization method
   title: (번역중) 개발자 가이드
-  sections:
+- sections:
   - local: performance
     title: 성능 및 확장성
   - local: in_translation
