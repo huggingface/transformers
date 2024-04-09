@@ -229,13 +229,12 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         Computes the `indices` based on `cache_position >= self.config.attention_window_size - 1`.
         The `to_shift` is only true once we are above attention_window_size. Thus with `attention_window_size==64`:
 
-        ```
         >>> indices = (slicing + to_shift[-1].int()-1) % self.config.attention_window_size
         tensor([ 1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
                 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
                 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54,
                 55, 56, 57, 58, 59, 60, 61, 62, 63,  0])
-        ```
+
         We overwrite the cache using these, then we always write at cache_position (clamped to `attention_window_size`)
         """
         cache_position = cache_kwargs.get("cache_position")
