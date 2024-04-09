@@ -2,7 +2,7 @@ name: Slow tests on important models (on Push - A10)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ add-new-push-test-workflow ]
 
 env:
   IS_GITHUB_CI: "1"
@@ -81,6 +81,12 @@ jobs:
         id: run_fa2_tests
         run:
           pytest -m "flash_attn_test" --make-reports=${{ matrix.model-name }}_fa2_tests/ tests/${{ matrix.model-name }}/test_modeling_*
+      - name: "Test suite reports artifacts: ${{ matrix.model-name }}_fa2_tests"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: tests_integration_${{ model-name }}
+          path: /transformers/reports/${{ matrix.model-name }}_fa2_tests
       - name: Post to Slack
         if: always()
         uses: ./.github/actions/post-slack
@@ -93,7 +99,13 @@ jobs:
         id: run_integration_tests
         if: always()
         run:
-          pytest -k "IntegrationTest" tests/${{ matrix.model-name }}/test_modeling_*
+          pytest -k "IntegrationTest"  --make-reports=tests_integration_${{ model-name }} tests/${{ matrix.model-name }}/test_modeling_*
+      - name: "Test suite reports artifacts: tests_integration_${{ model-name }}"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: tests_integration_${{ model-name }}
+          path: /transformers/reports/tests_integration_${{ model-name }}
       - name: Post to Slack
         if: always()
         uses: ./.github/actions/post-slack
