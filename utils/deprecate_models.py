@@ -369,7 +369,7 @@ def deprecate_models(models):
     # We do the following with all models passed at once to avoid having to re-write the file multiple times
 
     # Update the __init__.py file to point to the deprecated model.
-    update_init_file("src/transformers/models/__init__.py", models)
+    update_init_file("src/transformers/__init__.py", models)
 
     # Remove model references from other files
     remove_model_references_from_file("src/transformers/models/__init__.py", models, lambda line, model: model == line.strip().strip(","))
