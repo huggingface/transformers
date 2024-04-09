@@ -16,9 +16,6 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_flax_available,
-    is_sentencepiece_available,
-    is_tokenizers_available,
     is_torch_available,
 )
 
@@ -39,12 +36,6 @@ else:
         "RecurrentGemmaModel",
         "RecurrentGemmaPreTrainedModel",
     ]
-
-try:
-    if not is_flax_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
 
 
 if TYPE_CHECKING:
