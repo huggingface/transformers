@@ -273,6 +273,7 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         pass
 
 
+
 @require_torch
 class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):

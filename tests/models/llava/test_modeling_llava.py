@@ -24,18 +24,17 @@ from transformers import (
     AutoTokenizer,
     LlavaConfig,
     LlavaForConditionalGeneration,
-    CLIPVisionModel,
     is_torch_available,
     is_vision_available,
 )
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
+    require_torch_fp16,
     require_torch_gpu,
     require_vision,
     slow,
     torch_device,
-    require_torch_fp16
 )
 
 from ...test_configuration_common import ConfigTester
