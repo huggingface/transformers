@@ -14,7 +14,7 @@
 "AWQ (Activation aware Weight Quantization) integration file"
 from ..activations import ACT2FN
 from ..modeling_utils import PreTrainedModel
-from ..utils import is_auto_awq_available, is_torch_available
+from ..utils import is_auto_awq_available, is_torch_available, logging
 from ..utils.quantization_config import (
     AwqBackendPackingMethod,
     AwqConfig,
@@ -27,6 +27,7 @@ if is_torch_available():
     import torch
     import torch.nn as nn
 
+logger = logging.get_logger(__name__)
 
 AWQ_FUSED_MAPPINGS = {
     "mistral": {
@@ -155,6 +156,8 @@ def replace_with_awq_linear(
                 size = getattr(model, layers_detected[0]).out_features
                 scale_like = torch.ones(size)
                 model._modules[name] = ScaledActivation(module, scale_like)
+            elif len(layers_detected) == 0:
+                logger.info("We were not able to replace the GELU layers. The model might not perform as expected.")
         if len(list(module.children())) > 0:
             _, has_been_replaced = replace_with_awq_linear(
                 module,
