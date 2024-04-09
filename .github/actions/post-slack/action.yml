@@ -1,6 +1,6 @@
 name: Send message to slack
 
-description: 'Send resuls on slack'
+description: 'Send results to slack'
 author: 'Hugging Face'
 inputs:
   slack_channel:
