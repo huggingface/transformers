@@ -78,6 +78,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
         attention_dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
         num_key_value_heads (`<fill_type>`, *optional*, defaults to 16): <fill_docstring>
         attention_bias (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        w_init_variance_scale (`<fill_type>`, *optional*, defaults to 0.01): <fill_docstring>
     ```python
     >>> from transformers import RecurrentGemmaModel, RecurrentGemmaConfig
 
@@ -92,7 +93,6 @@ class RecurrentGemmaConfig(PretrainedConfig):
     ```"""
 
     model_type = "recurrent_gemma"
-    # keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,

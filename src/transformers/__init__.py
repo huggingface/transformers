@@ -743,7 +743,7 @@ _import_structure = {
         "RealmConfig",
         "RealmTokenizer",
     ],
-    "models.recurrent_gemma": ["RECURRENTGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RecurrentGemmaConfig"],
+    "models.recurrent_gemma": ["RecurrentGemmaConfig"],
     "models.reformer": ["REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ReformerConfig"],
     "models.regnet": ["REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "RegNetConfig"],
     "models.rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
