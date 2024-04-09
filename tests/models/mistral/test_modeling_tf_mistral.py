@@ -363,7 +363,7 @@ class TFMistralIntegrationTest(unittest.TestCase):
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
         model = TFMistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto")
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+        input_ids = tokenizer.encode(prompt, return_tensors="tf").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
@@ -378,9 +378,9 @@ class TFMistralIntegrationTest(unittest.TestCase):
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
         model = TFMistralForCausalLM.from_pretrained(
-            "mistralai/Mistral-7B-v0.1", device_map="auto", torch_dtype=torch.float16
+            "mistralai/Mistral-7B-v0.1", device_map="auto",
         )
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+        input_ids = tokenizer.encode(prompt, return_tensors="tf").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
         set_seed(0)
