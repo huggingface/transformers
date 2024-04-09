@@ -9142,13 +9142,6 @@ if TYPE_CHECKING:
             FlaxPegasusModel,
             FlaxPegasusPreTrainedModel,
         )
-
-        # Not implemented for FLAX yet.
-        # from .models.recurrent_gemma import (
-        #     RecurrentGemmaForCausalLM,
-        #     RecurrentGemmaModel,
-        #     RecurrentGemmaPreTrainedModel,
-        # )
         from .models.regnet import (
             FlaxRegNetForImageClassification,
             FlaxRegNetModel,
