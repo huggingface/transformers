@@ -1189,6 +1189,66 @@ class GenerationTesterMixin:
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
 
     @is_flaky()
+    def test_assisted_decoding_position_ids(self):
+        """
+        Similar test to `test_assisted_decoding_matches_greedy_search` but passes in position ids to check if
+        assisted decoding can correctly expand/crop it while generating
+        """
+        for model_class in self.all_generative_model_classes:
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+                self.skipTest("Won't fix: old model with different cache format")
+            if any(
+                model_name in model_class.__name__.lower()
+                for model_name in [
+                    "bigbirdpegasus",
+                    "led",
+                    "mega",
+                    "speech2text",
+                    "git",
+                    "prophetnet",
+                    "seamlessm4t",
+                    "clvp",
+                ]
+            ):
+                self.skipTest("May fix in the future: need model-specific fixes")
+
+            config, input_ids, attention_mask, _ = self._get_input_ids_and_config(batch_size=1)
+            if not hasattr(config, "use_cache"):
+                self.skipTest("This model doesn't support caching")
+
+            config.use_cache = True
+            config.is_decoder = True
+            model = model_class(config).to(torch_device).eval()
+            model_forward_args = inspect.signature(model.forward).parameters
+            if "position_ids" not in model_forward_args:
+                self.skipTest("This model doesn't use `position_ids`")
+
+            generation_kwargs = {
+                "eos_token_id": -1,
+                "max_new_tokens": 4,
+                "num_beams": 1,
+                "do_sample": False,
+            }
+
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            position_ids = position_ids[..., -input_ids.shape[-1] :].view(-1, input_ids.shape[-1])
+            output_greedy = model.generate(
+                input_ids, attention_mask=attention_mask, position_ids=position_ids, **generation_kwargs
+            )
+
+            assistant_model = model
+            assistant_model.generation_config.num_assistant_tokens = 2
+            assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
+            generation_kwargs.update({"assistant_model": assistant_model})
+            output_assisted = model.generate(
+                input_ids, attention_mask=attention_mask, position_ids=position_ids, **generation_kwargs
+            )
+
+            # The two outputs must match and their shape must be as expected
+            self.assertListEqual(output_greedy.tolist(), output_assisted.tolist())
+
+    @is_flaky()
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         # This test ensures that the prompt lookup generation does not introduce output changes over greedy search.
         # This test is mostly a copy of test_assisted_decoding_matches_greedy_search

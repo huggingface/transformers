@@ -182,6 +182,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 self.assistant_kwargs, new_cur_len, self.assistant_model.config.is_encoder_decoder
             )
             self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, new_cur_len)
+            self.assistant_kwargs = _prepare_position_ids(self.assistant_kwargs, new_cur_len)
 
         # 2. Forecast next N tokens using the assistant model.
         assistant_generation_kwargs = {
@@ -407,4 +408,19 @@ def _prepare_token_type_ids(model_kwargs: Dict[str, Any], new_length: int) -> Di
     elif type_length_diff > 0:
         token_type_copies = final_token_type.repeat(1, type_length_diff)
         model_kwargs["token_type_ids"] = torch.cat([model_kwargs["token_type_ids"], token_type_copies], dim=-1)
+    return model_kwargs
+
+
+def _prepare_position_ids(model_kwargs: Dict[str, Any], new_length: int) -> Dict[str, Any]:
+    position_ids = model_kwargs.get("position_ids")
+    if position_ids is None:
+        return model_kwargs
+
+    # we assume batch_size=1 for assited decoding (needs rework if bs > 1)
+    length_diff = new_length - position_ids[0, -1]
+    if length_diff < 0:
+        position_ids = position_ids[:, :length_diff]
+    elif length_diff > 0:
+        new_position_ids = torch.arange(position_ids[0, -1], new_length, device=position_ids.device).unsqueeze(0)
+        model_kwargs["position_ids"] = torch.cat([model_kwargs["position_ids"], new_position_ids], dim=-1)
     return model_kwargs
