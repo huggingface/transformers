@@ -224,6 +224,7 @@ class BeitPatchEmbeddings(nn.Module):
 class BeitSelfAttention(nn.Module):
     def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None) -> None:
         super().__init__()
+        self.config = config
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
@@ -271,7 +272,7 @@ class BeitSelfAttention(nn.Module):
 
         # Add relative position bias if present.
         if self.relative_position_bias is not None:
-            window_size = tuple(np.array(resolution) // 16)
+            window_size = tuple(np.array(resolution) // self.config.patch_size)
             attention_scores = attention_scores + self.relative_position_bias(window_size)
 
         # Add shared relative position bias if provided.
@@ -594,8 +595,9 @@ class BeitEncoder(nn.Module):
                     output_attentions,
                 )
             else:
+                window_size = tuple(np.array(resolution) // self.config.patch_size)
                 relative_position_bias = (
-                    self.relative_position_bias() if self.relative_position_bias is not None else None
+                    self.relative_position_bias(window_size) if self.relative_position_bias is not None else None
                 )
                 layer_outputs = layer_module(
                     hidden_states, layer_head_mask, output_attentions, relative_position_bias, resolution
