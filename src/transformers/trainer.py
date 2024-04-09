@@ -59,6 +59,7 @@ from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
+from .image_processing_utils import BaseImageProcessor
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
@@ -249,6 +250,8 @@ def _get_fsdp_ckpt_kwargs():
 if TYPE_CHECKING:
     import optuna
 
+    if is_datasets_available():
+        import datasets
 
 logger = logging.get_logger(__name__)
 
@@ -286,7 +289,7 @@ class Trainer:
             The function to use to form a batch from a list of elements of `train_dataset` or `eval_dataset`. Will
             default to [`default_data_collator`] if no `tokenizer` is provided, an instance of
             [`DataCollatorWithPadding`] otherwise.
-        train_dataset (`torch.utils.data.Dataset` or `torch.utils.data.IterableDataset`, *optional*):
+        train_dataset (Union[`torch.utils.data.Dataset`, `torch.utils.data.IterableDataset`, `datasets.Dataset`], *optional*):
             The dataset to use for training. If it is a [`~datasets.Dataset`], columns not accepted by the
             `model.forward()` method are automatically removed.
 
@@ -295,7 +298,7 @@ class Trainer:
             `torch.Generator` for the randomization that must be identical on all processes (and the Trainer will
             manually set the seed of this `generator` at each epoch) or have a `set_epoch()` method that internally
             sets the seed of the RNGs used.
-        eval_dataset (Union[`torch.utils.data.Dataset`, Dict[str, `torch.utils.data.Dataset`]), *optional*):
+        eval_dataset (Union[`torch.utils.data.Dataset`, Dict[str, `torch.utils.data.Dataset`, `datasets.Dataset`]), *optional*):
              The dataset to use for evaluation. If it is a [`~datasets.Dataset`], columns not accepted by the
              `model.forward()` method are automatically removed. If it is a dictionary, it will evaluate on each
              dataset prepending the dictionary key to the metric name.
@@ -327,6 +330,9 @@ class Trainer:
             by this function will be reflected in the predictions received by `compute_metrics`.
 
             Note that the labels (second parameter) will be `None` if the dataset does not have them.
+        image_processor ([`BaseImageProcessor`], *optional*):
+            The image processor used to preprocess the data. If provided, it will be saved along the model to make it easier
+            to rerun an interrupted training or reuse the fine-tuned model.
 
     Important attributes:
 
@@ -354,14 +360,15 @@ class Trainer:
         model: Union[PreTrainedModel, nn.Module] = None,
         args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
-        train_dataset: Optional[Union[Dataset, IterableDataset]] = None,
-        eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
+        train_dataset: Optional[Union[Dataset, IterableDataset, "datasets.Dataset"]] = None,
+        eval_dataset: Optional[Union[Dataset, Dict[str, Dataset], "datasets.Dataset"]] = None,
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
         model_init: Optional[Callable[[], PreTrainedModel]] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         callbacks: Optional[List[TrainerCallback]] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
+        image_processor: Optional["BaseImageProcessor"] = None,
     ):
         if args is None:
             output_dir = "tmp_trainer"
@@ -485,11 +492,12 @@ class Trainer:
         ):
             self.place_model_on_device = False
 
-        default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
+        default_collator = DataCollatorWithPadding(tokenizer) if tokenizer is not None else default_data_collator
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
+        self.image_processor = image_processor
 
         # Bnb Quantized models doesn't support `.to` operation.
         if (
@@ -541,7 +549,7 @@ class Trainer:
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
         callbacks = default_callbacks if callbacks is None else default_callbacks + callbacks
         self.callback_handler = CallbackHandler(
-            callbacks, self.model, self.tokenizer, self.optimizer, self.lr_scheduler
+            callbacks, self.model, self.tokenizer, self.image_processor, self.optimizer, self.lr_scheduler
         )
         self.add_callback(PrinterCallback if self.args.disable_tqdm else DEFAULT_PROGRESS_CALLBACK)
 
@@ -558,8 +566,8 @@ class Trainer:
         if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
             raise ValueError("The `data_collator` should be a simple callable (function, class with `__call__`).")
 
-        if args.max_steps > 0:
-            logger.info("max_steps is given, it will override any value given in num_train_epochs")
+        if args.max_steps > 0 and args.num_train_epochs > 0:
+            logger.warning("max_steps is given, it will override any value given in num_train_epochs")
 
         if train_dataset is not None and not has_length(train_dataset) and args.max_steps <= 0:
             raise ValueError(
@@ -3276,6 +3284,8 @@ class Trainer:
             )
         if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
+        if self.image_processor is not None and self.args.should_save:
+            self.image_processor.save_pretrained(output_dir)
 
         # We moved the model from TPU -> CPU for saving the weights.
         # Now we should move it back to subsequent compute still works.
@@ -3313,6 +3323,8 @@ class Trainer:
 
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
+        if self.image_processor is not None:
+            self.image_processor.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
@@ -3899,7 +3911,7 @@ class Trainer:
         else:
             return 0
 
-    def init_hf_repo(self):
+    def init_hf_repo(self, token: Optional[str] = None):
         """
         Initializes a git repo in `self.args.hub_model_id`.
         """
@@ -3912,7 +3924,8 @@ class Trainer:
         else:
             repo_name = self.args.hub_model_id
 
-        repo_url = create_repo(repo_name, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True)
+        token = token if token is not None else self.args.hub_token
+        repo_url = create_repo(repo_name, token=token, private=self.args.hub_private_repo, exist_ok=True)
         self.hub_model_id = repo_url.repo_id
         self.push_in_progress = None
 
@@ -4009,6 +4022,9 @@ class Trainer:
         # Saving the tokenizer is fast and we don't know how many files it may have spawned, so we resave it to be sure.
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
+        # Same for the image processor
+        if self.image_processor is not None:
+            self.image_processor.save_pretrained(output_dir)
         # Same for the training arguments
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
 
@@ -4054,15 +4070,23 @@ class Trainer:
             logger.info("Waiting for the current checkpoint push to be finished, this might take a couple of minutes.")
             self.push_in_progress.wait_until_done()
 
-    def push_to_hub(self, commit_message: Optional[str] = "End of training", blocking: bool = True, **kwargs) -> str:
+    def push_to_hub(
+        self,
+        commit_message: Optional[str] = "End of training",
+        blocking: bool = True,
+        token: Optional[str] = None,
+        **kwargs,
+    ) -> str:
         """
-        Upload `self.model` and `self.tokenizer` to the 🤗 model hub on the repo `self.args.hub_model_id`.
+        Upload `self.model` and `self.tokenizer` or `self.image_processor` to the 🤗 model hub on the repo `self.args.hub_model_id`.
 
         Parameters:
             commit_message (`str`, *optional*, defaults to `"End of training"`):
                 Message to commit while pushing.
             blocking (`bool`, *optional*, defaults to `True`):
                 Whether the function should return only when the `git push` has finished.
+            token (`str`, *optional*, defaults to `None`):
+                Token with write permission to overwrite Trainer's original args.
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to [`~Trainer.create_model_card`].
 
@@ -4076,10 +4100,11 @@ class Trainer:
                 model_name = Path(self.args.output_dir).name
             else:
                 model_name = self.args.hub_model_id.split("/")[-1]
+        token = token if token is not None else self.args.hub_token
 
         # In case the user calls this method with args.push_to_hub = False
         if self.hub_model_id is None:
-            self.init_hf_repo()
+            self.init_hf_repo(token=token)
 
         # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
         # self.args.should_save.
@@ -4112,7 +4137,7 @@ class Trainer:
             repo_id=self.hub_model_id,
             folder_path=self.args.output_dir,
             commit_message=commit_message,
-            token=self.args.hub_token,
+            token=token,
             run_as_future=not blocking,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
         )
