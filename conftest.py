@@ -23,6 +23,9 @@ from os.path import abspath, dirname, join
 import _pytest
 import pytest
 
+from huggingface_hub.utils import configure_http_backend
+# Private class that adds a unique request id to each request for debugging. Won't change anytime soon, so OK to use.
+from huggingface_hub.utils._http import UniqueRequestIdAdapter
 from transformers.testing_utils import HfDoctestModule, HfDocTestParser
 
 
@@ -140,3 +143,23 @@ class CustomOutputChecker(OutputChecker):
 doctest.OutputChecker = CustomOutputChecker
 _pytest.doctest.DoctestModule = HfDoctestModule
 doctest.DocTestParser = HfDocTestParser
+
+
+class TransformersCIAdapter(UniqueRequestIdAdapter):
+    def add_headers(self, request, **kwargs):
+        super().add_headers(request, **kwargs)
+
+        is_ci = "is_ci/true"
+        if "User-Agent" not in request.headers:
+            request.headers["User-Agent"] = is_ci
+        elif is_ci not in request.headers["User-Agent"]:
+            request.headers["User-Agent"] += "; "  + is_ci
+
+
+@pytest.fixture(autouse=True, scope="session")
+def set_is_ci_in_tests():
+    # Set TransformersCIAdapter for all HF requests
+    configure_http_backend(TransformersCIAdapter)
+    yield
+    # Set default adapter back
+    configure_http_backend()
