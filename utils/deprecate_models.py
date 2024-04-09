@@ -171,11 +171,62 @@ def update_alphabetic_ordering_of_imports(filelines):
     # c = 3
     maybe_else_block = []
     in_else_block = False
+    in_base_imports = False
+    base_import_block = []
 
     # We iterate over each line in the init file to create a new init file
-    for line in filelines.split("\n"):
+    for i, line in enumerate(filelines.split("\n")):
+        indent = get_line_indent(line)
+
+        # We first handle the base objects imports
+        if line.startswith("_import_structure = {"):
+            in_base_imports = True
+            new_init_file_lines.append(line)
+
+        elif in_base_imports:
+            # Comment which starts a new sub-block
+            if line.strip().startswith("#"):
+                base_import_block.append(sub_block)
+                # base_import_block.append(line)
+                base_import_block.append([line])
+                sub_block = []
+
+            # End of the base objects imports
+            elif line.strip().startswith("}"):
+                # import pdb; pdb.set_trace()
+                base_import_block.append(sub_block)
+                # Make all the sub-blocks lists (can do this before)?
+                # base_import_block = [[sub_block] if isinstance(sub_block, str) else sub_block for sub_block in base_import_block]
+
+                base_import_block = [[sub_block] if not isinstance(sub_block, list) else sub_block for sub_block in base_import_block]
+
+                # Sort the subblocks
+                # base_import_block = [[sorted(sub_block) if isinstance(sub_block, list) else sub_block for sub_block in sub_blocks] for sub_blocks in base_import_block]
+                base_import_block = [sorted(sub_block) for sub_block in base_import_block]
+                # Flatten the lists so they're all lines
+                base_import_block = [line for sub_block in base_import_block for line in sub_block]
+
+                new_init_file_lines.extend(base_import_block)
+                base_import_block = []
+                in_base_imports = False
+
+                new_init_file_lines.append(line)
+                sub_block = []
+            # Start of indented block in the base objects imports
+            elif line.strip().endswith(("[", "(")):
+                indented_block.append(line)
+            # End of indented block in the base objects imports
+            elif indented_block and line.strip().endswith(("],", "),")):
+                indented_block.append(line)
+                sub_block.append("\n".join(indented_block))
+                indented_block = []
+            elif indented_block:
+                indented_block.append(line)
+            else:
+                sub_block.append(line)
+
         # Next line is in the else block
-        if line.startswith("else:"):
+        elif line.startswith("else:"):
             new_init_file_lines.append(line)
             in_else_block = True
 
@@ -184,8 +235,6 @@ def update_alphabetic_ordering_of_imports(filelines):
             new_init_file_lines.append(line)
 
         elif in_else_block:
-            indent = get_line_indent(line)
-
             # previous line(s) were a blank line but within the else block
             if indent and maybe_else_block:
                 else_block.append(maybe_else_block)
@@ -197,13 +246,16 @@ def update_alphabetic_ordering_of_imports(filelines):
                 # End any existing sub_block and add it to the else block
                 else_block.append(sub_block)
                 sub_block = []
-
                 maybe_else_block.append(line)
 
             elif not indent and line != "":
                 # If we were in a maybe block, we now know it wasn't part of the else block
+                else_block = [[sub_block] if not isinstance(sub_block, list) else sub_block for sub_block in else_block]
+
                 # Sort the sub-blocks in the else block
-                else_block = [[sorted(sub_block) if isinstance(sub_block, list) else sub_block for sub_block in sub_blocks] for sub_blocks in else_block]
+                else_block = [sorted(sub_block) for sub_block in else_block]
+                # else_block = [[sorted(sub_block) for sub_block in sub_blocks] for sub_blocks in else_block]
+                # else_block = [[sorted(sub_block) if isinstance(sub_block, list) else sub_block for sub_block in sub_blocks] for sub_blocks in else_block]
 
                 # Flatten the lists so they're all lines
                 else_block = [line for sub_block in else_block for line in sub_block]
@@ -214,6 +266,7 @@ def update_alphabetic_ordering_of_imports(filelines):
                 in_else_block = False
 
                 # Add the maybe block
+                maybe_else_block.append(line)
                 new_init_file_lines.extend(maybe_else_block)
                 maybe_else_block = []
 
@@ -221,11 +274,7 @@ def update_alphabetic_ordering_of_imports(filelines):
             elif line.strip().startswith("_import_structure") and line.endswith(("]", ")")):
                 sub_block.append(line)
 
-            elif line.strip().startswith("_import_structure") and line.endswith(("[", "(")):
-                if sub_block:
-                    else_block.append(sub_block)
-                    sub_block = []
-
+            elif line.strip().startswith(("_import_structure", "sys.modules")) and line.endswith(("[", "(")):
                 indented_block.append(line)
 
             elif indented_block:
@@ -244,7 +293,9 @@ def update_alphabetic_ordering_of_imports(filelines):
                     else_block.append(sub_block)
                     sub_block = []
 
-                sub_block.append(line)
+                else_block.append(line)
+
+                # sub_block.append(line)
 
             else:
                 sub_block.append(line)
@@ -354,30 +405,30 @@ def deprecate_models(models):
     # Filter out skipped models
     models = [model for model in models if model not in skipped_models]
 
-    tip_message = build_tip_message(get_last_stable_minor_release())
+    # tip_message = build_tip_message(get_last_stable_minor_release())
 
-    for model, model_info in model_info.items():
-        # Add the tip message to the model doc page directly underneath the title
-        insert_tip_to_model_doc(model_info["model_doc_path"], tip_message)
+    # for model, model_info in model_info.items():
+    #     # Add the tip message to the model doc page directly underneath the title
+    #     insert_tip_to_model_doc(model_info["model_doc_path"], tip_message)
 
-        # Move the model file to deprecated: src/transfomers/models/model -> src/transformers/models/deprecated/model
-        # move_model_files_to_deprecated(model)
+    #     # Move the model file to deprecated: src/transfomers/models/model -> src/transformers/models/deprecated/model
+    #     # move_model_files_to_deprecated(model)
 
-        # Delete the model tests: tests/models/model
-        delete_model_tests(model)
+    #     # Delete the model tests: tests/models/model
+    #     delete_model_tests(model)
 
     # We do the following with all models passed at once to avoid having to re-write the file multiple times
 
     # Update the __init__.py file to point to the deprecated model.
     update_init_file("src/transformers/__init__.py", models)
 
-    # Remove model references from other files
-    remove_model_references_from_file("src/transformers/models/__init__.py", models, lambda line, model: model == line.strip().strip(","))
-    remove_model_references_from_file("utils/slow_documentation_tests.txt", models, lambda line, model: "/" + model + "/" in line)
+    # # Remove model references from other files
+    # remove_model_references_from_file("src/transformers/models/__init__.py", models, lambda line, model: model == line.strip().strip(","))
+    # remove_model_references_from_file("utils/slow_documentation_tests.txt", models, lambda line, model: "/" + model + "/" in line)
 
-    # Remove model config classes from config check
-    model_config_classes = [CONFIG_MAPPING[model_name].__name__ for model_name in models]
-    remove_model_config_classes_from_config_check("src/transformers/configuration_utils.py", model_config_classes)
+    # # Remove model config classes from config check
+    # model_config_classes = [CONFIG_MAPPING[model_name].__name__ for model_name in models]
+    # remove_model_config_classes_from_config_check("src/transformers/configuration_utils.py", model_config_classes)
 
 
 
