@@ -2,7 +2,7 @@ name: Slow tests on important models (on Push - A10)
 
 on:
   push:
-    branches: [ add-new-push-test-workflow ]
+    branches: [ main ]
 
 env:
   IS_GITHUB_CI: "1"
