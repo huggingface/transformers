@@ -541,8 +541,8 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
 
     def _init_weights(self, module):
+        std = math.sqrt(self.config.w_init_variance_scale / self.config.conv1d_width)
         if isinstance(module, nn.Conv1d):
-            std = math.sqrt(self.config.w_init_variance_scale / self.config.conv1d_width)
             torch.nn.init.normal_(module.weight, mean=0.0, std=std)
             torch.nn.init.zeros_(module.bias)
         elif isinstance(module, RecurrentGemmaSdpaAttention):
@@ -575,10 +575,11 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
             module.recurrent_param.data.log_().mul_(0.5)
             module.recurrent_param.data.neg_().exp_().sub_(1.0).log_()
         elif isinstance(module, nn.Linear):
-            std = math.sqrt(self.config.w_init_variance_scale / self.config.conv1d_width)
             torch.nn.init.normal_(module.weight, mean=0.0, std=std)
             if getattr(module, "bias", None) is not None:
                 torch.nn.init.zeros_(module.bias)
+        else:
+            torch.nn.init.normal_(module.weight, mean=0.0, std=std)
 
     def _setup_cache(self, config, batch, device, dtype):
         layers = getattr(self, "model", self).layers
@@ -908,14 +909,12 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
 
         past_length = cache_position[0]
         if past_length > 0:
-            if input_ids is not None:
-                input_ids = input_ids[:, past_length:]
             position_ids = position_ids[:, past_length:]
 
         if inputs_embeds is not None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
+            model_inputs = {"inputs_embeds": inputs_embeds[:, past_length:]}
         else:
-            model_inputs = {"input_ids": input_ids.contiguous()}
+            model_inputs = {"input_ids": input_ids[:, past_length:].contiguous()}
 
         if cache_position is not None:
             cache_position = cache_position[-position_ids.shape[1] :]
