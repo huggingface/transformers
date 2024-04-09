@@ -46,10 +46,8 @@ from ...utils import (
 
 logger = logging.getLogger(__name__)
 
-UDOP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/udop-large",
-    # See all UDOP models at https://huggingface.co/models?filter=udop
-]
+
+from ..deprecated._archive_maps import UDOP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 _CONFIG_FOR_DOC = "UdopConfig"
@@ -942,7 +940,7 @@ class UdopBlock(nn.Module):
             if len(past_key_value) != expected_num_past_key_values:
                 raise ValueError(
                     f"There should be {expected_num_past_key_values} past states. "
-                    f"{'2 (past / key) for cross attention. ' if expected_num_past_key_values == 4 else ''}"
+                    f"{'2 (key / value) for cross attention. ' if expected_num_past_key_values == 4 else ''}"
                     f"Got {len(past_key_value)} past key / value states"
                 )
 

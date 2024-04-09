@@ -38,12 +38,8 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlavaConfig"
 
-LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "llava-hf/llava-1.5-7b-hf",
-    "llava-hf/llava-1.5-13b-hf",
-    "llava-hf/bakLlava-v1-hf",
-    # See all Llava models at https://huggingface.co/models?filter=llava
-]
+
+from ..deprecated._archive_maps import LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -216,6 +212,11 @@ LLAVA_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
+        vision_feature_layer (`int`, *optional*, defaults to -2):
+            The index of the layer to select the vision feature.
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -240,7 +241,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = LlavaMultiModalProjector(config)
-        self.vocab_size = config.vocab_size
+        self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
             config.text_config, attn_implementation=config._attn_implementation
         )
@@ -272,7 +273,6 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
         # update vocab size
         self.config.text_config.vocab_size = model_embeds.num_embeddings
-        self.config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
@@ -339,6 +339,12 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
+
+        # 6. Mask out the embedding at padding positions, as we later use the past_key_value value to determine the non-attended tokens.
+        batch_indices, pad_indices = torch.where(input_ids == self.pad_token_id)
+        indices_to_mask = new_token_positions[batch_indices, pad_indices]
+
+        final_embedding[batch_indices, indices_to_mask] = 0
 
         if labels is None:
             final_labels = None
@@ -433,38 +439,39 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                 )
                 if labels is None:
                     labels = torch.full_like(attention_mask, self.config.ignore_index).to(torch.long)
-            else:
-                # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
-                # generation with cache
-                if past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
-                    # Retrieve the first layer to inspect the logits and mask out the hidden states
-                    # that are set to 0
-                    first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
 
-                    # Sum all dimensions of head_dim (-2) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
-                    batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
+            # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
+            # generation with cache
+            elif past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
+                # Retrieve the first layer to inspect the logits and mask out the hidden states
+                # that are set to 0
+                first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
 
-                    # Get the target length
-                    target_seqlen = first_layer_past_key_value.shape[-1] + 1
+                # Sum all dimensions of head_dim (-2) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
+                batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
 
-                    extended_attention_mask = torch.ones(
-                        (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
-                        dtype=attention_mask.dtype,
-                        device=attention_mask.device,
-                    )
+                # Get the target length
+                target_length = input_ids.shape[1]
+                past_length = first_layer_past_key_value.shape[-1]
 
-                    # Filter out only the tokens that can be un-attended, this can happen
-                    # if one uses Llava + Fused modules where the cache on the
-                    # first iteration is already big enough, or if one passes custom cache
-                    valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
-                    new_batch_index = batch_index[valid_indices]
-                    new_non_attended_tokens = non_attended_tokens[valid_indices]
+                extended_attention_mask = torch.ones(
+                    (attention_mask.shape[0], past_length),
+                    dtype=attention_mask.dtype,
+                    device=attention_mask.device,
+                )
 
-                    # Zero-out the places where we don't need to attend
-                    extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
+                # Filter out only the tokens that can be un-attended, this can happen
+                # if one uses Llava + Fused modules where the cache on the
+                # first iteration is already big enough, or if one passes custom cache
+                valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
+                new_batch_index = batch_index[valid_indices]
+                new_non_attended_tokens = non_attended_tokens[valid_indices]
 
-                    attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
-                    position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+                # Zero-out the places where we don't need to attend
+                extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
+
+                attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
+                position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
         outputs = self.language_model(
             attention_mask=attention_mask,

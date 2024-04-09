@@ -25,11 +25,6 @@ from ...utils import TensorType, is_torch_available, logging
 
 logger = logging.get_logger(__name__)
 
-MBART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/mbart-large-cc25": "https://huggingface.co/facebook/mbart-large-cc25/resolve/main/config.json",
-    # See all MBART models at https://huggingface.co/models?filter=mbart
-}
-
 
 class MBartConfig(PretrainedConfig):
     r"""
