@@ -357,6 +357,8 @@ class Idefics2Processor(ProcessorMixin):
 
         prompts = [message.get("content", []) for message in conversation]
         prompt_images = self._extract_images_from_prompts(prompts)
+        # Flatten out as this is for a single batch
+        prompt_images = [image for images in prompt_images for image in images]
 
         if process:
             tokenized = self.tokenizer(
