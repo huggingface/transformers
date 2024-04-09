@@ -1793,6 +1793,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
+        model.to(torch_device)
 
         input_speech = self._load_datasamples(4)
         input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
