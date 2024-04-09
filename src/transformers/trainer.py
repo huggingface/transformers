@@ -492,7 +492,11 @@ class Trainer:
         ):
             self.place_model_on_device = False
 
-        default_collator = DataCollatorWithPadding(tokenizer) if tokenizer is not None else default_data_collator
+        default_collator = (
+            DataCollatorWithPadding(tokenizer)
+            if tokenizer is not None and isinstance(tokenizer, PreTrainedTokenizerBase)
+            else default_data_collator
+        )
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
