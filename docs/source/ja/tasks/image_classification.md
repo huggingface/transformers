@@ -328,7 +328,7 @@ food["test"].set_transform(preprocess_val)
 ...     data_collator=data_collator,
 ...     train_dataset=food["train"],
 ...     eval_dataset=food["test"],
-...     tokenizer=image_processor,
+...     image_processor=image_processor,
 ...     compute_metrics=compute_metrics,
 ... )
 
@@ -426,7 +426,7 @@ Convert your datasets to the `tf.data.Dataset` format using the [`~datasets.Data
 >>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_eval_dataset)
 >>> push_to_hub_callback = PushToHubCallback(
 ...     output_dir="food_classifier",
-...     tokenizer=image_processor,
+...     image_processor=image_processor,
 ...     save_strategy="no",
 ... )
 >>> callbacks = [metric_callback, push_to_hub_callback]
