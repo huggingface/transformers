@@ -75,7 +75,7 @@ jobs:
         name: Identify quantization method to test
         working-directory: /transformers/tests
         run: |
-          echo "quantization_matrix=$(find "quantization" -mindepth 1 -maxdepth 1 -type d | sort)" >> $GITHUB_OUTPUT
+          echo "quantization_matrix=$(find "quantization" -mindepth 1 -maxdepth 1 -type d -printf "%p\n" | sort)" >> $GITHUB_OUTPUT
 
       - name: NVIDIA-SMI
         run: |
