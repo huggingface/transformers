@@ -65,6 +65,7 @@ jobs:
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+          SLACK_REPORT_CHANNEL: ${{ inputs.slack_report_channel }}
           CI_EVENT: scheduled
           CI_SHA: ${{ github.sha }}
           SETUP_STATUS: ${{ inputs.setup_status }}
