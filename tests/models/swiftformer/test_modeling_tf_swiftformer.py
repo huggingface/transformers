@@ -49,14 +49,14 @@ class TFSwiftFormerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=1,
         num_channels=3,
         is_training=True,
         use_labels=True,
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         image_size=224,
-        num_labels=1000,
+        num_labels=2,
         layer_depths=[3, 3, 6, 4],
         embed_dims=[48, 56, 112, 220],
     ):
