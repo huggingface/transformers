@@ -33,6 +33,7 @@ env:
 
 jobs:
   setup:
+    if: contains(fromJSON('["run_tests_gpu", "run_tests_quantization_torch_gpu"]'), inputs.job)
     name: Setup
     strategy:
       matrix:
@@ -63,7 +64,6 @@ jobs:
         run: pip freeze
 
       - id: set-matrix
-        if: ${{ inputs.job == 'run_tests_gpu' }}
         name: Identify models to test
         working-directory: /transformers/tests
         run: |
@@ -71,7 +71,6 @@ jobs:
           echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
       
       - id: set-matrix-quantization
-        if: ${{ inputs.job == 'run_tests_quantization_torch_gpu' }}
         name: Identify quantization method to test
         working-directory: /transformers/tests
         run: |
