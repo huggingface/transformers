@@ -23,6 +23,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
+from transformers.activations import get_activation
 
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
@@ -733,7 +734,7 @@ class FalconFlashAttention2(FalconAttention):
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
 
-from transformers.activations import get_activation
+
 class FalconMLP(nn.Module):
     def __init__(self, config: FalconConfig):
         super().__init__()
