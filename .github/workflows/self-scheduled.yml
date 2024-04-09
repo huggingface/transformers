@@ -75,7 +75,7 @@ jobs:
         name: Identify quantization method to test
         working-directory: /transformers/tests
         run: |
-          echo "quantization_matrix=$(find "quantization" -mindepth 1 -maxdepth 1 -type d -printf "%p\n" | sort)" >> $GITHUB_OUTPUT
+          echo "quantization_matrix=$(python3 -c 'import os; tests = os.getcwd(); quantization_tests = os.listdir(os.path.join(tests, "quantization")); d = sorted(list(filter(os.path.isdir, [f"quantization/{x}" for x in quantization_tests]))) ;  print(d)')" >> $GITHUB_OUTPUT
 
       - name: NVIDIA-SMI
         run: |
@@ -312,7 +312,6 @@ jobs:
   run_tests_quantization_torch_gpu:
     if: ${{ inputs.job == 'run_tests_quantization_torch_gpu' }}
     name: " "
-    needs: setup
     strategy:
       fail-fast: false
       matrix:
