@@ -22,6 +22,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
     require_torch_gpu,
+    require_read_token,
     slow,
     torch_device,
 )
@@ -365,17 +366,17 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
 @require_torch_gpu
 @slow
-# @require_read_token
+@require_read_token
 class RecurrentGemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
+    model_id = "google/recurrent-gemma-2b-hf"
 
     def test_2b_generate(self):
-        model_id = "gg-hf/recurrent-gemma-2b-hf"
         EXPECTED_TEXTS = ['<bos>Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', '<bos>Hi today<pad><pad> is a new app that allows you to make money by watching videos.\n\nThe app is very simple to use and you can earn money by watching videos.\n\nThe app is available for both Android and iOS devices and you can download it from the Google Play Store or the App Store.\n\nOnce you have downloaded the app']  # fmt: skip
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, low_cpu_mem_usage=True).to(torch_device)
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
@@ -388,33 +389,32 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
 
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
+        del model
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-        del model
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16
+        ).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
+        del model
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-        del model
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
+        ).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_2b_sample(self):
-        model_id = "gg-hf/recurrent-gemma-2b-hf"
         EXPECTED_TEXT = "<bos>Where is Paris ?\n\nIn the blank, insert the most appropriate word .\n\nThe _______ I felt when my teacher complimented my work this morning stayed with me all day.\n\nOn the line provided, combine each word with the prefix or suffix or write the plural form, as directed.\n\n<strong>Examples</strong>\n\n<strong>1</strong>. pre +"  # fmt: skip
 
-        model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id).to(torch_device)
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer("Where is Paris ?", return_tensors="pt", padding=True).to(torch_device)
         with torch.no_grad():
             model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
@@ -425,17 +425,31 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
 
     @require_bitsandbytes
     def test_model_2b_4bit(self):
-        model_id = "gg-hf/recurrent_gemma-2b"
         EXPECTED_TEXTS = ['<bos>Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking', "<bos>Hi today<pad><pad> I'm going to show you how to make a simple and easy to use <strong><em><u>"]  # fmt: skip
 
         model = AutoModelForCausalLM.from_pretrained(
             "gg-hf/recurrent-gemma-2b-hf", device_map={"": torch_device}, load_in_4bit=True, torch_dtype=torch.bfloat16
         )
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    def test_long_context(self):
+        input_text = [
+            '<bos><s>Marseille, France (CNN)The French prosecutor leading an investigation into the crash of Germanwings Flight 9525 insisted Wednesday that he was not aware of any video footage from on board the plane. Marseille prosecutor Brice Robin told CNN that "so far no videos were used in the crash investigation." He added, "A person who has such a video needs to immediately give it to the investigators." Robin\'s comments follow claims by two magazines, German daily Bild and French Paris Match, of a cell phone video showing the harrowing final seconds from on board Germanwings Flight 9525 as it crashed into the French Alps. All 150 on board were killed. Paris Match and Bild reported that the video was recovered from a phone at the wreckage site. The two publications described the supposed video, but did not post it on their websites. The publications said that they watched the video, which was found by a source close to the investigation. "One can hear cries of \'My God\' in several languages," Paris Match reported. "Metallic banging can also be heard more than three times, perhaps of the pilot trying to open the cockpit door with a heavy object.  Towards the end, after a heavy shake, stronger than the others, the screaming intensifies. Then nothing." "It is a very disturbing scene," said Julian Reichelt, editor-in-chief of Bild online. An official with France\'s accident investigation agency, the BEA, said the agency is not aware of any such video. Lt. Col.'
+        ]
+        EXPECTED_GENERATION = ' Jean-Marc Rolland said, "We have not seen any video or any other material that could'
+
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16
+        ).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        inputs = tokenizer(input_text, return_tensors="pt")
+        output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
+        output_text = tokenizer.batch_decode(output[:, inputs.input_ids.shap[1] :], skip_special_tokens=True)
+        self.assertEqual(output_text, EXPECTED_GENERATION)
