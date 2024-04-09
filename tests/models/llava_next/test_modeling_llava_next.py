@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
     torch_device,
+    require_torch_fp16,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
