@@ -5,7 +5,7 @@ from typing import Optional
 import requests
 from huggingface_hub import Discussion, HfApi, get_repo_discussions
 
-from .utils import cached_file, logging
+from .utils import cached_file, http_user_agent, logging
 
 
 logger = logging.get_logger(__name__)
@@ -86,7 +86,7 @@ def get_conversion_pr_reference(api: HfApi, model_id: str, **kwargs):
 
 def auto_conversion(pretrained_model_name_or_path: str, ignore_errors_during_conversion=False, **cached_file_kwargs):
     try:
-        api = HfApi(token=cached_file_kwargs.get("token"))
+        api = HfApi(token=cached_file_kwargs.get("token"), headers=http_user_agent())
         sha = get_conversion_pr_reference(api, pretrained_model_name_or_path, **cached_file_kwargs)
 
         if sha is None:
