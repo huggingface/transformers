@@ -1811,7 +1811,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         # fmt: on
 
-        self.assertTrue(torch.allclose(generated_ids, EXPECTED_LOGITS))
+        self.assertTrue(torch.allclose(generated_ids.cpu(), EXPECTED_LOGITS))
 
         # fmt: off
         EXPECTED_TRANSCRIPT = [
