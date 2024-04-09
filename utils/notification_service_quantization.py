@@ -132,7 +132,7 @@ class QuantizationMessage(Message):
         text = f"{self.n_failures} failures out of {self.n_tests} tests," if self.n_failures else "All tests passed."
 
         self.thread_ts = client.chat_postMessage(
-            channel="#transformers-ci-daily-quantization",
+            channel=SLACK_REPORT_CHANNEL_ID,
             blocks=payload,
             text=text,
         )
@@ -166,11 +166,8 @@ class QuantizationMessage(Message):
 
 if __name__ == "__main__":
     setup_status = os.environ.get("SETUP_STATUS")
+    SLACK_REPORT_CHANNEL_ID = os.environ["SLACK_REPORT_CHANNEL"]
     setup_failed = True if setup_status is not None and setup_status != "success" else False
-
-    org = "huggingface"
-    repo = "transformers"
-    repository_full_name = f"{org}/{repo}"
 
     # This env. variable is set in workflow file (under the job `send_results`).
     ci_event = os.environ["CI_EVENT"]
@@ -244,11 +241,7 @@ if __name__ == "__main__":
                         quantization_results[quant]["failures"][artifact_path["gpu"]].append(
                             {"line": line, "trace": stacktraces.pop(0)}
                         )
-    if not os.path.isdir(os.path.join(os.getcwd(), "prev_ci_results")):
-        os.makedirs(os.path.join(os.getcwd(), "prev_ci_results"))
 
-    with open("prev_ci_results/quantization_results.json", "w", encoding="UTF-8") as fp:
-        json.dump(quantization_results, fp, indent=4, ensure_ascii=False)
     message = QuantizationMessage(
         title,
         results=quantization_results,
