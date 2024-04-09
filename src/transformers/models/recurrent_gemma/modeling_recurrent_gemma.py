@@ -16,7 +16,7 @@
 """ PyTorch RecurrentGemma model."""
 
 import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, Dict
 
 import torch
 import torch.utils.checkpoint
@@ -304,7 +304,7 @@ class RecurrentGemmaRglru(nn.Module):
         self,
         activations: torch.Tensor,
         position_ids: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_len, lru_width = activations.shape
         reset = position_ids[:, :, None] == 0
 
@@ -353,7 +353,7 @@ class RecurrentGemmaRglru(nn.Module):
         reset: torch.Tensor,
         recurrent_states: Union[torch.Tensor, None],
         acc_dtype: torch.dtype = torch.float32,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Runs the recurrence of a linear RNN.
 
         Args:
@@ -425,7 +425,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         attention_mask: torch.Tensor,
         cache_position: torch.Tensor,
         use_cache: bool = True,
-    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         _, seq_len, _ = input_states.shape
 
         y_branch = self.linear_y(input_states)
@@ -493,7 +493,7 @@ class RecurrentGemmaDecoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         cache_position: torch.Tensor = None,
         use_cache: bool = None,
-    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         raw_activations = activations
         inputs_normalized = self.temporal_pre_norm(raw_activations)  # RMSNorm introduces slight slight differences
 
@@ -535,7 +535,7 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     config_class = RecurrentGemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["RecurrentGemmaDecoderLayer", "RecurrentGemmaRecurrentBlock"]
+    _no_split_modules = ["RecurrentGemmaDecoderLayer"]
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn_2 = False
     _supports_sdpa = False  # we can't compare with eager for now
