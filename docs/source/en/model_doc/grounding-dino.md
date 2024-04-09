@@ -36,7 +36,7 @@ The original code can be found [here](https://github.com/IDEA-Research/Grounding
 
 - One can use [`GroundingDinoProcessor`] to prepare image-text pairs for the model.
 - To separate classes in the text use a period e.g. "a cat. a dog."
-- When using multiple classes (e.g. `"a cat. a dog."`), use `post_process_grounded_object_detection` from [`GroundingDinoProcessor`] to post process outputs. Since, `post_process_object_detection` from [`GroundingDinoImageProcessor`] returned labels represent he indices from the model dimension where prob > threshold.
+- When using multiple classes (e.g. `"a cat. a dog."`), use `post_process_grounded_object_detection` from [`GroundingDinoProcessor`] to post process outputs. Since, the labels returned from `post_process_object_detection` represent the indices from the model dimension where prob > threshold.
 
 Here's how to use the model for zero-shot object detection:
 
@@ -52,10 +52,8 @@ model_id = "IDEA-Research/grounding-dino-tiny"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
 
-def load_image(url):
-    return Image.open(requests.get(url, stream=True).raw)
-
-image = load_image('http://images.cocodataset.org/val2017/000000039769.jpg')
+image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(image_url, stream=True).raw)
 # Check for cats and remote controls
 text = "a cat. a remote control"
 
