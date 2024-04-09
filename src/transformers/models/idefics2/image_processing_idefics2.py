@@ -365,17 +365,23 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         elif input_data_format == ChannelDimension.LAST:
             return im[h1:h2, w1:w2, :]
 
-    def _split_image(
+    def split_image(
         self,
         image: np.ndarray,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
-        if input_data_format == ChannelDimension.FIRST:
-            _, height, width = image.shape
-        elif input_data_format == ChannelDimension.LAST:
-            height, width, _ = image.shape
-        else:
-            raise ValueError("Invalid channel dimension format.")
+        """
+        Split an image into 4 equal sub-images, and the concatenate that sequence with the original image.
+        That means that a single image becomes a sequence of 5 images.
+        This is a "trick" to spend more compute on each image with no changes in the vision encoder.
+        
+        Args:
+            image (`np.ndarray`):
+                Images to split.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
+        """
+        height, width = get_image_size(image, input_data_format)
 
         mid_width = width // 2
         mid_height = height // 2
@@ -530,7 +536,13 @@ class Idefics2ImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images_list[0][0])
 
         if do_image_splitting:
-            images_list = self.split_images(images_list, input_data_format=input_data_format)
+            new_images_list = []
+            for images in images_list:
+                new_images = []
+                for image in images:
+                    new_images.extend(self.split_image(image, input_data_format))
+                new_images_list.append(new_images)
+            images_list = new_images_list
 
         if do_resize:
             images_list = [
