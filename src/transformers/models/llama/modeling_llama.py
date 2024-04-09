@@ -402,7 +402,6 @@ class LlamaAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-
 class LlamaFlashAttention2(LlamaAttention):
     """
     Llama flash attention module. This module inherits from `LlamaAttention` as the weights of the module stays
