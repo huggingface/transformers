@@ -1075,7 +1075,7 @@ if __name__ == "__main__":
         "run_pipelines_torch_gpu": "PyTorch pipelines",
         "run_pipelines_tf_gpu": "TensorFlow pipelines",
         "run_examples_gpu": "Examples directory",
-        "run_all_tests_torch_cuda_extensions_gpu": "Torch CUDA extension tests"
+        "run_all_tests_torch_cuda_extensions_gpu": "Torch CUDA extension tests",
     }
 
     # Remove some entries in `additional_files` if they are not concerned.
