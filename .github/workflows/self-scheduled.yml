@@ -33,6 +33,7 @@ env:
 
 jobs:
   setup:
+    if: contains(fromJSON('["run_tests_gpu", "run_tests_quantization_torch_gpu"]'), inputs.job)
     name: Setup
     strategy:
       matrix:
