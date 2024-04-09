@@ -22,11 +22,10 @@ import pickle
 import tempfile
 import traceback
 import unittest
-from pytest import mark
-
 
 import numpy as np
 from datasets import load_dataset
+from pytest import mark
 
 from transformers import Wav2Vec2Config, is_torch_available
 from transformers.testing_utils import (
@@ -35,13 +34,13 @@ from transformers.testing_utils import (
     is_pt_flax_cross_test,
     is_pyctcdecode_available,
     is_torchaudio_available,
+    require_flash_attn,
     require_pyctcdecode,
     require_soundfile,
     require_torch,
+    require_torch_gpu,
     require_torchaudio,
     run_test_in_subprocess,
-    require_flash_attn, 
-    require_torch_gpu, 
     slow,
     torch_device,
 )
@@ -2004,7 +2003,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     @mark.flash_attn_test
     def test_inference_ctc_fa2(self):
-        model_fa = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h", attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16)
+        model_fa = Wav2Vec2ForCTC.from_pretrained(
+            "facebook/wav2vec2-base-960h", attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16
+        )
         model_fa.to(torch_device)
         processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)
         input_speech = self._load_datasamples(1)
@@ -2012,7 +2013,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         input_values = processor(input_speech, return_tensors="pt").input_values.to(torch_device)
 
         with torch.no_grad():
-            logits = model_fa(input_values).logits
+            logits = model_fa(input_values.to(torch.bfloat16)).logits
 
         predicted_ids = torch.argmax(logits, dim=-1)
         predicted_trans = processor.batch_decode(predicted_ids)
