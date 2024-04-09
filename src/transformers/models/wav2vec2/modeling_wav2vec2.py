@@ -1105,6 +1105,8 @@ class Wav2Vec2Encoder(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([Wav2Vec2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        # self._use_sdpa = config._attn_implementation == "sdpa"
 
     def forward(
         self,
@@ -1119,15 +1121,19 @@ class Wav2Vec2Encoder(nn.Module):
 
         if attention_mask is not None:
             # make sure padded tokens output 0
-            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            hidden_states[~expand_attention_mask] = 0
+            if self._use_flash_attention_2:
+                # 2d mask is passed through the layers
+                attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+            else:
+                expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+                hidden_states[~expand_attention_mask] = 0
 
-            # extend attention_mask
-            attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
-            attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
-            attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-            )
+                # extend attention_mask
+                attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
+                attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
+                attention_mask = attention_mask.expand(
+                    attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+                )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
@@ -1188,6 +1194,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
             [Wav2Vec2EncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
         )
         self.gradient_checkpointing = False
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     def forward(
         self,
@@ -1201,16 +1208,20 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
         all_self_attentions = () if output_attentions else None
 
         if attention_mask is not None:
-            # make sure padded tokens are not attended to
-            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            hidden_states[~expand_attention_mask] = 0
+            if self._use_flash_attention_2:
+                # 2d mask is passed through the layers
+                attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+            else:
+                # make sure padded tokens are not attended to
+                expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+                hidden_states[~expand_attention_mask] = 0
 
-            # extend attention_mask
-            attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
-            attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
-            attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-            )
+                # extend attention_mask
+                attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
+                attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
+                attention_mask = attention_mask.expand(
+                    attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+                )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
