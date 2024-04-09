@@ -909,7 +909,8 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
 
         past_length = cache_position[0]
         if past_length > 0:
-            input_ids = input_ids[:, past_length:]
+            if input_ids is not None:
+                input_ids = input_ids[:, past_length:]
             position_ids = position_ids[:, past_length:]
 
         if inputs_embeds is not None:

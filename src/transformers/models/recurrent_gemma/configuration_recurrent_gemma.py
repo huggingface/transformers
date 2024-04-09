@@ -155,5 +155,5 @@ class RecurrentGemmaConfig(PretrainedConfig):
         )
 
     @property
-    def block_types(self) -> tuple[str, ...]:
+    def block_types(self):
         return (self._block_types * 100)[: self.num_hidden_layers]
