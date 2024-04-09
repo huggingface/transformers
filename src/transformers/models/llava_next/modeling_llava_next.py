@@ -391,6 +391,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         # Compute the maximum embed dimension
         max_embed_dim = (num_special_image_tokens.max().item() * (max_num_patches - 1)) + sequence_length # int
         # print("max embed dim found: ", max_embed_dim)
+        if max_embed_dim > 16000:
+            raise RuntimeError("Context lengths over 16k can cause unexpected OOM errors. Please resize your images before passing into the model appropriately")
 
         batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
         # print("batch_indices shape: ", batch_indices.shape)
@@ -418,6 +420,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
  
 
         # 3. Create the full embedding, already padded to the maximum position
+        print('using embedding size: ', max_embed_dim)
         final_embedding = torch.zeros(
             batch_size, max_embed_dim, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
         )
@@ -545,114 +548,122 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
 
         if inputs_embeds is None:
             # 1. Extract the input embeddings
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            # inputs_embeds = self.get_input_embeddings()(input_ids)
 
-            # 2. Merge text and images
+            # # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
-                batch_size, max_num_patches, num_channels, height, width = pixel_values.shape
-                # There might be some padding patches added to every image
-                # These will need to be removed before further processing. 
-                # list of len batch_size
-                mask = pixel_values[:, :, 0, 0, 0] == self.pad_token_id
-                # patches_lengths is a list contaning the lengths of the patches
-                # contained in every image 
-                # print("pixel values first row, ", pixel_values[0][-1])
-                # print("mask: ", mask)
-                patches_lengths = torch.argmax(mask.to(torch.int), dim=1)
-                img_idcs_with_no_pad = ~mask.any(dim=1) 
-                # print("patches_ lengths before setting others", patches_lengths)
-                # print("pad token id in model: ", self.pad_token_id)
-                # print("img indices without padding: ", img_idcs_with_no_pad)
-                patches_lengths[img_idcs_with_no_pad] = max_num_patches
-                # print("these are the patches lengths: ", patches_lengths)
+            #     batch_size, max_num_patches, num_channels, height, width = pixel_values.shape
+            #     # There might be some padding patches added to every image
+            #     # These will need to be removed before further processing. 
+            #     # list of len batch_size
+            #     mask = pixel_values[:, :, 0, 0, 0] == self.pad_token_id
+            #     # patches_lengths is a list contaning the lengths of the patches
+            #     # contained in every image 
+            #     # print("pixel values first row, ", pixel_values[0][-1])
+            #     # print("mask: ", mask)
+            #     patches_lengths = torch.argmax(mask.to(torch.int), dim=1)
+            #     img_idcs_with_no_pad = ~mask.any(dim=1) 
+            #     # print("patches_ lengths before setting others", patches_lengths)
+            #     # print("pad token id in model: ", self.pad_token_id)
+            #     # print("img indices without padding: ", img_idcs_with_no_pad)
+            #     patches_lengths[img_idcs_with_no_pad] = max_num_patches
+            #     # print("these are the patches lengths: ", patches_lengths)
 
-                # Each image in pixel_values is a 336x336 image
-                # We need to remove the images which are just padded tokens
-                mask = (pixel_values != self.pad_token_id).all(dim=1)
-                unpadded_pixel_values = []
-                total_patches = 0
-                for idx, img in enumerate(pixel_values):
-                    unpadded_patches = patches_lengths[idx]
-                    # print("Length of unpadded patches: ", unpadded_patches)
-                    total_patches += unpadded_patches
-                    unpadded_pixel_values.append(img[:unpadded_patches])
+            #     # Each image in pixel_values is a 336x336 image
+            #     # We need to remove the images which are just padded tokens
+            #     mask = (pixel_values != self.pad_token_id).all(dim=1)
+            #     unpadded_pixel_values = []
+            #     total_patches = 0
+            #     for idx, img in enumerate(pixel_values):
+            #         unpadded_patches = patches_lengths[idx]
+            #         # print("Length of unpadded patches: ", unpadded_patches)
+            #         total_patches += unpadded_patches
+            #         unpadded_pixel_values.append(img[:unpadded_patches])
 
-                unpadded_pixel_values = torch.cat(unpadded_pixel_values, dim=0)
-                # print("shape of unpadded pixel values : ", unpadded_pixel_values.shape)
-                # Use the mask to index the original tensor, filtering out the rows with pad_token
+            #     unpadded_pixel_values = torch.cat(unpadded_pixel_values, dim=0)
+            #     # print("shape of unpadded pixel values : ", unpadded_pixel_values.shape)
+            #     # Use the mask to index the original tensor, filtering out the rows with pad_token
 
-                reshaped_pixel_values = unpadded_pixel_values.view(total_patches, num_channels, height, width)
-                image_features = self.vision_tower(reshaped_pixel_values, output_hidden_states=True)
+            #     reshaped_pixel_values = unpadded_pixel_values.view(total_patches, num_channels, height, width)
+            #     image_features = self.vision_tower(reshaped_pixel_values, output_hidden_states=True)
 
-                selected_image_feature = image_features.hidden_states[vision_feature_layer]
+            #     selected_image_feature = image_features.hidden_states[vision_feature_layer]
 
-                if vision_feature_select_strategy == "default":
-                    selected_image_feature = selected_image_feature[:, 1:]
-                elif vision_feature_select_strategy == "full":
-                    selected_image_feature = selected_image_feature
+            #     if vision_feature_select_strategy == "default":
+            #         selected_image_feature = selected_image_feature[:, 1:]
+            #     elif vision_feature_select_strategy == "full":
+            #         selected_image_feature = selected_image_feature
 
-                image_features = self.multi_modal_projector(selected_image_feature)
+            #     image_features = self.multi_modal_projector(selected_image_feature)
 
-                # split up image_features for each of the individual images
-                # hence we get a list of image_features, each of shape (5, num_patches, hidden_size)
-                # if we assume each image has 5 image features (base image + 4 patches)
-                image_features = torch.split(image_features, patches_lengths.to(torch.int).tolist(), dim=0)
+            #     # split up image_features for each of the individual images
+            #     # hence we get a list of image_features, each of shape (5, num_patches, hidden_size)
+            #     # if we assume each image has 5 image features (base image + 4 patches)
+            #     image_features = torch.split(image_features, patches_lengths.to(torch.int).tolist(), dim=0)
 
-                # NOTE we only support multimodal_patch_merge_type == "spatial_unpad"
-                height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
+            #     # NOTE we only support multimodal_patch_merge_type == "spatial_unpad"
+            #     height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
 
-                new_image_features = []
-                for image_idx, image_feature in enumerate(image_features):
-                    num_unpadded_patches = image_feature.shape[0]
-                    # print("num _unpadded patches: ", num_unpadded_patches)
-                    # image feature has shape; 5/3/4 (num_patches), 3, 336, 336
-                    if image_feature.shape[0] > 1:
-                        base_image_feature = image_feature[0]
-                        image_feature = image_feature[1:]
+            #     new_image_features = []
+            #     for image_idx, image_feature in enumerate(image_features):
+            #         num_unpadded_patches = image_feature.shape[0]
+            #         # print("num _unpadded patches: ", num_unpadded_patches)
+            #         # image feature has shape; 5/3/4 (num_patches), 3, 336, 336
+            #         if image_feature.shape[0] > 1:
+            #             base_image_feature = image_feature[0]
+            #             image_feature = image_feature[1:]
 
-                        if height * width != base_image_feature.shape[0]:
-                            raise ValueError("The number of patches is not consistent with the image size.")
-                        num_patch_height, num_patch_width = get_anyres_image_grid_shape(
-                            image_sizes[image_idx],
-                            self.config.image_grid_pinpoints,
-                            self.config.vision_config.image_size,
-                        )
-                        # print("the image sizes I used to obtain these num_patches: ", image_sizes[image_idx])
-                        # print("these are the num patch  and num ht: ", num_patch_height, num_patch_width)
-                        # print("shape of image ftrs before view: ", image_feature.shape)
-                        image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1) # divide 5 - 1 
-                        # patches into 2x2 grid for num_patch_height, 
-                        # num_patch_width  and 336x336x3
-                        # print("shape of image ftrs before permute: ", image_feature.shape)
-                        image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous() # concatenate all the features
-                        # 3x
-                        # print("shape of image ftrs before flatten: ", image_feature.shape)
-                        image_feature = image_feature.flatten(1, 2).flatten(2, 3)
-                        # print("shape of image feature: before unpadding: ", image_feature.shape)
-                        image_feature = unpad_image(image_feature, image_sizes[image_idx])
-                        # print("shape of image feature: before catting: ", image_feature.shape)
-                        # print("shape of image newline: ", self.image_newline.shape)
-                        # print("after transform: ", self.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1).shape)
-                        image_feature = torch.cat(
-                            (
-                                image_feature,
-                                self.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1),
-                            ),
-                            dim=-1,
-                        )
-                        image_feature = image_feature.flatten(1, 2).transpose(0, 1)
-                        # print("print final image feature shape: ", image_feature.shape)
-                        image_feature = torch.cat((base_image_feature, image_feature), dim=0)
-                        # print("print final image feature shape after catting with base: ", image_feature.shape)
-                    else:
-                        image_feature = image_feature[0]
-                        image_feature = torch.cat((image_feature, self.image_newline[None]), dim=0)
-                    new_image_features.append(image_feature)
-                # image_features = torch.stack(new_image_features, dim=0)
+            #             if height * width != base_image_feature.shape[0]:
+            #                 raise ValueError("The number of patches is not consistent with the image size.")
+            #             num_patch_height, num_patch_width = get_anyres_image_grid_shape(
+            #                 image_sizes[image_idx],
+            #                 self.config.image_grid_pinpoints,
+            #                 self.config.vision_config.image_size,
+            #             )
+            #             # print("the image sizes I used to obtain these num_patches: ", image_sizes[image_idx])
+            #             # print("these are the num patch  and num ht: ", num_patch_height, num_patch_width)
+            #             # print("shape of image ftrs before view: ", image_feature.shape)
+            #             image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1) # divide 5 - 1 
+            #             # patches into 2x2 grid for num_patch_height, 
+            #             # num_patch_width  and 336x336x3
+            #             # print("shape of image ftrs before permute: ", image_feature.shape)
+            #             image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous() # concatenate all the features
+            #             # 3x
+            #             # print("shape of image ftrs before flatten: ", image_feature.shape)
+            #             image_feature = image_feature.flatten(1, 2).flatten(2, 3)
+            #             # print("shape of image feature: before unpadding: ", image_feature.shape)
+            #             image_feature = unpad_image(image_feature, image_sizes[image_idx])
+            #             # print("shape of image feature: before catting: ", image_feature.shape)
+            #             # print("shape of image newline: ", self.image_newline.shape)
+            #             # print("after transform: ", self.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1).shape)
+            #             image_feature = torch.cat(
+            #                 (
+            #                     image_feature,
+            #                     self.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1),
+            #                 ),
+            #                 dim=-1,
+            #             )
+            #             image_feature = image_feature.flatten(1, 2).transpose(0, 1)
+            #             # print("print final image feature shape: ", image_feature.shape)
+            #             image_feature = torch.cat((base_image_feature, image_feature), dim=0)
+            #             # print("print final image feature shape after catting with base: ", image_feature.shape)
+            #         else:
+            #             image_feature = image_feature[0]
+            #             image_feature = torch.cat((image_feature, self.image_newline[None]), dim=0)
+            #         new_image_features.append(image_feature)
+            #     # image_features = torch.stack(new_image_features, dim=0)
 
-                inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
-                    new_image_features, inputs_embeds, input_ids, attention_mask, labels
-                )
+            #     inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
+            #         new_image_features, inputs_embeds, input_ids, attention_mask, labels
+            #     )
+                
+                ###### Debugging throughput ############
+
+                ########################################
+                inputs_embeds = torch.ones([1, 6239, 4096]).to(input_ids.device) * 0.5
+                attention_mask = torch.ones([1, 6239]).to(input_ids.device)
+                position_ids = (attention_mask.cumsum(-1) - 1).masked_fill_((attention_mask == 0), 1)
+                labels = None
                 if labels is None:
                     labels = torch.full_like(attention_mask, self.config.ignore_index).to(torch.long)
 
@@ -663,30 +674,30 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 # that are set to 0
                 first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
 
-                # Sum all dimensions of head_dim (-2) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
-                batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
+                # # Sum all dimensions of head_dim (-2) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
+                # batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
 
-                # Get the target length
-                target_seqlen = first_layer_past_key_value.shape[-1] + 1
+                # # Get the target length
+                # target_seqlen = first_layer_past_key_value.shape[-1] + 1
 
-                extended_attention_mask = torch.ones(
-                    (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
-                    dtype=attention_mask.dtype,
-                    device=attention_mask.device,
-                )
+                # extended_attention_mask = torch.ones(
+                #     (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
+                #     dtype=attention_mask.dtype,
+                #     device=attention_mask.device,
+                # )
 
-                # Filter out only the tokens that can be un-attended, this can happen
-                # if one uses Llava + Fused modules where the cache on the
-                # first iteration is already big enough, or if one passes custom cache
-                valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
-                new_batch_index = batch_index[valid_indices]
-                new_non_attended_tokens = non_attended_tokens[valid_indices]
+                # # Filter out only the tokens that can be un-attended, this can happen
+                # # if one uses Llava + Fused modules where the cache on the
+                # # first iteration is already big enough, or if one passes custom cache
+                # valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
+                # new_batch_index = batch_index[valid_indices]
+                # new_non_attended_tokens = non_attended_tokens[valid_indices]
 
-                # Zero-out the places where we don't need to attend
-                extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
+                # # Zero-out the places where we don't need to attend
+                # extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
 
-                attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
-                position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+                # attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
+                # position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -739,6 +750,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         attention_mask=None,
         **kwargs,
     ):
+        input_ids =  torch.ones([1, 6239]).to(input_ids.device)
+        pixel_values = None
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
                 cache_length = past_key_values.get_seq_length()
