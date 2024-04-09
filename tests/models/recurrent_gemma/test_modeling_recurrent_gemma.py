@@ -362,14 +362,13 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     @unittest.skip("RecurrentGemma does not return the cache")
     def test_contrastive_generate(self):
         pass
-    
+
     @unittest.skip("SQRBound is known to have issues with gc")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     def _check_attentions_for_generate(self, *args, **kwargs):
-        return True # Model does not return attention
-
+        return True  # Model does not return attention
 
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
@@ -380,7 +379,7 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_model_parallel_beam_search(self):
         pass
 
-    def _check_past_key_values_for_generate(self,*args, **kwargs):
+    def _check_past_key_values_for_generate(self, *args, **kwargs):
         return True
 
     @unittest.skip("Seems to rely on `past_key_values`")
@@ -394,7 +393,6 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     @unittest.skip("Seems to rely on `past_key_values`")
     def test_assisted_decoding_sample(self):
         pass
-
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
@@ -414,6 +412,7 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
                 [expected_shape] * len(iter_hidden_states),
             )
+
 
 @require_torch_gpu
 @slow
