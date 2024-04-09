@@ -733,15 +733,15 @@ class FalconFlashAttention2(FalconAttention):
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
 
-
+from transformers.activations import get_activation
 class FalconMLP(nn.Module):
     def __init__(self, config: FalconConfig):
         super().__init__()
         hidden_size = config.hidden_size
 
-        self.dense_h_to_4h = FalconLinear(hidden_size, 4 * hidden_size, bias=config.bias)
-        self.act = nn.GELU()
-        self.dense_4h_to_h = FalconLinear(4 * hidden_size, hidden_size, bias=config.bias)
+        self.dense_h_to_4h = FalconLinear(hidden_size, config.ffn_hidden_size, bias=config.bias)
+        self.act = get_activation(config.activation)
+        self.dense_4h_to_h = FalconLinear(config.ffn_hidden_size, hidden_size, bias=config.bias)
         self.hidden_dropout = config.hidden_dropout
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
