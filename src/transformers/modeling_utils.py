@@ -1160,7 +1160,7 @@ class ModuleUtilsMixin:
                 # used for the 4bit quantization (uint8 tensors are stored)
                 if is_loaded_in_4bit and isinstance(param, bnb.nn.Params4bit):
                     total_numel.append(
-                        param.numel() * 2 * self.hf_quantizer.quantization_config.bnb_4bit_quant_storage.itemsize
+                        param.numel() * 2 * self.hf_quantizer.quantization_config.bnb_4bit_quant_storage.element_size()
                     )
                 else:
                     total_numel.append(param.numel())
