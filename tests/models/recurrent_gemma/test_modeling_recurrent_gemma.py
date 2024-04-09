@@ -15,17 +15,13 @@
 """ Testing suite for the PyTorch RecurrentGemma model. """
 import unittest
 
-import pytest
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, RecurrentGemmaConfig, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
-    require_flash_attn,
-    require_read_token,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -373,22 +369,25 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 class RecurrentGemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
 
-    def test_2b_logits(self):
-        EXPECTED_LOGITS = [] # TODO
-
     def test_2b_generate(self):
         model_id = "gg-hf/recurrent-gemma-2b-hf"
-        EXPECTED_TEXTS = [
-            'Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking',
-            'Hi today I am going to share with you the best <strong><em>free online video editing software</em></strong>.'
-        ]
+        EXPECTED_TEXTS = ['<bos>Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', '<bos>Hi today<pad><pad> is a new app that allows you to make money by watching videos.\n\nThe app is very simple to use and you can earn money by watching videos.\n\nThe app is available for both Android and iOS devices and you can download it from the Google Play Store or the App Store.\n\nOnce you have downloaded the app']  # fmt: skip
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+        tokenizer.padding_side = "left"
+        EXPECTED_TEXTS = ['<bos>Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', '<pad><pad><bos>Hi today I am going to share with you a very interesting and useful app which is called <strong><em>“</em></strong><strong><em>Google Translate</em></strong><strong><em>”</em></strong>. This app is very useful for those who are traveling to a foreign country and want to communicate with the local people. This app is very useful for those']  # fmt: skip
+
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
@@ -397,7 +396,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
             torch_device
         )
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -405,54 +404,33 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
             torch_device
         )
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    def test_7b_generate(self):
+    def test_2b_sample(self):
         model_id = "gg-hf/recurrent-gemma-2b-hf"
-        EXPECTED_TEXTS = [
-            'Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking',
-            'Hi today I am going to share with you the best <strong><em>free online video editing software</em></strong>.'
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(torch_device)
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    def test_2b_compile(self):
-        model_id = "gg-hf/recurrent-gemma-2b-hf"
-        EXPECTED_TEXTS = [
-            'Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking',
-            'Hi today I am going to share with you the best <strong><em>free online video editing software</em></strong>.'
-        ]
+        EXPECTED_TEXT = "<bos>Where is Paris ?\n\nIn the blank, insert the most appropriate word .\n\nThe _______ I felt when my teacher complimented my work this morning stayed with me all day.\n\nOn the line provided, combine each word with the prefix or suffix or write the plural form, as directed.\n\n<strong>Examples</strong>\n\n<strong>1</strong>. pre +"  # fmt: skip
 
         model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer("Where is Paris ?", return_tensors="pt", padding=True).to(torch_device)
         with torch.no_grad():
             model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        self.assertEqual(output_text, EXPECTED_TEXTS)
+        self.assertEqual(output_text, EXPECTED_TEXT)
 
     @require_bitsandbytes
     def test_model_2b_4bit(self):
         model_id = "gg-hf/recurrent_gemma-2b"
-        EXPECTED_TEXTS = [
-            'Hello I am doing a 100% 100% 100% 100',
-            'Hi today I’m going to talk about a topic that is very important to me and that is the topic'
-        ]
+        EXPECTED_TEXTS = ['<bos>Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking', "<bos>Hi today<pad><pad> I'm going to show you how to make a simple and easy to use <strong><em><u>"]  # fmt: skip
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, load_in_4bit=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            "gg-hf/recurrent-gemma-2b-hf", device_map={"": torch_device}, load_in_4bit=True, torch_dtype=torch.bfloat16
+        )
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)

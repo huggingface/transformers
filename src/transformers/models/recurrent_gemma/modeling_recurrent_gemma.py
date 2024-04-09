@@ -58,11 +58,6 @@ class RecurrentGemmaRMSNorm(nn.Module):
         # See https://github.com/huggingface/transformers/pull/29402
         output = output * (1.0 + self.weight.float())
         return output.type_as(x)
-        # THEIR TORCH
-        output = self._norm(x)
-        output = output * (1.0 + self.weight)
-        return output
-    
 
 ALL_LAYERNORM_LAYERS.append(RecurrentGemmaRMSNorm)
 
@@ -82,8 +77,8 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
             self.inv_freq = 1.0 / (
                 self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device=x.device).float() / self.dim)
             )
-        inv_freq_expanded = self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :]
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 since bfloat16 loses precision on long contexts
         # See https://github.com/huggingface/transformers/pull/29285
         device_type = x.device.type
@@ -212,7 +207,7 @@ class RecurrentGemmaSdpaAttention(nn.Module):
             value_states.contiguous(),
             attn_mask=causal_mask,  # pretty much a must for sliding window backend!
             dropout_p=self.attention_dropout if self.training else 0.0,
-            scale=(self.head_dim**-0.5),
+            scale=self.head_dim**-0.5,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -245,10 +240,12 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         cache_position = cache_kwargs.get("cache_position")
         if cache_position.shape[0] > self.config.attention_window_size:
             # int indexing -> device sync? in compile, use tensor
-            k_out = key_states[:,:,-self.config.attention_window_size:,:]
-            v_out = value_states[:,:,-self.config.attention_window_size:,:]
+            k_out = key_states[:, :, -self.config.attention_window_size :, :]
+            v_out = value_states[:, :, -self.config.attention_window_size :, :]
         else:
-            slicing = torch.ones(self.config.attention_window_size, dtype=torch.long, device=value_states.device).cumsum(0)
+            slicing = torch.ones(
+                self.config.attention_window_size, dtype=torch.long, device=value_states.device
+            ).cumsum(0)
             cache_position = cache_position.clamp(0, self.config.attention_window_size - 1)
             to_shift = cache_position >= self.config.attention_window_size - 1
             indices = (slicing + to_shift[-1].int() - 1) % self.config.attention_window_size
@@ -384,13 +381,14 @@ class RecurrentGemmaRglru(nn.Module):
 
         else:
             # Using scan in linear mode.
-            if recurrent_states is None:  # recurrent_states is self.cache, never None in transformeres
+            if recurrent_states is None:
                 recurrent_states = torch.zeros(hidden_states[:, 0].shape, dtype=acc_dtype, device=hidden_states.device)
 
             contextualized_states = torch.zeros_like(hidden_states)
             for t in range(hidden_states.shape[1]):
-                recurrent_states = recurrent_gate[:, t].type(acc_dtype) * recurrent_states
-                recurrent_states += hidden_states[:, t].type(acc_dtype)
+                recurrent_states = recurrent_gate[:, t].type(acc_dtype) * recurrent_states + hidden_states[:, t].type(
+                    acc_dtype
+                )
                 contextualized_states[:, t] = recurrent_states.type(hidden_states.dtype)
 
         return contextualized_states, recurrent_states
@@ -441,9 +439,8 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
                 x_branch = self.conv_1d(x_branch)[..., :seq_len]
             else:  # decoding
                 conv_state = torch.cat((self.conv1d_state, x_branch), -1)
-                x_branch = (
-                    torch.sum(conv_state * self.conv_1d.weight[:, 0, :], dim=-1) + self.conv_1d.bias
-                ).unsqueeze(-1)
+                x_branch = torch.sum(conv_state * self.conv_1d.weight[:, 0, :], dim=-1) + self.conv_1d.bias
+                x_branch = x_branch.unsqueeze(-1)
                 self.conv1d_state = conv_state[:, :, 1:]
         else:
             x_branch = self.conv_1d(x_branch)[..., :seq_len]
@@ -497,7 +494,7 @@ class RecurrentGemmaDecoderLayer(nn.Module):
         use_cache: bool = None,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         raw_activations = activations
-        inputs_normalized = self.temporal_pre_norm(raw_activations) # RMSNorm introduces slight slight differences
+        inputs_normalized = self.temporal_pre_norm(raw_activations)  # RMSNorm introduces slight slight differences
 
         hidden_states = self.temporal_block(
             inputs_normalized, position_ids, attention_mask, cache_position=cache_position, use_cache=use_cache
@@ -566,7 +563,9 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
             torch.nn.init.normal_(module.linear_out.weight, mean=0.0, std=std)
             torch.nn.init.zeros_(module.linear_out.bias)
         elif isinstance(module, RecurrentGemmaRglru):
-            std = math.sqrt(self.config.w_init_variance_scale /(self.config.lru_width // self.config.num_attention_heads))
+            std = math.sqrt(
+                self.config.w_init_variance_scale / (self.config.lru_width // self.config.num_attention_heads)
+            )
             torch.nn.init.normal_(module.input_gate_weight, mean=0.0, std=std)
             torch.nn.init.normal_(module.recurrent_gate_weight, mean=0.0, std=std)
             torch.nn.init.zeros_(module.input_gate_bias)
@@ -716,9 +715,8 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
 
-        if self.config.embeddings_scale_by_sqrt_dim:  # TODO no codepaths they always do it
-            normalizer = torch.tensor(self.config.hidden_size**0.5)
-            hidden_states = hidden_states * normalizer.type(torch.bfloat16)
+        normalizer = torch.full((1,), self.config.hidden_size**0.5, device=hidden_states.device)
+        hidden_states = hidden_states * normalizer.type(torch.bfloat16)
 
         all_hidden_states = () if output_hidden_states else None
         for i, residual_block in enumerate(self.layers):
@@ -869,9 +867,9 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         logits = self.lm_head(hidden_states)
 
         # Soft-cap the logits TODO remove if always done.
-        if self.config.logits_soft_cap is not None:
-            cap = self.config.logits_soft_cap
-            logits = nn.functional.tanh(logits / cap) * cap
+        # if self.config.logits_soft_cap is not None:
+        cap = self.config.logits_soft_cap
+        logits = nn.functional.tanh(logits / cap) * cap
 
         logits = logits.float()
         loss = None
@@ -931,8 +929,8 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         )
         return model_inputs
 
+    # Ignore copy
     def _reorder_cache(self, past_key_values, beam_idx):
-        reordered_past = ()
         for layer in self.layers:
             if hasattr(layer.temporal_block, "key_states"):
                 k_state = layer.temporal_block.key_states
