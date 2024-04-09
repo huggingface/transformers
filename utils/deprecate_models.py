@@ -187,21 +187,17 @@ def update_alphabetic_ordering_of_imports(filelines):
             # Comment which starts a new sub-block
             if line.strip().startswith("#"):
                 base_import_block.append(sub_block)
-                # base_import_block.append(line)
-                base_import_block.append([line])
+                base_import_block.append(line)
                 sub_block = []
 
             # End of the base objects imports
             elif line.strip().startswith("}"):
-                # import pdb; pdb.set_trace()
+                # We're at the end of the base imports
                 base_import_block.append(sub_block)
-                # Make all the sub-blocks lists (can do this before)?
-                # base_import_block = [[sub_block] if isinstance(sub_block, str) else sub_block for sub_block in base_import_block]
-
+                # Make all the sub-blocks lists
                 base_import_block = [[sub_block] if not isinstance(sub_block, list) else sub_block for sub_block in base_import_block]
 
                 # Sort the subblocks
-                # base_import_block = [[sorted(sub_block) if isinstance(sub_block, list) else sub_block for sub_block in sub_blocks] for sub_blocks in base_import_block]
                 base_import_block = [sorted(sub_block) for sub_block in base_import_block]
                 # Flatten the lists so they're all lines
                 base_import_block = [line for sub_block in base_import_block for line in sub_block]
@@ -212,6 +208,7 @@ def update_alphabetic_ordering_of_imports(filelines):
 
                 new_init_file_lines.append(line)
                 sub_block = []
+            
             # Start of indented block in the base objects imports
             elif line.strip().endswith(("[", "(")):
                 indented_block.append(line)
@@ -294,8 +291,6 @@ def update_alphabetic_ordering_of_imports(filelines):
                     sub_block = []
 
                 else_block.append(line)
-
-                # sub_block.append(line)
 
             else:
                 sub_block.append(line)
