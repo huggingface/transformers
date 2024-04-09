@@ -16,7 +16,7 @@
 """ PyTorch RecurrentGemma model."""
 
 import math
-from typing import Optional, Tuple, Union, Dict
+from typing import Dict, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
