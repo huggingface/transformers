@@ -243,7 +243,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                     [Qwen2MoE](model_doc/qwen2_moe)                      |       ✅        |         ❌         |      ❌      |
 |                           [RAG](model_doc/rag)                           |       ✅        |         ✅         |      ❌      |
 |                         [REALM](model_doc/realm)                         |       ✅        |         ❌         |      ❌      |
-|               [RecurrentGemma](model_doc/recurrent-gemma)                |       ✅        |         ❌         |      ❌      |
+|               [RecurrentGemma](model_doc/recurrent_gemma)                |       ✅        |         ❌         |      ❌      |
 |                      [Reformer](model_doc/reformer)                      |       ✅        |         ❌         |      ❌      |
 |                        [RegNet](model_doc/regnet)                        |       ✅        |         ✅         |      ✅      |
 |                       [RemBERT](model_doc/rembert)                       |       ✅        |         ✅         |      ❌      |
