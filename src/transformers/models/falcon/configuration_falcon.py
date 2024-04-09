@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Falcon configuration"""
+"""Falcon configuration"""
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -87,6 +88,10 @@ class FalconConfig(PretrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 11):
             The id of the "end-of-sequence" token.
+        ffn_hidden_size (`int`, *optional*, defaults to 4x hidden dim):
+            The hidden size of the feedforward layer in the Transformer decoder.
+        activation (`str`, *optional*, defaults to "gelu"):
+            The activation function used in the feedforward layer.
 
     Example:
 
@@ -129,7 +134,7 @@ class FalconConfig(PretrainedConfig):
         bos_token_id=11,
         eos_token_id=11,
         ffn_hidden_size=None,
-        activation='gelu',
+        activation="gelu",
         **kwargs,
     ):
         self.vocab_size = vocab_size
