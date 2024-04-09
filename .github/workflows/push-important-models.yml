@@ -104,6 +104,6 @@ jobs:
         uses: huggingface/tailscale-action@ssh-improvments
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
-          debugEnabled: ${{ secrets.ACTIONS_STEP_DEBUG }}
           slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
           slackToken: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+          waitForSSH: true

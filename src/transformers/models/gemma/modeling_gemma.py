@@ -46,6 +46,7 @@ from ...utils.import_utils import is_torch_fx_available
 from .configuration_gemma import GemmaConfig
 
 
+
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
