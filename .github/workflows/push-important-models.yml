@@ -66,7 +66,8 @@ jobs:
         uses: actions/checkout@v3
       - name: Install locally transformers & other libs
         run: |
-          pip uninstall transformers && pip install -e ".[testing]" 
+          sudo -H pip install --upgrade pip
+          sudo -H pip uninstall transformers && pip install -e ".[testing]" 
           MAX_JOBS=4 pip install flash-attn --no-build-isolation
           pip install bitsandbytes
       - name: NVIDIA-SMI
