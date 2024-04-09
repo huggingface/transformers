@@ -70,7 +70,7 @@ class GroundingDinoModelTester:
         attention_probs_dropout_prob=0.1,
         num_queries=2,
         num_channels=3,
-        image_size=196,
+        image_size=98,
         n_targets=8,
         num_labels=3,
         num_feature_levels=4,
