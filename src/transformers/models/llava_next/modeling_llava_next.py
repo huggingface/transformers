@@ -306,7 +306,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = LlavaNextMultiModalProjector(config)
-        self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size, dtype=config.torch_dtype or self.dtype))
+        self.image_newline = nn.Parameter(
+            torch.randn(config.text_config.hidden_size, dtype=config.torch_dtype or self.dtype)
+        )
 
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
