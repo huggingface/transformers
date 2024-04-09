@@ -330,9 +330,8 @@ def main():
     train_transforms = A.Compose(
         [
             A.Lambda(name="reduce_labels", mask=reduce_labels_transform if args.reduce_labels else None, p=1.0),
-            A.PadIfNeeded(
-                min_height=height, min_width=width, border_mode=0, value=255, p=1.0
-            ),  # 255 is ignored by loss
+            # pad image with 255, because it is ignored by loss
+            A.PadIfNeeded(min_height=height, min_width=width, border_mode=0, value=255, p=1.0),
             A.RandomCrop(height=height, width=width, p=1.0),
             A.HorizontalFlip(p=0.5),
             A.Normalize(mean=image_processor.image_mean, std=image_processor.image_std, max_pixel_value=255.0, p=1.0),
