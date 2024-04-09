@@ -2,7 +2,7 @@ name: Slow tests on important models (on Push - A10)
 
 on:
   push:
-    branches: [ add-new-push-test-workflow ]
+    branches: [ main ]
 
 env:
   IS_GITHUB_CI: "1"
@@ -50,7 +50,7 @@ jobs:
             echo "matrix=[$matrix_string]" >> $GITHUB_OUTPUT
   test_modified_files:
     needs: get_modified_models
-    name: Run slow & FA2 tests
+    name: Slow & FA2 tests
     runs-on: [single-gpu, nvidia-gpu, a10, ci]
     container:
       image: huggingface/transformers-all-latest-gpu
