@@ -7,7 +7,7 @@ import torch.nn.functional as F
 
 This file comes from https://github.com/alxndrTL/mamba.py.
 It is an implementation of the parallel scan operation in PyTorch (Blelloch version).
-Please see alxndrTL/mamba.py/docs/pscan.ipynb for a detailed explanation of what happens here.
+Please see https://github.com/alxndrTL/mamba.py/blob/main/docs/pscan.ipynb for a detailed explanation of what happens here.
 
 It has been slightly modified : here the input of pscan is supposed to be (B, D, L, N) to avoid
 a transpose given the shapes in modeling_mamba.py (as opposed to (B, L, D, N) in mamba.py).

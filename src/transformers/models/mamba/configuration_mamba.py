@@ -100,7 +100,6 @@ class MambaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        use_mambapy,
         vocab_size=50280,
         hidden_size=768,
         state_size=16,
@@ -126,7 +125,6 @@ class MambaConfig(PretrainedConfig):
         use_cache=True,
         **kwargs,
     ):
-        self.usemambapy = use_mambapy
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.state_size = state_size
