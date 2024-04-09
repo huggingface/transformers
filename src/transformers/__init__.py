@@ -6328,12 +6328,12 @@ if TYPE_CHECKING:
             MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_IMAGE_MAPPING,
+            MODEL_FOR_IMAGE_MATCHING_MAPPING,
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
             MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING,
             MODEL_FOR_IMAGE_TO_IMAGE_MAPPING,
             MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
             MODEL_FOR_KEYPOINT_DETECTION_MAPPING,
-            MODEL_FOR_IMAGE_MATCHING_MAPPING,
             MODEL_FOR_MASK_GENERATION_MAPPING,
             MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
@@ -6371,12 +6371,12 @@ if TYPE_CHECKING:
             AutoModelForDepthEstimation,
             AutoModelForDocumentQuestionAnswering,
             AutoModelForImageClassification,
+            AutoModelForImageMatching,
             AutoModelForImageSegmentation,
             AutoModelForImageTextToText,
             AutoModelForImageToImage,
             AutoModelForInstanceSegmentation,
             AutoModelForKeypointDetection,
-            AutoModelForImageMatching,
             AutoModelForMaskedImageModeling,
             AutoModelForMaskedLM,
             AutoModelForMaskGeneration,
@@ -7914,8 +7914,9 @@ if TYPE_CHECKING:
             Starcoder2PreTrainedModel,
         )
         from .models.superglue import (
-            SuperGlueModel,
+            SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST,
             SuperGlueForImageMatching,
+            SuperGlueModel,
             SuperGluePreTrainedModel,
         )
         from .models.superpoint import (

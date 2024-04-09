@@ -44,8 +44,8 @@ if TYPE_CHECKING:
     else:
         from .modeling_superglue import (
             SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SuperGlueModel,
             SuperGlueForImageMatching,
+            SuperGlueModel,
             SuperGluePreTrainedModel,
         )
 
