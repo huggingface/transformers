@@ -35,6 +35,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/download-artifact@v3
       - name: Send message to Slack
+        if: ${{ inputs.job != 'run_tests_quantization_torch_gpu' }}
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
           CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
@@ -60,7 +61,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/download-artifact@v3
       - name: Send message to Slack for quantization workflow
-        if: ${{ inputs.slack_report_channel == 'run_tests_quantization_torch_gpu' }}
+        if: ${{ inputs.job == 'run_tests_quantization_torch_gpu' }}
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}

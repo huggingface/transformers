@@ -312,6 +312,7 @@ jobs:
   run_tests_quantization_torch_gpu:
     if: ${{ inputs.job == 'run_tests_quantization_torch_gpu' }}
     name: " "
+    needs: setup
     strategy:
       fail-fast: false
       matrix:
