@@ -792,15 +792,18 @@ class MixtralBlockSparseTop2MLP(nn.Module):
         super().__init__()
         self.ffn_dim = config.intermediate_size
         self.hidden_dim = config.hidden_size
-
+        
         self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
         self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
         self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
 
         self.act_fn = ACT2FN[config.hidden_act]
-
+    # 这里是 SwiGLU， MLP（激活信号 * 矩阵）最后进行矩阵信息的放缩 
     def forward(self, hidden_states):
+        # act_fn(W1 @ hidden_states) * （W3 * hidden_states）
+        #  * 这里表示的 矩阵按位想乘； 前半部分是 矩阵激活函数 标识数据保留，乘以后半部分表示的是 需要保留的信息
         current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
+        # 将上面的信息 进行数据放缩
         current_hidden_states = self.w2(current_hidden_states)
         return current_hidden_states
 
@@ -834,45 +837,59 @@ class MixtralSparseMoeBlock(nn.Module):
 
         # gating
         self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
-
+        # 实现 num_experts个 swiGLU Block 矩阵信息
         self.experts = nn.ModuleList([MixtralBlockSparseTop2MLP(config) for _ in range(self.num_experts)])
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """ """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
+        
         hidden_states = hidden_states.view(-1, hidden_dim)
+        
         # router_logits: (batch * sequence_length, n_experts)
+        # 实现 gate
         router_logits = self.gate(hidden_states)
-
+        # 将gate 进行softmax
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+        # 从 路由中选取出来 top k 的 权重 以及 index
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+        # 将路由的数据 进行归一化
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         # we cast back to the input dtype
+        # 注意一下 这里进行了数据格式 转换， 表示上面计算结果 会对数据格式发生改变
         routing_weights = routing_weights.to(hidden_states.dtype)
-
+        #
         final_hidden_states = torch.zeros(
             (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
         )
 
         # One hot encode the selected experts to create an expert mask
         # this will be used to easily index which expert is going to be sollicitated
+        # 变成一个二维矩阵， 其中selected_experts 表示选中的expert
+        # 最后进行 permute 交换数据 0:batch_size  1: sequen_len 2: num_expert
+        # 进行permute 之后 相当于变成 num_expert * sequence_len * batch_size
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
 
         # Loop over all available experts in the model and perform the computation on each expert
-        for expert_idx in range(self.num_experts):
-            expert_layer = self.experts[expert_idx]
-            idx, top_x = torch.where(expert_mask[expert_idx])
 
+        # 逐个计算 expert
+        for expert_idx in range(self.num_experts):
+            expert_layer = self.experts[expert_idx]  # 抽取第idx个 topk 个expert 的index
+            # 通过 idx 和top_x 共同筛选出来 topK expert 的index
+            idx, top_x = torch.where(expert_mask[expert_idx]) 
+            
             if top_x.shape[0] == 0:
                 continue
 
             # in torch it is faster to index using lists than torch tensors
-            top_x_list = top_x.tolist()
-            idx_list = idx.tolist()
+            top_x_list = top_x.tolist() # 
+            idx_list = idx.tolist() #
 
             # Index the correct hidden states and compute the expert hidden state for
             # the current expert. We need to make sure to multiply the output hidden
             # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
+
+            # 
             current_state = hidden_states[None, top_x_list].reshape(-1, hidden_dim)
             current_hidden_states = expert_layer(current_state) * routing_weights[top_x_list, idx_list, None]
 
