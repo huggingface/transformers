@@ -68,7 +68,7 @@ jobs:
         run: |
           apt install sudo
           sudo -H pip install --upgrade pip
-          sudo -H pip uninstall transformers 
+          sudo -H pip uninstall -y transformers 
           sudo -H pip install -U -e ".[testing]" 
           MAX_JOBS=4 pip install flash-attn --no-build-isolation
           pip install bitsandbytes
