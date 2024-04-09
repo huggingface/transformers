@@ -838,8 +838,8 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, RecurrentGemmaForCausalLM
 
-        >>> model = RecurrentGemmaForCausalLM.from_pretrained("google/recurrent-gemma-2b")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/recurrent-gemma-2b")
+        >>> model = RecurrentGemmaForCausalLM.from_pretrained("google/recurrentgemma-2b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/recurrentgemma-2b")
 
         >>> prompt = "What is your favorite condiment?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
