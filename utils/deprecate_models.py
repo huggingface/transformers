@@ -3,24 +3,25 @@ Script which deprecates a list of given models
 """
 
 import argparse
+import glob
+import json
 import os
+import requests
 from collections import defaultdict
 from packaging import version
 
-from transformers import CONFIG_MAPPING
+from git import Repo
+
+from transformers import CONFIG_MAPPING, logging
 from transformers import __version__ as current_version
 
-import json
-import requests
-import glob
-
-from git import Repo
 
 REPO_PATH = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 
 repo = Repo(REPO_PATH)
 
-print(REPO_PATH)
+
+logger = logging.get_logger(__name__)
 
 
 # # FIXME - more robust way of finding the model doc - find the model class form the model's init file and then find the model doc
@@ -72,32 +73,6 @@ def insert_tip_to_model_doc(model_doc_path, tip_message):
         f.write("\n".join(new_model_lines))
 
 
-
-models = [
-    # 'graphormer',
-    # 'time_series_transformer',
-    'conditional_detr',
-    # 'xlm_prophetnet',
-    # 'qdqbert',
-    # 'nat',
-    # 'data2vec',
-    # 'ernie_m',
-    # 'dinat',
-    # 'tvlt',
-    # 'nezha',
-    # 'jukebox',
-    'vit_hybrid',
-    # 'decision_transformer',
-    # 'x_clip',
-    # 'deta',
-    # 'speech_to_text_2',
-    # 'efficientformer',
-    # 'realm',
-    # 'openai',
-    # 'gptsan_japanese'
-]
-
-
 def get_model_doc_path(model):
     model_doc_path = f"docs/source/en/model_doc/{model}.md"
 
@@ -119,40 +94,22 @@ def get_model_doc_path(model):
     return None
 
 
-skipped_models = []
-model_info = defaultdict(dict)
-# For each model, find its model doc page e.g. docs/source/en/model_doc/conditional_detr.md for conditional_detr
-for model in models:
+def extract_model_info(model):
+    model_info = dict()
     model_doc_path = get_model_doc_path(model)
     model_path = f"src/transformers/models/{model}"
 
     if model_doc_path is None:
-        print(f"Model doc path does not exist for {model}")
-        skipped_models.append(model)
-        continue
-    else:
-        model_info[model]["model_doc_path"] = model_doc_path
+        logging.info(f"Model doc path does not exist for {model}")
+        return None
+    model_info["model_doc_path"] = model_doc_path
 
     if not os.path.exists(model_path):
-        print(f"Model path does not exist for {model}")
-        skipped_models.append(model)
-        continue
-    else:
-        model_info[model]["model_path"] = model_path
+        logging.info(f"Model path does not exist for {model}")
+        return None
+    model_info["model_path"] = model_path
 
-
-models = [model for model in models if model not in skipped_models]
-
-# Comment out for the moment just to avoid having to revert when testing
-# last_stable_release = get_last_stable_minor_release()
-
-# tip_message = build_tip_message(last_stable_release)
-# # Add the tip message to the model doc page directly underneath the title
-# for model, info in model_info.items():
-#     if not "model_doc_path" in info:
-#         continue
-
-#     insert_tip_to_model_doc(info["model_doc_path"], tip_message)
+    return model_info
 
 
 
@@ -170,14 +127,6 @@ def move_model_files_to_deprecated(model):
         repo.git.mv(f"{model_path}/{file}", f"{deprecated_model_path}/{file}")
 
 
-# # For each model, we move all the files in the model directory to a deprecated directory
-# # e.g. src/transformers/models/conditional_detr/* -> src/transformers/models/deprecated/conditional_detr/*
-# for model, info in model_info.items():
-#     if not "model_path" in info:
-#         continue
-#    move_model_files_to_deprecated(model)
-
-
 def delete_model_tests(model):
     tests_path = f"tests/models/{model}"
 
@@ -185,14 +134,7 @@ def delete_model_tests(model):
         repo.git.rm("-r", tests_path)
 
 
-# for model, info in model_info.items():
-#     if not "model_path" in info:
-#         continue
-#     delete_model_tests(model)
-
-
-
-def update_alphabetic_ordering_of_imports():
+def update_alphabetic_ordering_of_imports(filelines):
     # For the direct import, they will be sorted by make fixup.
     # We need to sort the _import_structure lines
 
@@ -231,7 +173,7 @@ def update_alphabetic_ordering_of_imports():
     in_else_block = False
 
     # We iterate over each line in the init file to create a new init file
-    for i, line in enumerate(init_file.split("\n")):
+    for line in filelines.split("\n"):
         # Next line is in the else block
         if line.startswith("else:"):
             new_init_file_lines.append(line)
@@ -333,8 +275,6 @@ def update_init_file(filename, models):
         f.write(init_file)
 
 
-# update_init_file("src/transformers/models/__init__.py", models)
-
 def remove_model_references_from_file(filename, models, condition = None):
     """
     Remove all references to the given models from the given file
@@ -359,15 +299,6 @@ def remove_model_references_from_file(filename, models, condition = None):
 
     with open(filename, "w") as f:
         f.write("\n".join(new_file_lines))
-
-# remove_model_references_from_file("src/transformers/models/__init__.py", models, lambda line, model: model == line.strip().strip(","))
-# remove_model_references_from_file("utils/slow_documentation_tests.txt", models, lambda line, model: "/" + model + "/" in line)
-
-# Get the models config class names
-
-
-
-model_config_classes = [CONFIG_MAPPING[model_name].__name__ for model_name in models + ["oneformer", "seamless_m4t", "whisper"]]
 
 
 def remove_model_config_classes_from_config_check(filename, model_config_classes):
@@ -409,15 +340,72 @@ def remove_model_config_classes_from_config_check(filename, model_config_classes
         f.write("\n".join(new_file_lines))
 
 
-remove_model_config_classes_from_config_check("src/transformers/configuration_utils.py", model_config_classes)
+def deprecate_models(models):
+    # Get model info
+    skipped_models = []
+    model_info = defaultdict(dict)
+    for model in models:
+        single_model_info = extract_model_info(model)
+        if single_model_info is None:
+            skipped_models.append(model)
+        else:
+            model_info[model] = single_model_info
 
-def 
+    # Filter out skipped models
+    models = [model for model in models if model not in skipped_models]
 
+    tip_message = build_tip_message(get_last_stable_minor_release())
 
+    for model, model_info in model_info.items():
+        # Add the tip message to the model doc page directly underneath the title
+        insert_tip_to_model_doc(model_info["model_doc_path"], tip_message)
 
+        # Move the model file to deprecated: src/transfomers/models/model -> src/transformers/models/deprecated/model
+        # move_model_files_to_deprecated(model)
+
+        # Delete the model tests: tests/models/model
+        delete_model_tests(model)
+
+    # We do the following with all models passed at once to avoid having to re-write the file multiple times
+
+    # Update the __init__.py file to point to the deprecated model.
+    update_init_file("src/transformers/models/__init__.py", models)
+
+    # Remove model references from other files
+    remove_model_references_from_file("src/transformers/models/__init__.py", models, lambda line, model: model == line.strip().strip(","))
+    remove_model_references_from_file("utils/slow_documentation_tests.txt", models, lambda line, model: "/" + model + "/" in line)
+
+    # Remove model config classes from config check
+    model_config_classes = [CONFIG_MAPPING[model_name].__name__ for model_name in models]
+    remove_model_config_classes_from_config_check("src/transformers/configuration_utils.py", model_config_classes)
 
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--models", nargs="+", help="List of models to deprecate")
+    models = [
+        # 'graphormer',
+        # 'time_series_transformer',
+        'conditional_detr',
+        # 'xlm_prophetnet',
+        # 'qdqbert',
+        # 'nat',
+        # 'data2vec',
+        # 'ernie_m',
+        # 'dinat',
+        # 'tvlt',
+        # 'nezha',
+        # 'jukebox',
+        'vit_hybrid',
+        # 'decision_transformer',
+        # 'x_clip',
+        # 'deta',
+        # 'speech_to_text_2',
+        # 'efficientformer',
+        # 'realm',
+        # 'openai',
+        # 'gptsan_japanese'
+    ]
+    args = parser.parse_args()
+    deprecate_models(models)
