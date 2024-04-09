@@ -998,12 +998,12 @@ class MLflowCallback(TrainerCallback):
         self._experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", None)
         self._flatten_params = os.getenv("MLFLOW_FLATTEN_PARAMS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self._run_id = os.getenv("MLFLOW_RUN_ID", None)
-        self._async_log = False
+
         # "synchronous" flag is only available with mlflow version >= 2.8.0
         # https://github.com/mlflow/mlflow/pull/9705
         # https://github.com/mlflow/mlflow/releases/tag/v2.8.0
-        if packaging.version.parse(importlib.metadata.version("mlflow")) >= packaging.version.parse("2.8.0"):
-            self._async_log = True
+        self._async_log = packaging.version.parse(self._ml_flow.__version__) >= packaging.version.parse("2.8.0")
+
         logger.debug(
             f"MLflow experiment_name={self._experiment_name}, run_name={args.run_name}, nested={self._nested_run},"
             f" tags={self._nested_run}, tracking_uri={self._tracking_uri}"
