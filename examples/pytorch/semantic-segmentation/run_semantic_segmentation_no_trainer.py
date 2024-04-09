@@ -71,13 +71,6 @@ def reduce_labels_transform(labels: np.ndarray, **kwargs) -> np.ndarray:
     return labels
 
 
-def identity_transform(x: np.ndarray, **kwargs) -> np.ndarray:
-    """Return the input as is.
-    **kwargs are required to use this function with albumentations.
-    """
-    return x
-
-
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers model on a image semantic segmentation task")
     parser.add_argument(
@@ -337,7 +330,7 @@ def main():
     train_transforms = A.Compose(
         [
             A.Lambda(
-                name="reduce_labels", mask=reduce_labels_transform if args.reduce_labels else identity_transform, p=1.0
+                name="reduce_labels", mask=reduce_labels_transform if args.reduce_labels else None, p=1.0
             ),
             A.PadIfNeeded(
                 min_height=height, min_width=width, border_mode=0, value=255, p=1.0
@@ -351,7 +344,7 @@ def main():
     val_transforms = A.Compose(
         [
             A.Lambda(
-                name="reduce_labels", mask=reduce_labels_transform if args.reduce_labels else identity_transform, p=1.0
+                name="reduce_labels", mask=reduce_labels_transform if args.reduce_labels else None, p=1.0
             ),
             A.Resize(height=height, width=width, p=1.0),
             A.Normalize(mean=image_processor.image_mean, std=image_processor.image_std, max_pixel_value=255.0, p=1.0),

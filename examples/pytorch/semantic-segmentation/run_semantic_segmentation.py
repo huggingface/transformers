@@ -71,13 +71,6 @@ def reduce_labels_transform(labels: np.ndarray, **kwargs) -> np.ndarray:
     return labels
 
 
-def identity_transform(x: np.ndarray, **kwargs) -> np.ndarray:
-    """Return the input as is.
-    **kwargs are required to use this function with albumentations.
-    """
-    return x
-
-
 @dataclass
 class DataTrainingArguments:
     """
@@ -345,7 +338,7 @@ def main():
         [
             A.Lambda(
                 name="reduce_labels",
-                mask=reduce_labels_transform if data_args.reduce_labels else identity_transform,
+                mask=reduce_labels_transform if data_args.reduce_labels else None,
                 p=1.0,
             ),
             A.PadIfNeeded(
@@ -361,7 +354,7 @@ def main():
         [
             A.Lambda(
                 name="reduce_labels",
-                mask=reduce_labels_transform if data_args.reduce_labels else identity_transform,
+                mask=reduce_labels_transform if data_args.reduce_labels else None,
                 p=1.0,
             ),
             A.Resize(height=height, width=width, p=1.0),
