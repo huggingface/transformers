@@ -51,8 +51,8 @@ class GroundingDinoConfig(PretrainedConfig):
         backbone_kwargs (`dict`, *optional*):
             Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
             e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize any [`PretrainedConfig`].
+        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `BertConfig`):
+            The config object or dictionary of the text backbone.
         num_queries (`int`, *optional*, defaults to 900):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
             [`GroundingDinoModel`] can detect in a single image.
@@ -266,9 +266,15 @@ class GroundingDinoConfig(PretrainedConfig):
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
         # Text backbone
-        text_model_type = text_config["model_type"] if "model_type" in text_config else "bert"
-        self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
+        if isinstance(text_config, dict):
+            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "bert"
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        elif text_config is None:
+            text_config = CONFIG_MAPPING["bert"]()
+
+        self.text_config = text_config
         self.max_text_len = max_text_len
+
         # Text Enhancer
         self.text_enhancer_dropout = text_enhancer_dropout
         # Fusion
