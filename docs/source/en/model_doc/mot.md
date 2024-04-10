@@ -63,6 +63,11 @@ The original code can be found [here](https://github.com/llm-random/llm-random/b
 [[autodoc]] MoTModel
     - forward
 
+## MoTMLP
+
+[[autodoc]] MoTMLP
+    - forward
+
 ## MoTLMHeadModel
 
 [[autodoc]] MoTLMHeadModel

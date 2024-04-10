@@ -364,6 +364,10 @@ class MoTAttention(nn.Module):
 
 
 class MoTMLP(nn.Module):
+    r"""
+    Implementation of the Mixture of Tokens Sparse MLP module.
+    """
+
     def __init__(self, inner_dim: int, config: MoTConfig, sparsity_dim: int = 0, init_type: str = "kaiming_uniform"):
         super().__init__()
 
