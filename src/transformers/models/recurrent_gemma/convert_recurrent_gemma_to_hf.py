@@ -137,7 +137,6 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
 
     if push_to_hub:
         print(f"pushing the model to {save_path}")
-        # model.push_to_hub(save_path, safe_serialization=safe_serialization, private=True)
     else:
         model.save_pretrained(save_path, safe_serialization=safe_serialization)
 
