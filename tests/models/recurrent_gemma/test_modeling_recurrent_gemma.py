@@ -424,7 +424,7 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 @slow
 class RecurrentGemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
-    model_id = "google/recurrent-gemma-2b-hf"
+    model_id = "google/recurrentgemma-2b"
 
     @require_read_token
     def test_2b_generate(self):
