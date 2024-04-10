@@ -1968,6 +1968,50 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), False, safe_weights=save_safetensors
                 )
 
+    def test_load_best_model_with_save(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                save_steps=5,
+                evaluation_strategy="steps",
+                eval_steps=5,
+            )
+            trainer.train()
+            # Check that we have the last known step:
+            assert os.path.exists(
+                os.path.join(tmpdir, f"checkpoint-{trainer.state.max_steps}")
+            ), f"Could not find checkpoint-{trainer.state.max_steps}"
+            # And then check the last multiple
+            last_multiple = trainer.state.max_steps - trainer.state.max_steps % 5
+            assert os.path.exists(
+                os.path.join(tmpdir, f"checkpoint-{last_multiple}")
+            ), f"Could not find checkpoint-{last_multiple}"
+
+        # Now test that using a limit works
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                save_steps=5,
+                evaluation_strategy="steps",
+                eval_steps=5,
+                load_best_model_at_end=True,
+                save_total_limit=2,
+            )
+            trainer.train()
+            # Check that we have the last known step:
+            assert os.path.exists(
+                os.path.join(tmpdir, f"checkpoint-{trainer.state.max_steps}")
+            ), f"Could not find checkpoint-{trainer.state.max_steps}"
+            # And then check the last multiple
+            last_multiple = trainer.state.max_steps - trainer.state.max_steps % 5
+            assert os.path.exists(
+                os.path.join(tmpdir, f"checkpoint-{last_multiple}")
+            ), f"Could not find checkpoint-{last_multiple}"
+            # Finally check that we don't have an old one
+            assert not os.path.exists(
+                os.path.join(tmpdir, f"checkpoint-{trainer.state.max_steps-10}")
+            ), f"Found checkpoint-{trainer.state.max_steps-10}, limit not respected"
+
     @require_torch_multi_accelerator
     def test_run_seq2seq_double_train_wrap_once(self):
         # test that we don't wrap the model more than once
