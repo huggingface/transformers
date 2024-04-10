@@ -122,7 +122,6 @@ class RecurrentGemmaModelTester:
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
-    # Ignore copy
     def get_config(self):
         return RecurrentGemmaConfig(
             num_hidden_layers=self.num_hidden_layers,
