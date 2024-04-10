@@ -858,7 +858,6 @@ def check_copies(overwrite: bool = False, file: str = None):
             + diff
             + "\nRun `make fix-copies` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
         )
-    check_model_list_copy(overwrite=overwrite)
 
 
 def check_full_copies(overwrite: bool = False):
@@ -1053,68 +1052,6 @@ def _find_text_in_file(filename: str, start_prompt: str, end_prompt: str) -> Tup
         end_index -= 1
     end_index += 1
     return "".join(lines[start_index:end_index]), start_index, end_index, lines
-
-
-def check_model_list_copy(overwrite: bool = False):
-    """
-    Check the model lists in the README is consistent with the ones in the other READMES and also with `index.nmd`.
-
-    Args:
-        overwrite (`bool`, *optional*, defaults to `False`):
-            Whether or not to overwrite the copies when they don't match.
-    """
-    # Fix potential doc links in the README
-    with open(os.path.join(REPO_PATH, "README.md"), "r", encoding="utf-8", newline="\n") as f:
-        readme = f.read()
-    new_readme = readme.replace("https://huggingface.co/transformers", "https://huggingface.co/docs/transformers")
-    new_readme = new_readme.replace(
-        "https://huggingface.co/docs/main/transformers", "https://huggingface.co/docs/transformers/main"
-    )
-    if new_readme != readme:
-        if overwrite:
-            with open(os.path.join(REPO_PATH, "README.md"), "w", encoding="utf-8", newline="\n") as f:
-                f.write(new_readme)
-        else:
-            raise ValueError(
-                "The main README contains wrong links to the documentation of Transformers. Run `make fix-copies` to "
-                "automatically fix them."
-            )
-
-    md_list = get_model_list(
-        filename="README.md",
-        start_prompt=LOCALIZED_READMES["README.md"]["start_prompt"],
-        end_prompt=LOCALIZED_READMES["README.md"]["end_prompt"],
-    )
-
-    # Build the converted Markdown.
-    converted_md_lists = []
-    for filename, value in LOCALIZED_READMES.items():
-        _start_prompt = value["start_prompt"]
-        _end_prompt = value["end_prompt"]
-        _format_model_list = value["format_model_list"]
-
-        localized_md_list = get_model_list(filename, _start_prompt, _end_prompt)
-        readmes_match, converted_md_list = convert_to_localized_md(md_list, localized_md_list, _format_model_list)
-
-        converted_md_lists.append((filename, readmes_match, converted_md_list, _start_prompt, _end_prompt))
-
-    # Compare the converted Markdowns
-    for converted_md_list in converted_md_lists:
-        filename, readmes_match, converted_md, _start_prompt, _end_prompt = converted_md_list
-
-        if filename == "README.md":
-            continue
-        if overwrite:
-            _, start_index, end_index, lines = _find_text_in_file(
-                filename=os.path.join(REPO_PATH, filename), start_prompt=_start_prompt, end_prompt=_end_prompt
-            )
-            with open(os.path.join(REPO_PATH, filename), "w", encoding="utf-8", newline="\n") as f:
-                f.writelines(lines[:start_index] + [converted_md] + lines[end_index:])
-        elif not readmes_match:
-            raise ValueError(
-                f"The model list in the README changed and the list in `{filename}` has not been updated. Run "
-                "`make fix-copies` to fix this."
-            )
 
 
 # Map a model name with the name it has in the README for the check_readme check
