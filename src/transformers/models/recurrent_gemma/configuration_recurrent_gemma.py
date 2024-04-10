@@ -70,8 +70,6 @@ class RecurrentGemmaConfig(PretrainedConfig):
             End of stream token id.
         bos_token_id (`int`, *optional*, defaults to 2):
             Beginning of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
         hidden_activation (``str` or `function``, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The hidden activation used in the recurrent block as well as the MLP layer of the decoder layers.
         partial_rotary_factor (`float`, *optional*, defaults to 0.5):
@@ -115,7 +113,6 @@ class RecurrentGemmaConfig(PretrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         bos_token_id=2,
-        tie_word_embeddings=True,
         hidden_activation="gelu_pytorch_tanh",
         partial_rotary_factor=0.5,
         rope_theta=10000.0,
@@ -153,7 +150,6 @@ class RecurrentGemmaConfig(PretrainedConfig):
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
 
