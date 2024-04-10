@@ -517,11 +517,9 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
             )
         )
         # Create inputs
-        prompts = [
-            [image1, "In this image, we see"],
-            ["bla, bla", image2, image3],
-        ]
-        inputs = self.processor(prompts, return_tensors="pt", padding=True)
+        text = ["<image>In this image, we see", "bla, bla <image><image>"]
+        images = [[image1], [image2, image3]]
+        inputs = self.processor(text=text, images=images, return_tensors="pt", padding=True)
         inputs.to(torch_device)
 
         generated_ids = model.generate(**inputs, bad_words_ids=self.processor.bad_words_ids, max_new_tokens=10)
@@ -545,8 +543,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ).content
             )
         )
-        prompts = [image1, "In this image, we see"]
-        inputs = self.processor(prompts, return_tensors="pt")
+        inputs = self.processor(text="<image>In this image we wee", images=image1, return_tensors="pt")
 
         generated_ids = model.generate(**inputs, bad_words_ids=self.processor.bad_words_ids, max_new_tokens=10)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
