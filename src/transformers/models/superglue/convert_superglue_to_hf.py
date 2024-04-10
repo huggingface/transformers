@@ -12,21 +12,19 @@ from transformers import (
     AutoImageProcessor,
     AutoModelForKeypointDetection,
     SuperGlueConfig,
-    SuperGlueModel,
+    SuperGlueForImageMatching,
 )
 from transformers.models.superglue.modeling_superglue import ImageMatchingOutput
 from transformers.models.superpoint.modeling_superpoint import ImagePointDescriptionOutput
 
 
 def get_superglue_config():
-    keypoint_detection_config = AutoConfig.from_pretrained("magic-leap-community/superpoint")
     config = SuperGlueConfig(
         descriptor_dim=256,
         keypoint_encoder_sizes=[32, 64, 128, 256],
         gnn_layers_types=["self", "cross"] * 9,
         sinkhorn_iterations=100,
         matching_threshold=0.2,
-        keypoint_detector_config=keypoint_detection_config,
     )
 
     return config
@@ -79,12 +77,23 @@ def create_rename_keys(config, state_dict):
                             f"gnn.layers.{i}.mlp.layers.{j}.num_batches_tracked",
                         )
                     )
+
+    # final projection
+    rename_keys.append(("final_proj.weight", "final_projection.final_proj.weight"))
+    rename_keys.append(("final_proj.bias", "final_projection.final_proj.bias"))
+
     return rename_keys
 
 
 def rename_key(dct, old, new):
     val = dct.pop(old)
     dct[new] = val
+
+
+def add_keypoint_detector_state_dict(superglue_state_dict, keypoint_detector_state_dict):
+    for k, v in keypoint_detector_state_dict.items():
+        superglue_state_dict[f"keypoint_detector.{k}"] = v
+    return superglue_state_dict
 
 
 def process_resize(w, h, resize):
@@ -164,52 +173,39 @@ def convert_superglue_checkpoint(checkpoint_url, pytorch_dump_folder_path, save_
     TODO docs
     """
 
-    print("Downloading original model from checkpoint...")
-    config = get_superglue_config()
+    keypoint_detector_config = AutoConfig.from_pretrained("magic-leap-community/superpoint")
+    superglue_config = get_superglue_config()
+    superglue_config.keypoint_detector_config = keypoint_detector_config
 
-    original_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)
+    keypoint_detector = AutoModelForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
+    keypoint_detector.to("cuda")
+    keypoint_detector.eval()
+    keypoint_detector_state_dict = keypoint_detector.state_dict()
+
+    print("Downloading original model from checkpoint...")
+    original_superglue_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)
 
     print("Converting model parameters...")
-    rename_keys = create_rename_keys(config, original_state_dict)
-    new_state_dict = original_state_dict.copy()
+    rename_keys = create_rename_keys(superglue_config, original_superglue_state_dict)
+    new_superglue_state_dict = original_superglue_state_dict.copy()
     for src, dest in rename_keys:
-        rename_key(new_state_dict, src, dest)
+        rename_key(new_superglue_state_dict, src, dest)
+    new_superglue_state_dict = add_keypoint_detector_state_dict(new_superglue_state_dict, keypoint_detector_state_dict)
 
-    model = SuperGlueModel(config)
-    model.load_state_dict(new_state_dict)
+    model = SuperGlueForImageMatching(superglue_config)
+    model.load_state_dict(new_superglue_state_dict, strict=True, assign=True)
     model.to("cuda")
     model.eval()
     print("Successfully loaded weights in the model")
-
-    keypoint_detector = AutoModelForKeypointDetection.from_config(config.keypoint_detector_config)
-    keypoint_detector.to("cuda").eval()
 
     ## USE REGULAR IMAGE PROCESSOR FOR INFERENCE
     images = prepare_imgs_for_image_processor()
     preprocessor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
     inputs = preprocessor(images=images, return_tensors="pt")
     inputs.to("cuda")
-    keypoint_detection_output: ImagePointDescriptionOutput = keypoint_detector(**inputs, return_dict=True)
 
-    _, _, height, width = inputs.data["pixel_values"].shape
-    keypoints0, descriptors0, scores0 = extract_keypoint_information_from_image_point_description_output(
-        keypoint_detection_output, 0
-    )
-    keypoints1, descriptors1, scores1 = extract_keypoint_information_from_image_point_description_output(
-        keypoint_detection_output, 1
-    )
+    output = model(**inputs, return_dict=True)
 
-    output: ImageMatchingOutput = model(
-        image0_keypoints=keypoints0,
-        image0_descriptors=descriptors0,
-        image0_scores=scores0,
-        image1_keypoints=keypoints1,
-        image1_descriptors=descriptors1,
-        image1_scores=scores1,
-        height=height,
-        width=width,
-        return_dict=True,
-    )
     print("Number of matching keypoints using image processor")
     print(torch.sum(output.image0_matches != -1))
     print(torch.sum(output.image1_matches != -1))
@@ -246,7 +242,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint_url",
-        default="https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/models/weights/superglue_indoor.pth",
+        default="https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/models/weights/superglue_outdoor.pth",
         type=str,
         help="URL of the original SuperGlue checkpoint you'd like to convert.",
     )
