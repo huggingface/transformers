@@ -1160,60 +1160,11 @@ README_TEMPLATE = (
 )
 
 
-def check_readme(overwrite: bool = False):
-    """
-    Check if the main README contains all the models in the library or not.
-
-    Args:
-        overwrite (`bool`, *optional*, defaults to `False`):
-            Whether or not to add an entry for the missing models using `README_TEMPLATE`.
-    """
-    info = LOCALIZED_READMES["README.md"]
-    models, start_index, end_index, lines = _find_text_in_file(
-        os.path.join(REPO_PATH, "README.md"),
-        info["start_prompt"],
-        info["end_prompt"],
-    )
-    models_in_readme = [re.search(r"\*\*\[([^\]]*)", line).groups()[0] for line in models.strip().split("\n")]
-
-    model_names_mapping = transformers_module.models.auto.configuration_auto.MODEL_NAMES_MAPPING
-    absents = [
-        (key, name)
-        for key, name in model_names_mapping.items()
-        if SPECIAL_MODEL_NAMES.get(name, name) not in models_in_readme
-    ]
-    # Remove exceptions
-    absents = [(key, name) for key, name in absents if name not in MODELS_NOT_IN_README]
-    if len(absents) > 0 and not overwrite:
-        print(absents)
-        raise ValueError(
-            "The main README doesn't contain all models, run `make fix-copies` to fill it with the missing model(s)"
-            " then complete the generated entries.\nIf the model is not supposed to be in the main README, add it to"
-            " the list `MODELS_NOT_IN_README` in utils/check_copies.py.\nIf it has a different name in the repo than"
-            " in the README, map the correspondence in `SPECIAL_MODEL_NAMES` in utils/check_copies.py."
-        )
-
-    new_models = [README_TEMPLATE.format(model_name=name, model_type=key) for key, name in absents]
-
-    all_models = models.strip().split("\n") + new_models
-    all_models = sorted(all_models, key=lambda x: re.search(r"\*\*\[([^\]]*)", x).groups()[0].lower())
-    all_models = "\n".join(all_models) + "\n"
-
-    if all_models != models:
-        if overwrite:
-            print("Fixing the main README.")
-            with open(os.path.join(REPO_PATH, "README.md"), "w", encoding="utf-8", newline="\n") as f:
-                f.writelines(lines[:start_index] + [all_models] + lines[end_index:])
-        else:
-            raise ValueError("The main README model list is not properly sorted. Run `make fix-copies` to fix this.")
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--file", type=str, default=None, help="A specific file to check and/or fix")
     parser.add_argument("--fix_and_overwrite", action="store_true", help="Whether to fix inconsistencies.")
     args = parser.parse_args()
 
-    check_readme(args.fix_and_overwrite)
     check_copies(args.fix_and_overwrite, args.file)
     check_full_copies(args.fix_and_overwrite)
