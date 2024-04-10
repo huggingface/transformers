@@ -70,7 +70,7 @@ class Idefics2ProcessorTest(unittest.TestCase):
 
         # fmt: off
         tokenized_sentence = self.processor.tokenizer(text_str, add_special_tokens=False)
-        expected_input_ids = [[self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len) + [self.fake_image_token_id] + tokenized_sentence["input_ids"]]
+        expected_input_ids = [[self.bos_token_id] + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id] + tokenized_sentence["input_ids"]]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids[0])])
         self.assertEqual(inputs["pixel_values"].shape, (1, 1, 3, 653, 980))
@@ -93,8 +93,8 @@ class Idefics2ProcessorTest(unittest.TestCase):
         # fmt: off
         tokenized_sentence_1 = self.processor.tokenizer(text_str_1, add_special_tokens=False)
         tokenized_sentence_2 = self.processor.tokenizer(text_str_2, add_special_tokens=False)
-        expected_input_ids_1 = [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id] + tokenized_sentence_1["input_ids"]
-        expected_input_ids_2 = tokenized_sentence_2["input_ids"] + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id]
+        expected_input_ids_1 = [self.bos_token_id] + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id] + tokenized_sentence_1["input_ids"]
+        expected_input_ids_2 = [self.bos_token_id] + tokenized_sentence_2["input_ids"] + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id]
         # Pad the first input to match the second input
         pad_len = len(expected_input_ids_2) - len(expected_input_ids_1)
         padded_expected_input_ids_1 = [0] * pad_len + expected_input_ids_1
@@ -114,14 +114,14 @@ class Idefics2ProcessorTest(unittest.TestCase):
         image_str = "<image>"
         text_str = "In this image, we see"
         text = text_str + image_str
-        inputs = self.processor(text=text, images=self.image1)
 
         # fmt: off
+        inputs = self.processor(text=text, images=self.image1, add_special_tokens=False)
         tokenized_sentence = self.processor.tokenizer(text_str, add_special_tokens=False)
         expected_input_ids = [tokenized_sentence["input_ids"] + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id]]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
 
-        inputs = self.processor(text=text, images=self.image1, add_special_tokens=True)
+        inputs = self.processor(text=text, images=self.image1)
         expected_input_ids = [[self.bos_token_id] + tokenized_sentence["input_ids"] + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id]]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         # fmt: on
@@ -155,7 +155,7 @@ class Idefics2ProcessorTest(unittest.TestCase):
         rendered = processor.apply_chat_template(messages, add_generation_prompt=True)
 
         expected_rendered = (
-            "<s>User: What do these images show?<image><image><end_of_utterance>\n"
+            "User: What do these images show?<image><image><end_of_utterance>\n"
             "Assistant: The first image shows the statue of Liberty in New York. The second image picture depicts Idefix, the dog of Obelix in Asterix and Obelix.<end_of_utterance>\n"
             "User: And who is that?<end_of_utterance>\n"
             "Assistant:"

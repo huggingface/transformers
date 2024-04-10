@@ -148,14 +148,11 @@ class Idefics2Processor(ProcessorMixin):
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         is_split_into_words: bool = False,
-        add_special_tokens: bool = False,
+        add_special_tokens: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ) -> BatchEncoding:
         """
         Processes the input prompts and returns a BatchEncoding.
-
-        Note: By default, the processor assumes you have added any special tokens to the text before calling this method.
-        For example, the start of sentence token, <s>.
 
         Example:
 
@@ -365,7 +362,6 @@ class Idefics2Processor(ProcessorMixin):
         """
         # fmt: off
         return (
-            "{{ bos_token }}"
             "{% for message in messages %}"
                 "{{message['role'].capitalize()}}"
                 "{% if message['content'][0]['type'] == 'image' %}"
