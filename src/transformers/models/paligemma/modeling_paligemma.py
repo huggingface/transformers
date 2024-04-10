@@ -45,11 +45,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PaLIGemmaConfig"
 
-PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Molbap/model7",
-    # See all PaLIGemmamodels at https://huggingface.co/models?filter=paligemma
-]
-
 @dataclass
 class PaLIGemmaCausalLMOutputWithPast(ModelOutput):
     """
@@ -272,44 +267,38 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
+
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
-        _, num_image_tokens, embed_dim = image_features.shape
+        _, _, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
-
-        full_sequence_length = num_image_tokens + sequence_length
-        final_embedding = torch.zeros(batch_size, full_sequence_length, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device)
-        final_attention_mask_4d = torch.zeros(batch_size, 1, full_sequence_length, full_sequence_length, dtype=torch.float32, device=inputs_embeds.device)
-        position_ids = torch.ones(batch_size, full_sequence_length, dtype=torch.long, device=inputs_embeds.device) # Reflect padding tokens
-
+        scaled_image_features = image_features /  (self.config.hidden_size ** 0.5)
+        final_embedding = torch.zeros(batch_size, sequence_length, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device)
         if labels is not None:
-            final_labels = torch.full((batch_size, full_sequence_length), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device)
+            final_labels = torch.full((batch_size, sequence_length), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device)
         else:
             final_labels = None
 
-        pad_token_id = self.pad_token_id
-        batch_is_left_padded = (input_ids[:, 0] == pad_token_id).any()
+        text_mask = (input_ids != self.config.image_token_index) & (input_ids != self.pad_token_id)
+        image_mask = (input_ids == self.config.image_token_index)
+        pad_mask = (input_ids == self.pad_token_id)
 
-        for i in range(batch_size):
-            # TODO vectorize the ugliness below, lest in drags you in the abyss whence it came from
-            text_tokens_mask = attention_mask[i] > 0
-            num_text_tokens = text_tokens_mask.sum().item()
-            scaled_image_features = image_features[i] / (self.config.hidden_size ** 0.5)
-            if batch_is_left_padded:
-                num_padding_tokens = sequence_length - num_text_tokens
-                text_start_index = num_image_tokens + num_padding_tokens
-                final_embedding[i, num_padding_tokens:num_padding_tokens + num_image_tokens] = scaled_image_features
-                final_embedding[i, text_start_index:text_start_index + num_text_tokens] = inputs_embeds[i][text_tokens_mask]
-                position_ids[i, num_padding_tokens:num_padding_tokens + num_image_tokens + num_text_tokens] = torch.arange(1, num_image_tokens + num_text_tokens + 1, device=inputs_embeds.device)
-                final_attention_mask_4d[i, :, num_padding_tokens:num_image_tokens +num_text_tokens +num_padding_tokens, num_padding_tokens:num_padding_tokens + num_image_tokens + num_text_tokens] = 1
-                if labels is not None:
-                    final_labels[i, num_padding_tokens + num_image_tokens:] = labels[i]
-            else:
-                final_embedding[i, :num_image_tokens] = scaled_image_features
-                final_embedding[i, num_image_tokens:num_image_tokens + num_text_tokens] = inputs_embeds[i][text_tokens_mask]
-                position_ids[i, :num_image_tokens + num_text_tokens] = torch.arange(1, num_image_tokens + num_text_tokens + 1, device=inputs_embeds.device)
-                final_attention_mask_4d[i, :, :num_image_tokens + num_text_tokens, :num_image_tokens + num_text_tokens] = 1
-                if labels is not None:
-                    final_labels[i, num_image_tokens:num_image_tokens + num_text_tokens] = labels[i]
+        # expand masks to match embedding dimension
+        text_mask_expanded = text_mask.unsqueeze(-1).expand(-1, -1, embed_dim)
+        pad_mask_expanded = pad_mask.unsqueeze(-1).expand(-1, -1, embed_dim)
+        # insert padding and text token embeddings
+        final_embedding = torch.where(text_mask_expanded, inputs_embeds, final_embedding)
+        final_embedding = torch.where(pad_mask_expanded, torch.zeros_like(final_embedding), final_embedding)
+        # insert image embeddings - the image mask is always less or equal to the sentence in length
+        final_embedding = final_embedding.masked_scatter(image_mask.unsqueeze(-1).expand_as(final_embedding), scaled_image_features)
+        final_embedding = torch.where(pad_mask_expanded, torch.zeros_like(final_embedding), final_embedding)
+
+        final_attention_mask_4d = attention_mask.unsqueeze(1).unsqueeze(2) * attention_mask.unsqueeze(1).unsqueeze(-1)
+        final_attention_mask_4d = final_attention_mask_4d.float().expand(-1, self.config.text_config.num_key_value_heads, -1, -1)
+
+        position_ids = torch.arange(1, sequence_length + 1, device=input_ids.device).expand(batch_size, -1)
+        position_ids = torch.where(input_ids == self.pad_token_id, torch.zeros_like(input_ids), position_ids)
+        if labels is not None:
+            final_labels = torch.where(input_ids != self.pad_token_id, labels, final_labels)
         return final_embedding, final_attention_mask_4d, final_labels, position_ids
 
     @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
@@ -358,6 +347,15 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "answer en Where is the cow standing?\nbeach"
         ```"""
+
+        if input_ids is not None:
+            batch_size, seq_length = input_ids.shape
+        elif inputs_embeds is not None:
+            batch_size, seq_length, _ = inputs_embeds.shape
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds.")
+
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -373,11 +371,16 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
                 image_outputs = self.vision_tower(pixel_values)
                 selected_image_feature = image_outputs.last_hidden_state
                 image_features = self.multi_modal_projector(selected_image_feature)
+               
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, labels
                 )
+                              
                 if labels is None:
-                    batch_size, sequence_length = attention_mask.size(0), attention_mask.size(2)
+                    if attention_mask.dim() == 4:
+                        batch_size, sequence_length = attention_mask.size(0), attention_mask.size(2)
+                    elif attention_mask.dim() == 2:
+                        batch_size, sequence_length = attention_mask.size(0), attention_mask.size(1)
                     labels = torch.full((batch_size, sequence_length), self.config.ignore_index, dtype=torch.long).to(attention_mask.device)
             else:
                 # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
@@ -411,7 +414,6 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
 
                     attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
-
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -427,16 +429,16 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
         # in order to recover token-to-predict logits. 
         logits = outputs[0]
         loss = None
-
         # ----- slice / repeat logits -----
-
+        # TODO this depends on input_ids existing, which might not be the case. 
+        # padding should be detected with another method.
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
         # we know if the batch is left padded or not
         # logits and labels need to be sliced/padding logits need to be ignored
         # rather, last logit should be repeated last valid logit, not pad token logit over and over
         if attention_mask.dim() == 4:
             # this is to identify input phase
-            # else, we are in the cached situation and don't need to slice 
+            # else, we are in the cached situation and don't need to slice as just 1 token is passed
             attention_mask_2d = attention_mask[:, 0, -1] if left_padding else attention_mask[:, 0, 0]
             last_valid_indices = attention_mask_2d.sum(dim=1).int() -1
             batch_indices = torch.arange(logits.size(0), device=logits.device)
@@ -445,22 +447,20 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
             padding_mask = attention_mask_2d == 0
             updated_logits = torch.where(padding_mask.unsqueeze(-1), expanded_selected_logits, logits)       
             logits = updated_logits
-        
         # -----  end slice   -----      
-
-        
         if labels is not None:
-            # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :] 
             shift_labels = labels[..., 1:]
             if attention_mask is not None:
-                if not left_padding:
-                    # Use input first or last row of attention mask to remove unwanted logits
-                    validity_mask = attention_mask[:, 0, 0, :-1].squeeze(1).bool()
-                else:
-                    validity_mask = attention_mask[:, 0, -1, :-1].squeeze(1).bool()
-                shift_logits = shift_logits[validity_mask].contiguous()
-                shift_labels = shift_labels[validity_mask].contiguous()
+                if attention_mask.dim() == 4:
+                    # take top or bottom row of the 4d mask.
+                    # this should only be used in the initial pass with full attention on prefix.
+                    shift_attention_mask = attention_mask[:, 0, 0, :-1].squeeze(1) if not left_padding else attention_mask[:, 0, -1, :-1].squeeze(1) 
+                elif attention_mask.dim() == 2:
+                    # take normal slice of the attn mask
+                    shift_attention_mask = attention_mask[..., 1:]                
+                shift_logits = shift_logits[shift_attention_mask.to(logits.device) != 0].contiguous()
+                shift_labels = shift_labels[shift_attention_mask.to(logits.device) != 0].contiguous()
             else:
                 shift_logits = shift_logits.contiguous()
                 shift_labels = shift_labels.contiguous()
@@ -504,8 +504,8 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
             # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
             # input_ids based on the past_length.
             # here we need to recall past_length is num_image_tokens + previous input_ids.
-            elif past_length < input_ids.shape[1] + self.config.text_config.num_image_tokens:
-                input_ids = input_ids[:, past_length - self.config.text_config.num_image_tokens:]
+            elif past_length < input_ids.shape[1]:
+                input_ids = input_ids[:, past_length:]
             # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
             elif self.config.image_token_index in input_ids:
                 input_ids = input_ids[:, input_ids.shape[1] - 1 :]
