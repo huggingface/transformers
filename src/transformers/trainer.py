@@ -205,6 +205,7 @@ if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
     from accelerate import __version__ as accelerate_version
     from accelerate.utils import (
+        AutocastKwargs,
         DistributedDataParallelKwargs,
         DistributedType,
         GradientAccumulationPlugin,
@@ -3092,8 +3093,11 @@ class Trainer:
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
         arguments, depending on the situation.
         """
+        # Accelerate doesn't support this yet, so check it explicitly
         if self.use_cpu_amp:
             ctx_manager = torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
+        elif self.accelerator is not None:
+            ctx_manager = self.accelerator.autocast(autocast_handler=AutocastKwargs(cache_enabled=cache_enabled))
         else:
             ctx_manager = contextlib.nullcontext()
 
