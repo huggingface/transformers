@@ -52,7 +52,6 @@ class RecurrentGemmaConfig(PretrainedConfig):
             Dimension of the hidden representations of the RG-LRU. If `None`
             this will be set to `hidden_size`.
             Whether to scale the output of the embeddings by `sqrt(hidden_size)`.
-        embeddings_scale_by_sqrt_dim (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         attention_window_size (`int`, *optional*, defaults to 2048):
             The size of the attention window used in the attention block.
         conv1d_width (`int`, *optional*, defaults to 4):
@@ -79,11 +78,12 @@ class RecurrentGemmaConfig(PretrainedConfig):
             The partial rotary factor used in the initialization of the rotary embeddings.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        block_types (`<fill_type>`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`): <fill_docstring>
-        attention_dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
-        num_key_value_heads (`<fill_type>`, *optional*, defaults to 16): <fill_docstring>
-        attention_bias (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        w_init_variance_scale (`<fill_type>`, *optional*, defaults to 0.01): <fill_docstring>
+        block_types (`List[str]`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`):
+            List of aleternating blocks that will be repeated to initialize the `temporal_block` layer.
+        attention_dropout (`float`, *optional*, defaults to 0.0): dropout value to use after the attention softmax.
+        num_key_value_heads (`16`, *optional*, defaults to 16): Number of key value heads to use GQA.
+        attention_bias (`bool`, *optional*, defaults to `False`): whether or not the linear q,k,v of the Attention layer should have bias
+        w_init_variance_scale (`float`, *optional*, defaults to 0.01): weight initialization variance.
     ```python
     >>> from transformers import RecurrentGemmaModel, RecurrentGemmaConfig
 
@@ -107,7 +107,6 @@ class RecurrentGemmaConfig(PretrainedConfig):
         intermediate_size=3 * 2560,
         num_attention_heads=10,
         lru_width=None,
-        embeddings_scale_by_sqrt_dim=True,
         attention_window_size=2048,
         conv1d_width=4,
         logits_soft_cap=30.0,
@@ -133,7 +132,6 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_attention_heads = num_attention_heads
         self.lru_width = lru_width if lru_width is not None else hidden_size
-        self.embeddings_scale_by_sqrt_dim = embeddings_scale_by_sqrt_dim
         self.attention_window_size = attention_window_size
         self.conv1d_width = conv1d_width
         self.logits_soft_cap = logits_soft_cap
