@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Databricks Mosaic Research and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 Databricks Mosaic Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -716,11 +716,11 @@ class DbrxRouter(nn.Module):
 
         self.layer = nn.Linear(self.hidden_size, self.moe_num_experts, bias=False)
 
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]:
+    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]:
         if self.training and self.moe_jitter_eps is not None:
-            x *= torch.empty_like(x).uniform_(1.0 - self.moe_jitter_eps, 1.0 + self.moe_jitter_eps)
-
-        weights = self.layer(x.view(-1, x.shape[-1])).softmax(dim=-1, dtype=torch.float32)
+            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.moe_jitter_eps, 1.0 + self.moe_jitter_eps)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        weights = self.layer(hidden_states).softmax(dim=-1, dtype=torch.float32)
         top_weights, top_experts = torch.topk(weights, self.moe_top_k, dim=-1)
 
         if self.moe_normalize_expert_weights:
@@ -795,8 +795,8 @@ class DbrxExperts(nn.Module):
             if token_idx.shape[0] == 0:
                 continue
 
-            token_list = token_idx.tolist()
-            topk_list = topk_idx.tolist()
+            token_list = token_idx
+            topk_list = topk_idx
 
             expert_tokens = x[None, token_list].reshape(-1, hidden_size)
             expert_out = self.mlp(expert_tokens, expert_idx) * top_weights[token_list, topk_list, None]
