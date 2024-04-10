@@ -1072,7 +1072,7 @@ class MLflowCallback(TrainerCallback):
                 if isinstance(v, (int, float)):
                     metrics[k] = v
                 elif isinstance(v, torch.Tensor) and v.numel() == 1:
-                   metrics[k] = v.item()
+                    metrics[k] = v.item()
                 else:
                     logger.warning(
                         f'Trainer is attempting to log a value of "{v}" of type {type(v)} for key "{k}" as a metric. '
