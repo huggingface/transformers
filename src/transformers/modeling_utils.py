@@ -374,9 +374,7 @@ def shard_checkpoint(
             storage_id = id_tensor_storage(weight)
 
         # If a `weight` shares the same underlying storage as another tensor, we put `weight` in the same `block`
-        # unless if is a 'meta' parameter tensor
-        # TODO: find_tied_parameters() check to replace meta device workaround
-        if storage_id in storage_id_to_block and weight.device != torch.device("meta"):
+        if storage_id in storage_id_to_block:
             block_id = storage_id_to_block[storage_id]
             sharded_state_dicts[block_id][key] = weight
             continue
