@@ -217,10 +217,12 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         return attn_output
 
     def _setup_cache(self, batch_size, device, dtype=None):
-        self.dtype = dtype if dtype is not None else torch.float32
+        if dtype is None and self.config.torch_dtype is not None:
+            dtype = self.config.torch_dtype
+        dtype = dtype if dtype is not None else torch.float32
         cache_shape = (batch_size, self.num_key_value_heads, self.config.attention_window_size, self.head_dim)
-        self.value_states = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-        self.key_states = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+        self.value_states = torch.zeros(cache_shape, dtype=dtype, device=device)
+        self.key_states = torch.zeros(cache_shape, dtype=dtype, device=device)
 
     @torch.no_grad()
     def _update_cache(self, key_states, value_states, **cache_kwargs):
@@ -450,6 +452,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         return hidden_states
 
     def _setup_cache(self, batch, device, dtype):
+        # recurrent_states always computed in full precision
         self.rg_lru.recurrent_states = torch.zeros((batch, self.lru_width), device=device, dtype=torch.float32)
         self.conv1d_state = torch.zeros((batch, self.hidden_size, self.conv1d_width - 1), device=device, dtype=dtype)
 
