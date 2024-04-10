@@ -216,93 +216,17 @@ class SuperGlueAttentionalGNN(nn.Module):
         return descriptors_0, descriptors_1
 
 
-class SuperGlue(nn.Module):
-    """SuperGlue feature matching middle-end
-
-    Given two sets of keypoints and locations, we determine the
-    correspondences by:
-      1. Keypoint Encoding (normalization + visual feature and location fusion)
-      2. Graph Neural Network with multiple self and cross-attention layers
-      3. Final projection layer
-      4. Optimal Transport Layer (a differentiable Hungarian matching algorithm)
-      5. Thresholding matrix based on mutual exclusivity and a match_threshold
-
-    The correspondence ids use -1 to indicate non-matching points.
-
-    Paul-Edouard Sarlin, Daniel DeTone, Tomasz Malisiewicz, and Andrew
-    Rabinovich. SuperGlue: Learning Feature Matching with Graph Neural
-    Networks. In CVPR, 2020. https://arxiv.org/abs/1911.11763
-
-    """
-
+class SuperGlueFinalProjection(nn.Module):
     def __init__(
-        self,
-        config: SuperGlueConfig,
+            self,
+            config: SuperGlueConfig,
     ):
         super().__init__()
-
-        self.keypoint_encoder = SuperGlueKeypointEncoder(config)
-        self.gnn = SuperGlueAttentionalGNN(config)
-
         self.descriptor_dim = config.descriptor_dim
         self.final_proj = nn.Conv1d(self.descriptor_dim, self.descriptor_dim, kernel_size=1, bias=True)
 
-        bin_score = torch.nn.Parameter(torch.tensor(1.0))
-        self.register_parameter("bin_score", bin_score)
-
-        self.matching_threshold = config.matching_threshold
-
-    def forward(
-        self,
-        keypoints_0: Tensor,
-        scores_0: Tensor,
-        descriptors_0: Tensor,
-        keypoints_1: Tensor,
-        scores_1: Tensor,
-        descriptors_1: Tensor,
-    ):
-        """Run SuperGlue on a pair of keypoints and descriptors"""
-        if keypoints_0.shape[1] == 0 or keypoints_1.shape[1] == 0:  # no keypoints
-            shape0, shape1 = keypoints_0.shape[:-1], keypoints_1.shape[:-1]
-            return (
-                keypoints_0.new_full(shape0, -1, dtype=torch.int),
-                keypoints_1.new_full(shape1, -1, dtype=torch.int),
-                keypoints_0.new_zeros(shape0),
-                keypoints_1.new_zeros(shape1),
-            )
-
-        # Keypoint MLP encoder.
-        descriptors_0 = descriptors_0 + self.keypoint_encoder(keypoints_0, scores_0)
-        descriptors_1 = descriptors_1 + self.keypoint_encoder(keypoints_1, scores_1)
-
-        # Multi-layer Transformer network.
-        descriptors_0, descriptors_1 = self.gnn(descriptors_0, descriptors_1)
-
-        # Final MLP projection.
-        projected_descriptors_0 = self.final_proj(descriptors_0)
-        projected_descriptors_1 = self.final_proj(descriptors_1)
-
-        # Compute matching descriptor distance.
-        scores = torch.einsum("bdn,bdm->bnm", projected_descriptors_0, projected_descriptors_1)
-        scores = scores / self.descriptor_dim**0.5
-
-        # Run the optimal transport.
-        scores = self.log_optimal_transport(scores, self.bin_score, iters=self.sinkhorn_iterations)
-
-        # Get the matches with score above "match_threshold".
-        max0, max1 = scores[:, :-1, :-1].max(2), scores[:, :-1, :-1].max(1)
-        indices0, indices1 = max0.indices, max1.indices
-        mutual0 = self.arange_like(indices0, 1)[None] == indices1.gather(1, indices0)
-        mutual1 = self.arange_like(indices1, 1)[None] == indices0.gather(1, indices1)
-        zero = scores.new_tensor(0)
-        matching_scores_0 = torch.where(mutual0, max0.values.exp(), zero)
-        matching_scores_1 = torch.where(mutual1, matching_scores_0.gather(1, indices1), zero)
-        valid0 = mutual0 & (matching_scores_0 > self.matching_threshold)
-        valid1 = mutual1 & valid0.gather(1, indices1)
-        matches_0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
-        matches_1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
-
-        return matches_0, matches_1, matching_scores_0, matching_scores_1
+    def forward(self, descriptors: torch.Tensor) -> torch.Tensor:
+        return self.final_proj(descriptors)
 
 
 class SuperGluePreTrainedModel(PreTrainedModel):
@@ -355,112 +279,41 @@ SUPERGLUE_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The SuperGlue core model taking keypoints with their descriptors and scores as input and outputting keypoint matching information.",
-    SUPERGLUE_INPUTS_DOCSTRING,
+    "SuperGlue model taking images as inputs and outputting the matching of them.",
+    SUPERGLUE_START_DOCSTRING,
 )
-class SuperGlueModel(SuperGluePreTrainedModel):
+class SuperGlueForImageMatching(SuperGluePreTrainedModel):
+    """SuperGlue feature matching middle-end
+
+    Given two sets of keypoints and locations, we determine the
+    correspondences by:
+      1. Keypoint Encoding (normalization + visual feature and location fusion)
+      2. Graph Neural Network with multiple self and cross-attention layers
+      3. Final projection layer
+      4. Optimal Transport Layer (a differentiable Hungarian matching algorithm)
+      5. Thresholding matrix based on mutual exclusivity and a match_threshold
+
+    The correspondence ids use -1 to indicate non-matching points.
+
+    Paul-Edouard Sarlin, Daniel DeTone, Tomasz Malisiewicz, and Andrew
+    Rabinovich. SuperGlue: Learning Feature Matching with Graph Neural
+    Networks. In CVPR, 2020. https://arxiv.org/abs/1911.11763
+
+    """
+
     def __init__(self, config: SuperGlueConfig):
         super().__init__(config)
 
+        self.keypoint_detector = AutoModelForKeypointDetection.from_config(config.keypoint_detector_config)
+
         self.keypoint_encoder = SuperGlueKeypointEncoder(config)
         self.gnn = SuperGlueAttentionalGNN(config)
-
-        self.final_proj = nn.Conv1d(config.descriptor_dim, config.descriptor_dim, kernel_size=1, bias=True)
+        self.final_projection = SuperGlueFinalProjection(config)
 
         bin_score = torch.nn.Parameter(torch.tensor(1.0))
         self.register_parameter("bin_score", bin_score)
 
     @add_start_docstrings_to_model_forward(SUPERGLUE_INPUTS_DOCSTRING)
-    def forward(
-        self,
-        image0_keypoints: torch.Tensor = None,
-        image0_descriptors: torch.Tensor = None,
-        image0_scores: torch.Tensor = None,
-        image1_keypoints: torch.Tensor = None,
-        image1_descriptors: torch.Tensor = None,
-        image1_scores: torch.Tensor = None,
-        height: int = None,
-        width: int = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ImageMatchingOutput]:
-        # TODO documentation example
-
-        if image0_keypoints.shape[1] == 0 or image1_keypoints.shape[1] == 0:  # no keypoints
-            shape0, shape1 = image0_keypoints.shape[:-1], image1_keypoints.shape[:-1]
-            return (
-                image0_keypoints.new_full(shape0, -1, dtype=torch.int),
-                image1_keypoints.new_full(shape1, -1, dtype=torch.int),
-                image0_keypoints.new_zeros(shape0),
-                image1_keypoints.new_zeros(shape1),
-            )
-
-        descriptors_0 = torch.transpose(image0_descriptors, -1, -2)
-        descriptors_1 = torch.transpose(image1_descriptors, -1, -2)
-
-        # Keypoint normalization
-        keypoints0 = normalize_keypoints(image0_keypoints, height, width)
-        keypoints1 = normalize_keypoints(image1_keypoints, height, width)
-
-        # Keypoint MLP encoder.
-        descriptors_0 = descriptors_0 + self.keypoint_encoder(keypoints0, image0_scores)
-        descriptors_1 = descriptors_1 + self.keypoint_encoder(keypoints1, image1_scores)
-
-        # Multi-layer Transformer network.
-        descriptors_0, descriptors_1 = self.gnn(descriptors_0, descriptors_1)
-
-        # Final MLP projection.
-        projected_descriptors_0 = self.final_proj(descriptors_0)
-        projected_descriptors_1 = self.final_proj(descriptors_1)
-
-        # Compute matching descriptor distance.
-        scores = torch.einsum("bdn,bdm->bnm", projected_descriptors_0, projected_descriptors_1)
-        scores = scores / self.config.descriptor_dim**0.5
-
-        # Run the optimal transport.
-        scores = log_optimal_transport(scores, self.bin_score, iters=self.config.sinkhorn_iterations)
-
-        # Get the matches with score above "match_threshold".
-        max0, max1 = scores[:, :-1, :-1].max(2), scores[:, :-1, :-1].max(1)
-        indices0, indices1 = max0.indices, max1.indices
-        mutual0 = arange_like(indices0, 1)[None] == indices1.gather(1, indices0)
-        mutual1 = arange_like(indices1, 1)[None] == indices0.gather(1, indices1)
-        zero = scores.new_tensor(0)
-        matching_scores_0 = torch.where(mutual0, max0.values.exp(), zero)
-        matching_scores_1 = torch.where(mutual1, matching_scores_0.gather(1, indices1), zero)
-        valid0 = mutual0 & (matching_scores_0 > self.config.matching_threshold)
-        valid1 = mutual1 & valid0.gather(1, indices1)
-        matches_0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
-        matches_1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
-
-        if not return_dict:
-            return matches_0, matches_1, matching_scores_0, matching_scores_1
-
-        return ImageMatchingOutput(
-            image0_matches=matches_0,
-            image1_matches=matches_1,
-            image0_matching_scores=matching_scores_0,
-            image1_matching_scores=matching_scores_1,
-        )
-
-
-@add_start_docstrings(
-    "SuperGlue model taking images as inputs and outputting the matching of them.",
-    SUPERGLUE_START_DOCSTRING,
-)
-class SuperGlueForImageMatching(SuperGluePreTrainedModel):
-    # TODO documentation
-
-    def __init__(self, config: SuperGlueConfig):
-        super().__init__(config)
-
-        if config.keypoint_detector_config.name_or_path != "":
-            self.keypoint_detector = AutoModelForKeypointDetection.from_pretrained(
-                config.keypoint_detector_config.name_or_path
-            )
-        else:
-            self.keypoint_detector = AutoModelForKeypointDetection.from_config(config.keypoint_detector_config)
-        self.keypoint_matcher = SuperGlueModel(config)
-
     def forward(
         self,
         pixel_values: torch.FloatTensor = None,
@@ -487,13 +340,59 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
         image1_descriptors = torch.unsqueeze(keypoint_detection_output.descriptors[1][image1_indices], dim=0)
         image1_scores = torch.unsqueeze(keypoint_detection_output.scores[1][image1_indices], dim=0)
 
-        image_matching_output = self.keypoint_matcher(
-            image0_keypoints,
-            image0_descriptors,
-            image0_scores,
-            image1_keypoints,
-            image1_descriptors,
-            image1_scores,
-        )
+        if image0_keypoints.shape[1] == 0 or image1_keypoints.shape[1] == 0:  # no keypoints
+            shape0, shape1 = image0_keypoints.shape[:-1], image1_keypoints.shape[:-1]
+            return (
+                image0_keypoints.new_full(shape0, -1, dtype=torch.int),
+                image1_keypoints.new_full(shape1, -1, dtype=torch.int),
+                image0_keypoints.new_zeros(shape0),
+                image1_keypoints.new_zeros(shape1),
+            )
 
-        return image_matching_output
+        descriptors_0 = torch.transpose(image0_descriptors, -1, -2)
+        descriptors_1 = torch.transpose(image1_descriptors, -1, -2)
+
+        # Keypoint normalization
+        keypoints0 = normalize_keypoints(image0_keypoints, height, width)
+        keypoints1 = normalize_keypoints(image1_keypoints, height, width)
+
+        # Keypoint MLP encoder.
+        descriptors_0 = descriptors_0 + self.keypoint_encoder(keypoints0, image0_scores)
+        descriptors_1 = descriptors_1 + self.keypoint_encoder(keypoints1, image1_scores)
+
+        # Multi-layer Transformer network.
+        descriptors_0, descriptors_1 = self.gnn(descriptors_0, descriptors_1)
+
+        # Final MLP projection.
+        projected_descriptors_0 = self.final_projection(descriptors_0)
+        projected_descriptors_1 = self.final_projection(descriptors_1)
+
+        # Compute matching descriptor distance.
+        scores = torch.einsum("bdn,bdm->bnm", projected_descriptors_0, projected_descriptors_1)
+        scores = scores / self.config.descriptor_dim ** 0.5
+
+        # Run the optimal transport.
+        scores = log_optimal_transport(scores, self.bin_score, iters=self.config.sinkhorn_iterations)
+
+        # Get the matches with score above "match_threshold".
+        max0, max1 = scores[:, :-1, :-1].max(2), scores[:, :-1, :-1].max(1)
+        indices0, indices1 = max0.indices, max1.indices
+        mutual0 = arange_like(indices0, 1)[None] == indices1.gather(1, indices0)
+        mutual1 = arange_like(indices1, 1)[None] == indices0.gather(1, indices1)
+        zero = scores.new_tensor(0)
+        matching_scores_0 = torch.where(mutual0, max0.values.exp(), zero)
+        matching_scores_1 = torch.where(mutual1, matching_scores_0.gather(1, indices1), zero)
+        valid0 = mutual0 & (matching_scores_0 > self.config.matching_threshold)
+        valid1 = mutual1 & valid0.gather(1, indices1)
+        matches_0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
+        matches_1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
+
+        if not return_dict:
+            return matches_0, matches_1, matching_scores_0, matching_scores_1
+
+        return ImageMatchingOutput(
+            image0_matches=matches_0,
+            image1_matches=matches_1,
+            image0_matching_scores=matching_scores_0,
+            image1_matching_scores=matching_scores_1,
+        )
