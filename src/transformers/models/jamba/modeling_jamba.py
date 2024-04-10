@@ -689,7 +689,7 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         self.dtype = dtype
         self.seqlen_offset = 0  # only used by mamba, cache_positions otherwise
-        intermediate_size = config.intermediate_size
+        intermediate_size = config.mamba_expand * config.hidden_size
         ssm_state_size = config.mamba_d_state
         conv_kernel_size = config.mamba_d_conv
         self.conv_states = []
