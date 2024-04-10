@@ -71,7 +71,6 @@ from .models.auto.modeling_auto import (
 from .optimization import Adafactor, get_scheduler
 from .pytorch_utils import (
     ALL_LAYERNORM_LAYERS,
-    is_torch_greater_or_equal_than_1_12,
     is_torch_greater_or_equal_than_1_13,
 )
 from .tokenization_utils_base import PreTrainedTokenizerBase
@@ -3097,12 +3096,8 @@ class Trainer:
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
         arguments, depending on the situation.
         """
-        if (self.use_cuda_amp or self.use_cpu_amp) and is_torch_greater_or_equal_than_1_12:
-            ctx_manager = (
-                torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
-                if self.use_cpu_amp
-                else torch.cuda.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
-            )
+        if self.use_cpu_amp:
+            ctx_manager = torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
         elif self.accelerator is not None:
             ctx_manager = self.accelerator.autocast(autocast_handler=AutocastKwargs(cache_enabled=cache_enabled))
         else:
