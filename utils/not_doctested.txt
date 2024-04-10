@@ -768,6 +768,7 @@ src/transformers/models/rag/modeling_tf_rag.py
 src/transformers/models/rag/retrieval_rag.py
 src/transformers/models/realm/modeling_realm.py
 src/transformers/models/realm/retrieval_realm.py
+src/transformers/models/recurrent_gemma/modeling_recurrent_gemma.py
 src/transformers/models/reformer/convert_reformer_trax_checkpoint_to_pytorch.py
 src/transformers/models/regnet/configuration_regnet.py
 src/transformers/models/regnet/convert_regnet_seer_10b_to_pytorch.py
