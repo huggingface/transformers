@@ -35,10 +35,14 @@ from ...utils import (
 )
 from .configuration_dbrx import DbrxConfig
 
+
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import pad_input  # noqa
-    from flash_attn.bert_padding import index_first_axis, unpad_input
+    from flash_attn.bert_padding import (
+        index_first_axis,
+        pad_input,  # noqa
+        unpad_input,
+    )
 
 logger = logging.get_logger(__name__)
 
@@ -274,8 +278,9 @@ class DbrxAttention(nn.Module):
         bsz, q_len, _ = hidden_states.size()
 
         qkv_states = self.Wqkv(hidden_states)
-        if self.clip_qkv is not None:
-            qkv_states = qkv_states.clamp(min=-self.clip_qkv, max=self.clip_qkv)
+        min_val = -self.clip_qkv if self.clip_qkv is not None else None
+        max_val = self.clip_qkv
+        qkv_states = qkv_states.clamp(min=min_val, max=max_val)
 
         query_states, key_states, value_states = qkv_states.split(
             [
@@ -704,7 +709,6 @@ class DbrxRouter(nn.Module):
         moe_top_k: int,
         moe_jitter_eps: Optional[float],
         moe_normalize_expert_weights: Optional[float],
-        uniform_expert_assignment: bool,
     ):
         super().__init__()
         self.hidden_size = hidden_size
@@ -712,33 +716,27 @@ class DbrxRouter(nn.Module):
         self.moe_top_k = moe_top_k
         self.moe_jitter_eps = moe_jitter_eps
         self.moe_normalize_expert_weights = moe_normalize_expert_weights
-        self.uniform_expert_assignment = uniform_expert_assignment
 
         self.layer = nn.Linear(self.hidden_size, self.moe_num_experts, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]:
         if self.training and self.moe_jitter_eps is not None:
-            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.moe_jitter_eps, 1.0 + self.moe_jitter_eps)
+            hidden_states *= torch.empty_like(hidden_states).uniform_(
+                1.0 - self.moe_jitter_eps, 1.0 + self.moe_jitter_eps
+            )
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         weights = self.layer(hidden_states).softmax(dim=-1, dtype=torch.float32)
         top_weights, top_experts = torch.topk(weights, self.moe_top_k, dim=-1)
 
-        if self.moe_normalize_expert_weights:
-            top_weights = top_weights / torch.norm(
-                top_weights, p=self.moe_normalize_expert_weights, dim=-1, keepdim=True
-            )
+        top_weights_scale = (
+            torch.norm(top_weights, p=self.moe_normalize_expert_weights, dim=-1, keepdim=True)
+            if self.moe_normalize_expert_weights is not None
+            else 1.0
+        )
+        top_weights = top_weights / top_weights_scale
 
-        if self.uniform_expert_assignment:
-            with torch.no_grad():
-                uniform_tensor = (
-                    torch.arange(0, top_experts.numel(), device=top_experts.device, dtype=top_experts.dtype)
-                    % self.moe_num_experts
-                )
-                top_experts = uniform_tensor.reshape(top_experts.shape)
-                # Note, weights and top_weights are not changed
-
-        weights = weights.to(x.dtype)
-        top_weights = top_weights.to(x.dtype)
+        weights = weights.to(hidden_states.dtype)
+        top_weights = top_weights.to(hidden_states.dtype)
         return weights, top_weights, top_experts  # type: ignore
 
 
@@ -818,7 +816,6 @@ class DbrxFFN(nn.Module):
             moe_top_k=ffn_config.moe_top_k,
             moe_jitter_eps=ffn_config.moe_jitter_eps,
             moe_normalize_expert_weights=ffn_config.moe_normalize_expert_weights,
-            uniform_expert_assignment=ffn_config.uniform_expert_assignment,
         )
 
         self.experts = DbrxExperts(
@@ -1003,14 +1000,6 @@ class DbrxModel(DbrxPreTrainedModel):
     def set_input_embeddings(self, value: nn.Embedding):
         self.wte = value
 
-    def _autocast_input_embeddings(self, inputs_embeds: torch.Tensor) -> torch.Tensor:
-        if inputs_embeds.device.type == "cuda" and torch.is_autocast_enabled():
-            return inputs_embeds.to(dtype=torch.get_autocast_gpu_dtype())
-        elif inputs_embeds.device.type == "cpu" and torch.is_autocast_cpu_enabled():
-            return inputs_embeds.to(dtype=torch.get_autocast_cpu_dtype())
-        else:
-            return inputs_embeds
-
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1049,7 +1038,6 @@ class DbrxModel(DbrxPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
 
-        inputs_embeds = self._autocast_input_embeddings(inputs_embeds)  # type: ignore
         inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.emb_pdrop, training=self.training)
 
         past_seen_tokens = 0

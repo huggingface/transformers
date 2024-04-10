@@ -98,8 +98,6 @@ class DbrxFFNConfig(PretrainedConfig):
         moe_jitter_eps (`float`, *optional*, defaults to `None`): If not `None`, the jitter epsilon for the mixture of experts layer.
         moe_loss_weight (`float`, defaults to 0.01): The loss weight for the mixture of experts layer.
         moe_normalize_expert_weights (`float`, *optional*, defaults to 1.0): The normalization factor for the expert weights.
-        uniform_expert_assignment (`bool`, defaults to `False`): Whether to use uniform expert assignment.
-            This should only be used for benchmarking purposes.
     """
 
     def __init__(
@@ -111,7 +109,6 @@ class DbrxFFNConfig(PretrainedConfig):
         moe_jitter_eps: Optional[float] = None,
         moe_loss_weight: float = 0.01,
         moe_normalize_expert_weights: Optional[float] = 1.0,
-        uniform_expert_assignment: bool = False,
         **kwargs: Any,
     ):
         super().__init__()
@@ -124,7 +121,6 @@ class DbrxFFNConfig(PretrainedConfig):
         self.moe_jitter_eps = moe_jitter_eps
         self.moe_loss_weight = moe_loss_weight
         self.moe_normalize_expert_weights = moe_normalize_expert_weights
-        self.uniform_expert_assignment = uniform_expert_assignment
 
         for k in ["model_type"]:
             if k in kwargs:
