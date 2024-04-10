@@ -385,7 +385,7 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_assisted_decoding_matches_greedy_search(self):
         pass
 
-    @unittest.skip("recurrent gemma's output different if you pad lefr or right. This is expected")
+    @unittest.skip("RecurrentGemma's output different if you pad left or right. This is expected")
     def test_left_padding_compatibility(self):
         pass
 
