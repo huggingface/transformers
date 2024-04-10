@@ -298,7 +298,7 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     test_missing_keys = False
     test_model_parallel = False
     test_pruning = False
-    test_head_masking = False  # Mamba does not have attention heads
+    test_head_masking = False  # RecurrentGemma does not have attention heads
     test_model_parallel = False
 
     # Need to remove 0.9 in `test_cpu_offload`
