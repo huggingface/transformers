@@ -300,7 +300,7 @@ class Idefics2Processor(ProcessorMixin):
         chat_template: Optional[str] = None,
         tokenize: bool = False,
         **kwargs,
-    ):
+    ) -> str:
         """
         Overrides the tokenizer's `apply_chat_template` method to apply the IDEFICS2 chat template by default
         if no chat template is provided.
