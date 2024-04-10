@@ -673,7 +673,7 @@ JAMBA_ATTENTION_CLASSES = {
 }
 
 
-class HybridMambaAttentionDynamicCache(Cache ):
+class HybridMambaAttentionDynamicCache(Cache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
@@ -1082,7 +1082,7 @@ class JambaAttentionDecoderLayer(nn.Module):
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
-            cache_position=cache_position
+            cache_position=cache_position,
         )
 
         # residual connection after attention
