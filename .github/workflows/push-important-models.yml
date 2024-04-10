@@ -26,11 +26,13 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v3
+      
       - name: Get changed files
         id: changed-files
         uses: tj-actions/changed-files@3f54ebb830831fc121d3263c1857cfbdc310cdb9 #v42
         with:
           files: src/transformers/models/**
+      
       - name: Run step if only the files listed above change
         if: steps.changed-files.outputs.any_changed == 'true'
         id: set-matrix
@@ -64,6 +66,7 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v3
+      
       - name: Install locally transformers & other libs
         run: |
           apt install sudo
@@ -72,21 +75,26 @@ jobs:
           sudo -H pip install -U -e ".[testing]" 
           MAX_JOBS=4 pip install flash-attn --no-build-isolation
           pip install bitsandbytes
+      
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
+      
       - name: Show installed libraries and their versions
         run: pip freeze
+      
       - name: Run FA2 tests
         id: run_fa2_tests
         run:
           pytest -m "flash_attn_test" --make-reports=${{ matrix.model-name }}_fa2_tests/ tests/${{ matrix.model-name }}/test_modeling_*
+      
       - name: "Test suite reports artifacts: ${{ matrix.model-name }}_fa2_tests"
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.model-name }}_fa2_tests
           path: /transformers/reports/${{ matrix.model-name }}_fa2_tests
+      
       - name: Post to Slack
         if: always()
         uses: ./.github/actions/post-slack
@@ -95,17 +103,20 @@ jobs:
           title: 🤗 Results of the FA2 tests - ${{ matrix.model-name }}
           status: ${{ steps.run_fa2_tests.conclusion}}
           slack_token: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+      
       - name: Run integration tests
         id: run_integration_tests
         if: always()
         run:
           pytest -k "IntegrationTest"  --make-reports=tests_integration_${{ matrix.model-name }} tests/${{ matrix.model-name }}/test_modeling_*
+      
       - name: "Test suite reports artifacts: tests_integration_${{ matrix.model-name }}"
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
           name: tests_integration_${{ matrix.model-name }}
           path: /transformers/reports/tests_integration_${{ matrix.model-name }}
+
       - name: Post to Slack
         if: always()
         uses: ./.github/actions/post-slack
@@ -114,7 +125,8 @@ jobs:
           title: 🤗 Results of the Integration tests - ${{ matrix.model-name }}
           status: ${{ steps.run_integration_tests.conclusion}}
           slack_token: ${{ secrets.CI_SLACK_BOT_TOKEN }}
-      - name: Tailscale
+
+      - name: Tailscale # In order to be able to SSH when a test fails
         if: ${{ failure() || runner.debug == '1'}}
         uses: huggingface/tailscale-action@ssh-improvments
         with:
