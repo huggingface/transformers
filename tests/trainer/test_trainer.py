@@ -2556,7 +2556,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             def __init__(self):
                 self.lr_schedules = []
 
-            def on_log(self, args, state, control, logs=None, **kwargs):
+            def on_step_begin(self, args, state, control, **kwargs):
                 class Container:
                     pass
 
@@ -2584,10 +2584,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 model=model, args=args, train_dataset=train_dataset, eval_dataset=eval_dataset, callbacks=[cb]
             )
             trainer.train()
-            expected = [1.0, 0.8, 0.6, 0.4, 0.2, 0.0]
+            expected = [1.0, 0.8, 0.6, 0.4, 0.2]
             assert (
                 cb.lr_schedules == expected
             ), f"Did not log the right learning rates. Expected {expected}, got {cb.lr_schedules}"
+            # Ending LR should now be zero
+            assert trainer.lr_scheduler.get_last_lr()[0] == 0.0
 
     def check_mem_metrics(self, trainer, check_func):
         metrics = trainer.train().metrics
