@@ -706,8 +706,8 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
                 self.conv_states += [[]]
                 self.ssm_states += [[]]
 
-        self.key_cache = [torch.tensor([], device=device) for _ in range(config.num_hidden_layers)]
-        self.value_cache = [torch.tensor([], device=device)  for _ in range(config.num_hidden_layers)]
+        self.key_cache = [torch.tensor([[]]*batch_size, device=device) for _ in range(config.num_hidden_layers)]
+        self.value_cache = [torch.tensor([[]]*batch_size, device=device)  for _ in range(config.num_hidden_layers)]
 
     def update(
         self,
@@ -716,8 +716,14 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
         layer_idx: int,
         cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx].to(key_states.device), key_states], dim=-2)
-        self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx].to(key_states.device), value_states], dim=-2)
+        # Update the cache
+        if self.key_cache[layer_idx].shape[1] == 0:
+            self.key_cache[layer_idx] = key_states
+            self.value_cache[layer_idx] = value_states
+        else:
+            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
+            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
 
