@@ -210,8 +210,11 @@ class JambaConfig(PretrainedConfig):
 
     @property
     def layers_block_type(self):
-        return ["attention" for i in range(self.num_layers) if i%self.attention_period==0 else "mamba"]
+        return ["attention" if i % self.attention_period == 0 else "mamba" for i in range(self.num_layers)]
 
     @property
     def layers_num_experts(self):
-        return [self.num_experts for i in range(self.num_layers) if i%self.expert_layer_period==self.expert_layer_offset else 1]
+        return [
+            self.num_experts if i % self.expert_layer_period == self.expert_layer_offset else 1
+            for i in range(self.num_layers)
+        ]

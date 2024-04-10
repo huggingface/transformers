@@ -20,8 +20,6 @@
 """ PyTorch Jamba model."""
 import inspect
 import math
-import warnings
-from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -352,7 +350,7 @@ class JambaFlashAttention2(JambaAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        kv_seq_len = cache_positions[-1]
+        kv_seq_len = cache_position[-1]
 
         use_sliding_windows = (
             _flash_supports_window_size
@@ -689,16 +687,20 @@ class HybridMambaAttentionDynamicCache:
 
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         self.dtype = dtype
-        self.seqlen_offset # only used by mamba, cache_positions otherwise
+        self.seqlen_offset  # only used by mamba, cache_positions otherwise
         intermediate_size = config.intermediate_size
         ssm_state_size = config.state_size
         conv_kernel_size = config.conv_kernel
         self.conv_state = []
         self.ssm_state = []
         for i in range(config.num_hidden_layers):
-            if self.config.layer_block_type[i]  == "mamba":
-                self.conv_states +=[torch.zeros(batch_size, intermediate_size, conv_kernel_size, device=device, dtype=dtype)]
-                self.ssm_state +=[torch.zeros(batch_size, intermediate_size, ssm_state_size, device=device, dtype=dtype)]
+            if self.config.layer_block_type[i] == "mamba":
+                self.conv_states += [
+                    torch.zeros(batch_size, intermediate_size, conv_kernel_size, device=device, dtype=dtype)
+                ]
+                self.ssm_state += [
+                    torch.zeros(batch_size, intermediate_size, ssm_state_size, device=device, dtype=dtype)
+                ]
             else:
                 self.conv_states += []
                 self.ssm_state += []
@@ -1223,42 +1225,6 @@ class JambaPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    @staticmethod
-    def _convert_to_standard_cache(
-        past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]], batch_size: int
-    ) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
-        """
-        Standardizes the format of the cache so as to match most models in transformers, i.e. have the seqlen as the
-        third dim also for mamba layers
-        """
-        attn_layer_index = [k.shape == v.shape for k, v in past_key_value].index(True)
-        seqlen = past_key_value[attn_layer_index][0].shape[2]
-        standard_past_key_value = ()
-        for k, v in past_key_value:
-            if k.shape != v.shape:
-                # mamba layer
-                # expand doesn't use more memory, so it's fine to do it here
-                standard_past_key_value += ((k.expand(-1, -1, seqlen, -1), v.expand(-1, -1, seqlen, -1)),)
-            else:
-                standard_past_key_value += ((k, v),)
-        return standard_past_key_value
-
-    @staticmethod
-    def _convert_to_jamba_cache(
-        past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]],
-    ) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
-        """
-        Converts the cache to the format expected by Jamba, i.e. dummy seqlen dimesion with size 1 for mamba layers
-        """
-        jamba_past_key_value = ()
-        for k, v in past_key_value:
-            if k.shape != v.shape:
-                # mamba layer
-                jamba_past_key_value += ((k[:, :, :1, :], v[:, :, :1, :]),)
-            else:
-                jamba_past_key_value += ((k, v),)
-        return jamba_past_key_value
-
 
 JAMBA_INPUTS_DOCSTRING = r"""
     Args:
@@ -1330,7 +1296,8 @@ JAMBA_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-ALL_DECODER_LAYER_TYPES = {"attention":JambaAttentionDecoderLayer, "mamba":JambaMambaDecoderLayer}
+ALL_DECODER_LAYER_TYPES = {"attention": JambaAttentionDecoderLayer, "mamba": JambaMambaDecoderLayer}
+
 
 @add_start_docstrings(
     "The bare Jamba Model outputting raw hidden-states without any specific head on top.",
@@ -1383,6 +1350,7 @@ class JambaModel(JambaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, MoeModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
@@ -1408,6 +1376,7 @@ class JambaModel(JambaPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
+        hidden_states = inputs_embeds
 
         if cache_position is None:
             cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)
@@ -1416,13 +1385,9 @@ class JambaModel(JambaPreTrainedModel):
 
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
 
-        hidden_states = inputs_embeds
-
-        # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_router_logits = () if output_router_logits else None
-        next_decoder_cache = None
 
         for decoder_layer in self.layers:
             if output_hidden_states:
@@ -1438,7 +1403,7 @@ class JambaModel(JambaPreTrainedModel):
                     output_attentions,
                     output_router_logits,
                     use_cache,
-                    cache_position
+                    cache_position,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1449,13 +1414,10 @@ class JambaModel(JambaPreTrainedModel):
                     output_attentions=output_attentions,
                     output_router_logits=output_router_logits,
                     use_cache=use_cache,
-                    cache_position=cache_position
+                    cache_position=cache_position,
                 )
 
             hidden_states = layer_outputs[0]
-
-            if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
 
             if output_attentions:
                 if layer_outputs[1] is not None:
@@ -1491,7 +1453,7 @@ class JambaModel(JambaPreTrainedModel):
             router_logits=all_router_logits,
         )
 
-def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
+    def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
@@ -1542,6 +1504,7 @@ def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
             causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
         return causal_mask
+
 
 # Adapted from transformers.models.mixtral.modeling_mixtral.MixtralForCausalLM with MIXTRAL->JAMBA, Mixtral->Jamba
 class JambaForCausalLM(JambaPreTrainedModel):
@@ -1754,7 +1717,7 @@ class JambaForCausalLM(JambaPreTrainedModel):
         )
         return model_inputs
 
-    @staticmethod
+    @staticmethod  # TODO not sure this works
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
