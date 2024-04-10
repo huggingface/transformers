@@ -327,7 +327,8 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name_or_path, use_fast=not args.use_slow_tokenizer, trust_remote_code=args.trust_remote_code
     )
-    tokenizer.pad_token = tokenizer.eos_token
+    if tokenizer.pad_token is None: 
+        tokenizer.pad_token = tokenizer.eos_token
     config.pad_token_id = tokenizer.pad_token_id
 
     model = AutoModelForSequenceClassification.from_pretrained(
