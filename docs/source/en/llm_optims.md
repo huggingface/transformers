@@ -13,23 +13,23 @@ rendered properly in your Markdown viewer.
 
 Large language models (LLMs) have pushed text generation applications, such as chat and code completion models, to the next level by producing text that displays a high level of understanding and fluency. But what makes LLMs so powerful - namely their size - also presents challenges for inference.
 
-Basic inference is slow because LLMs are autoregressive, which means it becomes progressively slower the more tokens it generates. Additionally, LLMs have billions of parameters, making it a challenge to store and handle all those weights in memory. However, with a few optimization techniques, you can boost your inference speed and reduce memory usage.
+Basic inference is slow because LLMs have to be called repeatedly to generate the next token. As the input sequence increases as generation progresses, it takes longer and longer for the LLM to process it. LLMs also have billions of parameters, making it a challenge to store and handle all those weights in memory. However, with a few optimization techniques, you can boost your inference speed and reduce memory usage.
 
 This guide will show you how to use the optimization techniques available in Transformers to accelerate LLM inference.
 
 > [!TIP]
-> Hugging Face also provides [Text Generation Inference (TGI)](https://hf.co/docs/text-generation-inference), a library dedicated to deploying and serving highly optimized LLMs for inference. It includes more optimization features not included in Transformers such as continuous batching for increasing throughput and tensor parallelism for multi-GPU inference.
+> Hugging Face also provides [Text Generation Inference (TGI)](https://hf.co/docs/text-generation-inference), a library dedicated to deploying and serving highly optimized LLMs for inference. It includes more optimization features not included in Transformers, such as continuous batching for increasing throughput and tensor parallelism for multi-GPU inference.
 
 ## Static kv-cache and torch.compile
 
 During decoding, a LLM computes the key-value (kv) values for each input token and since it is autoregressive, it computes the same kv values each time since the generated output becomes part of the input now. This is not very efficient because you're recomputing the same kv values each time.
 
-To optimize this, you can use a kv-cache to store the past values instead of recomputing them each time. However, since the kv-cache grows with each generation step and is dynamic, it prevents you from taking advantage of [torch.compile](./perf_torch_compile), a powerful optimization tool that fuses Python code into fast and optimized kernels.
+To optimize this, you can use a kv-cache to store the past values instead of recomputing them each time. However, since the kv-cache grows with each generation step and is dynamic, it prevents you from taking advantage of [torch.compile](./perf_torch_compile), a powerful optimization tool that fuses PyTorch code into fast and optimized kernels.
 
 The *static kv-cache* solves this issue by fixing the kv-cache size to a maximum value which allows you to combine it with torch.compile for up to a 4x speed up.
 
 > [!WARNING]
-> Currently, only [Gemma](./model_doc/gemma) and [Llama](./model_doc/llama2) models support static kv-cache and torch.compile.
+> Currently, only [Command R](./model_doc/cohere), [Gemma](./model_doc/gemma) and [Llama](./model_doc/llama2) models support static kv-cache and torch.compile.
 
 For this example, let's load the [Gemma](https://hf.co/google/gemma-2b) model.
 
@@ -37,7 +37,6 @@ For this example, let's load the [Gemma](https://hf.co/google/gemma-2b) model.
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
-
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2b", device_map="auto"
 )
@@ -54,32 +53,83 @@ Access the model's `generation_config` attribute and set the `cache_implementati
 model.generation_config.cache_implementation = "static"
 ```
 
-Call torch.compile on the model to compile it with the static kv-cache.
+Call torch.compile on the model to compile the forward pass with the static kv-cache.
 
 ```py
 compiled_model = torch.compile(model, mode="reduce-overhead", fullgraph=True)
-input_text = "Planck's constant is"
+input_text = "The theory of special relativity states "
 input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 
 outputs = compiled_model.generate(**input_ids)
+tokenizer.batch_decode(outputs, skip_special_tokens=True)
+['The theory of special relativity states 1. The speed of light is constant in all inertial reference']
 ```
 
 </hfoption>
 <hfoption id="setup_cache">
 
-Access the model's `_set_cache` method and pass it the [`StaticCache`] class. This is a more flexible method because it allows you to configure parameters like the maximum batch size and sequence length.
+> [!WARNING]
+> The `_setup_cache` method is an internal method and still under development, so keep in mind this will likely change in the future.
+
+The `_setup_cache` method doesn't support [`GenerationMixin.generate`] yet, so this method is a bit more involved. You'll need to write your own function to decode the next token given the current token and position and cache position of previously generated tokens.
 
 ```py
-model._setup_cache(StaticCache, max_batch_size=1, max_cache_len=128)
+from transformers import LlamaTokenizer, LlamaForCausalLM, StaticCache, logging
+from transformers.testing_utils import CaptureLogger
+import torch
+
+prompts = [
+    "Simply put, the theory of relativity states that ",
+    "My favorite all time favorite condiment is ketchup.",
+]
+
+NUM_TOKENS_TO_GENERATE = 40
+torch_device = "cuda"
+
+tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="right")
+model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="sequential")
+inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+
+def decode_one_tokens(model, cur_token, input_pos, cache_position):
+    logits = model(
+        cur_token, position_ids=input_pos, cache_position=cache_position, return_dict=False, use_cache=True
+    )[0]
+    new_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
+    return new_token
 ```
 
-Call torch.compile on the model to compile it with the static kv-cache.
+The are two important things you must do to enable static kv-cache and torch.compile with the `_setup_cache` method:
+
+1. Access the model's `_setup_cache` method and pass it the [`StaticCache`] class. This is a more flexible method because it allows you to configure parameters like the maximum batch size and sequence length.
+
+2. Call torch.compile on the model to compile the forward pass with the static kv-cache.
 
 ```py
-compiled_model = torch.compile(model, mode="reduce-overhead", fullgraph=True)
-input_text = "Planck's constant is"
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
-outputs = compiled_model(input_ids)
+batch_size, seq_length = inputs["input_ids"].shape
+with torch.no_grad():
+     model._setup_cache(StaticCache, 2, max_cache_len=4096)
+     cache_position = torch.arange(seq_length, device=torch_device)
+     generated_ids = torch.zeros(
+         batch_size, seq_length + NUM_TOKENS_TO_GENERATE + 1, dtype=torch.int, device=torch_device
+     )
+     generated_ids[:, cache_position] = inputs["input_ids"].to(torch_device).to(torch.int)
+
+     logits = model(**inputs, cache_position=cache_position, return_dict=False, use_cache=True)[0]
+     next_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
+     generated_ids[:, seq_length] = next_token[:, 0]
+
+     decode_one_tokens = torch.compile(decode_one_tokens, mode="reduce-overhead", fullgraph=True)
+     cache_position = torch.tensor([seq_length + 1], device=torch_device)
+     for _ in range(1, NUM_TOKENS_TO_GENERATE):
+         with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
+             next_token = decode_one_tokens(model, next_token.clone(), None, cache_position)
+             generated_ids[:, cache_position] = next_token.int()
+         cache_position += 1
+
+text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+text
+['Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the same for all observers, and 3) the laws of physics are the same for all observers.',
+ 'My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p']
 ```
 
 </hfoption>
@@ -87,9 +137,12 @@ outputs = compiled_model(input_ids)
 
 ## Speculative decoding
 
+> [!TIP]
+> For a more in-depth explanation, take a look at the [Assisted Generation: a new direction toward low-latency text generation](https://hf.co/blog/assisted-generation) blog post!
+
 Another issue with autoregression is that for each input token you need to load the model weights each time during the forward pass. This is slow and cumbersome for LLMs which have billions of parameters. Speculative decoding alleviates this slowdown by using a second smaller and faster assistant model to generate candidate tokens that are verified by the larger LLM in a single forward pass. If the verified tokens are correct, the LLM essentially gets them for "free" without having to generate them itself. There is no degradation in accuracy because the verification forward pass ensures the same outputs are generated as if the LLM had generated them on its own.
 
-To get the largest speed up, the assistant model should be much smaller than the LLM so that it can generate tokens quickly. The assistant and LLM model must also share the same tokenizer to avoid encoding and decoding tokens.
+To get the largest speed up, the assistant model should be a lot smaller than the LLM so that it can generate tokens quickly. The assistant and LLM model must also share the same tokenizer to avoid re-encoding and decoding tokens.
 
 > [!WARNING]
 > Speculative decoding is only supported for the greedy search and sampling decoding strategies, and it also doesn't support batched inputs.
@@ -189,22 +242,23 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 
 ## Attention optimizations
 
-A known issue with transformer models is that the self-attention mechanism grows quadratically in compute and memory with the number of input tokens. This limitation is only magnified in LLMs which can handle much longer sequences. To address this, try FlashAttention2 or PyTorch's scaled dot product attention (SDPA), which are more memory efficient implementations and can accelerate inference.
+A known issue with transformer models is that the self-attention mechanism grows quadratically in compute and memory with the number of input tokens. This limitation is only magnified in LLMs which handles much longer sequences. To address this, try FlashAttention2 or PyTorch's scaled dot product attention (SDPA), which are more memory efficient attention implementations and can accelerate inference.
 
 ### FlashAttention-2
 
-FlashAttention and [FlashAttention-2](./perf_infer_gpu_one#flashattention-2) breaks up the attention computation into smaller chunks and reduces the number of intermediate read/write operations to GPU memory to speed up inference. FlashAttention-2 improves on the original FlashAttention algorithm by also parallelizing over sequence length dimension and better partitioning work on the hardware to reduce synchronization and communication overhead.
+FlashAttention and [FlashAttention-2](./perf_infer_gpu_one#flashattention-2) break up the attention computation into smaller chunks and reduces the number of intermediate read/write operations to GPU memory to speed up inference. FlashAttention-2 improves on the original FlashAttention algorithm by also parallelizing over sequence length dimension and better partitioning work on the hardware to reduce synchronization and communication overhead.
 
 To use FlashAttention-2, set `attn_implementation="flash_attention_2"` in the [`~PreTrainedModel.from_pretrained`] method.
 
 ```py
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
+quant_config = BitsAndBytesConfig(load_in_8bit=True)
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2b",
-    torch_dtype=bfloat16,
+    quantization_config=quant_config,
+    torch_dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
-    load_in_8bit=True,
 )
 ```
 
@@ -223,7 +277,7 @@ from transformers import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2b",
-    torch_dtype=bfloat16,
+    torch_dtype=torch.bfloat16,
 )
 
 with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
@@ -232,7 +286,7 @@ with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable
 
 ## Quantization
 
-Quantization reduces the size of the massive LLM weights by storing them in a lower precision. This translates to lower memory usage and makes loading LLMs for inference more accessible if you're constrained by your GPUs memory. If you aren't limited by your GPU, you don't necessarily need to quantize your model because it can incur a small latency cost (except for AWQ and fused AWQ modules) due to the extra step required to quantize and dequantize the weights.
+Quantization reduces the size of the LLM weights by storing them in a lower precision. This translates to lower memory usage and makes loading LLMs for inference more accessible if you're constrained by your GPUs memory. If you aren't limited by your GPU, you don't necessarily need to quantize your model because it can incur a small latency cost (except for AWQ and fused AWQ modules) due to the extra step required to quantize and dequantize the weights.
 
 > [!TIP]
 > There are many quantization libraries (see the [Quantization](./quantization) guide for more details) available, such as Quanto, AQLM, AWQ, and AutoGPTQ. Feel free to try them out and see which one works best for your use case. We also recommend reading the [Overview of natively supported quantization schemes in 🤗 Transformers](https://hf.co/blog/overview-quantization-transformers) blog post which compares AutoGPTQ and bitsandbytes.
@@ -252,20 +306,19 @@ To load Mistral-7B-v0.1 in half-precision, set the `torch_dtype` parameter in th
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
-tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
 model = AutoModelForCausalLM.from_pretrained(
     "mistralai/Mistral-7B-v0.1", torch_dtype=torch.bfloat16, device_map="auto",
-).to("cuda")
+)
 ```
 
 To load a quantized model (8-bit or 4-bit) for inference, try [bitsandbytes](https://hf.co/docs/bitsandbytes) and set the `load_in_4bit` or `load_in_8bit` parameters to `True`. Loading the model in 8-bits only costs 6.87 GB of memory.
 
 ```py
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 import torch
 
-tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
+quant_config = BitsAndBytesConfig(load_in_8bit=True)
 model = AutoModelForCausalLM.from_pretrained(
-    "mistralai/Mistral-7B-v0.1", device_map="auto", load_in_8bit=True,
-).to("cuda")
+    "mistralai/Mistral-7B-v0.1", quantization_config=quant_config, device_map="auto"
+)
 ```
