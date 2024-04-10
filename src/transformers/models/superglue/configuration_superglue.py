@@ -42,7 +42,7 @@ class SuperGlueConfig(PretrainedConfig):
         descriptor_dim (`int`, *optional*, defaults to 256): The dimension of the descriptors.
         keypoint_encoder_sizes (`List[int]`, *optional*, defaults to `[32, 64, 128, 256]`):
             The sizes of the keypoint encoder layers.
-        gnn_layers_types (`List[str]`, *optional*, defaults to `["self", "cross"] * 9`):
+        gnn_layers_types (`List[str]`, *optional*, defaults to `['self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross']`):
             The types of the GNN layers. Must be either 'self' or 'cross'.
         num_heads (`int`, *optional*, defaults to 4): The number of heads in the GNN layers.
         sinkhorn_iterations (`int`, *optional*, defaults to 100): The number of Sinkhorn iterations.

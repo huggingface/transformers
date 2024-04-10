@@ -82,7 +82,6 @@ def create_rename_keys(config, state_dict):
     return rename_keys
 
 
-# Copied from transformers.models.dinov2.convert_dinov2_to_hf
 def rename_key(dct, old, new):
     val = dct.pop(old)
     dct[new] = val
