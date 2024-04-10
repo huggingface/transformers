@@ -672,7 +672,7 @@ JAMBA_ATTENTION_CLASSES = {
 }
 
 
-class HybridMambaAttentionDynamicCache:
+class HybridMambaAttentionDynamicCache(Cache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
