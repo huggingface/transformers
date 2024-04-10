@@ -672,7 +672,7 @@ JAMBA_ATTENTION_CLASSES = {
 }
 
 
-class HybridMambaAttentionDynamicCache(Cache):
+class HybridMambaAttentionDynamicCache(Cache ):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
@@ -1462,12 +1462,9 @@ class JambaModel(JambaPreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        if hasattr(getattr(self.layers[0], "self_attn", {}), "past_key_value"):  # static cache
-            target_length = self.config.max_position_embeddings
-        else:  # dynamic cache
-            target_length = (
-                attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else cache_position[-1] + 1
-            )
+        target_length = (
+            attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else cache_position[-1] + 1
+        )
 
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
         if sequence_length != 1:
@@ -1480,18 +1477,6 @@ class JambaModel(JambaPreTrainedModel):
                 mask_length = attention_mask.shape[-1]
                 padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
                 causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
-            elif attention_mask.dim() == 4:
-                # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
-                # cache. In that case, the 4D attention mask attends to the newest tokens only.
-                if attention_mask.shape[-2] < cache_position[0] + sequence_length:
-                    offset = cache_position[0]
-                else:
-                    offset = 0
-                mask_shape = attention_mask.shape
-                mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
-                causal_mask[
-                    : mask_shape[0], : mask_shape[1], offset : mask_shape[2] + offset, : mask_shape[3]
-                ] = mask_slice
 
         if (
             self.config._attn_implementation == "sdpa"
@@ -1650,27 +1635,13 @@ class JambaForCausalLM(JambaPreTrainedModel):
         attention_mask=None,
         inputs_embeds=None,
         output_router_logits=False,
+        cache_positions=None,
         **kwargs,
     ):
         # Omit tokens covered by past_key_values
         if past_key_values is not None:
-            # the cache may be in the stardard format (e.g. in contrastive search), convert to Jamba's format if needed
-            if isinstance(past_key_values, Tuple):
-                if past_key_values[self.model._mamba_layer_index][0].shape[2] > 1:
-                    past_key_values = self._convert_to_jamba_cache(past_key_values)
-
-            if isinstance(past_key_values, Cache):
-                if not isinstance(past_key_values, HybridMambaAttentionDynamicCache):
-                    past_key_values = HybridMambaAttentionDynamicCache.from_legacy_cache(
-                        past_key_values.to_legacy_cache()
-                    )
-                cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
-                max_cache_length = past_key_values.get_max_length()
-            else:
-                cache_length = past_length = past_key_values[self.model._attn_layer_index][0].shape[2]
-                max_cache_length = None
-
+            past_length = cache_positions[-1] if cache_positions is not None else attention_mask.shape[1]
+            max_cache_length = self.config.sliding_window
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
             # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
@@ -1687,7 +1658,7 @@ class JambaForCausalLM(JambaPreTrainedModel):
             if (
                 max_cache_length is not None
                 and attention_mask is not None
-                and cache_length + input_ids.shape[1] > max_cache_length
+                and past_length + input_ids.shape[1] > max_cache_length
             ):
                 attention_mask = attention_mask[:, -max_cache_length:]
 
