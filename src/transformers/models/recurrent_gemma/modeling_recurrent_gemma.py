@@ -482,7 +482,7 @@ class RecurrentGemmaDecoderLayer(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.temporal_pre_norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.temporal_block = TEMPORAL_BLOCK_CLASSES[config.layers_recurrent_states[layer_idx]](config)
+        self.temporal_block = TEMPORAL_BLOCK_CLASSES[config.layers_block_type[layer_idx]](config)
         self.channel_pre_norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp_block = RecurrentGemmaMlp(config)
 
