@@ -117,6 +117,7 @@ if is_accelerate_available():
         save_offload_index,
         set_module_tensor_to_device,
     )
+    from accelerate.utils.modeling import get_state_dict_from_offload
 
 if is_safetensors_available():
     from safetensors import safe_open
@@ -2477,9 +2478,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save the model
         if state_dict is None:
             # if any model parameters are offloaded to the disk, make module map
-            if hasattr(self, "hf_device_map") and "disk" in self.hf_device_map:
+            if hasattr(self, "hf_device_map") and "disk" in self.hf_device_map.values():
                 warnings.warn(
-                    "Attempting to save a model with disk-offloaded modules. Ensure that unallocated execution device (GPU if available, else CPU) memory exceeds the `shard_size` (5GB default)"
+                    "Attempting to save a model with disk-offloaded modules. Ensure that unallocated cpu memory exceeds the `shard_size` (5GB default)"
                 )
                 for name, module in model_to_save.named_modules():
                     if name == "":
@@ -2516,12 +2517,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # These are all the pointers of shared tensors
             if hasattr(self, "device_map"):
+                # if the model has offloaded parameters, we must check using find_tied_parameters()
                 tied_params = find_tied_parameters(self)
-                shared_ptrs = {ptr: names for ptr, names in ptrs.items() if names in tied_params}
+                if tied_params:
+                    tied_names = tied_params[0]
+                    shared_ptrs = {ptr: names for ptr, names in ptrs.items() if any([name in tied_names for name in names])}
+                else:
+                    shared_ptrs = {}
             else:
                 shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
-            warn_names = set()
-            
+
+            # Recursively descend to find tied weight keys
+            _tied_weights_keys = _get_tied_weight_keys(self)
+            error_names = []
+            to_delete_names = set()
             for names in shared_ptrs.values():
                 # Removing the keys which are declared as known duplicates on
                 # load. This allows to make sure the name which is kept is consistent.
@@ -2601,7 +2610,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 for module_name in state_dict.keys():
                     module = module_map[module_name]
                     # update state dict with onloaded parameters
-                    state_dict = get_state_dict_from_offload(module, module_name, state_dict, device_to_put_offload=execution_device)
+                    state_dict = get_state_dict_from_offload(module, module_name, state_dict)
 
                 # assign shard to be the completed state dict 
                 shard = state_dict
