@@ -690,7 +690,6 @@ class HubertEncoder(nn.Module):
         self.layers = nn.ModuleList([HubertEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-        # self._use_sdpa = config._attn_implementation == "sdpa"
 
     def forward(
         self,
@@ -704,8 +703,10 @@ class HubertEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
 
         if attention_mask is not None:
-            # make sure padded tokens output 0
             if self._use_flash_attention_2:
+                # make sure padded tokens output 0
+                expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+                hidden_states[~expand_attention_mask] = 0
                 # 2d mask is passed through the layers
                 attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
             else:
@@ -794,6 +795,9 @@ class HubertEncoderStableLayerNorm(nn.Module):
 
         if attention_mask is not None:
             if self._use_flash_attention_2:
+                # make sure padded tokens are not attended to
+                expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+                hidden_states[~expand_attention_mask] = 0
                 # 2d mask is passed through the layers
                 attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
             else:
