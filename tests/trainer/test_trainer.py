@@ -124,7 +124,7 @@ if is_torch_available():
         TrainerState,
     )
     from transformers.modeling_utils import unwrap_model
-    from transformers.trainer_pt_utils import AcceleratorConfig
+    from transformers.trainer_pt_utils import AcceleratorConfig, _get_learning_rate
 
     if is_safetensors_available():
         import safetensors.torch
@@ -2550,6 +2550,44 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             "eval_steps: 10 (from args) != 5 (from trainer_state.json)",
             cl.out,
         )
+
+    def test_lr_schedule_logging(self):
+        class LRScheduleLoggerCallback(TrainerCallback):
+            def __init__(self):
+                self.lr_schedules = []
+
+            def on_log(self, args, state, control, logs=None, **kwargs):
+                class Container:
+                    pass
+
+                obj = Container()
+                obj.lr_scheduler = kwargs["lr_scheduler"]
+                obj.optimizer = kwargs["optimizer"]
+                obj.is_deepspeed_enabled = False
+                lr = _get_learning_rate(obj)
+                self.lr_schedules.append(lr)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            train_dataset = RegressionDataset(length=128)
+            eval_dataset = RegressionDataset()
+
+            config = RegressionModelConfig(a=0, b=2)
+            model = RegressionRandomPreTrainedModel(config)
+            args = RegressionTrainingArguments(
+                tmpdir,
+                learning_rate=1,
+                logging_steps=1,
+                max_steps=5,
+            )
+            cb = LRScheduleLoggerCallback()
+            trainer = Trainer(
+                model=model, args=args, train_dataset=train_dataset, eval_dataset=eval_dataset, callbacks=[cb]
+            )
+            trainer.train()
+            expected = [1.0, 0.8, 0.6, 0.4, 0.2, 0.0]
+            assert (
+                cb.lr_schedules == expected
+            ), f"Did not log the right learning rates. Expected {expected}, got {cb.lr_schedules}"
 
     def check_mem_metrics(self, trainer, check_func):
         metrics = trainer.train().metrics

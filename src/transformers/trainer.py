@@ -2255,10 +2255,6 @@ class Trainer:
                     # Optimizer step
                     self.optimizer.step()
                     optimizer_was_run = not self.accelerator.optimizer_step_was_skipped
-                    if optimizer_was_run:
-                        # Delay optimizer scheduling until metrics are generated
-                        if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                            self.lr_scheduler.step()
 
                     model.zero_grad()
                     self.state.global_step += 1
@@ -2266,6 +2262,12 @@ class Trainer:
                     self.control = self.callback_handler.on_step_end(args, self.state, self.control)
 
                     self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
+
+                    if optimizer_was_run:
+                        # Delay optimizer scheduling until metrics are generated and logged
+                        if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                            self.lr_scheduler.step()
+
                 else:
                     self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
 
