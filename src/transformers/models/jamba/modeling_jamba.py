@@ -690,12 +690,12 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
         self.dtype = dtype
         self.seqlen_offset = 0  # only used by mamba, cache_positions otherwise
         intermediate_size = config.intermediate_size
-        ssm_state_size = config.state_size
-        conv_kernel_size = config.conv_kernel
+        ssm_state_size = config.mamba_d_state
+        conv_kernel_size = config.mamba_d_conv
         self.conv_state = []
         self.ssm_state = []
         for i in range(config.num_hidden_layers):
-            if self.config.layer_block_type[i] == "mamba":
+            if config.layers_block_type[i] == "mamba":
                 self.conv_states += [
                     torch.zeros(batch_size, intermediate_size, conv_kernel_size, device=device, dtype=dtype)
                 ]
