@@ -468,7 +468,7 @@
         title: RAG
       - local: model_doc/realm
         title: REALM
-      - local: model_doc/recurrent-gemma
+      - local: model_doc/recurrent_gemma
         title: RecurrentGemma
       - local: model_doc/reformer
         title: Reformer
