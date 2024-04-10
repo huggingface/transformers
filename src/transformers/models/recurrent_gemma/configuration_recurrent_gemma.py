@@ -159,5 +159,5 @@ class RecurrentGemmaConfig(PretrainedConfig):
 
     def to_dict(self):
         output = super().to_dict()
-        output["block_types"] = output.pop("_block_types")
+        output["block_types"] = output.pop("layers_block_type")
         return output
