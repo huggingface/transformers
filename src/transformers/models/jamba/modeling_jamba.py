@@ -265,7 +265,7 @@ class JambaAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
-        **kwargs,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
@@ -604,6 +604,7 @@ class JambaSdpaAttention(JambaAttention):
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
@@ -1034,7 +1035,7 @@ class JambaSparseMoeBlock(nn.Module):
 class JambaAttentionDecoderLayer(nn.Module):
     def __init__(self, config: JambaConfig, layer_idx: int):
         super().__init__()
-        num_experts = self.config.layers_num_experts[layer_idx]
+        num_experts = config.layers_num_experts[layer_idx]
         self.self_attn = JAMBA_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
         ffn_layer_class = JambaSparseMoeBlock if num_experts > 1 else JambaMLP
@@ -1051,6 +1052,7 @@ class JambaAttentionDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -1080,6 +1082,7 @@ class JambaAttentionDecoderLayer(nn.Module):
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
+            cache_position=cache_position
         )
 
         # residual connection after attention
@@ -1110,9 +1113,9 @@ class JambaAttentionDecoderLayer(nn.Module):
 
 
 class JambaMambaDecoderLayer(nn.Module):
-    def __init__(self, config: JambaConfig, num_experts: int, layer_idx: int):
+    def __init__(self, config: JambaConfig, layer_idx: int):
         super().__init__()
-        num_experts = self.config.layers_num_experts[layer_idx]
+        num_experts = config.layers_num_experts[layer_idx]
         self.mamba = JambaMambaMixer(config=config, layer_idx=layer_idx)
 
         ffn_layer_class = JambaSparseMoeBlock if num_experts > 1 else JambaMLP
@@ -1129,6 +1132,7 @@ class JambaMambaDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -1153,7 +1157,7 @@ class JambaMambaDecoderLayer(nn.Module):
 
         hidden_states, present_key_value = self.mamba(
             hidden_states=hidden_states,
-            past_key_value=past_key_value,
+            cache_params=past_key_value,
         )
         self_attn_weights = None
 
