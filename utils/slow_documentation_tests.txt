@@ -1,6 +1,7 @@
 docs/source/en/generation_strategies.md
 docs/source/en/model_doc/ctrl.md
 docs/source/en/model_doc/kosmos-2.md
+docs/source/en/model_doc/video_llava.md
 docs/source/en/model_doc/seamless_m4t.md
 docs/source/en/model_doc/seamless_m4t_v2.md
 docs/source/en/task_summary.md
