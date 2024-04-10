@@ -472,7 +472,8 @@ def _make_causal_mask(input_ids_shape, dtype, past_key_values_length=0):
     bsz, tgt_len = input_ids_shape
     mask = tf.fill((tgt_len, tgt_len), tf.dtypes.as_dtype(dtype).min)
     mask_cond = tf.range(mask.shape[-1])
-    mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (mask.shape[-1], 1)), 0, mask)
+    zero_scalar = tf.zeros([], dtype=dtype)
+    mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (mask.shape[-1], 1)), zero_scalar, mask)
     mask = tf.cast(mask, dtype)
 
     if past_key_values_length > 0:
@@ -523,9 +524,6 @@ class TFIdeficsRMSNorm(tf.keras.layers.Layer):
             hidden_states = tf.cast(hidden_states, self.weight.dtype)
 
         return self.weight * hidden_states
-
-
-# ALL_LAYERNORM_LAYERS.append(TFIdeficsRMSNorm)
 
 
 class TFIdeficsEmbedding(tf.keras.layers.Layer):

@@ -44,6 +44,7 @@ IDEFICS_TINY_RANDOM_MODEL = "HuggingFaceM4/tiny-random-idefics"
 # Below is the expected output for the integration test TFIdeficsModelIntegrationTest.
 # Since we are using tiny-random to be able to fit it on the CI GPU,it is better to assert on the
 # ids because the generated text is gibberish
+# TODO: use fmt off
 EXPECTED_GENERATED_IDS = [
     [
         0,
@@ -685,6 +686,11 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_prepare_serving_output(self):
         pass
 
+    @unittest.skip(reason="Currently `saved_model` doesn't work with nested outputs.")
+    @slow
+    def test_saved_model_creation(self):
+        pass
+
     def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -766,6 +772,11 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         self.has_attentions = False
         super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
+    @unittest.skip(reason="Currently `saved_model` doesn't work with nested outputs.")
+    @slow
+    def test_saved_model_creation(self):
+       pass
+
     @slow
     def test_model_from_pretrained(self):
         model = TFIdeficsModel.from_pretrained(IDEFICS_TINY_RANDOM_MODEL, from_pt=True)
@@ -796,7 +807,7 @@ class TFIdeficsForVisionText2TextTest(TFIdeficsModelTest, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="""IDEFICS loss computation is done in TFIdeficsModel""")
+    @unittest.skip(reason="""IDEFICS loss computation is done in TFIdeficsForVisionText2Text""")
     def test_loss_computation(self):
         pass
 
