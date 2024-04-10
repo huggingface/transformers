@@ -35,14 +35,10 @@ from ...utils import (
 )
 from .configuration_dbrx import DbrxConfig
 
-
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import (
-        index_first_axis,
-        pad_input,  # noqa
-        unpad_input,
-    )
+    from flash_attn.bert_padding import pad_input  # noqa
+    from flash_attn.bert_padding import index_first_axis, unpad_input
 
 logger = logging.get_logger(__name__)
 
@@ -252,7 +248,7 @@ class DbrxAttention(nn.Module):
         self.num_key_value_heads = attn_config.kv_n_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.rope_theta = attn_config.rope_theta
-        self.is_casual = True
+        self.is_causal = True
 
         self.Wqkv = nn.Linear(
             self.hidden_size, self.hidden_size + 2 * self.num_key_value_heads * self.head_dim, bias=False
