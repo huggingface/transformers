@@ -136,7 +136,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.partial_rotary_factor = partial_rotary_factor
-        self._block_types = list(block_types)
+        self.block_types = list(block_types)
         self.hidden_activation = hidden_activation
         self.head_dim = self.hidden_size // self.num_attention_heads
         self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else num_attention_heads
@@ -155,7 +155,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
 
     @property
     def layers_block_type(self):
-        return (self._block_types * 100)[: self.num_hidden_layers]
+        return (self.block_types * 100)[: self.num_hidden_layers]
 
     def to_dict(self):
         output = super().to_dict()
