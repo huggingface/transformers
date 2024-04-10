@@ -23,12 +23,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/bigbird-roberta-base": "https://huggingface.co/google/bigbird-roberta-base/resolve/main/config.json",
-    "google/bigbird-roberta-large": "https://huggingface.co/google/bigbird-roberta-large/resolve/main/config.json",
-    "google/bigbird-base-trivia-itc": "https://huggingface.co/google/bigbird-base-trivia-itc/resolve/main/config.json",
-    # See all BigBird models at https://huggingface.co/models?filter=big_bird
-}
+
+from ..deprecated._archive_maps import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class BigBirdConfig(PretrainedConfig):

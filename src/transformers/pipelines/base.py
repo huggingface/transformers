@@ -42,6 +42,7 @@ from ..utils import (
     is_torch_available,
     is_torch_cuda_available,
     is_torch_mlu_available,
+    is_torch_mps_available,
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
@@ -860,11 +861,13 @@ class Pipeline(_ScikitCompat):
                 self.device = torch.device(f"npu:{device}")
             elif is_torch_xpu_available(check_device=True):
                 self.device = torch.device(f"xpu:{device}")
+            elif is_torch_mps_available():
+                self.device = torch.device(f"mps:{device}")
             else:
                 raise ValueError(f"{device} unrecognized or not available.")
         else:
             self.device = device if device is not None else -1
-        self.torch_dtype = torch_dtype
+
         self.binary_output = binary_output
 
         # We shouldn't call `model.to()` for models loaded with accelerate
@@ -966,6 +969,13 @@ class Pipeline(_ScikitCompat):
         Scikit / Keras interface to transformers' pipelines. This method will forward to __call__().
         """
         return self(X)
+
+    @property
+    def torch_dtype(self) -> Optional["torch.dtype"]:
+        """
+        Torch dtype of the model (if it's Pytorch model), `None` otherwise.
+        """
+        return getattr(self.model, "dtype", None)
 
     @contextmanager
     def device_placement(self):

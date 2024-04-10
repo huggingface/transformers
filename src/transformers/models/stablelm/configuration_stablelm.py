@@ -20,10 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "stabilityai/stablelm-3b-4e1t": "https://huggingface.co/stabilityai/stablelm-3b-4e1t/resolve/main/config.json",
-    # See all StableLM models at https://huggingface.co/models?filter=stablelm
-}
+
+from ..deprecated._archive_maps import STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class StableLmConfig(PretrainedConfig):
@@ -85,6 +83,11 @@ class StableLmConfig(PretrainedConfig):
             is an experimental feature, subject to breaking API changes in future versions.
         use_qkv_bias (`bool`, *optional*, defaults to `False`):
             Whether or not the model should use bias for qkv layers.
+        qk_layernorm (`bool`, *optional*, defaults to `False`):
+            Whether or not to normalize, per head, the Queries and Keys after projecting the hidden states.
+        use_parallel_residual (`bool`, *optional*, defaults to `False`):
+            Whether to use a "parallel" formulation in each Transformer layer, which can provide a slight training
+            speedup at large scales.
         hidden_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio after applying the MLP to the hidden states.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -125,6 +128,8 @@ class StableLmConfig(PretrainedConfig):
         rope_theta=10_000,
         rope_scaling=None,
         use_qkv_bias=False,
+        qk_layernorm=False,
+        use_parallel_residual=False,
         hidden_dropout=0.0,
         attention_dropout=0.0,
         partial_rotary_factor=0.25,
@@ -148,6 +153,8 @@ class StableLmConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.use_qkv_bias = use_qkv_bias
+        self.qk_layernorm = qk_layernorm
+        self.use_parallel_residual = use_parallel_residual
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.partial_rotary_factor = partial_rotary_factor
@@ -170,8 +177,7 @@ class StableLmConfig(PretrainedConfig):
 
         if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
             raise ValueError(
-                "`rope_scaling` must be a dictionary with with two fields, `type` and `factor`, "
-                f"got {self.rope_scaling}"
+                "`rope_scaling` must be a dictionary with two fields, `type` and `factor`, " f"got {self.rope_scaling}"
             )
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_factor = self.rope_scaling.get("factor", None)

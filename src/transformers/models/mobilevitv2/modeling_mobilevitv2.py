@@ -57,10 +57,7 @@ _IMAGE_CLASS_CHECKPOINT = "apple/mobilevitv2-1.0-imagenet1k-256"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "apple/mobilevitv2-1.0-imagenet1k-256"
-    # See all MobileViTV2 models at https://huggingface.co/models?filter=mobilevitv2
-]
+from ..deprecated._archive_maps import MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.mobilevit.modeling_mobilevit.make_divisible
