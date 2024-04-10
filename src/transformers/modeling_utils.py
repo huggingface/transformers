@@ -3840,7 +3840,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model_buffers = {".".join([prefix, key]) for key in model_buffers}
         unexpected_keys = sorted(unexpected_keys - model_buffers)
 
-        model.tie_weights()
         if device_map is None and not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
             ptrs = collections.defaultdict(list)
             for name, tensor in model.state_dict().items():
