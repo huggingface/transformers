@@ -2053,7 +2053,8 @@ class GenerationMixin:
 
             # Replicates the new past_key_values to match the `top_k` candidates
             new_key_values = []
-            for layer in model_kwargs["past_key_values"]:
+            past = model_kwargs["past_key_values"]
+            for layer in past:
                 items = []
                 # item is either the key or the value matrix
                 for item in layer:
@@ -2062,7 +2063,14 @@ class GenerationMixin:
                     else:
                         items.append(item.repeat_interleave(top_k, dim=0))
                 new_key_values.append(tuple(items))
-            model_kwargs["past_key_values"] = tuple(new_key_values)
+            if not isinstance(past, DynamicCache):
+                past = tuple(new_key_values)
+            else:
+                for idx in range(len(past.key_cache)):
+                    if past.value_cache[idx].shape[1] != 0:
+                        k, v = new_key_values.pop()
+                        past.key_cache[idx] = k
+                        past.value_cache[idx] = v
 
             if sequential:
                 all_outputs = []
@@ -2137,16 +2145,25 @@ class GenerationMixin:
 
             else:
                 next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
-                new_key_values = ()
+                new_key_values = []
                 for layer in next_past_key_values:
-                    items = ()
+                    items = []
                     # item is either the key or the value matrix
                     for item in layer:
                         item = torch.stack(torch.split(item, top_k, dim=0))  # [B, K, num_head, seq_len, esz]
                         item = item[range(batch_size), selected_idx, ...]  # [B, num_head, seq_len, esz]
-                        items += (item,)
-                    new_key_values += (items,)
-                next_past_key_values = new_key_values
+                        items += [item]
+                    new_key_values += [items]
+
+                if not isinstance(next_past_key_values, DynamicCache):
+                    next_past_key_values = tuple(new_key_values)
+                else:
+                    for idx in range(len(past.key_cache)):
+                        if past.value_cache[idx].shape[1] != 0:
+                            k, v = new_key_values.pop()
+                            past.key_cache[idx] = k
+                            past.value_cache[idx] = v
+                    next_past_key_values = past
 
             logit_for_next_step = torch.stack(torch.split(logits, top_k))[range(batch_size), selected_idx, :]
 

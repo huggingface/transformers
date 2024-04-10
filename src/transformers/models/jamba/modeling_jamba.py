@@ -254,9 +254,6 @@ class JambaAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -272,6 +269,7 @@ class JambaAttention(nn.Module):
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
+        print(value_states.shape, query_states.shape)
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -283,11 +281,13 @@ class JambaAttention(nn.Module):
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
+        print(value_states.shape, query_states.shape)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            print("maks:", causal_mask.shape, attn_weights.shape, cache_position)
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
@@ -346,9 +346,9 @@ class JambaFlashAttention2(JambaAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim)
 
         kv_seq_len = cache_position[-1]
 
@@ -366,7 +366,7 @@ class JambaFlashAttention2(JambaAttention):
 
         if past_key_value is not None:
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
-            cache_has_contents = past_key_value.get_seq_length(self.layer_idx) > 0
+            cache_has_contents = cache_position[0] > 0
             if (
                 getattr(self.config, "sliding_window", None) is not None
                 and kv_seq_len > self.config.sliding_window
@@ -419,11 +419,6 @@ class JambaFlashAttention2(JambaAttention):
             query_states = query_states.to(target_dtype)
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
-
-        # Reashape to the expected shape for Flash Attention
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
 
         attn_output = self._flash_attention_forward(
             query_states,
@@ -652,7 +647,7 @@ class JambaSdpaAttention(JambaAttention):
             query_states,
             key_states,
             value_states,
-            attn_mask=attention_mask,
+            attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
             # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
             is_causal=self.is_causal and attention_mask is None and q_len > 1,
@@ -717,12 +712,12 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
         cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # Update the cache
-        if self.key_cache[layer_idx].shape[1] == 0:
+        if self.key_cache[layer_idx].shape[-1] == 0:
             self.key_cache[layer_idx] = key_states
             self.value_cache[layer_idx] = value_states
         else:
-            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
-            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=2)
+            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=2)
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
@@ -798,7 +793,7 @@ class JambaMambaMixer(nn.Module):
 
         # 2. Convolution sequence transformation
         conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
-        if cache_params is not None and cache_params.seqlen_offset > 0:
+        if isinstance(cache_params,HybridMambaAttentionDynamicCache) and cache_params.seqlen_offset > 0:
             hidden_states = causal_conv1d_update(
                 hidden_states.squeeze(-1),
                 cache_params.conv_states[self.layer_idx],
@@ -879,8 +874,9 @@ class JambaMambaMixer(nn.Module):
         projected_states = self.in_proj(input_states).transpose(1, 2)                   # [batch, 2 * intermediate_size, seq_len]
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
+        use_cache = isinstance(cache_params,HybridMambaAttentionDynamicCache)
         # 2. Convolution sequence transformation
-        if cache_params is not None:
+        if use_cache and cache_params.ssm_states[self.layer_idx].shape[0] == batch_size:
             if self.training:
                 # In training mode, we don't want to perform in-place operations on ssm_state so we can compute the backwards pass
                 ssm_state = cache_params.ssm_states[self.layer_idx].clone()
@@ -891,7 +887,7 @@ class JambaMambaMixer(nn.Module):
                 conv_state = cache_params.conv_states[self.layer_idx]                   # [batch, intermediate_size, conv_kernel_size]
                 conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
                 conv_state[:, :, -1] = hidden_states[:, :, 0]
-                cache_params.conv_states[self.layer_idx].copy_(conv_state)
+                cache_params.conv_states[self.layer_idx] = conv_state
                 hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
                 if self.use_conv_bias:
                     hidden_states += self.conv1d.bias
@@ -901,7 +897,7 @@ class JambaMambaMixer(nn.Module):
                     hidden_states,
                     (self.conv_kernel_size - hidden_states.shape[-1], 0)
                 )
-                cache_params.conv_states[self.layer_idx].copy_(conv_state)
+                cache_params.conv_states[self.layer_idx] = conv_state
                 hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])     # [batch, intermediate_size, seq_len]
         else:
             ssm_state = torch.zeros(
@@ -940,8 +936,8 @@ class JambaMambaMixer(nn.Module):
         scan_output = scan_output + (hidden_states * self.D[None, :, None])
         scan_output = (scan_output * self.act(gate))
 
-        if cache_params is not None:
-            cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
+        if use_cache:
+            cache_params.ssm_states[self.layer_idx] = ssm_state
 
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))             # [batch, seq_len, hidden_size]
@@ -1471,9 +1467,9 @@ class JambaModel(JambaPreTrainedModel):
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
         target_length = (
-            attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else cache_position[0] + 1
+            attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else cache_position[-1] + 1
         )
-
+        print(f"target_length: {target_length}, {attention_mask.shape}")
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
         if sequence_length != 1:
             causal_mask = torch.triu(causal_mask, diagonal=1)
@@ -1548,6 +1544,7 @@ class JambaForCausalLM(JambaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: Optional[Union[int, None]] = None,
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
@@ -1643,12 +1640,12 @@ class JambaForCausalLM(JambaPreTrainedModel):
         attention_mask=None,
         inputs_embeds=None,
         output_router_logits=False,
-        cache_positions=None,
+        cache_position=None,
         **kwargs,
     ):
         # Omit tokens covered by past_key_values
         if past_key_values is not None:
-            past_length = cache_positions[0] if cache_positions is not None else attention_mask.shape[1]
+            past_length = cache_position[0] if cache_position is not None else attention_mask.shape[1]
             max_cache_length = self.config.sliding_window
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
@@ -1686,6 +1683,11 @@ class JambaForCausalLM(JambaPreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids}
 
+        if cache_position is None:
+            cache_position = torch.arange(past_length, past_length + -input_ids.shape[1], device=input_ids.device)
+        else:
+            cache_position = cache_position[-input_ids.shape[1]:] 
+            
         model_inputs.update(
             {
                 "position_ids": position_ids,
@@ -1694,6 +1696,7 @@ class JambaForCausalLM(JambaPreTrainedModel):
                 "attention_mask": attention_mask,
                 "output_router_logits": output_router_logits,
                 "num_logits_to_keep": self.config.num_logits_to_keep,
+                "cache_position":cache_position
             }
         )
         return model_inputs
