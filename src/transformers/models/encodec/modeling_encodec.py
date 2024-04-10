@@ -40,24 +40,20 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "EncodecConfig"
 
 
-ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/encodec_24khz",
-    "facebook/encodec_48khz",
-    # See all EnCodec models at https://huggingface.co/models?filter=encodec
-]
+from ..deprecated._archive_maps import ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
 class EncodecOutput(ModelOutput):
     """
     Args:
-        audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
             Discret code embeddings computed using `model.encode`.
         audio_values (`torch.FlaotTensor` of shape `(batch_size, sequence_length)`, *optional*)
             Decoded audio values, obtained using the decoder part of Encodec.
     """
 
-    audio_codes: torch.FloatTensor = None
+    audio_codes: torch.LongTensor = None
     audio_values: torch.FloatTensor = None
 
 
@@ -65,13 +61,13 @@ class EncodecOutput(ModelOutput):
 class EncodecEncoderOutput(ModelOutput):
     """
     Args:
-        audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
             Discret code embeddings computed using `model.encode`.
         audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
             Scaling factor for each `audio_codes` input. This is used to unscale each chunk of audio when decoding.
     """
 
-    audio_codes: torch.FloatTensor = None
+    audio_codes: torch.LongTensor = None
     audio_scales: torch.FloatTensor = None
 
 
@@ -115,14 +111,27 @@ class EncodecConv1d(nn.Module):
         elif self.norm_type == "time_group_norm":
             self.norm = nn.GroupNorm(1, out_channels)
 
-    @staticmethod
+        kernel_size = self.conv.kernel_size[0]
+        stride = torch.tensor(self.conv.stride[0], dtype=torch.int64)
+        dilation = self.conv.dilation[0]
+
+        # Effective kernel size with dilations.
+        kernel_size = torch.tensor((kernel_size - 1) * dilation + 1, dtype=torch.int64)
+
+        self.register_buffer("stride", stride, persistent=False)
+        self.register_buffer("kernel_size", kernel_size, persistent=False)
+        self.register_buffer("padding_total", torch.tensor(kernel_size - stride, dtype=torch.int64), persistent=False)
+
     def _get_extra_padding_for_conv1d(
-        hidden_states: torch.Tensor, kernel_size: int, stride: int, padding_total: int = 0
-    ) -> int:
+        self,
+        hidden_states: torch.Tensor,
+    ) -> torch.Tensor:
         """See `pad_for_conv1d`."""
         length = hidden_states.shape[-1]
-        n_frames = (length - kernel_size + padding_total) / stride + 1
-        ideal_length = (math.ceil(n_frames) - 1) * stride + (kernel_size - padding_total)
+        n_frames = (length - self.kernel_size + self.padding_total) / self.stride + 1
+        n_frames = torch.ceil(n_frames).to(torch.int64) - 1
+        ideal_length = n_frames * self.stride + self.kernel_size - self.padding_total
+
         return ideal_length - length
 
     @staticmethod
@@ -145,20 +154,15 @@ class EncodecConv1d(nn.Module):
         return padded[..., :end]
 
     def forward(self, hidden_states):
-        kernel_size = self.conv.kernel_size[0]
-        stride = self.conv.stride[0]
-        dilation = self.conv.dilation[0]
-        kernel_size = (kernel_size - 1) * dilation + 1  # effective kernel size with dilations
-        padding_total = kernel_size - stride
-        extra_padding = self._get_extra_padding_for_conv1d(hidden_states, kernel_size, stride, padding_total)
+        extra_padding = self._get_extra_padding_for_conv1d(hidden_states)
 
         if self.causal:
             # Left padding for causal
-            hidden_states = self._pad1d(hidden_states, (padding_total, extra_padding), mode=self.pad_mode)
+            hidden_states = self._pad1d(hidden_states, (self.padding_total, extra_padding), mode=self.pad_mode)
         else:
             # Asymmetric padding required for odd strides
-            padding_right = padding_total // 2
-            padding_left = padding_total - padding_right
+            padding_right = self.padding_total // 2
+            padding_left = self.padding_total - padding_right
             hidden_states = self._pad1d(
                 hidden_states, (padding_left, padding_right + extra_padding), mode=self.pad_mode
             )
@@ -514,7 +518,7 @@ ENCODEC_INPUTS_DOCSTRING = r"""
             The target bandwidth. Must be one of `config.target_bandwidths`. If `None`, uses the smallest possible
             bandwidth. bandwidth is represented as a thousandth of what it is, e.g. 6kbps bandwidth is represented as
             `bandwidth == 6.0`
-        audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
             Discret code embeddings computed using `model.encode`.
         audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
             Scaling factor for each `audio_codes` input.
@@ -718,7 +722,7 @@ class EncodecModel(EncodecPreTrainedModel):
         trimmed.
 
         Args:
-            audio_codes (`torch.FloatTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
+            audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
                 Discret code embeddings computed using `model.encode`.
             audio_scales (`torch.Tensor` of shape `(batch_size, nb_chunks)`, *optional*):
                 Scaling factor for each `audio_codes` input.

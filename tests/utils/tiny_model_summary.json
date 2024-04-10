@@ -4917,50 +4917,6 @@
         ],
         "sha": "b8c8d479e29e9ee048e2d0b05b001ac835ad8859"
     },
-    "PhiForCausalLM": {
-        "tokenizer_classes": [
-            "CodeGenTokenizer",
-            "CodeGenTokenizerFast"
-        ],
-        "processor_classes": [],
-        "model_classes": [
-            "PhiForCausalLM"
-        ],
-        "sha": "3fecc0109a4a3a230e3a5509eaf47a26eba85d79"
-    },
-    "PhiForSequenceClassification": {
-        "tokenizer_classes": [
-            "CodeGenTokenizer",
-            "CodeGenTokenizerFast"
-        ],
-        "processor_classes": [],
-        "model_classes": [
-            "PhiForSequenceClassification"
-        ],
-        "sha": "e1c9f8ebf1317516acc1cd6338de71a53e770245"
-    },
-    "PhiForTokenClassification": {
-        "tokenizer_classes": [
-            "CodeGenTokenizer",
-            "CodeGenTokenizerFast"
-        ],
-        "processor_classes": [],
-        "model_classes": [
-            "PhiForTokenClassification"
-        ],
-        "sha": "d3a8054903753b5c96c05eaf9877905a116a1d5e"
-    },
-    "PhiModel": {
-        "tokenizer_classes": [
-            "CodeGenTokenizer",
-            "CodeGenTokenizerFast"
-        ],
-        "processor_classes": [],
-        "model_classes": [
-            "PhiModel"
-        ],
-        "sha": "99c38d5ce7ace35127d00ed3eeb3561308ea6b21"
-    },
     "Pix2StructForConditionalGeneration": {
         "tokenizer_classes": [
             "T5TokenizerFast"

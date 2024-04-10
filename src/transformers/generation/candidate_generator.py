@@ -99,7 +99,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Make sure all data at the same device as assistant model
         device = assistant_model.device
         input_ids = input_ids.to(device)
-        inputs_tensor = inputs_tensor.to(device)
+        if inputs_tensor is not None:
+            inputs_tensor = inputs_tensor.to(device)
 
         # Prepare the assistant and the starting number of candidate tokens
         self.assistant_model = assistant_model
@@ -130,11 +131,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
         if assistant_model.config.is_encoder_decoder:
             # both are encoder-decoder
             self.input_ids_key = "decoder_input_ids"
-            self.attention_key = "decoder_attention_mask"
         elif "encoder_outputs" in assistant_kwargs:
             # special case for encoder-decoder with decoder-only assistant (like DistilWhisper)
             self.input_ids_key = "input_ids"
-            self.attention_key = "attention_mask"
             self.assistant_kwargs["attention_mask"] = self.assistant_kwargs.get(
                 "decoder_attention_mask",
                 torch.ones((input_ids.shape[0], 1), device=input_ids.device, dtype=torch.long),
@@ -142,15 +141,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
         else:
             # both are decoder-only
             self.input_ids_key = "input_ids"
-            self.attention_key = "attention_mask"
 
         # Prepare generation-related options.
-        eos_token_id = generation_config.eos_token_id
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
-        self.eos_token_id_tensor = (
-            torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
-        )
         self.logits_processor = logits_processor
         self.generation_config = copy.deepcopy(generation_config)
         self.generation_config.return_dict_in_generate = True
@@ -246,15 +238,20 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
             The maximum ngram size to be considered for matching in the prompt
         num_output_tokens (`int`):
             The number of tokens to be output as candidate tokens.
+        max_length (`int`):
+            The number of total maximum tokens that can be generated. For decoder-only models that includes the prompt length.
+            Defaults to 20, which is the max length used as default in generation config.
     """
 
     def __init__(
         self,
         num_output_tokens: int = 10,
-        max_matching_ngram_size: int = 2,
+        max_matching_ngram_size: int = None,
+        max_length: int = 20,
     ):
         self.num_output_tokens = num_output_tokens
-        self.max_matching_ngram_size = max_matching_ngram_size
+        self.max_matching_ngram_size = max_matching_ngram_size if max_matching_ngram_size else 2
+        self.max_length = max_length
 
         if self.max_matching_ngram_size <= 0 or self.num_output_tokens <= 0:
             raise ValueError("Invalid max_matching_ngram_size or num_output_tokens")
@@ -271,6 +268,10 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
             `torch.LongTensor` of shape `(num_candidates, candidate_length)`: The candidate sequences to be tried.
         """
         input_length = input_ids.size(1)
+
+        # Don't generate more than `max_length - 1` candidates since the target model generates one extra token.
+        if self.max_length == input_length + 1:
+            return input_ids, None
 
         chosen_ids = None
         match_found = False
@@ -291,7 +292,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
             for idx in match_indices:
                 start_idx = idx + ngram_size
                 end_idx = start_idx + self.num_output_tokens
-                end_idx = min(end_idx, input_length)
+                end_idx = min(end_idx, input_length, self.max_length)
 
                 if start_idx < end_idx:
                     chosen_ids = input_ids[0, start_idx:end_idx]
@@ -301,8 +302,8 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
                 break
 
         if chosen_ids is None or len(chosen_ids) == 0:
-            # Need to make a dummy tensor to avoid errors
-            chosen_ids = torch.zeros((1), dtype=torch.long, device=input_ids.device)
+            # In case we didn't find a match return the input sequence unchanged, reverts back to autoregressive decoding
+            return input_ids, None
 
         # Now need extend input_ids with chosen_ids
         chosen_ids = chosen_ids.unsqueeze(0)

@@ -45,7 +45,6 @@ if is_torch_available():
     import torch
 
     from transformers import ClvpEncoder, ClvpForCausalLM, ClvpModel, ClvpModelForConditionalGeneration
-    from transformers.models.clvp.modeling_clvp import CLVP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 from transformers import ClvpFeatureExtractor, ClvpTokenizer
 
@@ -344,6 +343,7 @@ class ClvpModelForConditionalGenerationTester:
         self.parent = parent
         self.clvp_encoder_tester = ClvpEncoderTester(parent)
         self.is_training = is_training
+        self.batch_size = self.clvp_encoder_tester.batch_size  # need bs for batching_equivalence test
 
     def get_config(self):
         decoder_config = ClvpDecoderConfig(
@@ -540,9 +540,9 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CLVP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ClvpModelForConditionalGeneration.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "susnato/clvp_dev"
+        model = ClvpModelForConditionalGeneration.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # Since Clvp has a lot of different models connected with each other it's better to test each of them individually along

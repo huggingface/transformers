@@ -246,7 +246,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> prompt = "Generate a coco-style caption.\n"
 
-        >>> inputs = processor(text=text_prompt, images=image, return_tensors="pt")
+        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> generated_ids = model.generate(**model_inputs, max_new_tokens=7)
@@ -290,7 +290,9 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
             if image_patches is not None and past_key_values is None:
                 patch_embeddings = [
-                    self.vision_embed_tokens(patch.to(self.vision_embed_tokens.weight.dtype)).squeeze(0)
+                    self.vision_embed_tokens(patch.to(self.vision_embed_tokens.weight.dtype))
+                    .squeeze(0)
+                    .to(inputs_embeds.device)
                     for patch in image_patches
                 ]
                 inputs_embeds = self.gather_continuous_embeddings(

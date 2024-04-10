@@ -87,7 +87,7 @@ to stop generation whenever the full generation exceeds some amount of time. To 
 - `num_beams`: by specifying a number of beams higher than 1, you are effectively switching from greedy search to
 beam search. This strategy evaluates several hypotheses at each time step and eventually chooses the hypothesis that
 has the overall highest probability for the entire sequence. This has the advantage of identifying high-probability
-sequences that start with a lower probability initial tokens and would've been ignored by the greedy search.
+sequences that start with a lower probability initial tokens and would've been ignored by the greedy search. Visualize how it works [here](https://huggingface.co/spaces/m-ric/beam_search_visualizer).
 - `do_sample`: if set to `True`, this parameter enables decoding strategies such as multinomial sampling, beam-search
 multinomial sampling, Top-K sampling and Top-p sampling. All these strategies select the next token from the probability
 distribution over the entire vocabulary with various strategy-specific adjustments.
@@ -254,6 +254,12 @@ Unlike greedy search, beam-search decoding keeps several hypotheses at each time
 the hypothesis that has the overall highest probability for the entire sequence. This has the advantage of identifying high-probability
 sequences that start with lower probability initial tokens and would've been ignored by the greedy search.
 
+<a href="https://huggingface.co/spaces/m-ric/beam_search_visualizer" class="flex flex-col justify-center">
+    <img style="max-width: 90%; margin: auto;" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/beam_search.png"/>
+</a>
+
+You can visualize how beam-search decoding works in [this interactive demo](https://huggingface.co/spaces/m-ric/beam_search_visualizer): type your input sentence, and play with the parameters to see how the decoding beams change.
+
 To enable this decoding strategy, specify the `num_beams` (aka number of hypotheses to keep track of) that is greater than 1.
 
 ```python
@@ -389,3 +395,6 @@ just like in multinomial sampling. However, in assisted decoding, reducing the t
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['Alice and Bob are going to the same party. It is a small party, in a small']
 ```
+
+Alternativelly, you can also set the `prompt_lookup_num_tokens` to trigger n-gram based assisted decoding, as opposed
+to model based assisted decoding. You can read more about it [here](https://twitter.com/joao_gante/status/1747322413006643259).

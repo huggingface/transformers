@@ -128,10 +128,6 @@ class TFTopPLogitsWarper(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-def tf_top_k_top_p_filtering(*args, **kwargs):
-    requires_backends(tf_top_k_top_p_filtering, ["tf"])
-
-
 class KerasMetricCallback(metaclass=DummyObject):
     _backends = ["tf"]
 

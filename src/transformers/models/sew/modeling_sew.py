@@ -55,12 +55,8 @@ _SEQ_CLASS_CHECKPOINT = "anton-l/sew-mid-100k-ft-keyword-spotting"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
 _SEQ_CLASS_EXPECTED_LOSS = 9.52
 
-SEW_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "asapp/sew-tiny-100k",
-    "asapp/sew-small-100k",
-    "asapp/sew-mid-100k",
-    # See all SEW models at https://huggingface.co/models?filter=sew
-]
+
+from ..deprecated._archive_maps import SEW_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices

@@ -20,11 +20,8 @@ from ....utils import logging
 
 logger = logging.get_logger(__name__)
 
-VAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Visual-Attention-Network/van-base": (
-        "https://huggingface.co/Visual-Attention-Network/van-base/blob/main/config.json"
-    ),
-}
+
+from .._archive_maps import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class VanConfig(PretrainedConfig):

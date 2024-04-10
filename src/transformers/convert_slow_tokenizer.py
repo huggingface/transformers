@@ -1039,6 +1039,17 @@ class T5Converter(SpmConverter):
         )
 
 
+class UdopConverter(SpmConverter):
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single=["$A", "</s>"],
+            pair=["$A", "</s>", "$B", "</s>"],
+            special_tokens=[
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
+            ],
+        )
+
+
 class WhisperConverter(Converter):
     def converted(self) -> Tokenizer:
         vocab = self.original_tokenizer.encoder
@@ -1308,7 +1319,10 @@ class GemmaConvert(SpmConverter):
             raise Exception(
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
             )
-
+        user_defined_symbols = [
+            AddedToken(token, normalized=False, special=False) for token in proto.trainer_spec.user_defined_symbols
+        ]
+        tokenizer.add_tokens(user_defined_symbols)
         return tokenizer
 
 
@@ -1317,9 +1331,9 @@ class LlamaConverter(SpmConverter):
 
     def vocab(self, proto):
         vocab = [
-            ("<unk>", 0.0),
-            ("<s>", 0.0),
-            ("</s>", 0.0),
+            (self.original_tokenizer.convert_ids_to_tokens(0), 0.0),
+            (self.original_tokenizer.convert_ids_to_tokens(1), 0.0),
+            (self.original_tokenizer.convert_ids_to_tokens(2), 0.0),
         ]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
         return vocab
@@ -1357,9 +1371,9 @@ class LlamaConverter(SpmConverter):
             )
             tokenizer.add_special_tokens(
                 [
-                    AddedToken("<unk>", normalized=False, special=True),
-                    AddedToken("<s>", normalized=False, special=True),
-                    AddedToken("</s>", normalized=False, special=True),
+                    AddedToken(self.original_tokenizer.convert_ids_to_tokens(0), normalized=False, special=True),
+                    AddedToken(self.original_tokenizer.convert_ids_to_tokens(1), normalized=False, special=True),
+                    AddedToken(self.original_tokenizer.convert_ids_to_tokens(2), normalized=False, special=True),
                 ]
             )
         else:
@@ -1471,6 +1485,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "SeamlessM4TTokenizer": SeamlessM4TConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
+    "UdopTokenizer": UdopConverter,
     "WhisperTokenizer": WhisperConverter,
     "XLMRobertaTokenizer": XLMRobertaConverter,
     "XLNetTokenizer": XLNetConverter,

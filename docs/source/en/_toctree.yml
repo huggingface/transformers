@@ -73,6 +73,8 @@
       title: Depth estimation
     - local: tasks/image_to_image
       title: Image-to-Image
+    - local: tasks/image_feature_extraction
+      title: Image Feature Extraction
     - local: tasks/mask_generation
       title: Mask Generation
     - local: tasks/knowledge_distillation_for_image_classification
@@ -132,7 +134,7 @@
   - local: custom_tools
     title: Custom Tools and Prompts
   - local: troubleshooting
-    title: Troubleshoot  
+    title: Troubleshoot
   - local: hf_quantizer
     title: Contribute new quantization method
   title: Developer guides
@@ -170,7 +172,7 @@
       title: GPU inference
     title: Optimizing inference
   - local: big_models
-    title: Instantiating a big model
+    title: Instantiate a big model
   - local: debugging
     title: Debugging
   - local: tf_xla
@@ -308,6 +310,8 @@
         title: CodeGen
       - local: model_doc/code_llama
         title: CodeLlama
+      - local: model_doc/cohere
+        title: Cohere
       - local: model_doc/convbert
         title: ConvBERT
       - local: model_doc/cpm
@@ -396,6 +400,8 @@
         title: M2M100
       - local: model_doc/madlad-400
         title: MADLAD-400
+      - local: model_doc/mamba
+        title: Mamba
       - local: model_doc/marian
         title: MarianMT
       - local: model_doc/markuplm
@@ -456,6 +462,8 @@
         title: QDQBert
       - local: model_doc/qwen2
         title: Qwen2
+      - local: model_doc/qwen2_moe
+        title: Qwen2MoE
       - local: model_doc/rag
         title: RAG
       - local: model_doc/realm
@@ -482,6 +490,8 @@
         title: SqueezeBERT
       - local: model_doc/stablelm
         title: StableLm
+      - local: model_doc/starcoder2
+        title: Starcoder2
       - local: model_doc/switch_transformers
         title: SwitchTransformers
       - local: model_doc/t5
@@ -577,12 +587,18 @@
         title: PoolFormer
       - local: model_doc/pvt
         title: Pyramid Vision Transformer (PVT)
+      - local: model_doc/pvt_v2
+        title: Pyramid Vision Transformer v2 (PVTv2)
       - local: model_doc/regnet
         title: RegNet
       - local: model_doc/resnet
         title: ResNet
       - local: model_doc/segformer
         title: SegFormer
+      - local: model_doc/seggpt
+        title: SegGpt
+      - local: model_doc/superpoint
+        title: SuperPoint
       - local: model_doc/swiftformer
         title: SwiftFormer
       - local: model_doc/swin
@@ -630,6 +646,8 @@
         title: MMS
       - local: model_doc/musicgen
         title: MusicGen
+      - local: model_doc/musicgen_melody
+        title: MusicGen Melody
       - local: model_doc/pop2piano
         title: Pop2Piano
       - local: model_doc/seamless_m4t
@@ -679,7 +697,7 @@
         title: VideoMAE
       - local: model_doc/vivit
         title: ViViT
-      title: Video models 
+      title: Video models
     - isExpanded: false
       sections:
       - local: model_doc/align
@@ -732,6 +750,8 @@
         title: LiLT
       - local: model_doc/llava
         title: Llava
+      - local: model_doc/llava_next
+        title: LLaVA-NeXT
       - local: model_doc/lxmert
         title: LXMERT
       - local: model_doc/matcha
@@ -764,6 +784,8 @@
         title: TVLT
       - local: model_doc/tvp
         title: TVP
+      - local: model_doc/udop
+        title: UDOP
       - local: model_doc/vilt
         title: ViLT
       - local: model_doc/vipllava

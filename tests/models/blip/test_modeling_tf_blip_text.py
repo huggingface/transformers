@@ -31,7 +31,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFBlipTextModel
-    from transformers.models.blip.modeling_tf_blip import TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class BlipTextModelTester:
@@ -173,9 +172,9 @@ class BlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFBlipTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip-vqa-base"
+        model = TFBlipTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
         super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)

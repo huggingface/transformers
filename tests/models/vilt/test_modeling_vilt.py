@@ -20,7 +20,6 @@ from datasets import load_dataset
 from packaging import version
 
 from transformers import ViltConfig, is_torch_available, is_vision_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
@@ -33,7 +32,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_MAPPING,
         ViltForImageAndTextRetrieval,
         ViltForImagesAndTextClassification,
         ViltForMaskedLM,
@@ -41,7 +39,7 @@ if is_torch_available():
         ViltForTokenClassification,
         ViltModel,
     )
-    from transformers.models.vilt.modeling_vilt import VILT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 
 if is_vision_available():
     import PIL
@@ -284,7 +282,7 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 config.modality_type_vocab_size = 3
 
             # ViltForImageAndTextRetrieval doesn't support training for now
-            if model_class in [*get_values(MODEL_MAPPING), ViltForImageAndTextRetrieval]:
+            if model_class.__name__ in [*MODEL_MAPPING_NAMES.values(), "ViltForImageAndTextRetrieval"]:
                 continue
 
             model = model_class(config)
@@ -307,7 +305,7 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             # ViltForImageAndTextRetrieval doesn't support training for now
             if (
-                model_class in [*get_values(MODEL_MAPPING), ViltForImageAndTextRetrieval]
+                model_class.__name__ in [*MODEL_MAPPING_NAMES.values(), "ViltForImageAndTextRetrieval"]
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
@@ -344,6 +342,12 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                             hidden states"""
     )
     def test_determinism(self):
+        pass
+
+    @unittest.skip(
+        "VilT samples image tokens from a multinomial distribution, resulting in not deterministic hidden states"
+    )
+    def test_batching_equivalence(self):
         pass
 
     @unittest.skip(
@@ -523,9 +527,9 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VILT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ViltModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "dandelin/vilt-b32-mlm"
+        model = ViltModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
