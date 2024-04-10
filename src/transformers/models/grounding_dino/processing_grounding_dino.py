@@ -40,7 +40,7 @@ def get_phrases_from_posmap(posmaps, input_ids):
             A tensor of token ids.
     """
     left_idx = 0
-    right_idx = 255
+    right_idx = posmaps.shape[-1] - 1
 
     # Avoiding altering the input tensor
     posmaps = posmaps.clone()
