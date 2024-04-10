@@ -1235,7 +1235,6 @@ else:
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
     _import_structure["models.siglip"].append("SiglipImageProcessor")
-    _import_structure["models.superglue"].extend(["SuperGlueImageProcessor"])
     _import_structure["models.superpoint"].extend(["SuperPointImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvp"].append("TvpImageProcessor")
@@ -6169,7 +6168,6 @@ if TYPE_CHECKING:
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
         from .models.siglip import SiglipImageProcessor
-        from .models.superglue import SuperGlueImageProcessor
         from .models.superpoint import SuperPointImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvp import TvpImageProcessor
