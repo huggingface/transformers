@@ -269,7 +269,6 @@ class JambaAttention(nn.Module):
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
-        print(value_states.shape, query_states.shape)
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -281,13 +280,12 @@ class JambaAttention(nn.Module):
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
-        print(value_states.shape, query_states.shape)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-            print("maks:", causal_mask.shape, attn_weights.shape, cache_position)
+            print("maks:", causal_mask.shape, " attn_weight:", attn_weights.shape, "cache_position", cache_position)
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
@@ -1466,10 +1464,9 @@ class JambaModel(JambaPreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        target_length = (
-            attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else cache_position[-1] + 1
-        )
-        print(f"target_length: {target_length}, {attention_mask.shape}")
+        target_length = cache_position[-1] + 1
+
+        print(f"target_length: {target_length}, {attention_mask.shape}, cache_position {cache_position}")
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
         if sequence_length != 1:
             causal_mask = torch.triu(causal_mask, diagonal=1)
@@ -1583,6 +1580,7 @@ class JambaForCausalLM(JambaPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             output_router_logits=output_router_logits,
+            cache_position=cache_position,
             return_dict=return_dict,
         )
 
@@ -1683,11 +1681,7 @@ class JambaForCausalLM(JambaPreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids}
 
-        if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + -input_ids.shape[1], device=input_ids.device)
-        else:
-            cache_position = cache_position[-input_ids.shape[1]:] 
-            
+
         model_inputs.update(
             {
                 "position_ids": position_ids,
