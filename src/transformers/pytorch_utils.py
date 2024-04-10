@@ -33,7 +33,6 @@ is_torch_greater_or_equal_than_2_1 = parsed_torch_version_base >= version.parse(
 is_torch_greater_or_equal_than_2_0 = parsed_torch_version_base >= version.parse("2.0")
 is_torch_greater_or_equal_than_1_13 = parsed_torch_version_base >= version.parse("1.13")
 is_torch_greater_or_equal_than_1_12 = parsed_torch_version_base >= version.parse("1.12")
-is_torch_greater_or_equal_than_1_10 = parsed_torch_version_base >= version.parse("1.10")
 
 
 def softmax_backward_data(parent, grad_output, output, dim, self):
