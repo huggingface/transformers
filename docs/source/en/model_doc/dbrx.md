@@ -20,7 +20,7 @@ It was pre-trained on 12T tokens of text and code data.
 Compared to other open MoE models like Mixtral-8x7B and Grok-1, DBRX is fine-grained, meaning it uses a larger number of smaller experts. DBRX has 16 experts and chooses 4, while Mixtral-8x7B and Grok-1 have 8 experts and choose 2.
 This provides 65x more possible combinations of experts and we found that this improves model quality.
 DBRX uses rotary position encodings (RoPE), gated linear units (GLU), and grouped query attention (GQA).
-It uses the GPT-4 tokenizer as described in the [tiktoken](https://github.com/openai/tiktoken) repository.
+It is a BPE based model and uses the GPT-4 tokenizer as described in the [tiktoken](https://github.com/openai/tiktoken) repository.
 We made these choices based on exhaustive evaluation and scaling experiments.
 
 DBRX was pretrained on 12T tokens of carefully curated data and a maximum context length of 32K tokens.
@@ -32,7 +32,7 @@ We used curriculum learning for pretraining, changing the data mix during traini
 More detailed information about DBRX Instruct and DBRX Base can be found in our [technical blog post](https://www.databricks.com/blog/introducing-dbrx-new-state-art-open-llm).
 
 
-This model was contributed by [abhi-db](https://huggingface.co/abhi-db). The original code can be found [here](https://github.com/databricks/dbrx-instruct).
+This model was contributed by [eitan-turok](https://huggingface.co/eitanturok) and [abhi-db](https://huggingface.co/abhi-db). The original code can be found [here](https://github.com/databricks/dbrx-instruct).
 
 ## DbrxConfig
 
