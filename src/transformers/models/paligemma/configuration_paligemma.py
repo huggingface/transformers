@@ -82,7 +82,7 @@ class PaLIGemmaConfig(PretrainedConfig):
         vision_config=None,
         text_config=None,
         ignore_index=-100,
-        image_token_index=257152,  # put dummy token index at end of vocabulary
+        image_token_index=256000,
         vocab_size=257152, # 
         projection_dim=2048,
         hidden_size=2048,
