@@ -1162,7 +1162,7 @@ class ModuleUtilsMixin:
                     quant_storage = self.hf_quantizer.quantization_config.bnb_4bit_quant_storage
                     # For compatibility with older PT version - see: https://github.com/huggingface/peft/pull/1635
                     nb_params = (
-                        quant_storage.itemize if hasattr(quant_storage, "itemize") else quant_storage.element_size
+                        quant_storage.itemize if hasattr(quant_storage, "itemize") else quant_storage.element_size()
                     )
                     total_numel.append(param.numel() * 2 * nb_params)
                 else:
