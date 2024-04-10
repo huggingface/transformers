@@ -686,11 +686,6 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_prepare_serving_output(self):
         pass
 
-    @unittest.skip(reason="Currently `saved_model` doesn't work with nested outputs.")
-    @slow
-    def test_saved_model_creation(self):
-        pass
-
     def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
