@@ -66,7 +66,8 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper#transformers.WhisperModel)
 * [Wav2Vec2](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2Model)
 * [Hubert](https://huggingface.co/docs/transformers/model_doc/hubert#transformers.HubertModel)
- 
+* [data2vec_audio](https://huggingface.co/docs/transformers/main/en/model_doc/data2vec#transformers.Data2VecAudioModel)
+
 
 You can request to add FlashAttention-2 support for another model by opening a GitHub Issue or Pull Request.
 
@@ -199,6 +200,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [MusicGen Melody](https://huggingface.co/docs/transformers/model_doc/musicgen_melody#transformers.MusicgenMelodyModel)
 * [wav2vec2](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2Model)
 * [Hubert](https://huggingface.co/docs/transformers/model_doc/hubert#transformers.HubertModel)
+* [data2vec_audio](https://huggingface.co/docs/transformers/main/en/model_doc/data2vec#transformers.Data2VecAudioModel)
 
 <Tip>
 
