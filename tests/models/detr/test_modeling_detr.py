@@ -522,7 +522,13 @@ def prepare_img():
 class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return DetrImageProcessor.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
+        return (
+            DetrImageProcessor.from_pretrained(
+                "facebook/detr-resnet-50", size={"shortest_edge": 800, "longest_edge": 1333}
+            )
+            if is_vision_available()
+            else None
+        )
 
     def test_inference_no_head(self):
         model = DetrModel.from_pretrained("facebook/detr-resnet-50").to(torch_device)
