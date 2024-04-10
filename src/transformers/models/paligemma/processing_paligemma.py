@@ -21,14 +21,45 @@ import logging
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy, AddedToken
 from ...utils import TensorType
 
 
 logger = logging.getLogger(__name__)
 
+def is_url(val) -> bool:
+    return isinstance(val, str) and val.startswith("http")
+
+
+def is_image_or_image_url(elem):
+    return is_url(elem) or is_valid_image(elem)
+
+
+def _is_str_or_image(elem):
+    return isinstance(elem, (str)) or is_image_or_image_url(elem)
+
+
+def build_string_from_input(prompt, bos_token, image_seq_len, image_token):
+    """
+    Builds a string from the input prompt and image tokens.
+    For example, for the call:
+    build_string_from_input(
+        prompt="Prefix str"
+        bos_token="<s>",
+        image_seq_len=3,
+        image_token="<im>",
+    )
+    The output will be:
+    "<im><im><im><s>Initial str"
+    Args:
+        prompt (`List[Union[str, ImageInput]]`): The input prompt.
+        bos_token (`str`): The beginning of sentence token.
+        image_seq_len (`int`): The length of the image sequence.
+        image_token (`str`): The image token.
+    """
+    return f"{image_token * image_seq_len}{bos_token}{prompt}"
 
 class PaLIGemmaProcessor(ProcessorMixin):
     r"""
@@ -48,7 +79,18 @@ class PaLIGemmaProcessor(ProcessorMixin):
     image_processor_class = "SiglipImageProcessor"
     tokenizer_class = ("GemmaTokenizer", "GemmaTokenizerFast")
 
-    def __init__(self, image_processor=None, tokenizer=None):
+    def __init__(self, image_processor=None, tokenizer=None, image_seq_length: int=256):
+        if image_processor is None:
+            raise ValueError("You need to specify an `image_processor`.")
+        if tokenizer is None:
+            raise ValueError("You need to specify a `tokenizer`.")
+        # TODO can we derive image sequence length from config here?
+        self.image_token = AddedToken("<image>", normalized=False, special=True)
+        self.image_seq_length = image_seq_length
+        tokens_to_add = {
+            "additional_special_tokens": [self.image_token]
+        }
+        tokenizer.add_special_tokens(tokens_to_add)
         super().__init__(image_processor, tokenizer)
 
     def __call__(
@@ -110,7 +152,7 @@ class PaLIGemmaProcessor(ProcessorMixin):
             raise ValueError("`images` are expected as arguments to a `PaLIGemmaProcessor` instance.")
         if text is None:
             logger.warning_once(
-                "You are using PaLIGemmawithout text prefix. It will perform as a picture-captioning model."
+                "You are using PaLIGemma without a text prefix. It will perform as a picture-captioning model."
             )
 
         if isinstance(text, List) and isinstance(images, List):
@@ -118,12 +160,32 @@ class PaLIGemmaProcessor(ProcessorMixin):
                 raise ValueError(
                     f"Received {len(images)} images for {len(text)} prompts. Each prompt should be associated with an image."
                 )
+        if _is_str_or_image(text):
+            text = [text]
+        elif isinstance(text, list) and _is_str_or_image(text[0]):
+            pass
+        input_strings = [
+            build_string_from_input(
+                prompt=prompt,
+                bos_token=self.tokenizer.bos_token,
+                image_seq_len=self.image_seq_length,
+                image_token=self.image_token.content
+            )
+            for prompt in text
+        ]
 
         pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
+        # Here padding is done wrongly, there is not enough fake image tokens.
+        if max_length is not None:
+            max_length += self.image_seq_length  # Here max_length has to account for the image tokens
         text_inputs = self.tokenizer(
-            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+            input_strings,
+            return_tensors=return_tensors,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            add_special_tokens=False,
         )
-
         return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
 
     def batch_decode(self, *args, **kwargs):
