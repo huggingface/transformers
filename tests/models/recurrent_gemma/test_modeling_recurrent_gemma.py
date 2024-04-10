@@ -122,7 +122,6 @@ class RecurrentGemmaModelTester:
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
-    # Ignore copy
     def get_config(self):
         return RecurrentGemmaConfig(
             num_hidden_layers=self.num_hidden_layers,
@@ -299,7 +298,7 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     test_missing_keys = False
     test_model_parallel = False
     test_pruning = False
-    test_head_masking = False  # Mamba does not have attention heads
+    test_head_masking = False  # RecurrentGemma does not have attention heads
     test_model_parallel = False
 
     # Need to remove 0.9 in `test_cpu_offload`
@@ -331,7 +330,7 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip("Rucurrent gemma does not use legacy cache")
+    @unittest.skip("Recurrent gemma does not use legacy cache")
     @parameterized.expand([(1, False), (1, True), (4, False)])
     def test_new_cache_format(self, num_beams, do_sample):
         pass
