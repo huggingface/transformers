@@ -170,7 +170,7 @@ class Idefics2Processor(ProcessorMixin):
         >>> images = [[image1], [image2]]
 
         >>> text = [
-        ...     ["<s><image> In this image, we see"],
+        ...     ["<s><image>In this image, we see"],
         ...     ["bla bla bla<image>"],
         ... ]
         >>> outputs = processor(text=text, images=images, return_tensors="pt", padding=True)
