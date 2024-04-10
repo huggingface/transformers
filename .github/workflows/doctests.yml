@@ -3,7 +3,7 @@ name: Doctests
 on:
   push:
     branches:
-      - doctest*
+      - fix_doctest
   repository_dispatch:
   schedule:
     - cron: "17 2 * * *"
@@ -46,6 +46,10 @@ jobs:
       - name: Get doctest files
         run: |
           $(python3 -c 'from utils.tests_fetcher import get_all_doctest_files; to_test = get_all_doctest_files(); to_test = " ".join(to_test); fp = open("doc_tests.txt", "w"); fp.write(to_test); fp.close()')
+
+      - name: Run doctests
+        run: |
+          python3 -m pip install --no-cache-dir natten==0.15.1+torch220cu118 -f https://shi-labs.com/natten/wheels
 
       - name: Run doctests
         run: |
