@@ -150,19 +150,19 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
         intermediate_size = (dim * olmo_config["mlp_ratio"]) // 2
 
     config = OLMoConfig(
+        vocab_size=vocab_size,
         hidden_size=dim,
         intermediate_size=intermediate_size,
-        num_attention_heads=n_heads,
         num_hidden_layers=n_layers,
-        rms_norm_eps=1e-5,
+        num_attention_heads=n_heads,
         num_key_value_heads=num_key_value_heads,
-        vocab_size=vocab_size,
-        rope_theta=base,
         max_position_embeddings=max_position_embeddings,
-        tie_word_embeddings=olmo_config["weight_tying"],
-        bos_token_id=None,
         pad_token_id=olmo_config["pad_token_id"],
+        bos_token_id=None,
         eos_token_id=olmo_config["eos_token_id"],
+        tie_word_embeddings=olmo_config["weight_tying"],
+        rope_theta=base,
+        rms_norm_eps=1e-5,
     )
     config.save_pretrained(tmp_model_path)
 
