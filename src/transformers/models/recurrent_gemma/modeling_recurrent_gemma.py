@@ -281,8 +281,6 @@ class SqrtBoundDerivative(torch.autograd.Function):
 class RecurrentGemmaRglru(nn.Module):
     """A Real-Gated Linear Recurrent Unit (RG-LRU) layer."""
 
-    recurrent_states = None
-
     def __init__(self, config):
         super().__init__()
         self.num_attention_heads = config.num_attention_heads
@@ -298,6 +296,7 @@ class RecurrentGemmaRglru(nn.Module):
             torch.empty([self.num_attention_heads, self.block_width, self.block_width])
         )
         self.recurrent_gate_bias = nn.Parameter(torch.empty([self.num_attention_heads, self.block_width]))
+        self.recurrent_states = None
 
     def forward(
         self,
@@ -386,9 +385,8 @@ class RecurrentGemmaRglru(nn.Module):
 
             contextualized_states = torch.zeros_like(hidden_states)
             for t in range(hidden_states.shape[1]):
-                recurrent_states = recurrent_gate[:, t].type(acc_dtype) * recurrent_states + hidden_states[:, t].type(
-                    acc_dtype
-                )
+                recurrent_states = recurrent_gate[:, t].type(acc_dtype) * recurrent_states
+                recurrent_states = recurrent_states + hidden_states[:, t].type(acc_dtype)
                 contextualized_states[:, t] = recurrent_states.type(hidden_states.dtype)
 
         return contextualized_states, recurrent_states
@@ -396,8 +394,6 @@ class RecurrentGemmaRglru(nn.Module):
 
 class RecurrentGemmaRecurrentBlock(nn.Module):
     """Griffin and Hawk's recurrent block."""
-
-    conv1d_state = None
 
     def __init__(self, config):
         super().__init__()
@@ -416,6 +412,8 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         )
         self.rg_lru = RecurrentGemmaRglru(config)
         self.act_fn = ACT2FN[config.hidden_activation]
+
+        self.conv1d_state = None
 
     def forward(
         self,
@@ -481,7 +479,7 @@ class RecurrentGemmaDecoderLayer(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.temporal_pre_norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.temporal_block = TEMPORAL_BLOCK_CLASSES[config.block_types[layer_idx]](config)
+        self.temporal_block = TEMPORAL_BLOCK_CLASSES[config.layers_recurrent_states[layer_idx]](config)
         self.channel_pre_norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp_block = RecurrentGemmaMlp(config)
 

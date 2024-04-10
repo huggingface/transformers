@@ -370,27 +370,30 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def _check_attentions_for_generate(self, *args, **kwargs):
         return True  # Model does not return attention
 
+    @unittest.skip("Past key values are not returned")
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
+    @unittest.skip("Past key values are not returned")
     def test_model_parallelism(self):
         pass
 
+    @unittest.skip("Past key values are not returned")
     def test_model_parallel_beam_search(self):
         pass
 
     def _check_past_key_values_for_generate(self, *args, **kwargs):
         return True
 
-    @unittest.skip("Seems to rely on `past_key_values`")
+    @unittest.skip("Rely on `past_key_values` to crop the assistant pkv. Not supported")
     def test_assisted_decoding_matches_greedy_search(self):
         pass
 
-    @unittest.skip("recurrent gemma's output different if you pad lefr or right. This is expected")
+    @unittest.skip("RecurrentGemma's output different if you pad left or right. This is expected")
     def test_left_padding_compatibility(self):
         pass
 
-    @unittest.skip("Seems to rely on `past_key_values`")
+    @unittest.skip("Relies on `past_key_values` returned by the model. Not supported with recurrent gemma")
     def test_assisted_decoding_sample(self):
         pass
 
