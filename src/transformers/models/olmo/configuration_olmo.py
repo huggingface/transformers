@@ -93,6 +93,9 @@ class OLMoConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        clip_qkv (`float`, *optional*):
+            If not `None`, elements of query, key and value attention states are clipped so that their
+            absolute value does not exceed this value.
 
     ```python
     >>> from transformers import OLMoModel, OLMoConfig
@@ -131,6 +134,7 @@ class OLMoConfig(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
+        clip_qkv=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -154,6 +158,7 @@ class OLMoConfig(PretrainedConfig):
         self._rope_scaling_validation()
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.clip_qkv = clip_qkv
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -163,6 +168,7 @@ class OLMoConfig(PretrainedConfig):
             **kwargs,
         )
 
+    # Copied from transformers.models.llama.configuration_llama.LlamaConfig._rope_scaling_validation
     def _rope_scaling_validation(self):
         """
         Validate the `rope_scaling` configuration.
@@ -172,8 +178,7 @@ class OLMoConfig(PretrainedConfig):
 
         if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
             raise ValueError(
-                "`rope_scaling` must be a dictionary with with two fields, `type` and `factor`, "
-                f"got {self.rope_scaling}"
+                "`rope_scaling` must be a dictionary with two fields, `type` and `factor`, " f"got {self.rope_scaling}"
             )
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_factor = self.rope_scaling.get("factor", None)

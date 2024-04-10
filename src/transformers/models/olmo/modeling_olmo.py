@@ -254,10 +254,10 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->OLMo
 class OLMoAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaAttention.__init__ with Llama->OLMo
     def __init__(self, config: OLMoConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -291,6 +291,7 @@ class OLMoAttention(nn.Module):
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
         self._init_rope()
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaAttention._init_rope with Llama->OLMo
     def _init_rope(self):
         if self.config.rope_scaling is None:
             self.rotary_emb = OLMoRotaryEmbedding(
@@ -353,6 +354,11 @@ class OLMoAttention(nn.Module):
             key_states = self.k_proj(hidden_states)
             value_states = self.v_proj(hidden_states)
 
+        if self.config.clip_qkv is not None:
+            query_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
+            key_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
+            value_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
+
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -403,7 +409,6 @@ class OLMoAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->OLMo
 class OLMoFlashAttention2(OLMoAttention):
     """
     OLMo flash attention module. This module inherits from `OLMoAttention` as the weights of the module stays
@@ -411,6 +416,7 @@ class OLMoFlashAttention2(OLMoAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -437,6 +443,11 @@ class OLMoFlashAttention2(OLMoAttention):
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
+
+        if self.config.clip_qkv is not None:
+            query_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
+            key_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
+            value_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
 
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
@@ -501,6 +512,7 @@ class OLMoFlashAttention2(OLMoAttention):
 
         return attn_output, attn_weights, past_key_value
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward with Llama->OLMo
     def _flash_attention_forward(
         self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
@@ -560,6 +572,7 @@ class OLMoFlashAttention2(OLMoAttention):
 
         return attn_output
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
     def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
@@ -599,7 +612,6 @@ class OLMoFlashAttention2(OLMoAttention):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->OLMo
 class OLMoSdpaAttention(OLMoAttention):
     """
     OLMo attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -639,6 +651,11 @@ class OLMoSdpaAttention(OLMoAttention):
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
+
+        if self.config.clip_qkv is not None:
+            query_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
+            key_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
+            value_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
