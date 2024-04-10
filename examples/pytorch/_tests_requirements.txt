@@ -25,3 +25,4 @@ torchaudio
 jiwer
 librosa
 evaluate >= 0.2.0
+albumentations
