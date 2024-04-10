@@ -646,7 +646,6 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         config: RecurrentGemmaConfig
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel.__init__ with LLAMA->RECURRENTGEMMA,Llama->RecurrentGemma,self.norm->self.final_norm
     def __init__(self, config: RecurrentGemmaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -659,6 +658,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         self.final_norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
+        self.register_buffer("normalizer",torch.tensor(self.config.hidden_size ** 0.5, dtype=torch.bfloat16))
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -715,8 +715,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
 
-        normalizer = torch.full((1,), self.config.hidden_size**0.5, device=hidden_states.device)
-        hidden_states = hidden_states * normalizer.type(torch.bfloat16)
+        hidden_states = hidden_states * self.normalizer.type(hidden_states.dtype)
 
         all_hidden_states = () if output_hidden_states else None
         for i, residual_block in enumerate(self.layers):

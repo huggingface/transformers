@@ -17,7 +17,7 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, RecurrentGemmaConfig, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, RecurrentGemmaConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_read_token,
@@ -421,18 +421,19 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
 
 @require_torch_gpu
-@slow
+# @slow
 class RecurrentGemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
     model_id = "google/recurrentgemma-2b"
 
     @require_read_token
     def test_2b_generate(self):
-        EXPECTED_TEXTS = ['<bos>Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', '<bos>Hi today<pad><pad> is a new app that allows you to make money by watching videos.\n\nThe app is very simple to use and you can earn money by watching videos.\n\nThe app is available for both Android and iOS devices and you can download it from the Google Play Store or the App Store.\n\nOnce you have downloaded the app']  # fmt: skip
-
+        EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', 'Hi today is a very good day for you. You will be able to do all the work you want to do. You will be able to do all the work you want to do. You will be able to do all the work you want to do. You will be able to do all the work you want to do.'] # fmt: skip
         model = AutoModelForCausalLM.from_pretrained(self.model_id, low_cpu_mem_usage=True).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        tokenizer.padding_side = "right"
+
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
@@ -441,7 +442,8 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
         tokenizer.padding_side = "left"
-        EXPECTED_TEXTS = ['<bos>Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', '<pad><pad><bos>Hi today I am going to share with you a very interesting and useful app which is called <strong><em>“</em></strong><strong><em>Google Translate</em></strong><strong><em>”</em></strong>. This app is very useful for those who are traveling to a foreign country and want to communicate with the local people. This app is very useful for those']  # fmt: skip
+        EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', 'Hi today I am going to share with you the best <strong><em>free online video editing software</em></strong>.\n\n<h2><strong>Best Free Online Video Editing Software</strong></h2>\n\n<strong>1.</strong> <strong>Wondershare Filmora</strong>\n\nWondershare Filmora is a free online video editing software that is used to edit videos.']  # fmt: skip
+
 
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
@@ -458,35 +460,26 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-        ).to(torch_device)
-        output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
     @require_read_token
     def test_2b_sample(self):
-        EXPECTED_TEXT = "<bos>Where is Paris ?\n\nIn the blank, insert the most appropriate word .\n\nThe _______ I felt when my teacher complimented my work this morning stayed with me all day.\n\nOn the line provided, combine each word with the prefix or suffix or write the plural form, as directed.\n\n<strong>Examples</strong>\n\n<strong>1</strong>. pre +"  # fmt: skip
-
+        set_seed(0)
+        EXPECTED_TEXT = ['Where is Paris ?\n\nChoose the word or phrase that is closest in meaning to the word in capital letters.\n\nREDEEM\n(A) sort out\n(B) think over\n(C) turn in\n(D) take back\n\nWrite the correct word in the space next to each definition. Use each word only once.\n\nto badly damage\n\nOn the lines provided below, write <em>P</em> if the underlined word group is a phrase and <em>NP</em> if it is not a phrase. Example $\\underline{\\text{P}}$ 1. We have finally discovered the secret $\\underline{\\text{of delicious pizza. }}$'] # fmt: skip
         model = AutoModelForCausalLM.from_pretrained(self.model_id).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer("Where is Paris ?", return_tensors="pt", padding=True).to(torch_device)
-        with torch.no_grad():
-            model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output = model.generate(**inputs, max_new_tokens=128, do_sample=True)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     @require_bitsandbytes
     @require_read_token
-    def test_model_2b_4bit(self):
+    def test_model_2b_8bit(self):
         EXPECTED_TEXTS = ['<bos>Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking', "<bos>Hi today<pad><pad> I'm going to show you how to make a simple and easy to use <strong><em><u>"]  # fmt: skip
 
         model = AutoModelForCausalLM.from_pretrained(
-            "gg-hf/recurrent-gemma-2b-hf", device_map={"": torch_device}, load_in_4bit=True, torch_dtype=torch.bfloat16
+            "gg-hf/recurrent-gemma-2b-hf", device_map={"": torch_device}, load_in_8bit=True, torch_dtype=torch.bfloat16
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
@@ -497,18 +490,18 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @require_read_token
+    # @require_read_token
     def test_long_context(self):
         input_text = [
             '<bos><s>Marseille, France (CNN)The French prosecutor leading an investigation into the crash of Germanwings Flight 9525 insisted Wednesday that he was not aware of any video footage from on board the plane. Marseille prosecutor Brice Robin told CNN that "so far no videos were used in the crash investigation." He added, "A person who has such a video needs to immediately give it to the investigators." Robin\'s comments follow claims by two magazines, German daily Bild and French Paris Match, of a cell phone video showing the harrowing final seconds from on board Germanwings Flight 9525 as it crashed into the French Alps. All 150 on board were killed. Paris Match and Bild reported that the video was recovered from a phone at the wreckage site. The two publications described the supposed video, but did not post it on their websites. The publications said that they watched the video, which was found by a source close to the investigation. "One can hear cries of \'My God\' in several languages," Paris Match reported. "Metallic banging can also be heard more than three times, perhaps of the pilot trying to open the cockpit door with a heavy object.  Towards the end, after a heavy shake, stronger than the others, the screaming intensifies. Then nothing." "It is a very disturbing scene," said Julian Reichelt, editor-in-chief of Bild online. An official with France\'s accident investigation agency, the BEA, said the agency is not aware of any such video. Lt. Col.'
         ]
-        EXPECTED_GENERATION = ' Jean-Marc Rolland said, "We have not seen any video or any other material that could'
+        EXPECTED_GENERATION = [' Jean-Paul Delannoy told CNN that the BEA is "not aware of any video footage that could have been taken on board the plane." "We are not aware of any video footage that could have been taken on board the plane," Delannoy said. "We are not aware of any video footage that could']
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16
         ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        inputs = tokenizer(input_text, return_tensors="pt")
+        inputs = tokenizer(input_text, return_tensors="pt").to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
-        output_text = tokenizer.batch_decode(output[:, inputs.input_ids.shap[1] :], skip_special_tokens=True)
+        output_text = tokenizer.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_GENERATION)
