@@ -180,9 +180,9 @@ class GroundingDinoProcessor(ProcessorMixin):
                 Raw outputs of the model.
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The token ids of the input text.
-            box_threshold (`float`, *optional*):
+            box_threshold (`float`, *optional*, defaults to 0.25):
                 Score threshold to keep object detection predictions.
-            text_threshold (`float`, *optional*):
+            text_threshold (`float`, *optional*, defaults to 0.25):
                 Score threshold to keep text detection predictions.
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
