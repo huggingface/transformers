@@ -1270,7 +1270,7 @@ class Idefics2PerceiverResampler(nn.Module):
         attention_mask,
     ) -> torch.Tensor:
         # seq embed -> bsz seq embed
-        latents = self.latents.unsqueeze(0).expand((context.shape[0], 1, 1))
+        latents = self.latents.unsqueeze(0).expand((context.shape[0], *self.latents.size()))
 
         latent_attention_mask = torch.ones(
             (attention_mask.size(0), latents.size(1)), dtype=attention_mask.dtype, device=attention_mask.device
