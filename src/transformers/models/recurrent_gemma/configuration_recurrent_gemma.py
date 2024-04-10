@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 class RecurrentGemmaConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`RecurrentGemmaModel`]. It is used to instantiate an RecurrentGemma
+    This is the configuration class to store the configuration of a [`RecurrentGemmaModel`]. It is used to instantiate a RecurrentGemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the RecurrentGemma-7B.
 
@@ -34,7 +34,8 @@ class RecurrentGemmaConfig(PretrainedConfig):
 
 
     Args:
-        num_hidden_layers (`<fill_type>`, *optional*, defaults to 26): <fill_docstring>
+        num_hidden_layers (`int`, *optional*, defaults to 26):
+            The number of hidden layers in the model.
         vocab_size (`int`, *optional*, defaults to 256000):
             Vocabulary size of the RecurrentGemma model. Defines the number of
             different tokens that can be represented by the
@@ -54,8 +55,10 @@ class RecurrentGemmaConfig(PretrainedConfig):
         embeddings_scale_by_sqrt_dim (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         attention_window_size (`int`, *optional*, defaults to 2048):
             The size of the attention window used in the attention block.
-        conv1d_width (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
-        logits_soft_cap (`<fill_type>`, *optional*, defaults to 30.0): <fill_docstring>
+        conv1d_width (`int`, *optional*, defaults to 4):
+            The kernel size of conv1d layers used in the recurrent blocks.
+        logits_soft_cap (`float`, *optional*, defaults to 30.0):
+            The value at which the logits should be soft-capped to after the transformer and LM-head computation in the Causal LM architecture.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -70,8 +73,10 @@ class RecurrentGemmaConfig(PretrainedConfig):
             Beginning of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        hidden_activation (`<fill_type>`, *optional*, defaults to `"gelu_pytorch_tanh"`): <fill_docstring>
-        partial_rotary_factor (`<fill_type>`, *optional*, defaults to 0.5): <fill_docstring>
+        hidden_activation (``str` or `function``, *optional*, defaults to `"gelu_pytorch_tanh"`):
+            The hidden activation used in the recurrent block as well as the MLP layer of the decoder layers.
+        partial_rotary_factor (`float`, *optional*, defaults to 0.5):
+            The partial rotary factor used in the initialization of the rotary embeddings.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         block_types (`<fill_type>`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`): <fill_docstring>
