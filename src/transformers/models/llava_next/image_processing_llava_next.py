@@ -647,7 +647,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             )
             if x.shape[0] < max_patches_in_batch
             else x
-            for x in pixel_values 
+            for x in pixel_values[:max_num_patches] # Do not allow more patches than the max_patches
         ])
         return torch.FloatTensor(padded_images)
  

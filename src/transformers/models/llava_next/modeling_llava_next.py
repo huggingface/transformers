@@ -603,7 +603,6 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
 
                 new_image_features = []
                 for image_idx, image_feature in enumerate(image_features):
-                    num_unpadded_patches = image_feature.shape[0]
                     # print("num _unpadded patches: ", num_unpadded_patches)
                     # image feature has shape; 5/3/4 (num_patches), 3, 336, 336
                     if image_feature.shape[0] > 1:
