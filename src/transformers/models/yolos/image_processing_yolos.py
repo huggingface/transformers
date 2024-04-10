@@ -720,20 +720,8 @@ class YolosImageProcessor(BaseImageProcessor):
         do_pad: bool = True,
         **kwargs,
     ) -> None:
-        if "pad_and_return_pixel_mask" in kwargs:
-            do_pad = kwargs.pop("pad_and_return_pixel_mask")
-
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
-                "Please specify in `size['longest_edge'] instead`.",
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None if size is None else 1333
-
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
-        size = get_size_dict(size, max_size=max_size, default_to_square=False)
+        size = get_size_dict(size, max_size=None, default_to_square=False)
 
         # Backwards compatibility
         if do_convert_annotations is None:
@@ -820,31 +808,6 @@ class YolosImageProcessor(BaseImageProcessor):
             raise ValueError(f"Format {format} is not supported.")
         return target
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare
-    def prepare(self, image, target, return_segmentation_masks=None, masks_path=None):
-        logger.warning_once(
-            "The `prepare` method is deprecated and will be removed in a v4.33. "
-            "Please use `prepare_annotation` instead. Note: the `prepare_annotation` method "
-            "does not return the image anymore.",
-        )
-        target = self.prepare_annotation(image, target, return_segmentation_masks, masks_path, self.format)
-        return image, target
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.convert_coco_poly_to_mask
-    def convert_coco_poly_to_mask(self, *args, **kwargs):
-        logger.warning_once("The `convert_coco_poly_to_mask` method is deprecated and will be removed in v4.33. ")
-        return convert_coco_poly_to_mask(*args, **kwargs)
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_detection with DETR->Yolos
-    def prepare_coco_detection(self, *args, **kwargs):
-        logger.warning_once("The `prepare_coco_detection` method is deprecated and will be removed in v4.33. ")
-        return prepare_coco_detection_annotation(*args, **kwargs)
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_panoptic
-    def prepare_coco_panoptic(self, *args, **kwargs):
-        logger.warning_once("The `prepare_coco_panoptic` method is deprecated and will be removed in v4.33. ")
-        return prepare_coco_panoptic_annotation(*args, **kwargs)
-
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.resize
     def resize(
         self,
@@ -873,14 +836,7 @@ class YolosImageProcessor(BaseImageProcessor):
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
-                "Please specify in `size['longest_edge'] instead`.",
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None
+        max_size = None
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
             size = get_resize_output_image_size(
@@ -1184,23 +1140,9 @@ class YolosImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
-        if "pad_and_return_pixel_mask" in kwargs:
-            logger.warning_once(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in v4.33, "
-                "use `do_pad` instead.",
-            )
-            do_pad = kwargs.pop("pad_and_return_pixel_mask")
-
-        max_size = None
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` argument is deprecated and will be removed in v4.33, use"
-                " `size['longest_edge']` instead.",
-            )
-            size = kwargs.pop("max_size")
-
         do_resize = self.do_resize if do_resize is None else do_resize
         size = self.size if size is None else size
+        max_size = None
         size = get_size_dict(size=size, max_size=max_size, default_to_square=False)
         resample = self.resample if resample is None else resample
         do_rescale = self.do_rescale if do_rescale is None else do_rescale
@@ -1295,7 +1237,7 @@ class YolosImageProcessor(BaseImageProcessor):
                 for image, target in zip(images, annotations):
                     orig_size = get_image_size(image, input_data_format)
                     resized_image = self.resize(
-                        image, size=size, max_size=max_size, resample=resample, input_data_format=input_data_format
+                        image, size=size, resample=resample, input_data_format=input_data_format
                     )
                     resized_annotation = self.resize_annotation(
                         target, orig_size, get_image_size(resized_image, input_data_format)

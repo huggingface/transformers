@@ -333,8 +333,13 @@ def prepare_img():
 @require_vision
 class YolosModelIntegrationTest(unittest.TestCase):
     @cached_property
+    # TODO: update checkpoint on the hub
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("hustvl/yolos-small") if is_vision_available() else None
+        return (
+            AutoImageProcessor.from_pretrained("hustvl/yolos-small", size={"shortest_edge": 800, "longest_edge": 1333})
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_object_detection_head(self):
