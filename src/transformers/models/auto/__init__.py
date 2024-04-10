@@ -81,6 +81,7 @@ else:
         "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
         "MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING",
         "MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING",
+        "MODEL_FOR_IMAGE_MATCHING_MAPPING",
         "AutoModel",
         "AutoBackbone",
         "AutoModelForAudioClassification",
@@ -119,6 +120,7 @@ else:
         "AutoModelWithLMHead",
         "AutoModelForZeroShotImageClassification",
         "AutoModelForZeroShotObjectDetection",
+        "AutoModelForImageMatching",
     ]
 
 try:
