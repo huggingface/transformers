@@ -221,7 +221,7 @@ class MambaMixer(nn.Module):
         return contextualized_states
 
     # fmt: off
-    def slow_forward(self, input_states, cache_params: Optional[MambaCache]=None):
+    def slow_forward(self, input_states, cache_params: Optional[HybridMambaAttentionDynamicCache]=None):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
