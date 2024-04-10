@@ -69,7 +69,6 @@ def get_paligemma_config(variant: str):
         config.pad_token_id = 0
         config.bos_token_id = 2
         config.eos_token_id = 1
-
     else:
         raise ValueError(f"Identifier {variant} not supported. Available: {PALIGEMMA_VARIANTS}")
     return config
@@ -235,40 +234,6 @@ def verify_logits(model, processor):
     prompt = ["answer en Where is the cow standing?\n", "\n"]
 
     model_inputs = processor(text=prompt, images=list_images, max_length=16, padding="longest", return_tensors="pt")
-    image_captioning_inputs_unpad = processor(text="\n", images=list_images[0], max_length=16, padding="longest", return_tensors="pt")
-    
-
-
-    # Test image captioning generation
-    captioning_generation = model.generate(**image_captioning_inputs_unpad, max_new_tokens=10)
-    captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
-    if captioning_output[0] != "\ncow standing on the beach":
-        raise ValueError(fr"Image captioning should match, got {captioning_output[0]}.")
-    else:
-        print("Image captioning works without padding.")
-
-
-    image_captioning_inputs = processor(text="\n", images=list_images[0], max_length=16, padding="max_length", return_tensors="pt")
-    
-
-
-    # Test image captioning generation
-    captioning_generation = model.generate(**image_captioning_inputs, max_new_tokens=10)
-    captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
-    if captioning_output[0] != "\ncow standing on the beach":
-        raise ValueError(fr"Image captioning should match, got {captioning_output[0]}.")
-    else:
-        print("Image captioning works with padding.")
-    outputs = model(**model_inputs)
-
-
-    manual_probs = torch.nn.functional.softmax(outputs.logits[:, -1, :], dim=-1)
-    next_token_id = torch.argmax(manual_probs, dim=-1)
-    if processor.decode(next_token_id[0]) != "beach":
-        raise ValueError("Next token prediction is wrong.")
-    else:
-        print("It seems that the forward pass predicts a correct next token. Go to .generate()!")
-        
     with torch.inference_mode():        
         raw_generation = model.generate(**model_inputs, max_new_tokens=10)
         generated_output = processor.batch_decode(raw_generation, skip_special_tokens=True)
@@ -280,7 +245,44 @@ def verify_logits(model, processor):
         else:
             print("Generation matches. You're almost done!")
 
+
+    image_captioning_inputs_unpad = processor(text="\n", images=list_images[0], max_length=16, padding="longest", return_tensors="pt")
+    # Test image captioning generation
+    captioning_generation = model.generate(**image_captioning_inputs_unpad, max_new_tokens=10)
+    captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
+    if captioning_output[0] != "\ncow standing on the beach":
+        raise ValueError(fr"Image captioning should match, got {captioning_output[0]}.")
+    else:
+        print("Image captioning works without padding.")
+
+    image_captioning_inputs = processor(text="\n", images=list_images[0], max_length=16, padding="max_length", return_tensors="pt")
     
+    # Test image captioning generation
+    captioning_generation = model.generate(**image_captioning_inputs, max_new_tokens=10)
+    captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
+    if captioning_output[0] != "\ncow standing on the beach":
+        raise ValueError(fr"Image captioning should match, got {captioning_output[0]}.")
+    else:
+        print("Image captioning works with padding.")
+ 
+
+    
+    print("Verifying that batched generation and single generation works.")
+    big_batch_inputs = ["answer en What is that, isn't int a very strange happenstance? Most confusinglicious?\n", "\n", "answer en Where is the cow standing?\n"]
+    cow_on_beach_path = "/home/ubuntu/gvhf/cow_beach_1.png"
+
+    list_images = [Image.open(cow_on_beach_path), Image.open(cow_on_beach_path), Image.open(cow_on_beach_path)]
+    batch_model_inputs = processor(text=big_batch_inputs, images=list_images, padding="longest", return_tensors='pt')
+    single_inputs = [processor(text=t, images=i, padding="do_not_pad", return_tensors="pt") for t, i in zip(big_batch_inputs, list_images)]
+    with torch.inference_mode():
+        batched_generation = model.generate(**batch_model_inputs, max_new_tokens=25)
+        batched_output = processor.batch_decode(batched_generation, skip_special_tokens=True)
+        single_generations = [model.generate(**single_input, max_new_tokens=25) for single_input in single_inputs]
+        single_outputs = [processor.batch_decode(gen, skip_special_tokens=True) for gen in single_generations]
+        for single, batched in zip(single_outputs, batched_output):
+            if single[0] != batched:
+                raise ValueError(f"Single-batch generation does not match batched. {single} != {batched}")
+    print("All checks completed. Conversion is proper.")
 
 
 @torch.no_grad()
