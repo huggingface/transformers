@@ -27,7 +27,38 @@ SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 
 class SuperGlueConfig(PretrainedConfig):
-    # TODO add documentation
+    r"""
+    This is the configuration class to store the configuration of a [`SuperGlueModel`]. It is used to instantiate a
+    SuperGlue model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the SuperGlue
+    [sbucaille/superglue_indoor](https://huggingface.co/stevenbucaille/superglue_indoor) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        keypoint_detector_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SuperPointConfig`):
+            The config object or dictionary of the keypoint detector.
+        descriptor_dim (`int`, *optional*, defaults to 256): The dimension of the descriptors.
+        keypoint_encoder_sizes (`List[int]`, *optional*, defaults to `[32, 64, 128, 256]`):
+            The sizes of the keypoint encoder layers.
+        gnn_layers_types (`List[str]`, *optional*, defaults to `["self", "cross"] * 9`):
+            The types of the GNN layers. Must be either 'self' or 'cross'.
+        num_heads (`int`, *optional*, defaults to 4): The number of heads in the GNN layers.
+        sinkhorn_iterations (`int`, *optional*, defaults to 100): The number of Sinkhorn iterations.
+        matching_threshold (`float`, *optional*, defaults to 0.2): The matching threshold.
+
+    Examples:
+        ```python
+        >>> from transformers import SuperGlueConfig, SuperGlueModel
+        >>> # Initializing a SuperGlue superglue style configuration
+        >>> configuration = SuperGlueConfig()
+        >>> # Initializing a model from the superglue style configuration
+        >>> model = SuperGlueModel(configuration)
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
+        ```
+    """
 
     model_type = "superglue"
 

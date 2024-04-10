@@ -14,10 +14,15 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_superglue": ["SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP", "SuperGlueConfig"]}
+_import_structure = {
+    "configuration_superglue": [
+        "SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SuperGlueConfig"
+    ]
+}
 
 
 try:
