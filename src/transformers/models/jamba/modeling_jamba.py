@@ -29,7 +29,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache # we need __iter__ and __len__ of pkv
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
     _prepare_4d_causal_attention_mask,
@@ -673,7 +673,7 @@ JAMBA_ATTENTION_CLASSES = {
 }
 
 
-class HybridMambaAttentionDynamicCache(Cache):
+class HybridMambaAttentionDynamicCache(DynamicCache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
@@ -1155,7 +1155,7 @@ class JambaMambaDecoderLayer(nn.Module):
 
         hidden_states = self.input_layernorm(hidden_states)
 
-        hidden_states, present_key_value = self.mamba(
+        hidden_states = self.mamba(
             hidden_states=hidden_states,
             cache_params=past_key_value,
         )
@@ -1179,7 +1179,7 @@ class JambaMambaDecoderLayer(nn.Module):
             outputs += (self_attn_weights,)
 
         if use_cache:
-            outputs += (present_key_value,)
+            outputs += (past_key_value,)
 
         if output_router_logits:
             outputs += (router_logits,)
@@ -1439,9 +1439,7 @@ class JambaModel(JambaPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = None
-        if use_cache:
-            next_cache = past_key_values
+        next_cache = None if not use_cache else past_key_values
 
         if not return_dict:
             return tuple(
@@ -1467,7 +1465,7 @@ class JambaModel(JambaPreTrainedModel):
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
         target_length = (
-            attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else cache_position[-1] + 1
+            attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else cache_position[0] + 1
         )
 
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
@@ -1644,7 +1642,7 @@ class JambaForCausalLM(JambaPreTrainedModel):
     ):
         # Omit tokens covered by past_key_values
         if past_key_values is not None:
-            past_length = cache_positions[-1] if cache_positions is not None else attention_mask.shape[1]
+            past_length = cache_positions[0] if cache_positions is not None else attention_mask.shape[1]
             max_cache_length = self.config.sliding_window
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
