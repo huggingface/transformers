@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [single-gpu]
+        machine_type: [multi-gpu]
     runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
     container:
       image: huggingface/transformers-pytorch-deepspeed-latest-gpu
