@@ -93,6 +93,17 @@ class SuperPointModelTester:
         self.parent.assertEqual(result.keypoints.shape[0], self.batch_size)
         self.parent.assertEqual(result.keypoints.shape[-1], 2)
 
+        result = model(pixel_values, output_hidden_states=True)
+        self.parent.assertEqual(
+            result.hidden_states[-1].shape,
+            (
+                self.batch_size,
+                self.encoder_hidden_sizes[-1],
+                self.image_height // 8,
+                self.image_width // 8,
+            ),
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs

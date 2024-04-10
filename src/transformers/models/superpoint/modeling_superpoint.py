@@ -414,7 +414,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
     @add_start_docstrings_to_model_forward(SUPERPOINT_INPUTS_DOCSTRING)
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: torch.FloatTensor,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -437,7 +437,6 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
         ```"""
-
         loss = None
         if labels is not None:
             raise ValueError("SuperPoint does not support training for now.")
@@ -446,9 +445,6 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
 
         pixel_values = self.extract_one_channel_pixel_values(pixel_values)
 
@@ -492,7 +488,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
 
         hidden_states = encoder_outputs[1] if output_hidden_states else None
         if not return_dict:
-            return tuple(v for v in [keypoints, scores, descriptors, mask, hidden_states] if v is not None)
+            return tuple(v for v in [loss, keypoints, scores, descriptors, mask, hidden_states] if v is not None)
 
         return SuperPointKeypointDescriptionOutput(
             loss=loss,
