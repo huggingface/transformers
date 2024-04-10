@@ -688,7 +688,7 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
 
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         self.dtype = dtype
-        self.seqlen_offset  # only used by mamba, cache_positions otherwise
+        self.seqlen_offset = 0  # only used by mamba, cache_positions otherwise
         intermediate_size = config.intermediate_size
         ssm_state_size = config.state_size
         conv_kernel_size = config.conv_kernel
@@ -1663,6 +1663,8 @@ class JambaForCausalLM(JambaPreTrainedModel):
                 and past_length + input_ids.shape[1] > max_cache_length
             ):
                 attention_mask = attention_mask[:, -max_cache_length:]
+        else:
+            past_key_values = HybridMambaAttentionDynamicCache(self.config, input_ids.shape[0], self.dtype, device=self.device)
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
