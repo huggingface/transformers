@@ -16,10 +16,7 @@
 Processor class for IDEFICS2.
 """
 
-from functools import lru_cache
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
-
-from packaging import version
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
@@ -29,7 +26,8 @@ from ...utils import TensorType, logging
 
 
 if TYPE_CHECKING:
-    from .pipelines.conversational import Conversation
+    from ...pipelines.conversational import Conversation
+    from ...tokenization_utils_base import PreTokenizedInput
 
 
 logger = logging.get_logger(__name__)
@@ -43,11 +41,7 @@ def is_image_or_image_url(elem):
     return is_url(elem) or is_valid_image(elem)
 
 
-def _is_str_or_image(elem):
-    return isinstance(elem, (str)) or is_image_or_image_url(elem)
-
-
-def build_string_from_input(prompt, image_seq_len, bos_token, image_token, fake_image_token, do_image_splitting):
+def build_string_from_input(prompt, image_seq_len, bos_token, image_token, fake_image_token):
     """
     Builds a string from the input prompt and image tokens.
 
@@ -147,41 +141,58 @@ class Idefics2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        prompts: Union[List[Union[TextInput, ImageInput]], List[List[Union[TextInput, ImageInput]]]],
+        text: Union[TextInput, "PreTokenizedInput", List[TextInput], List["PreTokenizedInput"]] = None,
+        images: Union[ImageInput, List[ImageInput], List[List[ImageInput]]] = None,
         image_seq_len: Optional[int] = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
+        is_split_into_words: bool = False,
+        add_special_tokens: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ) -> BatchEncoding:
         """
         Processes the input prompts and returns a BatchEncoding.
+
+        Note: By default, the processor assumes you have added any special tokens to the text before calling this method.
+        For example, the start of sentence token, <s>.
 
         Example:
 
         ```python
         >>> import requests
         >>> from transformers import Idefics2Processor
+        >>> from transformers.image_utils import load_image
 
         >>> processor = Idefics2Processor.from_pretrained("amyeroberts/idefics2", image_seq_len=2)
 
         >>> url1 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
         >>> url2 = "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg"
 
-        >>> prompts = [
-        ...     [url1, "In this image, we see"],
-        ...     ["bla bla bla", url2],
+        >>> image1, image2 = load_image(image1), load_image(image2)
+        >>> images = [[image1], [image2]]
+
+        >>> text = [
+        ...     ["<s><image> In this image, we see"],
+        ...     ["bla bla bla<image>"],
         ... ]
-        >>> outputs = processor(prompts, return_tensors="pt", padding=True)
+        >>> outputs = processor(text=text, images=images, return_tensors="pt", padding=True)
         >>> input_ids = outputs.input_ids
         >>> input_tokens = processor.tokenizer.batch_decode(input_ids)
-        ['<s><fake_token_around_image><image><image><fake_token_around_image> In this image, we see', '<s> bla bla bla<fake_token_around_image><image><image><fake_token_around_image>']
+        ['<s><fake_token_around_image><image><image><fake_token_around_image> In this image, we see', '<s>bla bla bla<fake_token_around_image><image><image><fake_token_around_image>']
         ```
 
         Args:
-            prompts (`Union[List[Union[TextInput, ImageInput]], List[List[Union[TextInput, ImageInput]]]`):
-                The input prompt. This can be a string, an image, a list of strings and images or a list of list of
-                strings and images.
+            text (`Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]`, *optional*):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+
+                Wherever an image token, `<image>` is encountered it is expanded to
+                `<fake_token_around_image>` + `<image>` * `image_seq_len` * <fake_token_around_image>`.
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. If is of type `List[ImageInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
             image_seq_len (`int`, *optional*):
                 The length of the image sequence. If not provided, the default value is used.
             padding (`Union[bool, str, PaddingStrategy]`, *optional*, defaults to `False`):
@@ -191,53 +202,71 @@ class Idefics2Processor(ProcessorMixin):
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding/truncation length. See
                 [`PreTrainedTokenizerFast.__call__`] for more information.
+            is_split_into_words (`bool`, *optional*, defaults to `False`):
+                Whether the input text is split into words or not. If set to `True`, the tokenizer will skip the
+                tokenization process and assume the input is already tokenized.
             return_tensors (`Union[str, TensorType]`, *optional*):
                 If set, will return tensors of a particular framework. See [`PreTrainedTokenizerFast.__call__`] for more
                 information.
         """
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
 
-        if _is_str_or_image(prompts):
-            prompts = [[prompts]]
-        elif isinstance(prompts, list) and _is_str_or_image(prompts[0]):
-            prompts = [prompts]
-        elif isinstance(prompts, list) and isinstance(prompts[0], list) and _is_str_or_image(prompts[0][0]):
-            pass
-        else:
-            raise ValueError(
-                "Invalid input prompts. Please provide a string or image, a list of strings and images or "
-                "a list of list of strings and images."
-            )
-
-        # Build the string from the input prompt and image tokens
-        prompt_strings = [
-            build_string_from_input(
-                prompt=prompt,
-                image_seq_len=image_seq_len,
-                bos_token=self.tokenizer.bos_token,
-                image_token=self.image_token.content,
-                fake_image_token=self.fake_image_token.content,
-                do_image_splitting=self.image_processor.do_image_splitting
-            )
-            for prompt in prompts
-        ]
-
+        n_images_in_text = []
         inputs = BatchFeature()
-        text_inputs = self.tokenizer(
-            text=prompt_strings,
-            add_special_tokens=False,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            return_tensors=return_tensors,
-        )
-        inputs.update(text_inputs)
 
-        # Extract the images from the prompts, loading them if necessary
-        prompt_images = self._extract_images_from_prompts(prompts)
+        if text is not None:
+            if isinstance(text, str):
+                text = [text]
+            elif not isinstance(text, list) and not isinstance(text[0], str):
+                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-        image_inputs = self.image_processor(prompt_images, return_tensors=return_tensors)
-        inputs.update(image_inputs)
+            # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
+            fake_image_token = self.fake_image_token.content
+            image_token = self.image_token.content
+            image_str = f"{fake_image_token}{image_token * image_seq_len}{fake_image_token}"
+            prompt_strings = []
+            for sample in text:
+                n_images_in_text.append(sample.count(image_token))
+                sample = sample.replace(image_token, image_str)
+                # Remove any double fake tokens if images are adjacent
+                sample = sample.replace(f"{fake_image_token}{fake_image_token}", f"{fake_image_token}")
+                prompt_strings.append(sample)
+
+            text_inputs = self.tokenizer(
+                text=prompt_strings,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                is_split_into_words=is_split_into_words,
+                return_tensors=return_tensors,
+            )
+            inputs.update(text_inputs)
+
+        if images is not None:
+            if is_image_or_image_url(images):
+                images = [[images]]
+            elif isinstance(images, list) and is_image_or_image_url(images[0]):
+                images = [images]
+            elif (
+                not isinstance(images, list)
+                and not isinstance(images[0], list)
+                and not is_image_or_image_url(images[0][0])
+            ):
+                raise ValueError(
+                    "Invalid input images. Please provide a single image or a list of images or a list of list of images."
+                )
+
+            n_images_in_images = [len(sample) for sample in images]
+            if text is not None and not n_images_in_images == n_images_in_text:
+                raise ValueError(
+                    f"The number of images in the text {n_images_in_text} and images  {n_images_in_images} should be the same."
+                )
+
+            # Load images if they are URLs
+            images = [[load_image(im) for im in sample] for sample in images]
+            image_inputs = self.image_processor(images, return_tensors=return_tensors)
+            inputs.update(image_inputs)
 
         return inputs
 
@@ -269,146 +298,38 @@ class Idefics2Processor(ProcessorMixin):
         self,
         conversation: Union[List[Dict[str, str]], "Conversation"],
         chat_template: Optional[str] = None,
-        add_generation_prompt: bool = False,
-        process: bool = True,
-        padding: bool = False,
-        truncation: bool = False,
-        max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_dict: bool = True,
-        tokenizer_kwargs=None,
-        image_processor_kwargs=None,
-    ) -> Union[str, List[int]]:
+        tokenize: bool = False,
+        **kwargs,
+    ):
         """
-        Converts a Conversation object or a list of dictionaries with `"role"` and `"content"` keys to a list of token
-        ids.
+        Overrides the tokenizer's `apply_chat_template` method to apply the IDEFICS2 chat template by default
+        if no chat template is provided.
 
-        For use with chat models, and will read the tokenizer's chat_template attribute to
-        determine the format and control tokens to use when converting. When chat_template is None, it will fall back
-        to the default_chat_template specified at the class level.
+        By default, the output isn't tokenized. This is because the IDEFICS2 chat template is designed to insert
+        the image token <image> into the sequence according to the message, but does not handle expanding the image
+        tokens to the sequence length or adding the surrounding tokens e.g. <fake_image_token>.
 
         Args:
-            conversation (Union[List[Dict[str, str]], "Conversation"]): A Conversation object or list of dicts
-                with "role" and "content" keys, representing the chat history so far.
-            chat_template (str, *optional*): A Jinja template to use for this conversion. If
-                this is not passed, the model's default chat template will be used instead.
-            add_generation_prompt (bool, *optional*): Whether to end the prompt with the token(s) that indicate
-                the start of an assistant message. This is useful when you want to generate a response from the model.
-                Note that this argument will be passed to the chat template, and so it must be supported in the
-                template for this argument to have any effect.
-            process (`bool`, defaults to `True`):
-                Whether to process the output. If `False`, the output will be a string and list of images.
-            padding (`bool`, defaults to `False`):
-                Whether to pad sequences to the maximum length. Has no effect if process is `False`.
-            truncation (`bool`, defaults to `False`):
-                Whether to truncate sequences at the maximum length. Has no effect if process is `False`.
-            max_length (`int`, *optional*):
-                Maximum length (in tokens) to use for padding or truncation. Has no effect if process is `False`. If
-                not specified, the tokenizer's `max_length` attribute will be used as a default.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Has no effect if tokenize is `False`. Acceptable
-                values are:
-                - `'tf'`: Return TensorFlow `tf.Tensor` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether to return a dictionary with named outputs. Has no effect if process is `False`.
-            tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
-            image_processor_kwargs: Additional kwargs to pass to the image processor.
-
-        Returns:
-            `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
-            output is ready to pass to the model, either directly or via methods like `generate()`.
+            conversation (`Union[List[Dict, str, str], "Conversation"]`):
+                The conversation to format.
+            chat_template (`Optional[str]`, *optional*):
+                The Jinja template to use for formatting the conversation. If not provided, the default chat template
+                is used.
+            tokenize (`bool`, *optional*, defaults to `False`):
+                Whether to tokenize the output or not.
+            **kwargs:
+                Additional keyword arguments for the tokenizer's `apply_chat_template` method.
         """
-        tokenizer_kwargs = tokenizer_kwargs if tokenizer_kwargs is not None else {}
-        image_processor_kwargs = image_processor_kwargs if image_processor_kwargs is not None else {}
 
-        if not return_dict and process:
-            raise ValueError("return_dict must be set to True for this processor if process is True.")
-
-        if hasattr(conversation, "messages"):
-            # Indicates it's a Conversation object
-            conversation = conversation.messages
-
-        # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template`
         if chat_template is None:
             if self.chat_template is not None:
                 chat_template = self.chat_template
             else:
                 chat_template = self.default_chat_template
 
-        # Compilation function uses a cache to avoid recompiling the same template
-        compiled_template = self._compile_jinja_template(chat_template)
-
-        # Ignore copy
-        rendered = compiled_template.render(
-            messages=conversation,
-            add_generation_prompt=add_generation_prompt,
-            image_tokens=self.image_token.content * self.image_seq_len,
-            **self.tokenizer.special_tokens_map,
+        return self.tokenizer.apply_chat_template(
+            conversation, chat_template=chat_template, tokenize=tokenize, **kwargs
         )
-        # We do a hack here - it's not possible to have the same if/else logic in Jinja to match build_string_from_input so
-        # we just remove cases when <fake_image_token> has been added twice in a row
-        rendered = rendered.replace(
-            f"{self.fake_image_token.content}{self.fake_image_token.content}", f"{self.fake_image_token.content}"
-        )
-        # We do another hack here - if the image_processor splitted the image, then reflect it in the rendered string
-        if self.image_processor.do_image_splitting:
-            image_seq_string = f"{self.fake_image_token.content}{self.image_token.content * self.image_seq_len}"
-            rendered = rendered.replace(
-                image_seq_string, image_seq_string * 5
-            )
-
-        if padding is True:
-            padding = "max_length"  # There's only one sequence here, so "longest" makes no sense
-
-        prompts = [message.get("content", []) for message in conversation]
-        prompt_images = self._extract_images_from_prompts(prompts)
-        # Flatten out as this is for a single batch
-        prompt_images = [image for images in prompt_images for image in images]
-
-        if process:
-            tokenized = self.tokenizer(
-                rendered,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                add_special_tokens=False,
-                return_tensors=return_tensors,
-                **tokenizer_kwargs,
-            )
-            processed_images = self.image_processor(
-                prompt_images, return_tensors=return_tensors, **image_processor_kwargs
-            )
-            tokenized.update(processed_images)
-            return tokenized
-        else:
-            return rendered, prompt_images
-
-    @lru_cache
-    # Copied from transformers.tokenization_utils_base.PreTrainedTokenizerBase._compile_jinja_template
-    def _compile_jinja_template(self, chat_template):
-        try:
-            import jinja2
-            from jinja2.exceptions import TemplateError
-            from jinja2.sandbox import ImmutableSandboxedEnvironment
-        except ImportError:
-            raise ImportError("apply_chat_template requires jinja2 to be installed.")
-
-        if version.parse(jinja2.__version__) <= version.parse("3.0.0"):
-            raise ImportError(
-                "apply_chat_template requires jinja2>=3.0.0 to be installed. Your version is " f"{jinja2.__version__}."
-            )
-
-        def raise_exception(message):
-            raise TemplateError(message)
-
-        jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
-        jinja_env.globals["raise_exception"] = raise_exception
-        # Ignore copy
-        jinja_env.filters["is_image"] = is_image_or_image_url
-        return jinja_env.from_string(chat_template)
 
     @property
     def default_chat_template(self):
@@ -422,44 +343,46 @@ class Idefics2Processor(ProcessorMixin):
         Example:
 
         ```python
-        messages = [
-            {"role": "user", "content": ["What is in this Image?", image1, "https://upload.wikimedia.org/wikipedia/commons/8/86/Id%C3%A9fix.JPG"]},
-            {"role": "assistant", "content": "This picture depicts Idefix, the dog of Obelix in Asterix and Obelix. Idefix is running on the ground."},
-            {"role": "user", "content": ["And who is that?"]},
-        ]
+        messages = [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What’s in this image?"},
+                {"type": "image", "index": 0},
+                {"type": "image", "index": 1},
+                ],
+        },
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "This picture depicts Idefix, the dog of Obelix in Asterix and Obelix. Idefix is running on the ground."},]
+        }]
         ```
 
         Will create outputs like:
         ```
-        User: What is in this Image?<fake_token_around_image><image><image><image><fake_token_around_image><image><image><image><end_of_utterance>
+        User: What is in this Image?<image><image><end_of_utterance>
         Assistant: This picture depicts Idefix, the dog of Obelix in Asterix and Obelix. Idefix is running on the ground.<end_of_utterance>
-        User: And who is that?<end_of_utterance>
-        Assistant:
         ```
         """
         # fmt: off
         return (
             "{{ bos_token }}"
             "{% for message in messages %}"
-                "{% if message is iterable and message is not string %}"
-                    "{{message['role'].capitalize()}}"
-                    "{% if message.content[0] | is_image %}"
-                        "{{':'}}"
-                    "{% else %}"
-                        "{{': '}}"
-                    "{% endif %}"
-                    "{% for content_elem in message.content %}"
-                        "{% if content_elem | is_image %}"
-                            "{{'<fake_token_around_image>' + image_tokens + '<fake_token_around_image>'}}"
-                        "{% else %}"
-                            "{{content_elem}}"
-                        "{% endif %}"
-                    "{% endfor %}"
-                    "<end_of_utterance>\n"
+                "{{message['role'].capitalize()}}"
+                "{% if message['content'][0]['type'] == 'image' %}"
+                    "{{':'}}"
                 "{% else %}"
-                    "{{message['role'].capitalize() + ':' + message['content'] + '<end_of_utterance>' + '\n'}}"
+                    "{{': '}}"
                 "{% endif %}"
+                "{% for line in message['content'] %}"
+                    "{% if line['type'] == 'text' %}"
+                        "{{line['text']}}"
+                    "{% elif line['type'] == 'image' %}"
+                        "{{ '<image>' }}"
+                    "{% endif %}"
+                "{% endfor %}"
+                "<end_of_utterance>\n"
             "{% endfor %}"
+
             "{% if add_generation_prompt %}"
                 "{{ 'Assistant:' }}"
             "{% endif %}"
