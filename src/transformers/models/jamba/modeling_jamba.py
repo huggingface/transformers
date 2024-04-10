@@ -703,8 +703,8 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
                     torch.zeros(batch_size, intermediate_size, ssm_state_size, device=device, dtype=dtype)
                 ]
             else:
-                self.conv_states += []
-                self.ssm_states += []
+                self.conv_states += [[]]
+                self.ssm_states += [[]]
 
         self.key_cache = [torch.tensor([], device=device) for _ in range(config.num_hidden_layers)]
         self.value_cache = [torch.tensor([], device=device)  for _ in range(config.num_hidden_layers)]
