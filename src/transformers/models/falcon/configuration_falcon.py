@@ -91,7 +91,7 @@ class FalconConfig(PretrainedConfig):
         ffn_hidden_size (`int`, *optional*):
             The hidden size of the feedforward layer in the Transformer decoder.
             defaults to 4x hidden dim
-        activation (`str`, *optional*, defaults to "gelu"):
+        activation (`str`, *optional*, defaults to `"gelu"`):
             The activation function used in the feedforward layer.
 
     Example:
