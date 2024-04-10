@@ -179,7 +179,7 @@ class Idefics2Processor(ProcessorMixin):
         >>> outputs = processor(text=text, images=images, return_tensors="pt", padding=True)
         >>> input_ids = outputs.input_ids
         >>> input_tokens = processor.tokenizer.batch_decode(input_ids)
-        ['<s><fake_token_around_image><image><image><fake_token_around_image> In this image, we see', '<s>bla bla bla<fake_token_around_image><image><image><fake_token_around_image>']
+        ['<s><fake_token_around_image><image><image><fake_token_around_image>In this image, we see', '<s>bla bla bla<fake_token_around_image><image><image><fake_token_around_image>']
         ```
 
         Args:
