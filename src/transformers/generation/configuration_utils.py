@@ -472,6 +472,11 @@ class GenerationConfig(PushToHubMixin):
             raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
         if self.max_new_tokens is not None and self.max_new_tokens <= 0:
             raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
+        if self.pad_token_id is not None and self.pad_token_id < 0:
+            warnings.warn(
+                f"`pad_token_id` must be positive but got {self.pad_token_id}. This may cause erros when batch generating. "
+                "Please set `pas_token_id` explicitly by `model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoiid errors in generation"
+            )
 
         # Validation of attribute relations:
         fix_location = ""
