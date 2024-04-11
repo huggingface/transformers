@@ -595,7 +595,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         with torch.no_grad():
             image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
             embed_indices = torch.arange(max_embed_dim).unsqueeze(0).to(target_device)
-            embed_indices = embedding_indices.expand(batch_size, max_embed_dim)
+            embed_indices = embed_indices.expand(batch_size, max_embed_dim)
             embed_seq_lens = embed_sequence_lengths[:, None].to(target_device)
 
             if left_padding:
