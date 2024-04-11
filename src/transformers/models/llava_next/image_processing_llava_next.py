@@ -632,6 +632,8 @@ class LlavaNextImageProcessor(BaseImageProcessor):
                 raise ValueError(f"Please provide a higher max_num_patches \
                             value since the input batch has higher patches\
                             {max_patches_in_batch}")
+            if max_patches_in_batch > max_num_patches:
+                raise ValueError(f"We do not allow truncation of images. Hence give a padding of greater than {max_patches_in_batch}")
             max_patches_in_batch = max_num_patches
         
         padded_images = np.array([
@@ -647,7 +649,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             )
             if x.shape[0] < max_patches_in_batch
             else x
-            for x in pixel_values[:max_num_patches] # Do not allow more patches than the max_patches
+            for x in pixel_values[:max_patches_in_batch] # Do not allow more patches than the max_patches
         ])
         return torch.FloatTensor(padded_images)
  
