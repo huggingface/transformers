@@ -2126,6 +2126,8 @@ class Trainer:
         self._globalstep_last_logged = self.state.global_step
         model.zero_grad()
         grad_norm: Optional[float] = None
+        # LOMO has a slightly different opitmizer API, see: https://github.com/OpenLMLab/LOMO/issues/73#issuecomment-2049612639
+        _is_lomo_optimizer = "Lomo" in self.optimizer.optimizer.__class__.__name__
 
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
 
@@ -2214,7 +2216,7 @@ class Trainer:
                     self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
                 with self.accelerator.accumulate(model):
-                    tr_loss_step = self.training_step(model, inputs)
+                    tr_loss_step = self.training_step(model, inputs, is_lomo_optimizer=_is_lomo_optimizer)
 
                 if (
                     args.logging_nan_inf_filter
@@ -2276,15 +2278,7 @@ class Trainer:
                         else:
                             grad_norm = _grad_norm
 
-                    # LOMO does not have a `step` method implemented
-                    if "Lomo" in self.optimizer.optimizer.__class__.__name__:
-                        if self.optimizer.optimizer.clip_grad_norm is not None or (
-                            hasattr(self.optimizer.optimizer, "loss_scaler")
-                            and self.optimizer.optimizer.loss_scaler is not None
-                        ):
-                            self.optimizer.optimizer.grad_norm(tr_loss)
-                    else:
-                        # Optimizer step
+                    if not _is_lomo_optimizer:
                         self.optimizer.step()
 
                     optimizer_was_run = not self.accelerator.optimizer_step_was_skipped
@@ -3132,7 +3126,7 @@ class Trainer:
 
         return ctx_manager
 
-    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
+    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], **kwargs) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
 
@@ -3146,12 +3140,15 @@ class Trainer:
 
                 The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
                 argument `labels`. Check your model's documentation for all accepted arguments.
+            kwargs:
+                Additional key-word arguments to pass along for custom optimizers
 
         Return:
             `torch.Tensor`: The tensor with training loss on this batch.
         """
         model.train()
         inputs = self._prepare_inputs(inputs)
+        is_lomo_optimizer = kwargs.pop("is_lomo_optimizer", False)
 
         if is_sagemaker_mp_enabled():
             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
@@ -3167,7 +3164,10 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
-            self.accelerator.backward(loss)
+            if not is_lomo_optimizer:
+                self.accelerator.backward(loss)
+            else:
+                self.optimizer.optimizer.fused_backward(loss, self.args.learning_rate)
 
         return loss.detach() / self.args.gradient_accumulation_steps
 
