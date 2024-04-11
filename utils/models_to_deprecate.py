@@ -127,6 +127,7 @@ def get_list_of_models_to_deprecate(
     print("\nModels to deprecate: ", list(models_to_deprecate.keys()))
     print(f"\nNumber of models to deprecate: {n_models_to_deprecate}")
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--output_file", type=str, default="models_to_deprecate.json")
