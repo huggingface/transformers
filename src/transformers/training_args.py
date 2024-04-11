@@ -18,7 +18,7 @@ import json
 import math
 import os
 import warnings
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import InitVar, asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from pathlib import Path
@@ -203,7 +203,7 @@ class TrainingArguments:
             Whether to run predictions on the test set or not. This argument is not directly used by [`Trainer`], it's
             intended to be used by your training/evaluation scripts instead. See the [example
             scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
-        evaluation_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"no"`):
+        evaluation_strategy (or eval_strategy) (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"no"`):
             The evaluation strategy to adopt during training. Possible values are:
 
                 - `"no"`: No evaluation is done during training.
@@ -735,6 +735,10 @@ class TrainingArguments:
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
     evaluation_strategy: Union[IntervalStrategy, str] = field(
         default="no",
+        metadata={"help": "The evaluation strategy to use."},
+    )
+    eval_strategy: InitVar[Union[IntervalStrategy, str]] = field(
+        default=None,
         metadata={"help": "The evaluation strategy to use."},
     )
     prediction_loss_only: bool = field(
@@ -1392,6 +1396,10 @@ class TrainingArguments:
 
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
+
+        # Deal with alias
+        if self.eval_strategy is not None:
+            self.evaluation_strategy = self.eval_strategy
 
         if isinstance(self.evaluation_strategy, EvaluationStrategy):
             warnings.warn(
