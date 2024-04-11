@@ -467,7 +467,7 @@ def resize_annotation(
 
 class RTDetrImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a RTDETR image processor.
+    Constructs a RT-DETR image processor.
 
     Args:
         format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
