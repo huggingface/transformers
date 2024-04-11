@@ -564,7 +564,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 # print("pad token id in model: ", self.pad_token_id)
                 # print("img indices without padding: ", img_idcs_with_no_pad)
                 patches_lengths[img_idcs_with_no_pad] = max_num_patches
-                print("these are the patches lengths: ", patches_lengths)
+                # print("these are the patches lengths: ", patches_lengths)
 
                 # Each image in pixel_values is a 336x336 image
                 # We need to remove the images which are just padded tokens
@@ -603,7 +603,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
 
                 new_image_features = []
                 for image_idx, image_feature in enumerate(image_features):
-                    # print("num _unpadded patches: ", num_unpadded_patches)
+                    num_unpadded_patches = image_feature.shape[0]
+                    print("num _unpadded patches: ", num_unpadded_patches)
                     # image feature has shape; 5/3/4 (num_patches), 3, 336, 336
                     if image_feature.shape[0] > 1:
                         base_image_feature = image_feature[0]
@@ -619,6 +620,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                         # print("the image sizes I used to obtain these num_patches: ", image_sizes[image_idx])
                         print("these are the num patch  and num ht: ", num_patch_height, num_patch_width)
                         print('image sizes: ', image_sizes[image_idx])
+                        assert num_patch_height*num_patch_width + 1 == num_unpadded_patches
                         # print("shape of image ftrs before view: ", image_feature.shape)
                         image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1) # divide 5 - 1 
                         # patches into 2x2 grid for num_patch_height, 

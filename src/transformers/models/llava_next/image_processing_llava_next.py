@@ -573,7 +573,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
 
         new_images = []
         image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
-        print("within the processor I got these image sizes: ", image_sizes)
+        # print("within the processor I got these image sizes: ", image_sizes)
         for image in images:
             # convert image into a list of patches
             # we intentially use the same data format as the input data format
@@ -586,7 +586,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
                 data_format=input_data_format,
                 input_data_format=input_data_format,
             )
-            print("within the processor I got these number of patches: ", len(image_patches))
+            # print("within the processor I got these number of patches: ", len(image_patches))
 
             # preprocess patches
             pixel_values = self._preprocess(
@@ -649,7 +649,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             )
             if x.shape[0] < max_patches_in_batch
             else x
-            for x in pixel_values[:max_patches_in_batch] # Do not allow more patches than the max_patches
+            for x in pixel_values
         ])
         return torch.FloatTensor(padded_images)
  
