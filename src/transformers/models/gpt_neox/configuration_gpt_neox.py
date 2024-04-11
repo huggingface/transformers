@@ -128,6 +128,7 @@ class GPTNeoXConfig(PretrainedConfig):
         use_parallel_residual=True,
         rope_scaling=None,
         attention_bias=True,
+        upcast_attn=False,
         **kwargs,
     ):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -150,6 +151,7 @@ class GPTNeoXConfig(PretrainedConfig):
         self.use_parallel_residual = use_parallel_residual
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
+        self.upcast_attn = upcast_attn
         self._rope_scaling_validation()
 
         if self.hidden_size % self.num_attention_heads != 0:

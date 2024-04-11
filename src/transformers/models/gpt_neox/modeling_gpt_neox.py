@@ -21,6 +21,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
+from torch.cuda.amp import autocast
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -258,20 +259,38 @@ class GPTNeoXAttention(nn.Module):
 
         query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
         key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
-        attn_scores = torch.zeros(
-            batch_size * num_attention_heads,
-            query_length,
-            key_length,
-            dtype=query.dtype,
-            device=key.device,
-        )
-        attn_scores = torch.baddbmm(
-            attn_scores,
-            query,
-            key.transpose(1, 2),
-            beta=1.0,
-            alpha=self.norm_factor,
-        )
+
+        if self.config.upcast_attn:
+            with autocast(enabled=False):
+                attn_scores = torch.zeros(
+                    batch_size * num_attention_heads,
+                    query_length,
+                    key_length,
+                    dtype=torch.float32,
+                    device=key.device,
+                )
+                attn_scores = torch.baddbmm(
+                    attn_scores,
+                    query.float(),
+                    key.float().transpose(1, 2),
+                    beta=1.0,
+                    alpha=self.norm_factor,
+                )
+        else:
+            attn_scores = torch.zeros(
+                batch_size * num_attention_heads,
+                query_length,
+                key_length,
+                dtype=query.dtype,
+                device=key.device,
+            )
+            attn_scores = torch.baddbmm(
+                attn_scores,
+                query,
+                key.transpose(1, 2),
+                beta=1.0,
+                alpha=self.norm_factor,
+            )
         attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
 
         mask_value = torch.finfo(attn_scores.dtype).min
