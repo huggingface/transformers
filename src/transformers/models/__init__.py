@@ -188,6 +188,7 @@ from . import (
     qwen2_moe,
     rag,
     realm,
+    recurrent_gemma,
     reformer,
     regnet,
     rembert,

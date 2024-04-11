@@ -103,7 +103,7 @@ class TFPTAutoModelTest(unittest.TestCase):
 
     @slow
     def test_model_for_causal_lm(self):
-        model_name = "google-bert/bert-base-uncased"
+        model_name = "openai-community/gpt2"
         config = AutoConfig.from_pretrained(model_name)
         self.assertIsNotNone(config)
         self.assertIsInstance(config, GPT2Config)
@@ -156,7 +156,7 @@ class TFPTAutoModelTest(unittest.TestCase):
 
     @slow
     def test_model_for_encoder_decoder_lm(self):
-        model_name = "google-bert/bert-base-uncased"
+        model_name = "google-t5/t5-base"
         config = AutoConfig.from_pretrained(model_name)
         self.assertIsNotNone(config)
         self.assertIsInstance(config, T5Config)

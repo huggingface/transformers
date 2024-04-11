@@ -1,0 +1,59 @@
+name: Self-hosted runner (scheduled)
+
+
+on:
+  repository_dispatch:
+  schedule:
+    - cron: "17 2 * * *"
+  push:
+    branches:
+      - run_scheduled_ci*
+
+jobs:
+  model-ci:
+    name: Model CI
+    uses: ./.github/workflows/self-scheduled.yml
+    with:
+      job: run_tests_gpu
+      slack_report_channel: "#transformers-ci-daily-models"
+    secrets: inherit
+
+  torch-pipeline:
+    name: Torch pipeline CI
+    uses: ./.github/workflows/self-scheduled.yml
+    with:
+      job: run_pipelines_torch_gpu
+      slack_report_channel: "#transformers-ci-daily-pipeline-torch"
+    secrets: inherit
+
+  tf-pipeline:
+    name: TF pipeline CI
+    uses: ./.github/workflows/self-scheduled.yml
+    with:
+      job: run_pipelines_tf_gpu
+      slack_report_channel: "#transformers-ci-daily-pipeline-tf"
+    secrets: inherit
+
+  example-ci:
+    name: Example CI
+    uses: ./.github/workflows/self-scheduled.yml
+    with:
+      job: run_examples_gpu
+      slack_report_channel: "#transformers-ci-daily-examples"
+    secrets: inherit
+
+  deepspeed-ci:
+    name: DeepSpeed CI
+    uses: ./.github/workflows/self-scheduled.yml
+    with:
+      job: run_all_tests_torch_cuda_extensions_gpu
+      slack_report_channel: "#transformers-ci-daily-deepspeed"
+    secrets: inherit
+
+  quantization-ci:
+    name: Quantization CI
+    uses: ./.github/workflows/self-scheduled.yml
+    with:
+      job: run_tests_quantization_torch_gpu
+      slack_report_channel: "#transformers-ci-daily-quantization"
+    secrets: inherit

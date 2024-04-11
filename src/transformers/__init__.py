@@ -745,6 +745,7 @@ _import_structure = {
         "RealmConfig",
         "RealmTokenizer",
     ],
+    "models.recurrent_gemma": ["RecurrentGemmaConfig"],
     "models.reformer": ["REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ReformerConfig"],
     "models.regnet": ["REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "RegNetConfig"],
     "models.rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
@@ -3124,6 +3125,13 @@ else:
             "RealmRetriever",
             "RealmScorer",
             "load_tf_weights_in_realm",
+        ]
+    )
+    _import_structure["models.recurrent_gemma"].extend(
+        [
+            "RecurrentGemmaForCausalLM",
+            "RecurrentGemmaModel",
+            "RecurrentGemmaPreTrainedModel",
         ]
     )
     _import_structure["models.reformer"].extend(
@@ -5637,6 +5645,7 @@ if TYPE_CHECKING:
         RealmConfig,
         RealmTokenizer,
     )
+    from .models.recurrent_gemma import RecurrentGemmaConfig
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
     from .models.regnet import REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP, RegNetConfig
     from .models.rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
@@ -7704,6 +7713,11 @@ if TYPE_CHECKING:
             RealmRetriever,
             RealmScorer,
             load_tf_weights_in_realm,
+        )
+        from .models.recurrent_gemma import (
+            RecurrentGemmaForCausalLM,
+            RecurrentGemmaModel,
+            RecurrentGemmaPreTrainedModel,
         )
         from .models.reformer import (
             REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -42,6 +42,7 @@ from ..utils import (
     is_torch_available,
     is_torch_cuda_available,
     is_torch_mlu_available,
+    is_torch_mps_available,
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
@@ -860,6 +861,8 @@ class Pipeline(_ScikitCompat):
                 self.device = torch.device(f"npu:{device}")
             elif is_torch_xpu_available(check_device=True):
                 self.device = torch.device(f"xpu:{device}")
+            elif is_torch_mps_available():
+                self.device = torch.device(f"mps:{device}")
             else:
                 raise ValueError(f"{device} unrecognized or not available.")
         else:
