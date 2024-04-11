@@ -26,7 +26,6 @@ from transformers.testing_utils import (
     slow,
 )
 from transformers.utils import cached_property
-from transformers.modeling_tf_utils import keras
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -38,6 +37,7 @@ if is_tf_available():
 
     from transformers import IdeficsProcessor, TFIdeficsForVisionText2Text, TFIdeficsModel
     from transformers.models.idefics.configuration_idefics import IdeficsPerceiverConfig, IdeficsVisionConfig
+    from transformers.modeling_tf_utils import keras
 
 if is_vision_available():
     from PIL import Image
