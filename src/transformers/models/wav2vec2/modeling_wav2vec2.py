@@ -1119,16 +1119,13 @@ class Wav2Vec2Encoder(nn.Module):
         all_self_attentions = () if output_attentions else None
 
         if attention_mask is not None:
+            # make sure padded tokens output 0
+            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            hidden_states[~expand_attention_mask] = 0
             if self._use_flash_attention_2:
-                # make sure padded tokens output 0
-                expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-                hidden_states[~expand_attention_mask] = 0
                 # 2d mask is passed through the layers
                 attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
             else:
-                expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-                hidden_states[~expand_attention_mask] = 0
-
                 # extend attention_mask
                 attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
                 attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
@@ -1209,17 +1206,13 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
         all_self_attentions = () if output_attentions else None
 
         if attention_mask is not None:
+            # make sure padded tokens are not attended to
+            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            hidden_states[~expand_attention_mask] = 0
             if self._use_flash_attention_2:
-                # make sure padded tokens are not attended to
-                expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-                hidden_states[~expand_attention_mask] = 0
                 # 2d mask is passed through the layers
                 attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
             else:
-                # make sure padded tokens are not attended to
-                expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-                hidden_states[~expand_attention_mask] = 0
-
                 # extend attention_mask
                 attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
                 attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
