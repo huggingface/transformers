@@ -34,13 +34,18 @@ import numpy as np
 import torch
 import torch.distributed as dist
 from torch import nn
-from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
 from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .tokenization_utils_base import BatchEncoding
-from .utils import is_sagemaker_mp_enabled, is_torch_xla_available, is_training_run_on_sagemaker, logging
+from .utils import (
+    is_sagemaker_mp_enabled,
+    is_torch_available,
+    is_torch_xla_available,
+    is_training_run_on_sagemaker,
+    logging,
+)
 
 
 if is_training_run_on_sagemaker():
@@ -48,6 +53,15 @@ if is_training_run_on_sagemaker():
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
+
+if is_torch_available():
+    from .pytorch_utils import is_torch_greater_or_equal_than_2_0
+
+    if is_torch_greater_or_equal_than_2_0:
+        from torch.optim.lr_scheduler import LRScheduler
+    else:
+        from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
+
 
 # this is used to suppress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
 try:
@@ -1171,6 +1185,15 @@ class AcceleratorConfig:
             training results are fully reproducable using a different sampling technique. While seed-to-seed results
             may differ, on average the differences are neglible when using multiple different seeds to compare. Should
             also be ran with [`~utils.set_seed`] for the best results.
+        gradient_accumulation_kwargs (`dict`, *optional*):
+            Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`].
+            Any of the following (optional) keys are acceptable:
+              num_steps (`int`): Will take precedence over [`~.TrainingArguments.gradient_accumulation_steps`] if
+                the latter is set to 1, otherwise an exception will be raised.
+              adjust_scheduler (`bool`): Whether to adjust the scheduler steps to account for [`~.TrainingArguments.gradient_accumulation_steps`].
+                The [`accelerate.utils.GradientAccumulationPlugin`] default is `True`.
+              sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch.
+                The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`.
 
     """
 
@@ -1209,6 +1232,19 @@ class AcceleratorConfig:
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
         },
     )
+    gradient_accumulation_kwargs: Optional[Dict] = field(
+        default=None,
+        metadata={
+            "help": "Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`]. "
+            "Any of the following (optional) keys are acceptable: "
+            "  num_steps (`int`): Will take precedence over [`~.TrainingArguments.gradient_accumulation_steps`] if "
+            "    the latter is set to 1, otherwise an exception will be raised. "
+            "  adjust_scheduler (`bool`): Whether to adjust the scheduler steps to account for [`~.TrainingArguments.gradient_accumulation_steps`]. "
+            "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `True`. "
+            "  sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch. "
+            "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`."
+        },
+    )
 
     @classmethod
     def from_json_file(cls, json_file):
@@ -1243,7 +1279,7 @@ class LayerWiseDummyOptimizer(torch.optim.Optimizer):
     def __init__(self, optimizer_dict=None, *args, **kwargs):
         dummy_tensor = torch.randn(1, 1)
         self.optimizer_dict = optimizer_dict
-        super().__init__([dummy_tensor], {"lr": 1e-03})
+        super().__init__([dummy_tensor], {"lr": kwargs.get("lr", 1e-03)})
 
     def zero_grad(self, set_to_none: bool = True) -> None:
         pass

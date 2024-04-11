@@ -260,11 +260,14 @@ def torch_arange(*args, **kwargs):
 
 def torch_full(*args, **kwargs):
     args = list(args)
-    if isinstance(args[1], torch.Tensor) and args[1].device == torch.device("meta"):
-        args[1] = 1  # Any value.
+    # We set the fill value to 1 as its value is not important as long as it's not a tensor on the `meta` device.
+    if len(args) > 1:
+        args[1] = 1
+    else:
+        kwargs["fill_value"] = 1
     kwargs_without_device = dict(kwargs)
     kwargs_without_device.pop("device", None)
-    return torch.full(*args, **kwargs_without_device)
+    return torch.full(*args, **kwargs_without_device, device="meta")
 
 
 def torch_cat(tensors, dim=None, axis=None, *, out=None):

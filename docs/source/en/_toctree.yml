@@ -172,7 +172,7 @@
       title: GPU inference
     title: Optimizing inference
   - local: big_models
-    title: Instantiating a big model
+    title: Instantiate a big model
   - local: debugging
     title: Debugging
   - local: tf_xla
@@ -462,10 +462,14 @@
         title: QDQBert
       - local: model_doc/qwen2
         title: Qwen2
+      - local: model_doc/qwen2_moe
+        title: Qwen2MoE
       - local: model_doc/rag
         title: RAG
       - local: model_doc/realm
         title: REALM
+      - local: model_doc/recurrent_gemma
+        title: RecurrentGemma
       - local: model_doc/reformer
         title: Reformer
       - local: model_doc/rembert
