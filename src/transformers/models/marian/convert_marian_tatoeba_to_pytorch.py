@@ -87,7 +87,7 @@ class TatoebaConverter:
             opus_language_groups_to_hf = convert_opus_name_to_hf_name
             pair_name = opus_language_groups_to_hf(model["_name"])
             convert(save_dir / model["_name"], dest_dir / f"opus-mt-{pair_name}")
-            # self.write_model_card(model, dry_run=dry_run)
+            self.write_model_card(model, dry_run=dry_run)
 
     def expand_group_to_two_letter_codes(self, grp_name):
         return [self.alpha3_to_alpha2.get(x, x) for x in GROUP_MEMBERS[grp_name][1]]
