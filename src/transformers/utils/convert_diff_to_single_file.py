@@ -55,9 +55,15 @@ class ModelConverter:
 
     def register(self, new_class, old_class):
         # registering. Returns the old class to be usable with a new name
-        self.registered_classes[new_class] = type(new_class, (old_class,), {})
+        self.registered_classes[new_class] = old_class
+        
+        new_class = type(new_class, (old_class,), {})
         base_model_name = re.search(r'models\.(.*?)\.modeling', old_class.__module__).group(1)
 
-        self.registered_classes[new_class].__module__ = re.sub(base_model_name, self.model_name, old_class.__module__)
+        new_class.__module__ = re.sub(base_model_name, self.model_name, old_class.__module__)
         
-        return self.registered_classes[new_class]
+        return new_class
+
+    def __repr__(self) -> str:
+        return f"ModelConverter({self.diff_file}, {self.model_name}, {self.registered_classes})"
+    

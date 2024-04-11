@@ -4,6 +4,7 @@ from transformers import CohereConfig
 from transformers.utils import ModelConverter
 
 CohereConverter = ModelConverter(__file__)
+# now should the cohere converted be added to all model converters? 
 
 class CohereLayerNorm(nn.Module):
     def __init__(self, hidden_size=None, eps=1e-5, bias=False):
