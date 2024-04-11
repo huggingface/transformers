@@ -383,7 +383,7 @@ def _prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: 
     `(batch_size, key_value_length)`
 
     Args:
-        mask (`torch.Tensor` or `None`):
+        mask (`torch.Tensor`):
             A 2D attention mask of shape `(batch_size, key_value_length)`
         dtype (`torch.dtype`):
             The torch dtype the created mask shall have.
@@ -399,7 +399,7 @@ def _prepare_4d_attention_mask_for_sdpa(mask: torch.Tensor, dtype: torch.dtype, 
     `(batch_size, key_value_length)`
 
     Args:
-        mask (`torch.Tensor` or `None`):
+        mask (`torch.Tensor`):
             A 2D attention mask of shape `(batch_size, key_value_length)`
         dtype (`torch.dtype`):
             The torch dtype the created mask shall have.
