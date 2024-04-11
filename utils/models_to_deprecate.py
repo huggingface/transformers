@@ -125,6 +125,7 @@ def get_list_of_models_to_deprecate(
             print(f"Downloads: {n_downloads}")
             print(f"Date: {info['first_commit_datetime']}")
     print(f"\nNumber of models to deprecate: {n_models_to_deprecate}")
+    print(f"Before deprecating make sure to verify the models, including if they're used as a module in other models.")
 
 
 if __name__ == "__main__":
