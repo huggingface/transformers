@@ -124,7 +124,7 @@ def get_list_of_models_to_deprecate(
             print(f"\nModel: {model}")
             print(f"Downloads: {n_downloads}")
             print(f"Date: {info['first_commit_datetime']}")
-    print("\nModels to deprecate: ", list(models_to_deprecate.keys()))
+    print("\nModels to deprecate: ", "\n" + "\n".join(models_to_deprecate.keys()))
     print(f"\nNumber of models to deprecate: {n_models_to_deprecate}")
 
 
