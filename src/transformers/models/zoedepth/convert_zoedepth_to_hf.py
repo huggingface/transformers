@@ -390,9 +390,16 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
         image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
+        model_name_to_repo_id = {
+            "ZoeD_N": "zoedepth-nyu",
+            "ZoeD_K": "zoedepth-kitti",
+            "ZoeD_NK": "zoedepth-nyu-kitti",
+        }
+
         print("Pushing model and processor to the hub...")
-        model.push_to_hub(f"nielsr/{model_name}")
-        image_processor.push_to_hub(f"nielsr/{model_name}")
+        repo_id = model_name_to_repo_id[model_name]
+        model.push_to_hub(f"nielsr/{repo_id}")
+        image_processor.push_to_hub(f"nielsr/{repo_id}")
 
 
 if __name__ == "__main__":

@@ -153,7 +153,17 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.config_tester = ConfigTester(self, config_class=ZoeDepthConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        self.create_and_test_config_common_properties()
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.check_config_arguments_init()
+
+    # ZoeDepth has no `num_attention_heads` in its config
+    def create_and_test_config_common_properties(self):
+        return
 
     @unittest.skip(reason="ZoeDepth with AutoBackbone does not have a base model and hence no input_embeddings")
     def test_inputs_embeds(self):
@@ -264,9 +274,10 @@ def prepare_img():
 @require_vision
 @slow
 class ZoeDepthModelIntegrationTest(unittest.TestCase):
-    def test_inference_depth_estimation_dinov2(self):
-        image_processor = ZoeDepthImageProcessor.from_pretrained("facebook/dpt-dinov2-small-kitti")
-        model = ZoeDepthForDepthEstimation.from_pretrained("facebook/dpt-dinov2-small-kitti").to(torch_device)
+    def test_inference_depth_estimation(self):
+        # TODO update organization
+        image_processor = ZoeDepthImageProcessor.from_pretrained("nielsr/zoedepth-nyu")
+        model = ZoeDepthForDepthEstimation.from_pretrained("nielsr/zoedepth-nyu").to(torch_device)
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
