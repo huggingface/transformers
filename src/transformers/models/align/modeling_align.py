@@ -400,7 +400,7 @@ class AlignVisionExpansionLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetDepthwiseLayer with with EfficientNet->AlignVision
+# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetDepthwiseLayer with EfficientNet->AlignVision
 class AlignVisionDepthwiseLayer(nn.Module):
     r"""
     This corresponds to the depthwise convolution phase of each block in the original implementation.
@@ -440,7 +440,7 @@ class AlignVisionDepthwiseLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetSqueezeExciteLayer with with EfficientNet->AlignVision
+# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetSqueezeExciteLayer with EfficientNet->AlignVision
 class AlignVisionSqueezeExciteLayer(nn.Module):
     r"""
     This corresponds to the Squeeze and Excitement phase of each block in the original implementation.

@@ -6939,6 +6939,34 @@ class Qwen2PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class Qwen2MoeForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Qwen2MoeForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Qwen2MoeModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Qwen2MoePreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class RagModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7021,6 +7049,27 @@ class RealmScorer(metaclass=DummyObject):
 
 def load_tf_weights_in_realm(*args, **kwargs):
     requires_backends(load_tf_weights_in_realm, ["torch"])
+
+
+class RecurrentGemmaForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RecurrentGemmaModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RecurrentGemmaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
