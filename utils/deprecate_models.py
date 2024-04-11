@@ -375,6 +375,10 @@ def deprecate_models(models):
     logger.info(f"Skipped models: {skipped_models} as the model doc or model path could not be found.")
     logger.info(f"Models to deprecate: {models}")
 
+    # Remove model config classes from config check
+    logger.info(f"Removing model config classes from config checks")
+    model_config_classes = [CONFIG_MAPPING[model_name].__name__ for model_name in models]
+    remove_model_config_classes_from_config_check("src/transformers/configuration_utils.py", model_config_classes)
 
     tip_message = build_tip_message(get_last_stable_minor_release())
 
@@ -402,10 +406,6 @@ def deprecate_models(models):
     remove_model_references_from_file("src/transformers/models/__init__.py", models, lambda line, model: model == line.strip().strip(","))
     remove_model_references_from_file("utils/slow_documentation_tests.txt", models, lambda line, model: "/" + model + "/" in line)
 
-    # Remove model config classes from config check
-    logger.info(f"Removing model config classes from config checks")
-    model_config_classes = [CONFIG_MAPPING[model_name].__name__ for model_name in models]
-    remove_model_config_classes_from_config_check("src/transformers/configuration_utils.py", model_config_classes)
 
 
 if __name__ == "__main__":
