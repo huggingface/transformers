@@ -250,7 +250,7 @@ Now you can combine the image and annotation transformations to use on a batch o
 ...     image_ids = examples["image_id"]
 ...     images, bboxes, area, categories = [], [], [], []
 ...     for image, objects in zip(examples["image"], examples["objects"]):
-...         image = np.array(image.convert("RGB"))[:, :, ::-1]
+...         image = np.array(image.convert("RGB"))
 ...         out = transform(image=image, bboxes=objects["bbox"], category=objects["category"])
 
 ...         area.append(objects["area"])
