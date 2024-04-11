@@ -12,7 +12,7 @@ from packaging import version
 
 from transformers import __version__ as current_version
 from transformers import logging
-
+from transformers.configuration_utils import CONFIG_MAPPING
 
 REPO_PATH = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 
@@ -369,33 +369,44 @@ def deprecate_models(models):
         else:
             model_info[model] = single_model_info
 
+
     # Filter out skipped models
     models = [model for model in models if model not in skipped_models]
 
-    # tip_message = build_tip_message(get_last_stable_minor_release())
+    logging.info(f"Skipped models: {skipped_models} as the model doc or model path could not be found.")
+    logger.info(f"Models to deprecate: {models}")
 
-    # for model, model_info in model_info.items():
-    #     # Add the tip message to the model doc page directly underneath the title
-    #     insert_tip_to_model_doc(model_info["model_doc_path"], tip_message)
 
-    #     # Move the model file to deprecated: src/transfomers/models/model -> src/transformers/models/deprecated/model
-    #     # move_model_files_to_deprecated(model)
+    tip_message = build_tip_message(get_last_stable_minor_release())
 
-    #     # Delete the model tests: tests/models/model
-    #     delete_model_tests(model)
+    for model, model_info in model_info.items():
+        # Add the tip message to the model doc page directly underneath the title
+        logging.info(f"Adding tip message to model doc page for model: {model}")
+        insert_tip_to_model_doc(model_info["model_doc_path"], tip_message)
+
+        # Move the model file to deprecated: src/transfomers/models/model -> src/transformers/models/deprecated/model
+        logging.info(f"Moving model files to deprecated for model: {model}")
+        move_model_files_to_deprecated(model)
+
+        # Delete the model tests: tests/models/model
+        logging.info(f"Deleting model tests for model: {model}")
+        delete_model_tests(model)
 
     # We do the following with all models passed at once to avoid having to re-write the file multiple times
 
     # Update the __init__.py file to point to the deprecated model.
+    logging.info(f"Updating __init__.py file to point to the deprecated models")
     update_init_file("src/transformers/__init__.py", models)
 
-    # # Remove model references from other files
-    # remove_model_references_from_file("src/transformers/models/__init__.py", models, lambda line, model: model == line.strip().strip(","))
-    # remove_model_references_from_file("utils/slow_documentation_tests.txt", models, lambda line, model: "/" + model + "/" in line)
+    # Remove model references from other files
+    logging.info(f"Removing model references from other files")
+    remove_model_references_from_file("src/transformers/models/__init__.py", models, lambda line, model: model == line.strip().strip(","))
+    remove_model_references_from_file("utils/slow_documentation_tests.txt", models, lambda line, model: "/" + model + "/" in line)
 
-    # # Remove model config classes from config check
-    # model_config_classes = [CONFIG_MAPPING[model_name].__name__ for model_name in models]
-    # remove_model_config_classes_from_config_check("src/transformers/configuration_utils.py", model_config_classes)
+    # Remove model config classes from config check
+    logging.info(f"Removing model config classes from config checks")
+    model_config_classes = [CONFIG_MAPPING[model_name].__name__ for model_name in models]
+    remove_model_config_classes_from_config_check("src/transformers/configuration_utils.py", model_config_classes)
 
 
 if __name__ == "__main__":
