@@ -626,7 +626,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size))
         """
         
-        max_patches_in_batch = max(len(x) for x in pixel_values)
+        max_patches_in_batch = max([len(x) for x in pixel_values])
         if max_num_patches:
             if max_num_patches < max_patches_in_batch:
                 raise ValueError(f"Please provide a higher max_num_patches \
