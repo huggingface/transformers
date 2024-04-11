@@ -14,16 +14,10 @@ from packaging import version
 from transformers import __version__ as current_version
 from transformers import logging, CONFIG_MAPPING
 
-REPO_PATH = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
-
+REPO_PATH = Path(os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 repo = Repo(REPO_PATH)
 
-
-logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
-
-
-# # FIXME - more robust way of finding the model doc - find the model class form the model's init file and then find the model doc
 
 
 def get_last_stable_minor_release():
@@ -78,19 +72,19 @@ def insert_tip_to_model_doc(model_doc_path, tip_message):
 
 
 def get_model_doc_path(model: str) -> Tuple[Optional[str], Optional[str]]:
-    model_doc_path = f"docs/source/en/model_doc/{model}.md"
+    model_doc_path = REPO_PATH / f"docs/source/en/model_doc/{model}.md"
 
     if os.path.exists(model_doc_path):
         return model_doc_path, model
 
     # Try replacing _ with - in the model name
-    model_doc_path = f"docs/source/en/model_doc/{model.replace('_', '-')}.md"
+    model_doc_path = REPO_PATH / f"docs/source/en/model_doc/{model.replace('_', '-')}.md"
 
     if os.path.exists(model_doc_path):
         return model_doc_path, model.replace('_', '-')
 
     # Try replacing _ with "" in the model name
-    model_doc_path = f"docs/source/en/model_doc/{model.replace('_', '')}.md"
+    model_doc_path = REPO_PATH / f"docs/source/en/model_doc/{model.replace('_', '')}.md"
 
     if os.path.exists(model_doc_path):
         return model_doc_path, model.replace('_', '')
@@ -101,7 +95,7 @@ def get_model_doc_path(model: str) -> Tuple[Optional[str], Optional[str]]:
 def extract_model_info(model):
     model_info = dict()
     model_doc_path, model_doc_name = get_model_doc_path(model)
-    model_path = f"src/transformers/models/{model}"
+    model_path = REPO_PATH / f"src/transformers/models/{model}"
 
     if model_doc_path is None:
         logger.info(f"Model doc path does not exist for {model}")
@@ -119,8 +113,8 @@ def extract_model_info(model):
 
 def move_model_files_to_deprecated(model):
     # FIXME - more robust path handling
-    model_path = f"src/transformers/models/{model}"
-    deprecated_model_path = f"src/transformers/models/deprecated/{model}"
+    model_path = REPO_PATH / f"src/transformers/models/{model}"
+    deprecated_model_path = REPO_PATH / f"src/transformers/models/deprecated/{model}"
 
     if not os.path.exists(deprecated_model_path):
         os.makedirs(deprecated_model_path)
@@ -132,7 +126,7 @@ def move_model_files_to_deprecated(model):
 
 
 def delete_model_tests(model):
-    tests_path = f"tests/models/{model}"
+    tests_path = REPO_PATH / f"tests/models/{model}"
 
     if os.path.exists(tests_path):
         repo.git.rm("-r", tests_path)
@@ -384,7 +378,7 @@ def deprecate_models(models):
     # Filter out skipped models
     models = [model for model in models if model not in skipped_models]
 
-    logger.info(f"Skipped models: {skipped_models} as the model doc or model path could not be found.")
+    logger.warning(f"Skipped models: {skipped_models} as the model doc or model path could not be found.")
     logger.info(f"Models to deprecate: {models}")
 
     # Remove model config classes from config check
