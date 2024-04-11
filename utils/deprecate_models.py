@@ -11,8 +11,7 @@ from git import Repo
 from packaging import version
 
 from transformers import __version__ as current_version
-from transformers import logging
-from transformers.configuration_utils import CONFIG_MAPPING
+from transformers import logging, CONFIG_MAPPING
 
 REPO_PATH = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 
