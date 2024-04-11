@@ -370,7 +370,6 @@ class IdeficsProcessor(ProcessorMixin):
         output_images = []
         output_attention_masks = []
 
-
         for text, attention_mask, images in zip(all_texts, all_attention_masks, all_images):
             padded_input_ids = text
             image_count = padded_input_ids.count(self.image_token_id)
@@ -402,7 +401,6 @@ class IdeficsProcessor(ProcessorMixin):
                 elif return_tensors == "tf":
                     padded_image_tensor = tf.zeros((max_num_images, *self.default_image_dims))
 
-            #breakpoint()
             output_images.append(padded_image_tensor)
             if return_tensors == "pt":
                 output_input_ids.append(torch.tensor(padded_input_ids))

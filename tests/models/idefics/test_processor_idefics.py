@@ -204,7 +204,6 @@ class IdeficsProcessorTest(TestCasePlus):
         processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor)
         prompts = self.prepare_prompts()
 
-
         inputs = processor(prompts, padding="longest", return_tensors="pt")
 
         # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']

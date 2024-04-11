@@ -785,15 +785,18 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             functional_inputs = {
                 key: keras.Input(
                     shape=(
-                        (channels, image_height, image_width) if 'pixel_values' in key else
-                        (2,) if key in ['input_ids', 'attention_mask'] else
-                        (fixed_seq_length, fixed_batch_size)
+                        (channels, image_height, image_width)
+                        if "pixel_values" in key
+                        else (2,)
+                        if key in ["input_ids", "attention_mask"]
+                        else (fixed_seq_length, fixed_batch_size)
                     ),
                     dtype=val.dtype,
                     name=key,
-                    batch_size=fixed_batch_size
+                    batch_size=fixed_batch_size,
                 )
-                for key, val in model.input_signature.items() if key in model.dummy_inputs
+                for key, val in model.input_signature.items()
+                if key in model.dummy_inputs
             }
             # Pass the functional inputs to the model
             outputs_dict = model(functional_inputs)
@@ -834,9 +837,7 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             with tempfile.TemporaryDirectory() as tmpdirname:
                 filepath = os.path.join(tmpdirname, "keras_model.h5")
                 model.save(filepath)
-                model = keras.models.load_model(
-                        filepath, custom_objects={main_layer_class.__name__: main_layer_class}
-                )
+                model = keras.models.load_model(filepath, custom_objects={main_layer_class.__name__: main_layer_class})
                 assert isinstance(model, keras.Model)
                 after_outputs = model(inputs_dict)
                 self.assert_outputs_same(after_outputs, outputs)
@@ -848,12 +849,11 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @unittest.skip(reason="Currently `saved_model` doesn't work with nested outputs.")
     def test_saved_model_creation(self):
-       pass
+        pass
 
     @unittest.skip(reason="""IDEFICS loss computation not implemented yet""")
     def test_loss_computation(self):
         pass
-
 
 
 @require_tf
@@ -883,6 +883,7 @@ class TFIdeficsForVisionText2TextTest(TFIdeficsModelTest, unittest.TestCase):
     @unittest.skip(reason="""IDEFICS loss computation not implemented yet""")
     def test_loss_computation(self):
         pass
+
 
 @require_tf
 @require_vision
@@ -921,6 +922,7 @@ class TFIdeficsModelIntegrationTest(TestCasePlus):
         inputs = processor(prompts, return_tensors="tf")
         generated_ids = model.generate(**inputs, max_length=100)
         generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
+
         # keep for debugging
         for i, t in enumerate(generated_text):
             t = bytes(t, "utf-8").decode("unicode_escape")
