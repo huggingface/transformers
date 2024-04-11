@@ -475,7 +475,7 @@ class GenerationConfig(PushToHubMixin):
         if self.pad_token_id is not None and self.pad_token_id < 0:
             warnings.warn(
                 f"`pad_token_id` must be positive but got {self.pad_token_id}. This may cause erros when batch generating. "
-                "Please set `pas_token_id` explicitly by `model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoiid errors in generation"
+                "Please set `pas_token_id` explicitly by `model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation"
             )
 
         # Validation of attribute relations:
