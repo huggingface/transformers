@@ -15,7 +15,9 @@
 """ Testing suite for the TF Idefics model. """
 
 import unittest
-
+import tempfile
+from importlib import import_module
+import os
 from transformers import IdeficsConfig, is_tf_available, is_vision_available
 from transformers.testing_utils import (
     TestCasePlus,
@@ -24,6 +26,7 @@ from transformers.testing_utils import (
     slow,
 )
 from transformers.utils import cached_property
+from transformers.modeling_tf_utils import keras
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -767,15 +770,89 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         self.has_attentions = False
         super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
-    @unittest.skip(reason="Currently `saved_model` doesn't work with nested outputs.")
     @slow
-    def test_saved_model_creation(self):
-       pass
+    def test_compile_tf_model(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes[1:]:
+            model = model_class(config)
+
+            fixed_batch_size = 1  # Example fixed batch size
+            fixed_seq_length = 10  # Example fixed sequence length for input_ids and attention_mask
+            image_height, image_width, channels = 30, 30, 3  # Example fixed image dimensions for pixel_values
+
+            functional_inputs = {
+                key: keras.Input(
+                    shape=(
+                        (channels, image_height, image_width) if 'pixel_values' in key else
+                        (2,) if key in ['input_ids', 'attention_mask'] else
+                        (fixed_seq_length, fixed_batch_size)
+                    ),
+                    dtype=val.dtype,
+                    name=key,
+                    batch_size=fixed_batch_size
+                )
+                for key, val in model.input_signature.items() if key in model.dummy_inputs
+            }
+            # Pass the functional inputs to the model
+            outputs_dict = model(functional_inputs)
+            hidden_states = outputs_dict[0]
+            functional_model = keras.Model(inputs=functional_inputs, outputs=hidden_states)
+            model_out = functional_model.predict(model.dummy_inputs)
+            self.assertTrue(model_out is not None)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                functional_model.save(tmpdirname)  # Ensure we can save/export the whole functional model
+
+    def test_keras_save_load(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        tf_main_layer_classes = {
+            module_member
+            for model_class in self.all_model_classes
+            for module in (import_module(model_class.__module__),)
+            for module_member_name in dir(module)
+            if module_member_name.endswith("MainLayer")
+            for module_member in (getattr(module, module_member_name),)
+            if isinstance(module_member, type)
+            and keras.layers.Layer in module_member.__bases__
+            and getattr(module_member, "_keras_serializable", False)
+        }
+
+        for main_layer_class in tf_main_layer_classes:
+            main_layer = main_layer_class(config)
+
+            symbolic_inputs = {
+                name: keras.Input(tensor.shape[1:], dtype=tensor.dtype, batch_size=2)
+                for name, tensor in inputs_dict.items()
+                if tf.is_tensor(tensor)
+            }
+            model = keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
+            outputs = model(inputs_dict)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                filepath = os.path.join(tmpdirname, "keras_model.h5")
+                model.save(filepath)
+                model = keras.models.load_model(
+                        filepath, custom_objects={main_layer_class.__name__: main_layer_class}
+                )
+                assert isinstance(model, keras.Model)
+                after_outputs = model(inputs_dict)
+                self.assert_outputs_same(after_outputs, outputs)
 
     @slow
     def test_model_from_pretrained(self):
         model = TFIdeficsModel.from_pretrained(IDEFICS_TINY_RANDOM_MODEL, from_pt=True)
         self.assertIsNotNone(model)
+
+    @unittest.skip(reason="Currently `saved_model` doesn't work with nested outputs.")
+    def test_saved_model_creation(self):
+       pass
+
+    @unittest.skip(reason="""IDEFICS loss computation not implemented yet""")
+    def test_loss_computation(self):
+        pass
+
 
 
 @require_tf
@@ -802,7 +879,7 @@ class TFIdeficsForVisionText2TextTest(TFIdeficsModelTest, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="""IDEFICS loss computation is done in TFIdeficsForVisionText2Text""")
+    @unittest.skip(reason="""IDEFICS loss computation not implemented yet""")
     def test_loss_computation(self):
         pass
 
