@@ -620,6 +620,12 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                         # print("the image sizes I used to obtain these num_patches: ", image_sizes[image_idx])
                         print("these are the num patch  and num ht: ", num_patch_height, num_patch_width)
                         print('image sizes: ', image_sizes[image_idx])
+                        if num_patch_height*num_patch_width + 1 != num_unpadded_patches:
+                            print("Found mismatched shapes!!!!!!!!!!!!")
+                            print(image_idx)
+                            print(patches_lengths)
+                            print(image_features[image_idx].shape)
+                            print(pixel_values[image_idx])
                         assert num_patch_height*num_patch_width + 1 == num_unpadded_patches
                         # print("shape of image ftrs before view: ", image_feature.shape)
                         image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1) # divide 5 - 1 
