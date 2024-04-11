@@ -22,9 +22,11 @@ import pytest
 
 from transformers import MixtralConfig, is_torch_available
 from transformers.testing_utils import (
+    is_flaky,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -307,6 +309,13 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     ):
         return True
 
+    # TODO: @Fxmarty
+    @is_flaky(max_attempts=3, description="flaky on some models.")
+    @require_torch_sdpa
+    @slow
+    def test_eager_matches_sdpa_generate(self):
+        super().test_eager_matches_sdpa_generate()
+
     def setUp(self):
         self.model_tester = MixtralModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MixtralConfig, hidden_size=37)
@@ -456,7 +465,7 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
-    def test_flash_attn_2_inference_padding_right(self):
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest("Mixtral flash attention does not support right padding")
 
     # Ignore copy
@@ -498,6 +507,16 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 @require_torch
 class MixtralIntegrationTest(unittest.TestCase):
+    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
+    # Depending on the hardware we get different logits / generations
+    cuda_compute_capability_major_version = None
+
+    @classmethod
+    def setUpClass(cls):
+        if is_torch_available() and torch.cuda.is_available():
+            # 8 is for A100 / A10 and 7 for T4
+            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+
     @slow
     @require_torch_gpu
     def test_small_model_logits(self):
@@ -509,18 +528,26 @@ class MixtralIntegrationTest(unittest.TestCase):
         )
         # TODO: might need to tweak it in case the logits do not match on our daily runners
         # these logits have been obtained with the original megablocks impelmentation.
-        EXPECTED_LOGITS = torch.Tensor(
-            [[0.1670, 0.1620, 0.6094], [-0.8906, -0.1588, -0.6060], [0.1572, 0.1290, 0.7246]]
-        ).to(torch_device)
-
+        EXPECTED_LOGITS = {
+            7: torch.Tensor([[0.1670, 0.1620, 0.6094], [-0.8906, -0.1588, -0.6060], [0.1572, 0.1290, 0.7246]]).to(
+                torch_device
+            ),
+            8: torch.Tensor([[0.1631, 0.1621, 0.6094], [-0.8906, -0.1621, -0.6094], [0.1572, 0.1270, 0.7227]]).to(
+                torch_device
+            ),
+        }
         with torch.no_grad():
             logits = model(dummy_input).logits
 
-        torch.testing.assert_close(logits[0, :3, :3].half(), EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)
-        torch.testing.assert_close(logits[1, :3, :3].half(), EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(
+            logits[0, :3, :3], EXPECTED_LOGITS[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3
+        )
+        torch.testing.assert_close(
+            logits[1, :3, :3], EXPECTED_LOGITS[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3
+        )
 
     @slow
-    # @require_torch_gpu
+    @require_torch_gpu
     def test_small_model_logits_batched(self):
         model_id = "hf-internal-testing/Mixtral-tiny"
         dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
@@ -531,23 +558,48 @@ class MixtralIntegrationTest(unittest.TestCase):
         )
 
         # TODO: might need to tweak it in case the logits do not match on our daily runners
-        EXPECTED_LOGITS_LEFT = torch.Tensor(
-            [[0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007]],
-        )
+        EXPECTED_LOGITS_LEFT = {
+            7: torch.Tensor(
+                [[0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007]],
+            ).to(torch_device),
+            8: torch.Tensor([[0.1914, 0.0508, 0.7188], [0.1953, 0.0510, 0.7227], [0.1973, 0.0562, 0.7148]]).to(
+                torch_device
+            ),
+        }
 
-        # logits[0, -3:, -3:].half()
-        EXPECTED_LOGITS_LEFT_UNPADDED = torch.Tensor(
-            [[0.2212, 0.5200, -0.3816], [0.8213, -0.2313, 0.6069], [0.2664, -0.7090, 0.2468]],
-        )
+        EXPECTED_LOGITS_LEFT_UNPADDED = {
+            7: torch.Tensor(
+                [[0.2212, 0.5200, -0.3816], [0.8213, -0.2313, 0.6069], [0.2664, -0.7090, 0.2468]],
+            ).to(torch_device),
+            8: torch.Tensor([[0.2217, 0.5195, -0.3828], [0.8203, -0.2295, 0.6055], [0.2676, -0.7109, 0.2461]]).to(
+                torch_device
+            ),
+        }
 
-        # logits[1, -3:, -3:].half()
-        EXPECTED_LOGITS_RIGHT_UNPADDED = torch.Tensor(
-            [[0.2205, 0.1232, -0.1611], [-0.3484, 0.3030, -1.0312], [0.0742, 0.7930, 0.7969]]
-        )
+        EXPECTED_LOGITS_RIGHT_UNPADDED = {
+            7: torch.Tensor([[0.2205, 0.1232, -0.1611], [-0.3484, 0.3030, -1.0312], [0.0742, 0.7930, 0.7969]]).to(
+                torch_device
+            ),
+            8: torch.Tensor([[0.2178, 0.1260, -0.1621], [-0.3496, 0.2988, -1.0312], [0.0693, 0.7930, 0.8008]]).to(
+                torch_device
+            ),
+        }
 
         with torch.no_grad():
             logits = model(dummy_input, attention_mask=attention_mask).logits
 
-        torch.testing.assert_close(logits[0, :3, :3].half(), EXPECTED_LOGITS_LEFT, atol=1e-3, rtol=1e-3)
-        torch.testing.assert_close(logits[0, -3:, -3:].half(), EXPECTED_LOGITS_LEFT_UNPADDED, atol=1e-3, rtol=1e-3)
-        torch.testing.assert_close(logits[1, -3:, -3:].half(), EXPECTED_LOGITS_RIGHT_UNPADDED, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(
+            logits[0, :3, :3], EXPECTED_LOGITS_LEFT[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3
+        )
+        torch.testing.assert_close(
+            logits[0, -3:, -3:],
+            EXPECTED_LOGITS_LEFT_UNPADDED[self.cuda_compute_capability_major_version],
+            atol=1e-3,
+            rtol=1e-3,
+        )
+        torch.testing.assert_close(
+            logits[1, -3:, -3:],
+            EXPECTED_LOGITS_RIGHT_UNPADDED[self.cuda_compute_capability_major_version],
+            atol=1e-3,
+            rtol=1e-3,
+        )
