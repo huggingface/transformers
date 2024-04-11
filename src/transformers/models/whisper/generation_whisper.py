@@ -985,16 +985,16 @@ class WhisperGenerationMixin:
             "{}, but will be ignored."
         )
         if condition_on_prev_tokens is not None:
-            logger.warn(warning_prefix.format(f"condition_on_prev_tokens is set to {condition_on_prev_tokens}"))
+            logger.warning(warning_prefix.format(f"condition_on_prev_tokens is set to {condition_on_prev_tokens}"))
 
         if compression_ratio_threshold is not None:
-            logger.warn(warning_prefix.format(f"compression_ratio_threshold is set to {compression_ratio_threshold}"))
+            logger.warning(warning_prefix.format(f"compression_ratio_threshold is set to {compression_ratio_threshold}"))
 
         if logprob_threshold is not None:
-            logger.warn(warning_prefix.format(f"logprob_threshold is set to {logprob_threshold}"))
+            logger.warning(warning_prefix.format(f"logprob_threshold is set to {logprob_threshold}"))
 
         if no_speech_threshold is not None:
-            logger.warn(warning_prefix.format(f"no_speech_threshold is set to {no_speech_threshold}"))
+            logger.warning(warning_prefix.format(f"no_speech_threshold is set to {no_speech_threshold}"))
 
         # when passing temperature as a list it cannot just be ignored => throw error in this case
         if isinstance(temperature, (list, tuple)):
