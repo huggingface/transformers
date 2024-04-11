@@ -243,7 +243,7 @@ class RTDetrModelOutput(ModelOutput):
             foreground and background).
         enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
             Logits of predicted bounding boxes coordinates in the first stage.
-        dn_meta (`dict`):
+        denoising_meta_values (`dict`):
             Extra dictionary for the denoising related values
     """
 
@@ -262,7 +262,7 @@ class RTDetrModelOutput(ModelOutput):
     enc_topk_bboxes: Optional[torch.FloatTensor] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
-    dn_meta: Optional[Dict] = None
+    denoising_meta_values: Optional[Dict] = None
 
 
 @dataclass
@@ -330,8 +330,8 @@ class RTDetrObjectDetectionOutput(ModelOutput):
             foreground and background).
         enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
             Logits of predicted bounding boxes coordinates in the first stage.
-        dn_meta (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-            Logits of predicted bounding boxes coordinates in the first stage.
+        denoising_meta_values (`dict`):
+            Extra dictionary for the denoising related values
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -354,7 +354,7 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     enc_topk_bboxes: Optional[torch.FloatTensor] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
-    dn_meta: Optional[Dict] = None
+    denoising_meta_values: Optional[Dict] = None
 
 
 def _get_clones(partial_module, N):
@@ -457,7 +457,7 @@ def get_contrastive_denoising_training_group(
         A tuple containing: input_query_class (`torch.FloatTensor`): Class queries with applied label noise.
         input_query_bbox
             (`torch.FloatTensor`): Bounding box queries with applied box noise. attn_mask (`torch.FloatTensor`):
-            Attention mask for separating denoising and reconstruction queries. dn_meta (`dict`): Metadata including
+            Attention mask for separating denoising and reconstruction queries. denoising_meta_values (`dict`): Metadata including
             denoising positive indices, number of groups, and split sizes.
     """
 
@@ -536,13 +536,13 @@ def get_contrastive_denoising_training_group(
         attn_mask[idx_block_start:idx_block_end, :idx_block_start] = True
         attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising_queries] = True
 
-    dn_meta = {
+    denoising_meta_values = {
         "dn_positive_idx": denoise_positive_idx,
         "dn_num_group": num_groups_denoising_queries,
         "dn_num_split": [num_denoising_queries, num_queries],
     }
 
-    return input_query_class, input_query_bbox, attn_mask, dn_meta
+    return input_query_class, input_query_bbox, attn_mask, denoising_meta_values
 
 
 class RTDetrConvEncoder(nn.Module):
@@ -1776,7 +1776,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         # prepare denoising training
         if self.training and self.config.num_denoising > 0 and labels is not None:
-            denoising_class, denoising_bbox_unact, mask_flatten, dn_meta = get_contrastive_denoising_training_group(
+            denoising_class, denoising_bbox_unact, mask_flatten, denoising_meta_values = get_contrastive_denoising_training_group(
                 targets=labels,
                 num_classes=self.config.num_labels,
                 num_queries=self.config.num_queries,
@@ -1786,7 +1786,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
                 box_noise_scale=self.config.box_noise_scale,
             )
         else:
-            denoising_class, denoising_bbox_unact, mask_flatten, dn_meta = None, None, None, None
+            denoising_class, denoising_bbox_unact, mask_flatten, denoising_meta_values = None, None, None, None
 
         batch_size = len(source_flatten)
         device = source_flatten.device
@@ -1849,7 +1849,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
                 for value in [enc_topk_logits, enc_topk_bboxes, enc_outputs_class, enc_outputs_coord_logits]
                 if value is not None
             )
-            dn_outputs = tuple(value for value in [dn_meta] if value is not None)
+            dn_outputs = tuple(value for value in [denoising_meta_values] if value is not None)
             tuple_outputs = decoder_outputs + encoder_outputs + (init_reference_points,) + enc_outputs + dn_outputs
 
             return tuple_outputs
@@ -1870,7 +1870,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
             enc_topk_bboxes=enc_topk_bboxes,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
-            dn_meta=dn_meta,
+            denoising_meta_values=denoising_meta_values,
         )
 
 
@@ -2188,12 +2188,12 @@ class RTDetrLoss(nn.Module):
 
         # In case of cdn auxiliary losses. For rtdetr
         if "dn_aux_outputs" in outputs:
-            if "dn_meta" not in outputs:
+            if "denoising_meta_values" not in outputs:
                 raise ValueError(
-                    "The output must have the 'dn_meta` key. Please, ensure that 'outputs' includes a 'dn_meta' entry."
+                    "The output must have the 'denoising_meta_values` key. Please, ensure that 'outputs' includes a 'denoising_meta_values' entry."
                 )
-            indices = self.get_cdn_matched_indices(outputs["dn_meta"], targets)
-            num_boxes = num_boxes * outputs["dn_meta"]["dn_num_group"]
+            indices = self.get_cdn_matched_indices(outputs["denoising_meta_values"], targets)
+            num_boxes = num_boxes * outputs["denoising_meta_values"]["dn_num_group"]
 
             for i, aux_outputs in enumerate(outputs["dn_aux_outputs"]):
                 # indices = self.matcher(aux_outputs, targets)
@@ -2568,14 +2568,14 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             return_dict=return_dict,
         )
 
-        dn_meta = outputs.dn_meta if return_dict else outputs[-1]
+        denoising_meta_values = outputs.denoising_meta_values if return_dict else outputs[-1]
 
         outputs_class = outputs.intermediate_logits if return_dict else outputs[2]
         outputs_coord = outputs.intermediate_reference_points if return_dict else outputs[3]
 
-        if self.training and dn_meta is not None:
-            dn_out_coord, outputs_coord = torch.split(outputs_coord, dn_meta["dn_num_split"], dim=2)
-            dn_out_class, outputs_class = torch.split(outputs_class, dn_meta["dn_num_split"], dim=2)
+        if self.training and denoising_meta_values is not None:
+            dn_out_coord, outputs_coord = torch.split(outputs_coord, denoising_meta_values["dn_num_split"], dim=2)
+            dn_out_class, outputs_class = torch.split(outputs_class, denoising_meta_values["dn_num_split"], dim=2)
 
         logits = outputs_class[:, -1]
         pred_boxes = outputs_coord[:, -1]
@@ -2595,9 +2595,9 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
                 auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
                 outputs_loss["aux_outputs"] = auxiliary_outputs
                 outputs_loss["aux_outputs"].extend(self._set_aux_loss([enc_topk_logits], [enc_topk_bboxes]))
-                if self.training and dn_meta is not None:
+                if self.training and denoising_meta_values is not None:
                     outputs_loss["dn_aux_outputs"] = self._set_aux_loss(dn_out_class, dn_out_coord)
-                    outputs_loss["dn_meta"] = dn_meta
+                    outputs_loss["denoising_meta_values"] = denoising_meta_values
 
             loss_dict = criterion(outputs_loss, labels)
             # Compute total loss, as a weighted sum of the various losses
@@ -2642,5 +2642,5 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             enc_topk_bboxes=outputs.enc_topk_bboxes,
             enc_outputs_class=outputs.enc_outputs_class,
             enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
-            dn_meta=outputs.dn_meta,
+            denoising_meta_values=outputs.denoising_meta_values,
         )
