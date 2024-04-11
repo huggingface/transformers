@@ -407,32 +407,8 @@ def deprecate_models(models):
     remove_model_references_from_file("utils/slow_documentation_tests.txt", models, lambda line, model: "/" + model + "/" in line)
 
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--models", nargs="+", help="List of models to deprecate")
-    models = [
-        # 'graphormer',
-        # 'time_series_transformer',
-        "conditional_detr",
-        # 'xlm_prophetnet',
-        # 'qdqbert',
-        # 'nat',
-        # 'data2vec',
-        # 'ernie_m',
-        # 'dinat',
-        # 'tvlt',
-        # 'nezha',
-        # 'jukebox',
-        "vit_hybrid",
-        # 'decision_transformer',
-        # 'x_clip',
-        # 'deta',
-        # 'speech_to_text_2',
-        # 'efficientformer',
-        # 'realm',
-        # 'openai',
-        # 'gptsan_japanese'
-    ]
     args = parser.parse_args()
-    deprecate_models(models)
+    deprecate_models(args.models)
