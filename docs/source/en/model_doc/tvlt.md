@@ -16,6 +16,14 @@ rendered properly in your Markdown viewer.
 
 # TVLT
 
+    <Tip warning={true}>
+
+    This model is in maintenance mode only, we don't accept any new PRs changing its code.
+    If you run into any issues running this model, please reinstall the last version that supported this model: v4.38.2.
+    You can do so by running the following command: `pip install -U transformers==4.38.2`.
+
+    </Tip>
+
 ## Overview
 
 The TVLT model was proposed in [TVLT: Textless Vision-Language Transformer](https://arxiv.org/abs/2209.14156)

@@ -16,6 +16,14 @@ rendered properly in your Markdown viewer.
 
 # Conditional DETR
 
+    <Tip warning={true}>
+
+    This model is in maintenance mode only, we don't accept any new PRs changing its code.
+    If you run into any issues running this model, please reinstall the last version that supported this model: v4.38.2.
+    You can do so by running the following command: `pip install -U transformers==4.38.2`.
+
+    </Tip>
+
 ## Overview
 
 The Conditional DETR model was proposed in [Conditional DETR for Fast Training Convergence](https://arxiv.org/abs/2108.06152) by Depu Meng, Xiaokang Chen, Zejia Fan, Gang Zeng, Houqiang Li, Yuhui Yuan, Lei Sun, Jingdong Wang. Conditional DETR presents a conditional cross-attention mechanism for fast DETR training. Conditional DETR converges 6.7× to 10× faster than DETR.

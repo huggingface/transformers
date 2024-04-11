@@ -16,6 +16,14 @@ rendered properly in your Markdown viewer.
 
 # MEGA
 
+    <Tip warning={true}>
+
+    This model is in maintenance mode only, we don't accept any new PRs changing its code.
+    If you run into any issues running this model, please reinstall the last version that supported this model: v4.38.2.
+    You can do so by running the following command: `pip install -U transformers==4.38.2`.
+
+    </Tip>
+
 ## Overview
 
 The MEGA model was proposed in [Mega: Moving Average Equipped Gated Attention](https://arxiv.org/abs/2209.10655) by Xuezhe Ma, Chunting Zhou, Xiang Kong, Junxian He, Liangke Gui, Graham Neubig, Jonathan May, and Luke Zettlemoyer.
