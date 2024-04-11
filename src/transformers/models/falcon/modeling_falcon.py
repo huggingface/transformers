@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
+from ...activations import get_activation
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
     _prepare_4d_causal_attention_mask,
@@ -739,9 +740,9 @@ class FalconMLP(nn.Module):
         super().__init__()
         hidden_size = config.hidden_size
 
-        self.dense_h_to_4h = FalconLinear(hidden_size, 4 * hidden_size, bias=config.bias)
-        self.act = nn.GELU()
-        self.dense_4h_to_h = FalconLinear(4 * hidden_size, hidden_size, bias=config.bias)
+        self.dense_h_to_4h = FalconLinear(hidden_size, config.ffn_hidden_size, bias=config.bias)
+        self.act = get_activation(config.activation)
+        self.dense_4h_to_h = FalconLinear(config.ffn_hidden_size, hidden_size, bias=config.bias)
         self.hidden_dropout = config.hidden_dropout
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
