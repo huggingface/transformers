@@ -33,7 +33,7 @@ env:
 
 jobs:
   setup:
-    if: ${{ inputs.job == 'run_tests_gpu' }}
+    if: contains(fromJSON('["run_tests_gpu", "run_tests_quantization_torch_gpu"]'), inputs.job)
     name: Setup
     strategy:
       matrix:
@@ -45,6 +45,7 @@ jobs:
     outputs:
       folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
       slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
+      quantization_matrix: ${{ steps.set-matrix-quantization.outputs.quantization_matrix }}
     steps:
       - name: Update clone
         working-directory: /transformers
@@ -63,11 +64,19 @@ jobs:
         run: pip freeze
 
       - id: set-matrix
+        if: ${{ inputs.job == 'run_tests_gpu' }}
         name: Identify models to test
         working-directory: /transformers/tests
         run: |
           echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
           echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
+      
+      - id: set-matrix-quantization
+        if: ${{ inputs.job == 'run_tests_quantization_torch_gpu' }}
+        name: Identify quantization method to test
+        working-directory: /transformers/tests
+        run: |
+          echo "quantization_matrix=$(python3 -c 'import os; tests = os.getcwd(); quantization_tests = os.listdir(os.path.join(tests, "quantization")); d = sorted(list(filter(os.path.isdir, [f"quantization/{x}" for x in quantization_tests]))) ;  print(d)')" >> $GITHUB_OUTPUT
 
       - name: NVIDIA-SMI
         run: |
@@ -303,16 +312,27 @@ jobs:
 
   run_tests_quantization_torch_gpu:
     if: ${{ inputs.job == 'run_tests_quantization_torch_gpu' }}
-    name: Quantization tests
+    name: " "
+    needs: setup
     strategy:
       fail-fast: false
       matrix:
+        folders: ${{ fromJson(needs.setup.outputs.quantization_matrix) }}
         machine_type: [single-gpu, multi-gpu]
     runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
     container:
       image: huggingface/transformers-quantization-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
+      - name: Echo folder ${{ matrix.folders }}
+        shell: bash
+        run: |
+          echo "${{ matrix.folders }}"
+          matrix_folders=${{ matrix.folders }}
+          matrix_folders=${matrix_folders/'quantization/'/'quantization_'}
+          echo "$matrix_folders"
+          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
+
       - name: Update clone
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
@@ -337,19 +357,19 @@ jobs:
       - name: Run quantization tests on GPU
         working-directory: /transformers
         run: |
-          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_quantization_torch_gpu tests/quantization
+          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_quantization_torch_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_quantization_torch_gpu/failures_short.txt
+        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_quantization_torch_gpu_${{ matrix.folders }}/failures_short.txt
 
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_quantization_torch_gpu"
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_quantization_torch_gpu_${{ env.matrix_folders }}"
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.machine_type }}_run_tests_quantization_torch_gpu
-          path: /transformers/reports/${{ matrix.machine_type }}_tests_quantization_torch_gpu
+          name: ${{ matrix.machine_type }}_run_tests_quantization_torch_gpu_${{ env.matrix_folders }}
+          path: /transformers/reports/${{ matrix.machine_type }}_tests_quantization_torch_gpu_${{ matrix.folders }}
 
   run_extract_warnings:
     # Let's only do this for the job `run_tests_gpu` to simplify the (already complex) logic.
@@ -413,4 +433,6 @@ jobs:
       slack_report_channel: ${{ inputs.slack_report_channel }}
       # This would be an empty string if `setup` is skipped.
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
+      quantization_matrix: ${{ needs.setup.outputs.quantization_matrix }}
+      
     secrets: inherit
