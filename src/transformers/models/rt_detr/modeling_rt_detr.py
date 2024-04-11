@@ -721,11 +721,11 @@ class RTDetrCSPRepLayer(nn.Module):
         else:
             self.conv3 = nn.Identity()
 
-    def forward(self, x):
-        x_1 = self.conv1(x)
-        x_1 = self.bottlenecks(x_1)
-        x_2 = self.conv2(x)
-        return self.conv3(x_1 + x_2)
+    def forward(self, hidden_state):
+        hidden_state_1 = self.conv1(hidden_state)
+        hidden_state_1 = self.bottlenecks(hidden_state_1)
+        hidden_state_2 = self.conv2(hidden_state)
+        return self.conv3(hidden_state_1 + hidden_state_2)
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
