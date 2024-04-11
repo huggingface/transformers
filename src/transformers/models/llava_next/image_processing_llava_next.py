@@ -422,20 +422,23 @@ class LlavaNextImageProcessor(BaseImageProcessor):
 
         image_size = get_image_size(image, channel_dim=input_data_format)
         best_resolution = select_best_resolution(image_size, possible_resolutions)
+
         # print("found this best resolution within image processing: ", best_resolution)
         resized_image = self._resize_for_patching(
             image, best_resolution, resample=resample, input_data_format=input_data_format
         )
         padded_image = self._pad_for_patching(resized_image, best_resolution, input_data_format=input_data_format)
-
+        # print('size of padded image: ', padded_image.shape)
         patches = divide_to_patches(padded_image, patch_size=patch_size, input_data_format=input_data_format)
 
+        # print('len of patches: ', len(patches))
         # make sure that all patches are in the input data format
         patches = [
             to_channel_dimension_format(patch, channel_dim=data_format, input_channel_dim=input_data_format)
             for patch in patches
         ]
 
+        # print('shape of patches: ', patches[0].shape)
         resized_original_image = resize(
             image,
             size=size,
@@ -445,6 +448,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         )
 
         image_patches = [resized_original_image] + patches
+        # print('len of final patches after addig base image: ', len(image_patches))
 
         return image_patches
 
@@ -527,6 +531,8 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size", default_to_square=True)
+        # print("crop size: ", crop_size)
+
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
@@ -573,6 +579,12 @@ class LlavaNextImageProcessor(BaseImageProcessor):
 
         new_images = []
         image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
+        # print('image sizes: ', image_sizes)
+        # print(size["shortest_edge"])
+        # print('resample: ', resample)
+        # print('data format', input_data_format)
+        # print('patch size: ',crop_size["height"] )
+        
         # print("within the processor I got these image sizes: ", image_sizes)
         for image in images:
             # convert image into a list of patches

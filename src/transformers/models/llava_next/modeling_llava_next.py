@@ -66,6 +66,7 @@ def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
         raise ValueError("grid_pinpoints should be a list of tuples or lists")
 
     height, width = select_best_resolution(image_size, grid_pinpoints)
+    # print('found best resolution : ', height, width)
     return height // patch_size, width // patch_size
 
 
@@ -232,7 +233,7 @@ LLAVA_NEXT_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`LlavaNextImageProcessor.__call__`] for details. [`LlavaProcessor`] uses
             [`LlavaNextImageProcessor`] for processing images.
@@ -604,7 +605,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 new_image_features = []
                 for image_idx, image_feature in enumerate(image_features):
                     num_unpadded_patches = image_feature.shape[0]
-                    print("num _unpadded patches: ", num_unpadded_patches)
+                    # print("num _unpadded patches: ", num_unpadded_patches)
                     # image feature has shape; 5/3/4 (num_patches), 3, 336, 336
                     if image_feature.shape[0] > 1:
                         base_image_feature = image_feature[0]
@@ -613,16 +614,17 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                         if height * width != base_image_feature.shape[0]:
                             raise ValueError("The number of patches is not consistent with the image size.")
                         num_patch_height, num_patch_width = get_anyres_image_grid_shape(
-                            image_sizes[image_idx],
+                            image_sizes[image_idx].tolist(),
                             self.config.image_grid_pinpoints,
                             self.config.vision_config.image_size,
                         )
                         # print("the image sizes I used to obtain these num_patches: ", image_sizes[image_idx])
-                        print("these are the num patch  and num ht: ", num_patch_height, num_patch_width)
-                        print('image sizes: ', image_sizes[image_idx])
+                        # print("these are the num patch  and num ht: ", num_patch_height, num_patch_width)
                         if num_patch_height*num_patch_width + 1 != num_unpadded_patches:
                             print("Found mismatched shapes!!!!!!!!!!!!")
-                            print(image_idx)
+
+                            print("these are the num patch  and num ht: ", num_patch_height, num_patch_width)
+                            print('image sizes: ', image_sizes[image_idx])
                             print(patches_lengths)
                             print(image_features[image_idx].shape)
                             print(pixel_values[image_idx])
