@@ -445,6 +445,36 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         image_patches = [resized_original_image] + patches
 
         return image_patches
+    
+    def pad(
+        self,
+        pixel_values: List[np.ndarray],
+        image_sizes: List[Tuple[int, int]],
+        return_tensors: Optional[Union[str, TensorType]] = None,
+    ):
+        """
+        Args:
+            pixel_values (`List[np.ndarray]`): array of pixel values of each images
+            image_sizes (`List[Tuple[int, int]]`): image sizes (height, weidt)
+            return_tensors (`str` or `TensorType`, *optional*):
+                The type of tensors to return. Can be one of:
+                - Unset: Return a list of `np.ndarray`.
+                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
+                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+        """
+        max_patch = max(len(x) for x in pixel_values)
+        pixel_values = [
+            np.concatenate([x, np.zeros([max_patch - x.shape[0]] + list(x.shape[1:]), dtype=x.dtype)], axis=0)
+            if x.shape[0] < max_patch
+            else x
+            for x in pixel_values
+        ]
+        data = {"pixel_values": pixel_values, "image_sizes": image_sizes}
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
+
 
     def preprocess(
         self,
@@ -604,13 +634,14 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             pixel_values = np.array(pixel_values)
             new_images.append(pixel_values)
 
-        max_patch = max(len(x) for x in new_images)
-        new_images = [
-            np.concatenate([x, np.zeros([max_patch - x.shape[0]] + list(x.shape[1:]), dtype=x.dtype)], axis=0)
-            if x.shape[0] < max_patch
-            else x
-            for x in new_images
-        ]
-        data = {"pixel_values": new_images, "image_sizes": image_sizes}
+        # max_patch = max(len(x) for x in new_images)
+        # new_images = [
+        #     np.concatenate([x, np.zeros([max_patch - x.shape[0]] + list(x.shape[1:]), dtype=x.dtype)], axis=0)
+        #     if x.shape[0] < max_patch
+        #     else x
+        #     for x in new_images
+        # ]
+        # data = {"pixel_values": new_images, "image_sizes": image_sizes}
+        # return BatchFeature(data=data, tensor_type=return_tensors)
+        return self.pad(pixel_values=new_images, image_sizes=image_sizes, return_tensors=return_tensors)
 
-        return BatchFeature(data=data, tensor_type=return_tensors)

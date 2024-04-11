@@ -106,6 +106,7 @@ def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
     best_resolution = select_best_resolution(image_size, grid_pinpoints)
     height, width = best_resolution
     num_patches = 0
+    # consider change to ceil(height/patch_size)*ceil(width/patch_size) + 1
     for i in range(0, height, patch_size):
         for j in range(0, width, patch_size):
             num_patches += 1
