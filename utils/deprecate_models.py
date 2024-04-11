@@ -1,5 +1,8 @@
 """
 Script which deprecates a list of given models
+
+Example usage:
+python utils/deprecate_models.py --models bert distilbert
 """
 
 import argparse
