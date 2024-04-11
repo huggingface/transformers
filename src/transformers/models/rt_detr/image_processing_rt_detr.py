@@ -521,8 +521,6 @@ class RTDetrImageProcessor(BaseImageProcessor):
         do_pad: bool = False,
         **kwargs,
     ) -> None:
-        if "pad_and_return_pixel_mask" in kwargs:
-            do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
         size = size if size is not None else {"height": 640, "width": 640}
         size = get_size_dict(size, default_to_square=False)
