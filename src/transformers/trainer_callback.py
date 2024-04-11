@@ -16,9 +16,10 @@
 Callbacks to use with the Trainer class and customize the training loop.
 """
 import dataclasses
+import datetime
 import json
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 
 import numpy as np
 from tqdm.auto import tqdm
@@ -83,6 +84,9 @@ class TrainerState:
         is_hyper_param_search (`bool`, *optional*, defaults to `False`):
             Whether we are in the process of a hyper parameter search using Trainer.hyperparameter_search. This will
             impact the way data will be logged in TensorBoard.
+        time_checkpoints (`Dict[str, datetime.datetime]`, *optional*):
+            A dictionary of time checkpoints to keep track of the time spent since the previous "log", "eval" and "save"
+            event.
     """
 
     epoch: Optional[float] = None
@@ -103,14 +107,32 @@ class TrainerState:
     is_hyper_param_search: bool = False
     trial_name: str = None
     trial_params: Dict[str, Union[str, float, int, bool]] = None
+    time_checkpoints: Dict[Literal["log", "save", "eval"], Optional[datetime.datetime]] = dataclasses.field(
+        default=None, init=False
+    )
 
     def __post_init__(self):
         if self.log_history is None:
             self.log_history = []
 
+        if self.time_checkpoints is None:
+            # Just to be very sure that they keys are correctly set (and don't mess with defaultdicts)
+            self.time_checkpoints = {
+                "log": None,
+                "save": None,
+                "eval": None,
+            }
+
     def save_to_json(self, json_path: str):
         """Save the content of this instance in JSON format inside `json_path`."""
-        json_string = json.dumps(dataclasses.asdict(self), indent=2, sort_keys=True) + "\n"
+        self_data = dataclasses.asdict(self)
+        # Convert time checkpoints to string -- we're not using `default=str` to avoid unexpected behavior for future
+        # arguments that might be added that are not serializable.
+        self_data["time_checkpoints"] = {
+            k: v.isoformat() if isinstance(v, datetime.datetime) else None
+            for k, v in self_data["time_checkpoints"].items()
+        }
+        json_string = json.dumps(self_data, indent=2, sort_keys=True) + "\n"
         with open(json_path, "w", encoding="utf-8") as f:
             f.write(json_string)
 
@@ -119,7 +141,13 @@ class TrainerState:
         """Create an instance from the content of `json_path`."""
         with open(json_path, "r", encoding="utf-8") as f:
             text = f.read()
-        return cls(**json.loads(text))
+        self_data = json.loads(text)
+        if "time_checkpoints" in self_data:
+            self_data["time_checkpoints"] = {
+                k: datetime.datetime.fromisoformat(v) if v is not None else None
+                for k, v in self_data["time_checkpoints"].items()
+            }
+        return cls(**self_data)
 
 
 @dataclass
@@ -434,12 +462,27 @@ class DefaultFlowCallback(TrainerCallback):
     A [`TrainerCallback`] that handles the default flow of the training loop for logs, evaluation and checkpoints.
     """
 
+    def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        now = datetime.datetime.now()
+        state.time_checkpoints = {
+            "log": now,
+            "save": now,
+            "eval": now,
+        }
+        return control
+
     def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         # Log
         if state.global_step == 1 and args.logging_first_step:
             control.should_log = True
         if args.logging_strategy == IntervalStrategy.STEPS and state.global_step % state.logging_steps == 0:
             control.should_log = True
+
+        if args.log_every_minutes is not None and state.time_checkpoints["log"] is not None:
+            log_time_elapsed = (datetime.datetime.now() - state.time_checkpoints["log"]).total_seconds() / 60
+            if log_time_elapsed >= args.log_every_minutes:
+                control.should_log = True
+                state.time_checkpoints["log"] = datetime.datetime.now()
 
         # Evaluate
         if (
@@ -449,6 +492,12 @@ class DefaultFlowCallback(TrainerCallback):
         ):
             control.should_evaluate = True
 
+        if args.eval_every_minutes is not None and state.time_checkpoints["eval"] is not None:
+            eval_time_elapsed = (datetime.datetime.now() - state.time_checkpoints["eval"]).total_seconds() / 60
+            if eval_time_elapsed >= args.eval_every_minutes:
+                control.should_evaluate = True
+                state.time_checkpoints["eval"] = datetime.datetime.now()
+
         # Save
         if (
             args.save_strategy == IntervalStrategy.STEPS
@@ -456,6 +505,12 @@ class DefaultFlowCallback(TrainerCallback):
             and state.global_step % state.save_steps == 0
         ):
             control.should_save = True
+
+        if args.save_every_minutes is not None and state.time_checkpoints["save"] is not None:
+            save_time_elapsed = (datetime.datetime.now() - state.time_checkpoints["save"]).total_seconds() / 60
+            if save_time_elapsed >= args.save_every_minutes:
+                control.should_save = True
+                state.time_checkpoints["save"] = datetime.datetime.now()
 
         # End training
         if state.global_step >= state.max_steps:
