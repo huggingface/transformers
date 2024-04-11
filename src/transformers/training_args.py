@@ -171,6 +171,8 @@ class OptimizerNames(ExplicitEnum):
     GALORE_ADAMW_LAYERWISE = "galore_adamw_layerwise"
     GALORE_ADAMW_8BIT_LAYERWISE = "galore_adamw_8bit_layerwise"
     GALORE_ADAFACTOR_LAYERWISE = "galore_adafactor_layerwise"
+    LOMO = "lomo"
+    ADALOMO = "adalomo"
 
 
 # TODO: `TrainingArguments` users rely on it being fully mutable. In the future see if we can narrow this to a few keys: https://github.com/huggingface/transformers/pull/25903

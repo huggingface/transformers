@@ -80,6 +80,7 @@ from .utils import (
     is_keras_nlp_available,
     is_levenshtein_available,
     is_librosa_available,
+    is_lomo_available,
     is_natten_available,
     is_nltk_available,
     is_onnx_available,
@@ -334,6 +335,14 @@ def require_galore_torch(test_case):
     https://github.com/jiaweizzhao/GaLore
     """
     return unittest.skipUnless(is_galore_torch_available(), "test requires GaLore")(test_case)
+
+
+def require_lomo(test_case):
+    """
+    Decorator marking a test that requires LOMO. These tests are skipped when LOMO-optim isn't installed.
+    https://github.com/OpenLMLab/LOMO
+    """
+    return unittest.skipUnless(is_lomo_available(), "test requires LOMO")(test_case)
 
 
 def require_cv2(test_case):

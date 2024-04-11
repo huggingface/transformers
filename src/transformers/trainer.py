@@ -147,6 +147,7 @@ from .utils import (
     is_galore_torch_available,
     is_in_notebook,
     is_ipex_available,
+    is_lomo_available,
     is_peft_available,
     is_safetensors_available,
     is_sagemaker_dp_enabled,
@@ -1031,6 +1032,11 @@ class Trainer:
             if "params" in optimizer_kwargs:
                 optimizer_grouped_parameters = optimizer_kwargs.pop("params")
 
+            # Overwrite `model` in case it's created by `get_optimizer_cls_and_kwargs`
+            # e.g. for LOMO optimizer.
+            if "model" in optimizer_kwargs:
+                optimizer_grouped_parameters = optimizer_kwargs.pop("model")
+
             # For layer-wise dummy optimizers we overwrite optimizer_grouped_parameters with `optimizer_dict`
             # to avoid arguments conflicts.
             if "optimizer_dict" in optimizer_kwargs:
@@ -1354,6 +1360,24 @@ class Trainer:
 
             if args.optim == OptimizerNames.GALORE_ADAFACTOR:
                 optimizer_kwargs.update({"scale_parameter": False, "relative_step": False})
+        elif args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
+            if not is_lomo_available():
+                raise ImportError(
+                    "You need to install `galore_torch` in order to use GaLore optimizers"
+                    " install it with `pip install git+https://github.com/jiaweizzhao/GaLore`"
+                )
+
+            if model is None:
+                raise ValueError("You need to pass a model in order to correctly initialize a LOMO optimizer.")
+
+            from lomo_optim import AdaLomo, Lomo
+
+            if "ada" in args.optim:
+                optimizer_cls = AdaLomo
+            else:
+                optimizer_cls = Lomo
+
+            optimizer_kwargs.update({"model": model})
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
@@ -2252,8 +2276,17 @@ class Trainer:
                         else:
                             grad_norm = _grad_norm
 
-                    # Optimizer step
-                    self.optimizer.step()
+                    # LOMO does not have a `step` method implemented
+                    if "Lomo" in self.optimizer.optimizer.__class__.__name__:
+                        if self.optimizer.optimizer.clip_grad_norm is not None or (
+                            hasattr(self.optimizer.optimizer, "loss_scaler")
+                            and self.optimizer.optimizer.loss_scaler is not None
+                        ):
+                            self.optimizer.optimizer.grad_norm(tr_loss)
+                    else:
+                        # Optimizer step
+                        self.optimizer.step()
+
                     optimizer_was_run = not self.accelerator.optimizer_step_was_skipped
                     if optimizer_was_run:
                         # Delay optimizer scheduling until metrics are generated
