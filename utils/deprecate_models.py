@@ -18,7 +18,7 @@ REPO_PATH = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 repo = Repo(REPO_PATH)
 
 
-logger = logger.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 # # FIXME - more robust way of finding the model doc - find the model class form the model's init file and then find the model doc
