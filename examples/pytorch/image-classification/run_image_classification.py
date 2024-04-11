@@ -411,7 +411,7 @@ def main():
         train_dataset=dataset["train"] if training_args.do_train else None,
         eval_dataset=dataset["validation"] if training_args.do_eval else None,
         compute_metrics=compute_metrics,
-        image_processor=image_processor,
+        tokenizer=image_processor,
         data_collator=collate_fn,
     )
 
