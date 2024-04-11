@@ -393,32 +393,6 @@ class Idefics2ImageProcessor(BaseImageProcessor):
             image
         ]
 
-    def split_images(
-        self,
-        images_list: List[List[np.ndarray]],
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> List[List[np.ndarray]]:
-        """
-        For a list of images, for each images, split the image into 4 equal sub-images, and the concatenate that sequence with the original image.
-        That means that a single image becomes a sequence of 5 images.
-        This is a "trick" to spend more compute on each image with no changes in the vision encoder.
-
-        Args:
-            images (`np.ndarray`):
-                List of list of images to split.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred.
-        """
-        new_images_list = []
-
-        for images in images_list:
-            new_images = []
-            for image in images:
-                new_images.extend(self._split_image(image, input_data_format=input_data_format))
-            new_images_list.append(new_images)
-
-        return new_images_list
-
     def preprocess(
         self,
         images: ImageInput,
