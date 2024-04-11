@@ -485,8 +485,8 @@ def ndgrid(*tensors) -> Tuple[torch.Tensor, ...]:
         return torch.meshgrid(*tensors)
 
 
-# Copied from transformers.models.beit.modeling_beit.gen_relative_position_index
-def gen_relative_position_index(window_size: Tuple[int, int]) -> torch.Tensor:
+# Copied from transformers.models.beit.modeling_beit.generate_relative_position_index
+def generate_relative_position_index(window_size: Tuple[int, int]) -> torch.Tensor:
     num_relative_distance = (2 * window_size[0] - 1) * (2 * window_size[1] - 1) + 3
     # cls to token & token 2 cls & cls to cls
     # get pair-wise relative position index for each token inside the window
@@ -548,7 +548,7 @@ class Data2VecVisionRelativePositionBias(nn.Module):
 
         key = str(window_size[1]) + "," + str(window_size[0])
         if key not in self.relative_position_indices.keys():
-            self.relative_position_indices[key] = gen_relative_position_index(window_size)
+            self.relative_position_indices[key] = generate_relative_position_index(window_size)
 
         relative_position_bias = new_relative_position_bias_table[self.relative_position_indices[key].view(-1)].view(
             window_size[0] * window_size[1] + 1, window_size[0] * window_size[1] + 1, -1
@@ -643,6 +643,21 @@ class Data2VecVisionPreTrainedModel(PreTrainedModel):
     base_model_prefix = "data2vec_vision"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+
+    _keys_to_ignore_on_load_unexpected = [
+        "data2vec_vision.encoder.layer.0.attention.attention.relative_position_bias.relative_position_index",
+        "data2vec_vision.encoder.layer.1.attention.attention.relative_position_bias.relative_position_index",
+        "data2vec_vision.encoder.layer.10.attention.attention.relative_position_bias.relative_position_index",
+        "data2vec_vision.encoder.layer.11.attention.attention.relative_position_bias.relative_position_index",
+        "data2vec_vision.encoder.layer.2.attention.attention.relative_position_bias.relative_position_index",
+        "data2vec_vision.encoder.layer.3.attention.attention.relative_position_bias.relative_position_index",
+        "data2vec_vision.encoder.layer.4.attention.attention.relative_position_bias.relative_position_index",
+        "data2vec_vision.encoder.layer.5.attention.attention.relative_position_bias.relative_position_index",
+        "data2vec_vision.encoder.layer.6.attention.attention.relative_position_bias.relative_position_index",
+        "data2vec_vision.encoder.layer.7.attention.attention.relative_position_bias.relative_position_index",
+        "data2vec_vision.encoder.layer.8.attention.attention.relative_position_bias.relative_position_index",
+        "data2vec_vision.encoder.layer.9.attention.attention.relative_position_bias.relative_position_index",
+    ]
 
     def _init_weights(self, module):
         """Initialize the weights"""
