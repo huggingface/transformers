@@ -106,7 +106,7 @@ XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 
 if is_accelerate_available():
     from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
-    from accelerate.hooks import AlignDevicesHook, add_hook_to_module
+    from accelerate.hooks import add_hook_to_module
     from accelerate.utils import (
         check_tied_parameters_on_same_device,
         find_tied_parameters,
@@ -2519,7 +2519,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 tied_params = find_tied_parameters(self)
                 if tied_params:
                     tied_names = tied_params[0]
-                    shared_ptrs = {ptr: names for ptr, names in ptrs.items() if any([name in tied_names for name in names])}
+                    shared_ptrs = {
+                        ptr: names for ptr, names in ptrs.items() if any(name in tied_names for name in names)
+                    }
                 else:
                     shared_ptrs = {}
             else:
@@ -2610,7 +2612,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     # update state dict with onloaded parameters
                     state_dict = get_state_dict_from_offload(module, module_name, state_dict)
 
-                # assign shard to be the completed state dict 
+                # assign shard to be the completed state dict
                 shard = state_dict
 
             if safe_serialization:

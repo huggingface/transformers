@@ -936,7 +936,9 @@ class ModelUtilsTest(TestCasePlus):
             saved_model = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map=device_map)
             postsaved_output = saved_model(input_tokens)[0]
 
-        self.assertTrue(postsaved_memory - presaved_memory < 7e5)  # shard size (2e5) plus buffer, will fail if shard is too large
+        self.assertTrue(
+            postsaved_memory - presaved_memory < 7e5
+        )  # shard size (2e5) plus buffer, will fail if shard is too large
         self.assertTrue(torch.allclose(cpu_output, presaved_output, atol=1e-4))
         self.assertTrue(torch.allclose(presaved_output, postsaved_output))
 
