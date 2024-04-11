@@ -107,7 +107,7 @@ class TrainerState:
     is_hyper_param_search: bool = False
     trial_name: str = None
     trial_params: Dict[str, Union[str, float, int, bool]] = None
-    time_checkpoints: Dict[Literal["log", "save", "eval"], Optional[datetime.datetime]] = None
+    time_checkpoints: Optional[Dict[Literal["log", "save", "eval"], Optional[datetime.datetime]]] = None
 
     def __post_init__(self):
         if self.log_history is None:
