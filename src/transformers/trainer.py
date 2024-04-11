@@ -3167,7 +3167,7 @@ class Trainer:
             if not is_lomo_optimizer:
                 self.accelerator.backward(loss)
             else:
-                self.optimizer.optimizer.fused_backward(loss, self.args.learning_rate)
+                self.optimizer.optimizer.fused_backward(loss, self._get_learning_rate())
 
         return loss.detach() / self.args.gradient_accumulation_steps
 
