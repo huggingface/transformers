@@ -133,11 +133,13 @@ class CogvlmVisionAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_heads = config.num_attention_heads
-        head_dim = config.hidden_size // config.num_attention_heads
-        self.scale = 1.0 / head_dim**0.5
         self.query_key_value = nn.Linear(config.hidden_size, config.hidden_size * 3)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.output_dropout = torch.nn.Dropout(config.dropout_prob)
+
+        # Reference: https://github.com/bigscience-workshop/Megatron-DeepSpeed/pull/118
+        head_dim = config.hidden_size // config.num_attention_heads
+        self.sqrt_scale = math.sqrt(1.0 / math.sqrt(head_dim))
 
     def forward(self, hidden_state: torch.FloatTensor) -> torch.FloatTensor:
         batch_size, sequence_length, _ = hidden_state.shape
@@ -147,33 +149,34 @@ class CogvlmVisionAttention(nn.Module):
         qkv = qkv.reshape(batch_size, sequence_length, 3, self.num_heads, -1).permute(2, 0, 1, 3, 4)
         queries, keys, values = qkv[0], qkv[1], qkv[2]
 
-        import xformers.ops as xops
+        queries = queries.transpose(1, 2) * self.sqrt_scale
+        keys = keys.transpose(1, 2) * self.sqrt_scale
+        values = values.transpose(1, 2)
+        attention_scores = queries @ keys.transpose(-2, -1)
 
-        out = xops.memory_efficient_attention(
-            queries,
-            keys,
-            values,
-            scale=self.scale,
-        )
+        # PyTorch already accumulates softmax on fp32 (Reference: https://github.com/pytorch/pytorch/pull/103167)
+        attention_probs = attention_scores.softmax(-1)
+        attention_output = attention_probs @ values
+        attention_output = attention_output.transpose(1, 2)
 
-        output = self.dense(out.view(batch_size, sequence_length, -1))
+        output = self.dense(attention_output.reshape(batch_size, sequence_length, -1))
         output = self.output_dropout(output)
         return output
 
-        # thanks to https://github.com/facebookresearch/xformers/issues/922#issuecomment-1808329588
-        # queries = queries * self.scale
-        # queries = queries.transpose(1, 2)
-        # keys = keys.transpose(1, 2)
-        # values = values.transpose(1, 2)
-        # attention_scores = queries @ keys.transpose(-2, -1)
 
-        # attention_probs = attention_scores.softmax(-1)
-        # attention_output = attention_probs @ values
-        # attention_output = attention_output.transpose(1, 2)
+class CogvlmVisionSdpaAttention(CogvlmVisionAttention):
+    def forward(self, hidden_state: torch.FloatTensor) -> torch.FloatTensor:
+        batch_size, sequence_length, _ = hidden_state.shape
+        qkv = self.query_key_value(hidden_state)
 
-        # output = self.dense(attention_output.reshape(batch_size, sequence_length, -1))
-        # output = self.output_dropout(output)
-        # return output
+        # reshape to (3, batch_size, sequence_length, num_heads, head_dim)
+        qkv = qkv.reshape(batch_size, sequence_length, 3, self.num_heads, -1).permute(2, 0, 1, 3, 4)
+        queries, keys, values = qkv[0], qkv[1], qkv[2]
+
+        attention_output = torch.nn.functional.scaled_dot_product_attention(queries, keys, values, is_causal=False)
+        output = self.dense(attention_output.reshape(batch_size, sequence_length, -1))
+        output = self.output_dropout(output)
+        return output
 
 
 class CogvlmVisionMLP(nn.Module):
@@ -191,11 +194,17 @@ class CogvlmVisionMLP(nn.Module):
         return hidden_state
 
 
+COGVLM_VISION_ATTENTION_CLASSES = {
+    "eager": CogvlmVisionAttention,
+    "sdpa": CogvlmVisionSdpaAttention,
+}
+
+
 class CogvlmVisionTransformerLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = CogvlmVisionAttention(config)
+        self.attention = COGVLM_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
         self.mlp = CogvlmVisionMLP(config)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -404,6 +413,9 @@ class CogvlmVisionExpertAttention(nn.Module):
         self.language_expert_query_key_value = nn.Linear(self.hidden_size, self.hidden_size * 3, bias=False)
         self.language_expert_dense = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
+        # Reference: https://github.com/bigscience-workshop/Megatron-DeepSpeed/pull/118
+        self.sqrt_scale = math.sqrt(1 / math.sqrt(self.head_dim))
+
     def _transpose_for_scores(self, tensor):
         """Transpose a 3D tensor [batch_size, sequence_length, num_head*head_dim] into a 4D tensor with size
         [batch_size, num_heads, seq_length, head_dim]."""
@@ -452,14 +464,14 @@ class CogvlmVisionExpertAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+        attn_weights = torch.matmul(query_states * self.sqrt_scale, key_states.transpose(2, 3) * self.sqrt_scale)
 
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        # PyTorch already accumulates softmax on fp32 (Reference: https://github.com/pytorch/pytorch/pull/103167)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
         attn_weights = nn.functional.dropout(attn_weights, p=0.0, training=self.training)
         context_layer = torch.matmul(attn_weights, value_states)
 
@@ -548,6 +560,7 @@ class CogvlmVisionExpertSdpaAttention(CogvlmVisionExpertAttention):
                 f"`attn_output` should be of size {(batch_size, self.num_heads, q_len, self.head_dim)}, but is"
                 f" {context_layer.size()}"
             )
+
         context_layer = context_layer.transpose(1, 2).contiguous().reshape(batch_size, q_len, self.hidden_size)
 
         attn_output = torch.empty(context_layer.shape, dtype=hidden_states.dtype, device=hidden_states.device)
@@ -567,8 +580,6 @@ class CogvlmDecoderLayer(nn.Module):
     def __init__(self, config: CogvlmConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        # TODO eager isn't giving logits with same tolerance
-        config._attn_implementation = "sdpa"
         self.self_attn = COGVLM_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
         self.mlp = CogvlmVisionExpertMLP(config)
         self.input_layernorm = CogvlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
