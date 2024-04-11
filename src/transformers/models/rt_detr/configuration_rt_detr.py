@@ -159,7 +159,7 @@ class RTDetrConfig(PretrainedConfig):
     ```python
     >>> from transformers import RTDetrConfig, RTDetrModel
 
-    >>> # Initializing a RT_DETR checkpoing/todo style configuration
+    >>> # Initializing a RT-DETR configuration
     >>> configuration = RTDetrConfig()
 
     >>> # Initializing a model (with random weights) from the checkpoing/todo style configuration
