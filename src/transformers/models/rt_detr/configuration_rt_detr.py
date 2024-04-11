@@ -30,8 +30,8 @@ RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class RTDetrConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RTDetrModel`]. It is used to instantiate a
-    RT_DETR model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the RT_DETR
+    RT-DETR model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the RT-DETR
     [checkpoing/todo](https://huggingface.co/checkpoing/todo) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
