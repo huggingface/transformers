@@ -574,7 +574,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
                 image, size=size, size_divisor=size_divisor, resample=resample, input_data_format=input_data_format
             )
         if do_rescale:
-            image = self.rescale(image, rescale_factor=rescale_factor, input_data_format=input_data_format)
+            image = self.rescale(image, rescale_factor, input_data_format=input_data_format)
         if do_normalize:
             image = self.normalize(image, mean=image_mean, std=image_std, input_data_format=input_data_format)
         return image
