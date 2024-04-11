@@ -630,8 +630,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
                 data_format=data_format,
                 input_data_format=input_data_format,
             )
-            pixel_values = np.array(pixel_va
-            lues)
+            pixel_values = np.array(pixel_values)
             new_images.append(pixel_values)
 
         # max_patch = max(len(x) for x in new_images)
