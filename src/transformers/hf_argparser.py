@@ -14,8 +14,8 @@
 
 import dataclasses
 import json
-import sys
 import os
+import sys
 import types
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, ArgumentTypeError
 from copy import copy
