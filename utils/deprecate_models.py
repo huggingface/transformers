@@ -9,7 +9,7 @@ import argparse
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Tuple, Optional
 
 import requests
 from git import Repo
