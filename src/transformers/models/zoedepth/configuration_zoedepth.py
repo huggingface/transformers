@@ -23,7 +23,7 @@ from ..auto.configuration_auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "nielsr/Intel-zoedepth-nyu": "https://huggingface.co/nielsr/Intel-zoedepth-nyu/resolve/main/config.json",
+    "nielsr/zoedepth-nyu": "https://huggingface.co/nielsr/zoedepth-nyu/resolve/main/config.json",
 }
 
 
@@ -32,7 +32,7 @@ class ZoeDepthConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`ZoeDepthForDepthEstimation`]. It is used to instantiate an ZoeDepth
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the ZoeDepth
-    [nielsr/Intel-zoedepth-nyu](https://huggingface.co/nielsr/Intel-zoedepth-nyu) architecture.
+    [nielsr/zoedepth-nyu](https://huggingface.co/nielsr/zoedepth-nyu) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

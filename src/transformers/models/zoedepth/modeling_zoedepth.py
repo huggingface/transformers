@@ -43,7 +43,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ZoeDepthConfig"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "nielsr/Intel-zoedepth-nyu"
+_CHECKPOINT_FOR_DOC = "nielsr/zoedepth-nyu"
 _EXPECTED_OUTPUT_SHAPE = [1, 577, 1024]
 
 N_MIDAS_OUT = 32
@@ -1272,8 +1272,8 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("nielsr/Intel-zoedepth-nyu")
-        >>> model = ZoeDepthForDepthEstimation.from_pretrained("nielsr/Intel-zoedepth-nyu")
+        >>> image_processor = AutoImageProcessor.from_pretrained("nielsr/zoedepth-nyu")
+        >>> model = ZoeDepthForDepthEstimation.from_pretrained("nielsr/zoedepth-nyu")
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt")
