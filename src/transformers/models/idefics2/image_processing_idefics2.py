@@ -201,7 +201,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: bool = True,
-        do_image_splitting = False,
+        do_image_splitting=False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -374,7 +374,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         Split an image into 4 equal sub-images, and the concatenate that sequence with the original image.
         That means that a single image becomes a sequence of 5 images.
         This is a "trick" to spend more compute on each image with no changes in the vision encoder.
-        
+
         Args:
             image (`np.ndarray`):
                 Images to split.
@@ -390,7 +390,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
             self._crop(image, mid_width, 0, width, mid_height, input_data_format),
             self._crop(image, 0, mid_height, mid_width, height, input_data_format),
             self._crop(image, mid_width, mid_height, width, height, input_data_format),
-            image
+            image,
         ]
 
     def preprocess(

@@ -41,49 +41,6 @@ def is_image_or_image_url(elem):
     return is_url(elem) or is_valid_image(elem)
 
 
-def build_string_from_input(prompt, image_seq_len, bos_token, image_token, fake_image_token):
-    """
-    Builds a string from the input prompt and image tokens.
-
-    For example, for the call:
-
-    build_string_from_input(
-        prompt=["Initial str", img1, img2, "mid str", img3],
-        image_seq_len=2,
-        bos_token="<s>",
-        image_token="<im>",
-        fake_image_token="<fake>"
-    )
-
-    The output will be:
-
-    "<s>Initial str<fake><im><im><fake><im><im><fake>mid str<fake><im><im><fake>"
-
-    Args:
-        prompt (`List[Union[str, ImageInput]]`): The input prompt.
-        image_seq_len (`int`): The length of the image sequence.
-        bos_token (`str`): The beginning of sentence token.
-        image_token (`str`): The image token.
-        fake_image_token (`str`): The fake image token.
-    """
-    input_strings = []
-    input_strings.append(f"{bos_token}")
-    open_image_tag = False
-    for elem in prompt:
-        if is_image_or_image_url(elem):
-            image_string = f"{fake_image_token}{image_token * image_seq_len}" * (5 if do_image_splitting else 1)
-            input_strings.append(image_string)
-            open_image_tag = True
-        else:
-            if open_image_tag:
-                input_strings.append(f"{fake_image_token}")
-                open_image_tag = False
-            input_strings.append(elem)
-    if open_image_tag:
-        input_strings.append(f"{fake_image_token}")
-    return "".join(input_strings)
-
-
 class Idefics2Processor(ProcessorMixin):
     r"""
     Constructs a IDEFICS2 processor which wraps a LLama tokenizer and IDEFICS2 image processor into a single processor.
@@ -223,6 +180,11 @@ class Idefics2Processor(ProcessorMixin):
             fake_image_token = self.fake_image_token.content
             image_token = self.image_token.content
             image_str = f"{fake_image_token}{image_token * image_seq_len}{fake_image_token}"
+
+            if self.image_processor.do_image_splitting:
+                # A single image token is split into 4 patches + 1 original image
+                image_str = image_str * 5
+
             prompt_strings = []
             for sample in text:
                 n_images_in_text.append(sample.count(image_token))
