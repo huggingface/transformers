@@ -129,13 +129,14 @@ def get_list_of_models_to_deprecate(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output_file", type=str, default="models_to_deprecate.json")
-    parser.add_argument("--save-model-info", action="store_true")
-    parser.add_argument("--use-cache", action="store_true")
+    parser.add_argument("--save_model_info", action="store_true", help="Save the retrieved model info to a json file.")
+    parser.add_argument(
+        "--use_cache", action="store_true", help="Use the cached model info instead of calling the hub."
+    )
     parser.add_argument(
         "--thresh_num_downloads",
         type=int,
-        default=1_000,
+        default=5_000,
         help="Threshold number of downloads below which a model should be deprecated. Default is 1,000.",
     )
     parser.add_argument(
