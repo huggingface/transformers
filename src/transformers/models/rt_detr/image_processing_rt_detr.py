@@ -67,8 +67,6 @@ if is_torch_available():
     import torch
 
 
-if is_torchvision_available():
-    pass
 
 if is_vision_available():
     import PIL
