@@ -94,13 +94,24 @@ def arange_like(x, dim: int):
 @dataclass
 class ImageMatchingOutput(ModelOutput):
     """
-    TODO documentation
+    Base class for outputs of image matching models. Due to the nature of keypoint detection and matching, the number of
+    keypoints is not fixed and can vary from image to image, which makes batching non-trivial. In the batch of images,
+    the maximum number of matches is set as the dimension of the matches and matching scores. The mask
+    tensor is used to indicate which values in the matches and matching_scores, scores and descriptors tensors are
+    keypoint matching information and which are padding.
+
+    Args:
+        mask (`torch.BoolTensor` of shape `(batch_size, num_keypoints)`):
+            Mask indicating which values in matches and matching_scores are keypoint matching information.
+        matches (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
+            Index of keypoint matched in the other image.
+        matching_scores (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
+            Scores of predicted matches.
     """
 
-    image0_matches: torch.FloatTensor = None
-    image1_matches: torch.FloatTensor = None
-    image0_matching_scores: torch.FloatTensor = None
-    image1_matching_scores: torch.FloatTensor = None
+    mask: torch.FloatTensor = None
+    matches: torch.FloatTensor = None
+    matching_scores: torch.FloatTensor = None
 
 
 class SuperGlueMultiLayerPerceptron(nn.Module):
@@ -218,8 +229,8 @@ class SuperGlueAttentionalGNN(nn.Module):
 
 class SuperGlueFinalProjection(nn.Module):
     def __init__(
-            self,
-            config: SuperGlueConfig,
+        self,
+        config: SuperGlueConfig,
     ):
         super().__init__()
         self.descriptor_dim = config.descriptor_dim
@@ -313,33 +324,17 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
         bin_score = torch.nn.Parameter(torch.tensor(1.0))
         self.register_parameter("bin_score", bin_score)
 
-    @add_start_docstrings_to_model_forward(SUPERGLUE_INPUTS_DOCSTRING)
-    def forward(
+    def match_image_pair(
         self,
-        pixel_values: torch.FloatTensor = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ImageMatchingOutput]:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if pixel_values.shape[0] != 2:
-            # TODO Define input strategy : should input contain exactly 2 images or modulo 2 images and treat them as bathes
-            raise ValueError("Input does not contain exactly 2 images")
-
-        _, _, height, width = pixel_values.shape
-        keypoint_detection_output = self.keypoint_detector(
-            pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict
-        )
-
-        image0_indices = torch.nonzero(keypoint_detection_output.mask[0]).squeeze()
-        image0_keypoints = torch.unsqueeze(keypoint_detection_output.keypoints[0][image0_indices], dim=0)
-        image0_descriptors = torch.unsqueeze(keypoint_detection_output.descriptors[0][image0_indices], dim=0)
-        image0_scores = torch.unsqueeze(keypoint_detection_output.scores[0][image0_indices], dim=0)
-        image1_indices = torch.nonzero(keypoint_detection_output.mask[1]).squeeze()
-        image1_keypoints = torch.unsqueeze(keypoint_detection_output.keypoints[1][image1_indices], dim=0)
-        image1_descriptors = torch.unsqueeze(keypoint_detection_output.descriptors[1][image1_indices], dim=0)
-        image1_scores = torch.unsqueeze(keypoint_detection_output.scores[1][image1_indices], dim=0)
-
+        image0_keypoints: torch.Tensor,
+        image0_descriptors: torch.Tensor,
+        image0_scores: torch.Tensor,
+        image1_keypoints: torch.Tensor,
+        image1_descriptors: torch.Tensor,
+        image1_scores: torch.Tensor,
+        height: int,
+        width: int,
+    ):
         if image0_keypoints.shape[1] == 0 or image1_keypoints.shape[1] == 0:  # no keypoints
             shape0, shape1 = image0_keypoints.shape[:-1], image1_keypoints.shape[:-1]
             return (
@@ -369,7 +364,7 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
 
         # Compute matching descriptor distance.
         scores = torch.einsum("bdn,bdm->bnm", projected_descriptors_0, projected_descriptors_1)
-        scores = scores / self.config.descriptor_dim ** 0.5
+        scores = scores / self.config.descriptor_dim**0.5
 
         # Run the optimal transport.
         scores = log_optimal_transport(scores, self.bin_score, iters=self.config.sinkhorn_iterations)
@@ -386,13 +381,82 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
         valid1 = mutual1 & valid0.gather(1, indices1)
         matches_0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
         matches_1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
+        return matches_0, matches_1, matching_scores_0, matching_scores_1
+
+    @add_start_docstrings_to_model_forward(SUPERGLUE_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, ImageMatchingOutput]:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if len(pixel_values.size()) != 5 or pixel_values.size(1) != 2:
+            raise ValueError("Input must be a 5D tensor of shape (batch_size, 2, num_channels, height, width)")
+
+        batch_size, _, channels, height, width = pixel_values.shape
+
+        list_matches_0 = []
+        list_matches_1 = []
+        list_matching_scores_0 = []
+        list_matching_scores_1 = []
+
+        for i in range(pixel_values.size(0)):
+            image_pair = pixel_values[i]
+            keypoint_detection_output = self.keypoint_detector(
+                image_pair, output_hidden_states=output_hidden_states, return_dict=return_dict
+            )
+
+            image0_indices = torch.nonzero(keypoint_detection_output.mask[0]).squeeze()
+            image0_keypoints = torch.unsqueeze(keypoint_detection_output.keypoints[0][image0_indices], dim=0)
+            image0_descriptors = torch.unsqueeze(keypoint_detection_output.descriptors[0][image0_indices], dim=0)
+            image0_scores = torch.unsqueeze(keypoint_detection_output.scores[0][image0_indices], dim=0)
+            image1_indices = torch.nonzero(keypoint_detection_output.mask[1]).squeeze()
+            image1_keypoints = torch.unsqueeze(keypoint_detection_output.keypoints[1][image1_indices], dim=0)
+            image1_descriptors = torch.unsqueeze(keypoint_detection_output.descriptors[1][image1_indices], dim=0)
+            image1_scores = torch.unsqueeze(keypoint_detection_output.scores[1][image1_indices], dim=0)
+
+            matches_0, matches_1, matching_scores_0, matching_scores_1 = self.match_image_pair(
+                image0_keypoints,
+                image0_descriptors,
+                image0_scores,
+                image1_keypoints,
+                image1_descriptors,
+                image1_scores,
+                height,
+                width,
+            )
+            list_matches_0.append(matches_0)
+            list_matches_1.append(matches_1)
+            list_matching_scores_0.append(matching_scores_0)
+            list_matching_scores_1.append(matching_scores_1)
+
+        maximum_matches = max(
+            [
+                max([matches_0.size(1) for matches_0 in list_matches_0]),
+                max([matches_1.size(1) for matches_1 in list_matches_1]),
+            ]
+        )
+        matches = torch.full((batch_size, 2, maximum_matches), -1, device=pixel_values.device, dtype=torch.int)
+        matching_scores = torch.zeros((batch_size, 2, maximum_matches), device=pixel_values.device)
+        matches_mask = torch.zeros((batch_size, 2, maximum_matches), device=pixel_values.device, dtype=torch.int)
+
+        for i, (_matches_0, _matches_1, _matching_scores_0, _matching_scores_1) in enumerate(
+            zip(list_matches_0, list_matches_1, list_matching_scores_0, list_matching_scores_1)
+        ):
+            matches[i, 0, : _matches_0.shape[1]] = _matches_0
+            matches[i, 1, : _matches_1.shape[1]] = _matches_1
+            matching_scores[i, 0, : _matching_scores_0.shape[1]] = _matching_scores_0
+            matching_scores[i, 1, : _matching_scores_1.shape[1]] = _matching_scores_1
+            matches_mask[i, 0, : _matches_0.shape[1]] = 1
+            matches_mask[i, 1, : _matches_1.shape[1]] = 1
 
         if not return_dict:
-            return matches_0, matches_1, matching_scores_0, matching_scores_1
+            return matches_mask, matches, matching_scores
 
         return ImageMatchingOutput(
-            image0_matches=matches_0,
-            image1_matches=matches_1,
-            image0_matching_scores=matching_scores_0,
-            image1_matching_scores=matching_scores_1,
+            mask=matches_mask,
+            matches=matches,
+            matching_scores=matching_scores,
         )
