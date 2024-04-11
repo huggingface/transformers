@@ -15,7 +15,7 @@
 """Image processor class for LLaVa-NeXT."""
 
 import math
-from typing import Dict, List, Optional, Union, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -445,7 +445,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         image_patches = [resized_original_image] + patches
 
         return image_patches
-    
+
     def pad(
         self,
         pixel_values: List[np.ndarray],
@@ -474,7 +474,6 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         data = {"pixel_values": pixel_values, "image_sizes": image_sizes}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
-
 
     def preprocess(
         self,
@@ -631,7 +630,8 @@ class LlavaNextImageProcessor(BaseImageProcessor):
                 data_format=data_format,
                 input_data_format=input_data_format,
             )
-            pixel_values = np.array(pixel_values)
+            pixel_values = np.array(pixel_va
+            lues)
             new_images.append(pixel_values)
 
         # max_patch = max(len(x) for x in new_images)
@@ -644,4 +644,3 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         # data = {"pixel_values": new_images, "image_sizes": image_sizes}
         # return BatchFeature(data=data, tensor_type=return_tensors)
         return self.pad(pixel_values=new_images, image_sizes=image_sizes, return_tensors=return_tensors)
-
