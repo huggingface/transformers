@@ -13,12 +13,21 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
+from ... import is_vision_available
+
 # rely on isort to merge the imports
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {"configuration_superglue": ["SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP", "SuperGlueConfig"]}
 
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_superglue"] = ["SuperGlueImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -37,6 +46,14 @@ if TYPE_CHECKING:
     from .configuration_superglue import SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP, SuperGlueConfig
 
     try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_superglue import SuperGlueImageProcessor
+
+    try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
@@ -45,7 +62,6 @@ if TYPE_CHECKING:
         from .modeling_superglue import (
             SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST,
             SuperGlueForImageMatching,
-            SuperGlueModel,
             SuperGluePreTrainedModel,
         )
 
