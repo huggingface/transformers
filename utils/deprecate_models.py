@@ -98,13 +98,13 @@ def extract_model_info(model):
     model_path = REPO_PATH / f"src/transformers/models/{model}"
 
     if model_doc_path is None:
-        logger.info(f"Model doc path does not exist for {model}")
+        print(f"Model doc path does not exist for {model}")
         return None
     model_info["model_doc_path"] = model_doc_path
     model_info["model_doc_name"] = model_doc_name
 
     if not os.path.exists(model_path):
-        logger.info(f"Model path does not exist for {model}")
+        print(f"Model path does not exist for {model}")
         return None
     model_info["model_path"] = model_path
 
@@ -373,41 +373,42 @@ def deprecate_models(models):
             model_config_classes.append(CONFIG_MAPPING[model_info['model_doc_name']].__name__)
         else:
             skipped_models.append(model)
-            logger.info(f"Model config class not found for model: {model}")
+            print(f"Model config class not found for model: {model}")
 
     # Filter out skipped models
     models = [model for model in models if model not in skipped_models]
 
-    logger.warning(f"Skipped models: {skipped_models} as the model doc or model path could not be found.")
-    logger.info(f"Models to deprecate: {models}")
+    print(f"Skipped models: {skipped_models} as the model doc or model path could not be found.")
+    print(f"Models to deprecate: {models}")
 
     # Remove model config classes from config check
-    logger.info(f"Removing model config classes from config checks")
+    print(f"Removing model config classes from config checks")
     remove_model_config_classes_from_config_check("src/transformers/configuration_utils.py", model_config_classes)
 
     tip_message = build_tip_message(get_last_stable_minor_release())
 
     for model, model_info in models_info.items():
+        print(f"Processing model: {model}")
         # Add the tip message to the model doc page directly underneath the title
-        logger.info(f"Adding tip message to model doc page for model: {model}")
+        print("Adding tip message to model doc page")
         insert_tip_to_model_doc(model_info["model_doc_path"], tip_message)
 
         # Move the model file to deprecated: src/transfomers/models/model -> src/transformers/models/deprecated/model
-        logger.info(f"Moving model files to deprecated for model: {model}")
+        print("Moving model files to deprecated for model")
         move_model_files_to_deprecated(model)
 
         # Delete the model tests: tests/models/model
-        logger.info(f"Deleting model tests for model: {model}")
+        print("Deleting model tests")
         delete_model_tests(model)
 
     # We do the following with all models passed at once to avoid having to re-write the file multiple times
 
     # Update the __init__.py file to point to the deprecated model.
-    logger.info(f"Updating __init__.py file to point to the deprecated models")
+    print(f"Updating __init__.py file to point to the deprecated models")
     update_init_file("src/transformers/__init__.py", models)
 
     # Remove model references from other files
-    logger.info(f"Removing model references from other files")
+    print(f"Removing model references from other files")
     remove_model_references_from_file("src/transformers/models/__init__.py", models, lambda line, model: model == line.strip().strip(","))
     remove_model_references_from_file("utils/slow_documentation_tests.txt", models, lambda line, model: "/" + model + "/" in line)
 
