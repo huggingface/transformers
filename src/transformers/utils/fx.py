@@ -141,6 +141,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "marian",
     "mbart",
     "megatron-bert",
+    "mistral",
     "mobilebert",
     "mt5",
     "nezha",
@@ -758,6 +759,7 @@ class HFTracer(Tracer):
         "tensor",
         "clamp",
         "finfo",
+        "triu",
     ]
     supported_archs = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
 
