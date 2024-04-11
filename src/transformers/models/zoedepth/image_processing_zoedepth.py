@@ -228,7 +228,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
-    def pad_image(
+    def pad(
         self,
         image: np.array,
         mode: PaddingMode = PaddingMode.REFLECT,
@@ -397,7 +397,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         if do_pad:
-            images = [self.pad_image(image=image, input_data_format=input_data_format) for image in images]
+            images = [self.pad(image=image, input_data_format=input_data_format) for image in images]
 
         if do_rescale:
             images = [

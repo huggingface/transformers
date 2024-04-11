@@ -340,9 +340,7 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     # Check outputs on an image
     image = prepare_img()
 
-    # TODO we should default to this:
-    # image_processor = ZoeDepthImageProcessor()
-    # and verify pixel values on this large image:
+    # TODO we could verify pixel values on this large image:
     # filepath = hf_hub_download(repo_id="shariqfarooq/ZoeDepth", filename="examples/person_1.jpeg", repo_type="space")
     # image = Image.open(filepath).convert("RGB")
 
@@ -399,6 +397,7 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
         print("Pushing model and processor to the hub...")
         repo_id = model_name_to_repo_id[model_name]
         model.push_to_hub(f"nielsr/{repo_id}")
+        image_processor = ZoeDepthImageProcessor()
         image_processor.push_to_hub(f"nielsr/{repo_id}")
 
 
