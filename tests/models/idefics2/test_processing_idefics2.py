@@ -133,8 +133,8 @@ class Idefics2ProcessorTest(unittest.TestCase):
                 "role": "user",
                 "content": [
                     {"type": "text", "text": "What do these images show?"},
-                    {"type": "image", "index": 0},
-                    {"type": "image", "index": 1},
+                    {"type": "image"},
+                    {"type": "image"},
                     "What do these images show?",
                 ],
             },

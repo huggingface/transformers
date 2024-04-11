@@ -202,6 +202,8 @@ class Idefics2Processor(ProcessorMixin):
             is_split_into_words (`bool`, *optional*, defaults to `False`):
                 Whether the input text is split into words or not. If set to `True`, the tokenizer will skip the
                 tokenization process and assume the input is already tokenized.
+            add_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether to add special tokens or not. See [`PreTrainedTokenizerFast.__call__`] for more information.
             return_tensors (`Union[str, TensorType]`, *optional*):
                 If set, will return tensors of a particular framework. See [`PreTrainedTokenizerFast.__call__`] for more
                 information.
@@ -344,8 +346,8 @@ class Idefics2Processor(ProcessorMixin):
             "role": "user",
             "content": [
                 {"type": "text", "text": "What’s in this image?"},
-                {"type": "image", "index": 0},
-                {"type": "image", "index": 1},
+                {"type": "image"},
+                {"type": "image"},
                 ],
         },
         {
