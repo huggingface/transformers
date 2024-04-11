@@ -212,7 +212,7 @@ from .peft_utils import (
     check_peft_version,
     find_adapter_config_file,
 )
-
+from .convert_diff_to_single_file import ModelConverter
 
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
