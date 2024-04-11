@@ -163,6 +163,7 @@ def get_list_of_models_to_deprecate(
     print(f"\nNumber of models to deprecate: {n_models_to_deprecate}")
     print("Before deprecating make sure to verify the models, including if they're used as a module in other models.")
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--save_model_info", action="store_true", help="Save the retrieved model info to a json file.")

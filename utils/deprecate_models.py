@@ -3,17 +3,15 @@ Script which deprecates a list of given models
 """
 
 import argparse
-import glob
-import json
 import os
-import requests
 from collections import defaultdict
+
+import requests
+from git import Repo
 from packaging import version
 
-from git import Repo
-
-from transformers import CONFIG_MAPPING, logging
 from transformers import __version__ as current_version
+from transformers import logging
 
 
 REPO_PATH = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
@@ -35,21 +33,26 @@ def get_last_stable_minor_release():
     # Find the last stable release of of transformers (version below current version)
     major_version, minor_version, patch_version, _ = current_version.split(".")
     last_major_minor = f"{major_version}.{int(minor_version) - 1}"
-    last_stable_minor_releases = [release for release in release_data["releases"] if release.startswith(last_major_minor)]
+    last_stable_minor_releases = [
+        release for release in release_data["releases"] if release.startswith(last_major_minor)
+    ]
     last_stable_release = sorted(last_stable_minor_releases, key=version.parse)[-1]
 
     return last_stable_release
 
 
 def build_tip_message(last_stable_release):
-    return """
+    return (
+        """
     <Tip warning={true}>
 
     This model is in maintenance mode only, we don't accept any new PRs changing its code.
-    """ + f"""If you run into any issues running this model, please reinstall the last version that supported this model: v{last_stable_release}.
+    """
+        + f"""If you run into any issues running this model, please reinstall the last version that supported this model: v{last_stable_release}.
     You can do so by running the following command: `pip install -U transformers=={last_stable_release}`.
 
     </Tip>"""
+    )
 
 
 def insert_tip_to_model_doc(model_doc_path, tip_message):
@@ -112,7 +115,6 @@ def extract_model_info(model):
     return model_info
 
 
-
 def move_model_files_to_deprecated(model):
     # FIXME - more robust path handling
     model_path = f"src/transformers/models/{model}"
@@ -173,6 +175,7 @@ def update_alphabetic_ordering_of_imports(filelines):
     in_else_block = False
     in_base_imports = False
     base_import_block = []
+    open_indent_level = -1
 
     # We iterate over each line in the init file to create a new init file
     for i, line in enumerate(filelines.split("\n")):
@@ -183,76 +186,40 @@ def update_alphabetic_ordering_of_imports(filelines):
             in_base_imports = True
             new_init_file_lines.append(line)
 
-        elif in_base_imports:
-            # Comment which starts a new sub-block
-            if line.strip().startswith("#"):
-                base_import_block.append(sub_block)
-                base_import_block.append(line)
-                sub_block = []
-
-            # End of the base objects imports
-            elif line.strip().startswith("}"):
-                # We're at the end of the base imports
-                base_import_block.append(sub_block)
-                # Make all the sub-blocks lists
-                base_import_block = [[sub_block] if not isinstance(sub_block, list) else sub_block for sub_block in base_import_block]
-
-                # Sort the subblocks
-                base_import_block = [sorted(sub_block) for sub_block in base_import_block]
-                # Flatten the lists so they're all lines
-                base_import_block = [line for sub_block in base_import_block for line in sub_block]
-
-                new_init_file_lines.extend(base_import_block)
-                base_import_block = []
-                in_base_imports = False
-
-                new_init_file_lines.append(line)
-                sub_block = []
-            
-            # Start of indented block in the base objects imports
-            elif line.strip().endswith(("[", "(")):
-                indented_block.append(line)
-            # End of indented block in the base objects imports
-            elif indented_block and line.strip().endswith(("],", "),")):
-                indented_block.append(line)
-                sub_block.append("\n".join(indented_block))
-                indented_block = []
-            elif indented_block:
-                indented_block.append(line)
-            else:
-                sub_block.append(line)
-
         # Next line is in the else block
         elif line.startswith("else:"):
             new_init_file_lines.append(line)
             in_else_block = True
 
         # Not in the else block - just add the line directly
-        elif not in_else_block:
+        elif not (in_else_block or in_base_imports):
             new_init_file_lines.append(line)
 
-        elif in_else_block:
+        elif in_else_block or in_base_imports:
             # previous line(s) were a blank line but within the else block
             if indent and maybe_else_block:
                 else_block.append(maybe_else_block)
                 maybe_else_block = []
-                # We then want to add the line according to the rules below
 
-            # We might be outside of the else block, or it might just be a blank line
+            # We might be outside of the block, or it might just be a blank line
             if not indent and line == "":
                 # End any existing sub_block and add it to the else block
                 else_block.append(sub_block)
                 sub_block = []
                 maybe_else_block.append(line)
 
-            elif not indent and line != "":
-                # If we were in a maybe block, we now know it wasn't part of the else block
-                else_block = [[sub_block] if not isinstance(sub_block, list) else sub_block for sub_block in else_block]
+            # We've exited the else-block or the base objects imports
+            elif (not indent and line != "") or line.strip().startswith("}"):
+                if sub_block:
+                    else_block.append(sub_block)
+                    sub_block = []
+
+                else_block = [
+                    [sub_block] if not isinstance(sub_block, list) else sub_block for sub_block in else_block
+                ]
 
                 # Sort the sub-blocks in the else block
                 else_block = [sorted(sub_block) for sub_block in else_block]
-                # else_block = [[sorted(sub_block) for sub_block in sub_blocks] for sub_blocks in else_block]
-                # else_block = [[sorted(sub_block) if isinstance(sub_block, list) else sub_block for sub_block in sub_blocks] for sub_blocks in else_block]
 
                 # Flatten the lists so they're all lines
                 else_block = [line for sub_block in else_block for line in sub_block]
@@ -260,26 +227,26 @@ def update_alphabetic_ordering_of_imports(filelines):
                 # Add the else block to the file lines and reset it
                 new_init_file_lines.extend(else_block)
                 else_block = []
-                in_else_block = False
+                in_else_block = in_base_imports = False
 
-                # Add the maybe block
+                # If we were in a maybe block, we now know it wasn't part of the else block
                 maybe_else_block.append(line)
                 new_init_file_lines.extend(maybe_else_block)
                 maybe_else_block = []
 
-            # All import structures are at the same level so we can just add them directly
-            elif line.strip().startswith("_import_structure") and line.endswith(("]", ")")):
-                sub_block.append(line)
-
-            elif line.strip().startswith(("_import_structure", "sys.modules")) and line.endswith(("[", "(")):
+            elif line.endswith(("[", "(")) and not indented_block:
                 indented_block.append(line)
+                open_indent_level = indent
 
             elif indented_block:
-                if line.strip().endswith(("]", ")")) and indent == 4:
+                if indent == open_indent_level and (
+                    line.strip().endswith(("]", ")")) or line.strip().startswith(("],", "),"))
+                ):
                     # We're at the end of the indented block
                     indented_block.append(line)
                     sub_block.append("\n".join(indented_block))
                     indented_block = []
+                    open_indent_level = -1
                 else:
                     # We're still in the indented block
                     indented_block.append(line)
@@ -298,7 +265,10 @@ def update_alphabetic_ordering_of_imports(filelines):
     # Add the last sub-block
     if else_block:
         # Sort the sub-blocks in the else block
-        else_block = [[sorted(sub_block) if isinstance(sub_block, list) else sub_block for sub_block in sub_blocks] for sub_blocks in else_block]
+        else_block = [
+            [sorted(sub_block) if isinstance(sub_block, list) else sub_block for sub_block in sub_blocks]
+            for sub_blocks in else_block
+        ]
 
         # Flatten the lists so they're all lines
         else_block = [line for sub_block in else_block for line in sub_block]
@@ -321,7 +291,7 @@ def update_init_file(filename, models):
         f.write(init_file)
 
 
-def remove_model_references_from_file(filename, models, condition = None):
+def remove_model_references_from_file(filename, models, condition=None):
     """
     Remove all references to the given models from the given file
 
@@ -368,7 +338,9 @@ def remove_model_config_classes_from_config_check(filename, model_config_classes
                 in_indent = False
             continue
 
-        if in_special_cases_to_allow and any(model_config_class in line for model_config_class in model_config_classes):
+        if in_special_cases_to_allow and any(
+            model_config_class in line for model_config_class in model_config_classes
+        ):
             while new_file_lines[-1].strip().startswith("#"):
                 new_file_lines.pop()
 
@@ -426,14 +398,13 @@ def deprecate_models(models):
     # remove_model_config_classes_from_config_check("src/transformers/configuration_utils.py", model_config_classes)
 
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--models", nargs="+", help="List of models to deprecate")
     models = [
         # 'graphormer',
         # 'time_series_transformer',
-        'conditional_detr',
+        "conditional_detr",
         # 'xlm_prophetnet',
         # 'qdqbert',
         # 'nat',
@@ -443,7 +414,7 @@ if __name__ == "__main__":
         # 'tvlt',
         # 'nezha',
         # 'jukebox',
-        'vit_hybrid',
+        "vit_hybrid",
         # 'decision_transformer',
         # 'x_clip',
         # 'deta',
