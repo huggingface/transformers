@@ -775,6 +775,10 @@ def pipeline(
             pretrained_model_name_or_path = model
 
         if not isinstance(config, PretrainedConfig) and pretrained_model_name_or_path is not None:
+            # cached_file needs the cache directory, so that config.json is found in the right place.
+            if "cache_dir" in model_kwargs:
+                hub_kwargs["cache_dir"] = model_kwargs["cache_dir"]
+
             # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
             resolved_config_file = cached_file(
                 pretrained_model_name_or_path,
@@ -785,6 +789,10 @@ def pipeline(
                 **hub_kwargs,
             )
             hub_kwargs["_commit_hash"] = extract_commit_hash(resolved_config_file, commit_hash)
+
+            # Remove the cache directory from hub_kwargs, so it doesn't conflict with model_kwargs.
+            if "cache_dir" in model_kwargs:
+                del hub_kwargs["cache_dir"]
         else:
             hub_kwargs["_commit_hash"] = getattr(config, "_commit_hash", None)
 
