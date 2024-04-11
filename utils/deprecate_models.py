@@ -5,6 +5,7 @@ Script which deprecates a list of given models
 import argparse
 import os
 from collections import defaultdict
+from typing import Tuple, Optional
 
 import requests
 from git import Repo
@@ -18,6 +19,7 @@ REPO_PATH = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 repo = Repo(REPO_PATH)
 
 
+logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
@@ -75,36 +77,37 @@ def insert_tip_to_model_doc(model_doc_path, tip_message):
         f.write("\n".join(new_model_lines))
 
 
-def get_model_doc_path(model):
+def get_model_doc_path(model: str) -> Tuple[Optional[str], Optional[str]]:
     model_doc_path = f"docs/source/en/model_doc/{model}.md"
 
     if os.path.exists(model_doc_path):
-        return model_doc_path
+        return model_doc_path, model
 
     # Try replacing _ with - in the model name
     model_doc_path = f"docs/source/en/model_doc/{model.replace('_', '-')}.md"
 
     if os.path.exists(model_doc_path):
-        return model_doc_path
+        return model_doc_path, model.replace('_', '-')
 
     # Try replacing _ with "" in the model name
     model_doc_path = f"docs/source/en/model_doc/{model.replace('_', '')}.md"
 
     if os.path.exists(model_doc_path):
-        return model_doc_path
+        return model_doc_path, model.replace('_', '')
 
-    return None
+    return None, None
 
 
 def extract_model_info(model):
     model_info = dict()
-    model_doc_path = get_model_doc_path(model)
+    model_doc_path, model_doc_name = get_model_doc_path(model)
     model_path = f"src/transformers/models/{model}"
 
     if model_doc_path is None:
         logger.info(f"Model doc path does not exist for {model}")
         return None
     model_info["model_doc_path"] = model_doc_path
+    model_info["model_doc_name"] = model_doc_name
 
     if not os.path.exists(model_path):
         logger.info(f"Model path does not exist for {model}")
@@ -360,14 +363,23 @@ def remove_model_config_classes_from_config_check(filename, model_config_classes
 def deprecate_models(models):
     # Get model info
     skipped_models = []
-    model_info = defaultdict(dict)
+    models_info = defaultdict(dict)
     for model in models:
         single_model_info = extract_model_info(model)
         if single_model_info is None:
             skipped_models.append(model)
         else:
-            model_info[model] = single_model_info
+            models_info[model] = single_model_info
 
+    model_config_classes = []
+    for model, model_info in models_info.items():
+        if model in CONFIG_MAPPING:
+            model_config_classes.append(CONFIG_MAPPING[model].__name__)
+        elif model_info['model_doc_name'] in CONFIG_MAPPING:
+            model_config_classes.append(CONFIG_MAPPING[model_info['model_doc_name']].__name__)
+        else:
+            skipped_models.append(model)
+            logger.info(f"Model config class not found for model: {model}")
 
     # Filter out skipped models
     models = [model for model in models if model not in skipped_models]
@@ -377,12 +389,11 @@ def deprecate_models(models):
 
     # Remove model config classes from config check
     logger.info(f"Removing model config classes from config checks")
-    model_config_classes = [CONFIG_MAPPING[model_name].__name__ for model_name in models]
     remove_model_config_classes_from_config_check("src/transformers/configuration_utils.py", model_config_classes)
 
     tip_message = build_tip_message(get_last_stable_minor_release())
 
-    for model, model_info in model_info.items():
+    for model, model_info in models_info.items():
         # Add the tip message to the model doc page directly underneath the title
         logger.info(f"Adding tip message to model doc page for model: {model}")
         insert_tip_to_model_doc(model_info["model_doc_path"], tip_message)
