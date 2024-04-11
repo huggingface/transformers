@@ -149,7 +149,7 @@ class StopStringCriteria(StoppingCriteria):
     - ["st", "op"]
     - ["stop"]
     - ["st", "opera"]
-    - ["sto", "opper"]
+    - ["sto", "pper"]
     - ["las", "topper"]
 
     Note that a match will only be triggered if the stop string is at the end of the generated sequence. In other
