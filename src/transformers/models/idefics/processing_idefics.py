@@ -402,14 +402,11 @@ class IdeficsProcessor(ProcessorMixin):
                 elif return_tensors == "tf":
                     padded_image_tensor = tf.zeros((max_num_images, *self.default_image_dims))
 
-<<<<<<< HEAD
-
-=======
->>>>>>> e1102da5d (Fix processing code and vision_tf.py)
+            #breakpoint()
             output_images.append(padded_image_tensor)
             if return_tensors == "pt":
                 output_input_ids.append(torch.tensor(padded_input_ids))
-                output_attention_masks.append(attention_mask)
+                output_attention_masks.append(torch.tensor(attention_mask))
             elif return_tensors == "tf":
                 output_input_ids.append(tf.convert_to_tensor(padded_input_ids, dtype=tf.int32))
                 output_attention_masks.append(attention_mask)
