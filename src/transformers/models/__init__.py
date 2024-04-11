@@ -105,6 +105,7 @@ from . import (
     gptj,
     gptsan_japanese,
     graphormer,
+    grounding_dino,
     groupvit,
     herbert,
     hubert,
