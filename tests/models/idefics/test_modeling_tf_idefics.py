@@ -14,10 +14,11 @@
 # limitations under the License.
 """ Testing suite for the TF Idefics model. """
 
-import unittest
-import tempfile
-from importlib import import_module
 import os
+import tempfile
+import unittest
+from importlib import import_module
+
 from transformers import IdeficsConfig, is_tf_available, is_vision_available
 from transformers.testing_utils import (
     TestCasePlus,
@@ -36,8 +37,8 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import IdeficsProcessor, TFIdeficsForVisionText2Text, TFIdeficsModel
-    from transformers.models.idefics.configuration_idefics import IdeficsPerceiverConfig, IdeficsVisionConfig
     from transformers.modeling_tf_utils import keras
+    from transformers.models.idefics.configuration_idefics import IdeficsPerceiverConfig, IdeficsVisionConfig
 
 if is_vision_available():
     from PIL import Image
