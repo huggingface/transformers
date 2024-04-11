@@ -15,7 +15,7 @@
 """Image processor class for LLaVa-NeXT."""
 
 import math
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 
 import numpy as np
 
