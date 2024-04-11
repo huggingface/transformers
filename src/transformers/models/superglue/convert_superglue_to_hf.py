@@ -9,12 +9,11 @@ from PIL import Image
 
 from transformers import (
     AutoConfig,
-    AutoImageProcessor,
     AutoModelForKeypointDetection,
     SuperGlueConfig,
     SuperGlueForImageMatching,
+    SuperGlueImageProcessor,
 )
-from transformers.models.superglue.modeling_superglue import ImageMatchingOutput
 from transformers.models.superpoint.modeling_superpoint import ImagePointDescriptionOutput
 
 
@@ -137,8 +136,8 @@ def read_image(path, device, resize, rotation, resize_float):
         if rotation % 2:
             scales = scales[::-1]
 
-    inp = frame2tensor(image, device)
-    return inp
+    # inp = frame2tensor(image, device)
+    return image[None]
 
 
 def prepare_imgs_as_original():
@@ -146,7 +145,29 @@ def prepare_imgs_as_original():
     im1 = read_image(url, "cuda", [640, 480], 0, False)
     url = "tests/fixtures/tests_samples/image_matching/london_bridge_19481797_2295892421.jpg"
     im2 = read_image(url, "cuda", [640, 480], 0, False)
-    return torch.cat([im1, im2], dim=0)
+    url = "tests/fixtures/tests_samples/image_matching/london_bridge_49190386_5209386933.jpg"
+    im3 = read_image(url, "cuda", [640, 480], 0, False)
+    return [im1, im2, im3, im2]
+
+
+def prepare_imgs_with_cv2_grayscale():
+    url = "tests/fixtures/tests_samples/image_matching/london_bridge_78916675_4568141288.jpg"
+    im1 = cv2.imread(url, cv2.IMREAD_GRAYSCALE)[None]
+    url = "tests/fixtures/tests_samples/image_matching/london_bridge_19481797_2295892421.jpg"
+    im2 = cv2.imread(url, cv2.IMREAD_GRAYSCALE)[None]
+    url = "tests/fixtures/tests_samples/image_matching/london_bridge_49190386_5209386933.jpg"
+    im3 = cv2.imread(url, cv2.IMREAD_GRAYSCALE)[None]
+    return [im1, im2, im3, im2]
+
+
+def prepare_imgs_with_cv2_rgb():
+    url = "tests/fixtures/tests_samples/image_matching/london_bridge_78916675_4568141288.jpg"
+    im1 = cv2.cvtColor(cv2.imread(url, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
+    url = "tests/fixtures/tests_samples/image_matching/london_bridge_19481797_2295892421.jpg"
+    im2 = cv2.cvtColor(cv2.imread(url, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
+    url = "tests/fixtures/tests_samples/image_matching/london_bridge_49190386_5209386933.jpg"
+    im3 = cv2.cvtColor(cv2.imread(url, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
+    return [im1, im2, im3, im2]
 
 
 def prepare_imgs_for_image_processor():
@@ -154,7 +175,9 @@ def prepare_imgs_for_image_processor():
     im1 = Image.open(url)
     url = "tests/fixtures/tests_samples/image_matching/london_bridge_19481797_2295892421.jpg"
     im2 = Image.open(url)
-    return [im1, im2]
+    url = "tests/fixtures/tests_samples/image_matching/london_bridge_49190386_5209386933.jpg"
+    im3 = Image.open(url)
+    return [im1, im2, im3, im2]
 
 
 def extract_keypoint_information_from_image_point_description_output(
@@ -200,41 +223,65 @@ def convert_superglue_checkpoint(checkpoint_url, pytorch_dump_folder_path, save_
 
     ## USE REGULAR IMAGE PROCESSOR FOR INFERENCE
     images = prepare_imgs_for_image_processor()
-    preprocessor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
+    preprocessor = SuperGlueImageProcessor()
     inputs = preprocessor(images=images, return_tensors="pt")
     inputs.to("cuda")
 
     output = model(**inputs, return_dict=True)
 
     print("Number of matching keypoints using image processor")
-    print(torch.sum(output.image0_matches != -1))
-    print(torch.sum(output.image1_matches != -1))
+    print(torch.sum(output.matches[0][0] != -1))
+
+    images = prepare_imgs_with_cv2_rgb()
+    preprocessor = SuperGlueImageProcessor()
+    inputs = preprocessor(images=images, return_tensors="pt")
+    inputs.to("cuda")
+
+    output = model(**inputs, return_dict=True)
+
+    print("Number of matching keypoints using cv2 grayscale")
+    print(torch.sum(output.matches[0][0] != -1))
+
+    images = prepare_imgs_with_cv2_grayscale()
+    preprocessor = SuperGlueImageProcessor()
+    inputs = preprocessor(images=images, return_tensors="pt")
+    inputs.to("cuda")
+
+    output = model(**inputs, return_dict=True)
+
+    print("Number of matching keypoints using cv2 rgb")
+    print(torch.sum(output.matches[0][0] != -1))
 
     images = prepare_imgs_as_original()
-    output: ImageMatchingOutput = model(pixel_values=images, return_dict=True)
-    print("Number of matching keypoints using original reading code")
-    print(torch.sum(output.image0_matches != -1))
-    print(torch.sum(output.image1_matches != -1))
-    # output: ImageMatchingOutput = model(pixel_values=images, return_dict=True)
+    preprocessor = SuperGlueImageProcessor()
+    inputs = preprocessor(images=images, return_tensors="pt")
+    inputs.to("cuda")
 
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
+    output = model(**inputs, return_dict=True)
 
-    print("Pushing model to the hub...")
-    model_name = "superglue"
-    if (
-        checkpoint_url
-        == "https://github.com/magicleap/SuperGluePretrainedNetwork/raw/master/models/weights/superglue_outdoor.pth"
-    ):
-        model_name += "_outdoor"
-    elif (
-        checkpoint_url
-        == "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/models/weights/superglue_indoor.pth"
-    ):
-        model_name += "_indoor"
+    print("Number of matching keypoints using original function")
+    print(torch.sum(output.matches[0][0] != -1))
 
-    model.push_to_hub(repo_id=model_name, organization="stevenbucaille", commit_message="Add model")
+    if save_model:
+        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+        print(f"Saving model to {pytorch_dump_folder_path}")
+        model.save_pretrained(pytorch_dump_folder_path)
+
+        if push_to_hub:
+            print("Pushing model to the hub...")
+            model_name = "superglue"
+            if (
+                checkpoint_url
+                == "https://github.com/magicleap/SuperGluePretrainedNetwork/raw/master/models/weights/superglue_outdoor.pth"
+            ):
+                model_name += "_outdoor"
+            elif (
+                checkpoint_url
+                == "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/models/weights/superglue_indoor.pth"
+            ):
+                model_name += "_indoor"
+
+            model.push_to_hub(repo_id=model_name, organization="stevenbucaille", commit_message="Add model")
 
 
 if __name__ == "__main__":
