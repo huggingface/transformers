@@ -739,7 +739,7 @@ class TrainingArguments:
     )
     eval_strategy: InitVar[Union[IntervalStrategy, str]] = field(
         default=None,
-        metadata={"help": "The evaluation strategy to use."},
+        metadata={"help": "Alias for `evaluation_strategy`."},
     )
     prediction_loss_only: bool = field(
         default=False,
