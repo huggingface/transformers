@@ -62,7 +62,7 @@ def write_json(text, path):
         json.dump(text, f)
 
 
-def write_model(model_path, input_base_path, tokenizer_path=None, safe_serialization=True):
+def write_model(model_path, input_base_path, tokenizer_path=None, safe_serialization=True, fix_eos_token_id=True):
     os.makedirs(model_path, exist_ok=True)
     tmp_model_path = os.path.join(model_path, "tmp")
     os.makedirs(tmp_model_path, exist_ok=True)
@@ -172,7 +172,7 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
     gc.collect()
 
     if tokenizer_path is not None:
-        _write_tokenizer(model_path, config, tokenizer_path)
+        _write_tokenizer(model_path, config, tokenizer_path, fix_eos_token_id)
 
     print("Loading the checkpoint in a OLMo model.")
     model = OLMoForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.float32, low_cpu_mem_usage=True)
@@ -184,7 +184,7 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
     shutil.rmtree(tmp_model_path)
 
 
-def _write_tokenizer(output_path: Path, config: OLMoConfig, input_tokenizer_path: Path) -> None:
+def _write_tokenizer(output_path: Path, config: OLMoConfig, input_tokenizer_path: Path, fix_eos_token_id: bool = True) -> None:
     print(f"Saving a {GPTNeoXTokenizerFast.__name__} to {output_path}.")
 
     base_tokenizer = Tokenizer.from_file(str(input_tokenizer_path))
@@ -192,7 +192,10 @@ def _write_tokenizer(output_path: Path, config: OLMoConfig, input_tokenizer_path
     eos_token_id = config.eos_token_id if config.eos_token_id is not None else base_tokenizer.get_vocab_size() - 1
     pad_token_id = config.pad_token_id if config.pad_token_id is not None else eos_token_id
 
-    print(eos_token_id, pad_token_id)
+    if fix_eos_token_id and eos_token_id == 0:
+        # Fixing a bug in OLMo where eos token id was incorrectly set
+        print("Changing eos_token_id from 0 to 50279.")
+        eos_token_id = 50279
 
     tokenizer = GPTNeoXTokenizerFast(
         tokenizer_object=base_tokenizer,
@@ -223,6 +226,12 @@ def main():
         required=True,
         help="Location to write HF model and tokenizer",
     )
+    parser.add_argument(
+        "--no_fix_eos_token_id",
+        action="store_false",
+        dest="fix_eos_token_id",
+        help="If set, does not change eos token id from 0 to 50279 if it is 0. Changing 0 to 50279 is a bug fix, so use this option with care.",
+    )
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     # Different OLMo versions used different default values for max_position_embeddings, hence the need to be able to specify which version is being used.
     args = parser.parse_args()
@@ -231,6 +240,7 @@ def main():
         input_base_path=args.input_dir,
         safe_serialization=args.safe_serialization,
         tokenizer_path=args.tokenizer_json_path,
+        fix_eos_token_id=args.fix_eos_token_id,
     )
 
 
