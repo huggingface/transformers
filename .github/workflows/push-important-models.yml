@@ -71,6 +71,7 @@ jobs:
           echo ${{ matrix.model-name }}
           echo ${{ needs.get_modified_models.outputs.matrix == '' }}
           echo ${{ needs.get_modified_models.outputs.matrix == ' ' }}
+          echo ${{ fromJson(needs.get_modified_models.outputs.matrix) == ' ' }}
       - name: Check out code
         uses: actions/checkout@v3
       
