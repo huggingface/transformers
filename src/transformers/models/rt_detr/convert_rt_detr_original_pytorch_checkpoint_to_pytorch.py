@@ -88,7 +88,6 @@ def create_rename_keys(config):
         rename_keys.append((f"backbone.conv1.conv1_3.norm.{last}", f"model.backbone.model._backbone.bn1.{last}"))
 
     # stages
-    # TO DO : make this as function
     layer = [3,4,6,3]
     for stage_idx in range(4):
         for layer_idx in range(layer[stage_idx]):
