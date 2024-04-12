@@ -201,7 +201,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: bool = True,
-        do_image_splitting=False,
+        do_image_splitting: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
