@@ -59,7 +59,8 @@ class MoTConfig(PretrainedConfig):
             Dimensionality of the inner feed-forward layers. `None` will set it to 4 times n_embd
         group_size (`int`, *optional*, defaults to 32):
             The number of tokens per expert.
-        expert_size (`<fill_type>`, *optional*): <fill_docstring>
+        expert_size (`int`, *optional*):
+            The dimensionality of an expert. `None` will set it to n_inner / n_head.
         init_scale (`float`, *optional*, defaults to 1.0):
             # TODO: Add description
         activation_function (`str`, *optional*, defaults to `"gelu_new"`):
