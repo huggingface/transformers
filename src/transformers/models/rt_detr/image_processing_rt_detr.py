@@ -56,7 +56,6 @@ from ...utils import (
     is_tf_tensor,
     is_torch_available,
     is_torch_tensor,
-    is_torchvision_available,
     is_vision_available,
     logging,
 )
@@ -65,7 +64,6 @@ from ...utils.generic import TensorType
 
 if is_torch_available():
     import torch
-
 
 
 if is_vision_available():
@@ -521,7 +519,6 @@ class RTDetrImageProcessor(BaseImageProcessor):
         do_pad: bool = False,
         **kwargs,
     ) -> None:
-
         size = size if size is not None else {"height": 640, "width": 640}
         size = get_size_dict(size, default_to_square=False)
 
@@ -593,7 +590,6 @@ class RTDetrImageProcessor(BaseImageProcessor):
         else:
             raise ValueError(f"Format {format} is not supported.")
         return target
-
 
     def resize(
         self,

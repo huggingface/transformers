@@ -574,7 +574,7 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     # preprocess image
     transformations = transforms.Compose(
         [
-            transforms.Resize([640,640], interpolation=transforms.InterpolationMode.BILINEAR),
+            transforms.Resize([640, 640], interpolation=transforms.InterpolationMode.BILINEAR),
             transforms.ToTensor(),
         ]
     )
