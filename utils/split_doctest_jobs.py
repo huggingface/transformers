@@ -73,9 +73,6 @@ if __name__ == "__main__":
 
     sorted_file_dirs = sorted(refined_test_collection_map.keys())
 
-    # TODO: remove
-    sorted_file_dirs = sorted_file_dirs[0:4]
-
     test_collection_map = {}
     for file_dir in sorted_file_dirs:
         test_collection_map[file_dir] = refined_test_collection_map[file_dir]
@@ -89,9 +86,6 @@ if __name__ == "__main__":
         start = end
         end = start + num_jobs_per_splits + (1 if idx < num_jobs % args.num_splits else 0)
         file_directory_splits.append(sorted_file_dirs[start:end])
-
-    # TODO: remove
-    # file_directory_splits = [["src/transformers/integrations"]]
 
     if args.only_return_keys:
         print(file_directory_splits)
