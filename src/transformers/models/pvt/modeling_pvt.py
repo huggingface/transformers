@@ -49,10 +49,8 @@ _EXPECTED_OUTPUT_SHAPE = [1, 50, 512]
 _IMAGE_CLASS_CHECKPOINT = "Zetatech/pvt-tiny-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-PVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Zetatech/pvt-tiny-224"
-    # See all PVT models at https://huggingface.co/models?filter=pvt
-]
+
+from ..deprecated._archive_maps import PVT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path

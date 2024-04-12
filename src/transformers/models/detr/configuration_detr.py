@@ -27,10 +27,8 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/detr-resnet-50": "https://huggingface.co/facebook/detr-resnet-50/resolve/main/config.json",
-    # See all DETR models at https://huggingface.co/models?filter=detr
-}
+
+from ..deprecated._archive_maps import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class DetrConfig(PretrainedConfig):

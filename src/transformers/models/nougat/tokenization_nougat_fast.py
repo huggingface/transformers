@@ -49,14 +49,7 @@ INIT_TOKENIZER_DOCSTRING += """
 """
 
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "tokenizer_file": {
-        "facebook/nougat-base": "https://huggingface.co/facebook/nougat-base/tokenizer/blob/main/tokenizer.json",
-    },
-}
-
 VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/nougat-base": 3584}
 
 
 def markdown_compatible(text: str) -> str:
@@ -409,8 +402,6 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = None
 
