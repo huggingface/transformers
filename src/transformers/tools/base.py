@@ -406,7 +406,8 @@ class Tool:
                 self.name = _gradio_tool.name
                 self.description = _gradio_tool.description
 
-        GradioToolWrapper.__call__ = gradio_tool.run
+            def __call__(self, *args, **kwargs):
+                return gradio_tool.run(*args, *list(kwargs.values()))
         return GradioToolWrapper(gradio_tool)
 
     @staticmethod

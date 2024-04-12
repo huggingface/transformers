@@ -262,7 +262,7 @@ class Toolbox():
 class Agent:
     def __init__(
             self, 
-            llm_callable,  
+            llm_engine,  
             tools: List[Tool],
             system_prompt=DEFAULT_REACT_SYSTEM_PROMPT,
             tool_description_template=None,
@@ -273,8 +273,8 @@ class Agent:
         ):
         
         self.agent_name = self.__class__.__name__
-        self.llm_callable = llm_callable
-        self.prompt_template = system_prompt
+        self.llm_engine = llm_engine
+        self.system_prompt_template = system_prompt
         self.tool_description_template = tool_description_template if tool_description_template else OPENAI_TOOL_DESCRIPTION_TEMPLATE
         self.additional_args = additional_args
         self.max_iterations = max_iterations
@@ -354,14 +354,14 @@ class CodeAgent(Agent):
     """
     def __init__(
             self, 
-            llm_callable, 
+            llm_engine, 
             system_prompt=DEFAULT_CODE_SYSTEM_PROMPT, 
             tool_description_template=None,
             **kwargs
         ):
         
         super().__init__(
-            llm_callable, 
+            llm_engine, 
             system_prompt=system_prompt,
             tool_description_template=tool_description_template if tool_description_template else self.default_tool_description_template,
             **kwargs
@@ -409,12 +409,12 @@ class CodeAgent(Agent):
         ```
         """
         # Run LLM
-        self.system_prompt = format_prompt(self._toolbox, self.prompt_template, self.tool_description_template)
+        self.system_prompt = format_prompt(self._toolbox, self.system_prompt_template, self.tool_description_template)
 
         self.prompt = self.system_prompt + f"\nTask: {task}"
-        llm_output = self.llm_callable(self.prompt, stop=["Task:"])
         self.log.info("====Executing with this prompt====")
         self.log.info(self.prompt)
+        llm_output = self.llm_engine(self.prompt, stop=["Task:"])
 
         if return_generated_code:
             return llm_output
@@ -453,22 +453,22 @@ class ReactAgent(Agent):
     """
     def __init__(
             self, 
-            llm_callable, 
+            llm_engine, 
             system_prompt=DEFAULT_REACT_SYSTEM_PROMPT, 
             tool_description_template=None,
             max_iterations=5,
-            llm_callable_grammar=None,
+            llm_engine_grammar=None,
             **kwargs
         ):
         
         super().__init__(
-            llm_callable, 
+            llm_engine, 
             system_prompt=system_prompt,
             tool_description_template=tool_description_template if tool_description_template else self.default_tool_description_template,
             max_iterations=max_iterations,
             **kwargs
         )
-        self.llm_callable_grammar = llm_callable_grammar
+        self.llm_engine_grammar = llm_engine_grammar
         self._toolbox.add_tool(FinalAnswerTool())
 
     @property
@@ -502,7 +502,7 @@ class ReactAgent(Agent):
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
-        self.system_prompt = format_prompt(self._toolbox, self.prompt_template, self.tool_description_template)
+        self.system_prompt = format_prompt(self._toolbox, self.system_prompt_template, self.tool_description_template)
 
         self.memory = [self.system_prompt]
 
@@ -544,10 +544,10 @@ class ReactAgent(Agent):
         print("=====Initiating LLM with this prompt:=====")
         print(self.prompt)
 
-        if self.llm_callable_grammar:
-            llm_output = self.llm_callable(self.prompt, stop=["Observation:"], grammar=self.llm_callable_grammar)
+        if self.llm_engine_grammar:
+            llm_output = self.llm_engine(self.prompt, stop=["Observation:"], grammar=self.llm_engine_grammar)
         else:
-            llm_output = self.llm_callable(self.prompt, stop=["Observation:"])
+            llm_output = self.llm_engine(self.prompt, stop=["Observation:"])
         self.log.info("=====Output message of the LLM:=====")
         self.memory.append(llm_output)
         self.log.info(llm_output)
