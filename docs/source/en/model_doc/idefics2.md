@@ -29,7 +29,7 @@ images in their native aspect ratio and resolution, which allows for varying inf
 
 Tips:
 - Each sample can contain multiple images, and the number of images can vary between samples. The processor will pad the inputs to the maximum number of images in a batch for input to the model.
-- The processor has a `do_image_splitting` option. If `True`, each input image will be split into 4 sub-images, and concatenated with the original to form 5 images. This is useful for increasing data efficiency and model performance. Make sure `processor.do_image_splitting` is set to `False` if the model was not trained with this option.
+- The processor has a `do_image_splitting` option. If `True`, each input image will be split into 4 sub-images, and concatenated with the original to form 5 images. This is useful for increasing data efficiency and model performance. Make sure `processor.image_processor.do_image_splitting` is set to `False` if the model was not trained with this option.
 - The processor has its own `apply_chat_template` method to apply a list of chat messages. These can then be passed as `text` to the processor.
 
 Example of how to use the processor on chat messages:
