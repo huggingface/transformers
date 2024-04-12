@@ -1906,9 +1906,9 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ids = [0, 8986, 32942, 32966, 32554, 32551, 1]
 
         # test slow tokenizer
-        decoding = tokenizer_p.decode(ids)
+        decoding = tokenizer_p.decode(ids, spaces_between_special_tokens=False)
 
-        excepted_decoding = "<pad>paragraph <loc_58> <loc_34> <loc_446> <loc_449> </s>"
+        excepted_decoding = "<pad>paragraph<loc_58><loc_34><loc_446><loc_449></s>"
         assert decoding == excepted_decoding
 
         # test fast tokenizer

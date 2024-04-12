@@ -241,6 +241,8 @@ class UdopTokenizer(PreTrainedTokenizer):
         add_prefix_space (`bool`, *optional*, defaults to `True`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word.
+        spaces_between_special_tokens (`bool`, *optional*, defaults to `False`):
+            Whether or not to add spaces between special tokens.
 
 
     Attributes:
@@ -267,6 +269,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         legacy=True,
         add_prefix_space=True,
+        spaces_between_special_tokens=False,
         **kwargs,
     ) -> None:
         eos_token = AddedToken(eos_token, special=True) if isinstance(eos_token, str) else eos_token
@@ -302,6 +305,7 @@ class UdopTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             legacy=legacy,
             add_prefix_space=add_prefix_space,
+            spaces_between_special_tokens=spaces_between_special_tokens,
             **kwargs,
         )
 
