@@ -759,7 +759,7 @@ class HFTracer(Tracer):
         "tensor",
         "clamp",
         "finfo",
-        "triu",
+        "tril",
     ]
     supported_archs = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
 
