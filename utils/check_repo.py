@@ -311,6 +311,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SegGptForImageSegmentation",
     "SiglipVisionModel",
     "SiglipTextModel",
+    "MoTDoubleHeadsModel",
 ]
 
 # DO NOT edit this list!
