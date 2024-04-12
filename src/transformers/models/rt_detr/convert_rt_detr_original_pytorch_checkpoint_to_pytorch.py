@@ -22,6 +22,7 @@ import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
+from torchvision import transforms
 
 from transformers import RTDetrConfig, RTDetrForObjectDetection, RTDetrImageProcessor
 from transformers.utils import logging
@@ -569,8 +570,20 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     # prepare image
     img = prepare_img()
+
+    # preprocess image
+    transformations = transforms.Compose(
+        [
+            transforms.Resize([640,640], interpolation=transforms.InterpolationMode.BILINEAR),
+            transforms.ToTensor(),
+        ]
+    )
+    original_pixel_values = transformations(img).unsqueeze(0)  # insert batch dimension
+
     encoding = image_processor(images=img, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
+
+    assert torch.allclose(original_pixel_values, pixel_values)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
