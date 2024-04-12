@@ -1301,6 +1301,23 @@ class Idefics2PerceiverResampler(nn.Module):
         return compressed_context
 
 
+class Idefics2Connector(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.modality_projection = Idefics2MLP(
+            hidden_size=config.vision_config.hidden_size,
+            intermediate_size=config.text_config.intermediate_size,
+            output_size=config.text_config.hidden_size,
+            hidden_act=config.text_config.hidden_act,
+        )
+        self.perceiver_resampler = Idefics2PerceiverResampler(config)
+
+    def forward(self, image_hidden_states, attention_mask):
+        image_hidden_states = self.modality_projection(image_hidden_states)
+        image_hidden_states = self.perceiver_resampler(context=image_hidden_states, attention_mask=attention_mask)
+        return image_hidden_states
+
+
 IDEFICS2_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1458,19 +1475,11 @@ class Idefics2Model(Idefics2PreTrainedModel):
         self.vocab_size = self.config.text_config.vocab_size
 
         self.vision_model = Idefics2VisionTransformer(config.vision_config)
-        self.modality_projection = Idefics2MLP(
-            hidden_size=config.vision_config.hidden_size,
-            intermediate_size=config.text_config.intermediate_size,
-            output_size=config.text_config.hidden_size,
-            hidden_act=config.text_config.hidden_act,
-        )
-
-        self.perceiver_resampler = Idefics2PerceiverResampler(config)
+        self.connector = Idefics2Connector(config)
+        self.text_model = AutoModel.from_config(config.text_config)
 
         self.image_seq_len = config.perceiver_config.resampler_n_latents
         self.image_token_id = self.config.image_token_id
-
-        self.text_model = AutoModel.from_config(config.text_config)
 
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
@@ -1630,12 +1639,11 @@ class Idefics2Model(Idefics2PreTrainedModel):
                 patch_attention_mask=patch_attention_mask,
             ).last_hidden_state
 
-            # Modality projection
-            image_hidden_states = self.modality_projection(image_hidden_states)
-
-            image_hidden_states = self.perceiver_resampler(
-                context=image_hidden_states, attention_mask=patch_attention_mask.view(pixel_values.size(0), -1)
+            # Modality projection & resampling
+            image_hidden_states = self.connector(
+                image_hidden_states, attention_mask=patch_attention_mask.view(pixel_values.size(0), -1)
             )
+
         elif image_hidden_states is not None:
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=input_ids.device)
 

@@ -39,6 +39,8 @@ KEYS_TO_MODIFY_MAPPING = {
     "lm_head.weight": "lm_head.linear.weight",
     "model.layers": "model.text_model.layers",
     "model.norm": "model.text_model.norm",
+    "model.perceiver_resampler": "model.connector.perceiver_resampler",
+    "model.modality_projection": "model.connector.modality_projection",
 }
 
 
