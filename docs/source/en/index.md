@@ -154,6 +154,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                   [GPTBigCode](model_doc/gpt_bigcode)                    |       ✅        |         ❌         |      ❌      |
 |               [GPTSAN-japanese](model_doc/gptsan-japanese)               |       ✅        |         ❌         |      ❌      |
 |                    [Graphormer](model_doc/graphormer)                    |       ✅        |         ❌         |      ❌      |
+|                [Grounding DINO](model_doc/grounding-dino)                |       ✅        |         ❌         |      ❌      |
 |                      [GroupViT](model_doc/groupvit)                      |       ✅        |         ✅         |      ❌      |
 |                       [HerBERT](model_doc/herbert)                       |       ✅        |         ✅         |      ✅      |
 |                        [Hubert](model_doc/hubert)                        |       ✅        |         ✅         |      ❌      |
@@ -243,6 +244,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                     [Qwen2MoE](model_doc/qwen2_moe)                      |       ✅        |         ❌         |      ❌      |
 |                           [RAG](model_doc/rag)                           |       ✅        |         ✅         |      ❌      |
 |                         [REALM](model_doc/realm)                         |       ✅        |         ❌         |      ❌      |
+|               [RecurrentGemma](model_doc/recurrent_gemma)                |       ✅        |         ❌         |      ❌      |
 |                      [Reformer](model_doc/reformer)                      |       ✅        |         ❌         |      ❌      |
 |                        [RegNet](model_doc/regnet)                        |       ✅        |         ✅         |      ✅      |
 |                       [RemBERT](model_doc/rembert)                       |       ✅        |         ✅         |      ❌      |

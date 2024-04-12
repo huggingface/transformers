@@ -384,7 +384,7 @@ Finally, bring everything together, and call [`~transformers.Trainer.train`]:
 ...     args=training_args,
 ...     data_collator=collate_fn,
 ...     train_dataset=cppe5["train"],
-...     image_processor=image_processor,
+...     tokenizer=image_processor,
 ... )
 
 >>> trainer.train()
