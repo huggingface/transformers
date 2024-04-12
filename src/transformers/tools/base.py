@@ -307,6 +307,9 @@ class Tool:
         tool_class = get_class_from_dynamic_module(
             tool_class, repo_id, token=token, **hub_kwargs
         )
+        print("Ok tool calss:")
+        print(tool_class.__name__)
+        tool_class.__name__ = tool_class.__name__.split(".")[-1]
 
         if len(tool_class.name) == 0:
             tool_class.name = custom_tool["name"]
