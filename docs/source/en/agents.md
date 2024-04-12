@@ -19,7 +19,7 @@ Large Language Models (LLMs) trained to perform [causal language modeling](https
 
 One approach to overcome this weakness is to embed the LLM into a system where it has the ability to call tools: such a system is called an LLM Agent.
 
-The augmentation with tools gives the LLM superpowers. See for youselves:
+The augmentation with tools gives the LLM superpowers. See for yourselves:
 
 ```python
 agent.run("Caption the following image", image=image)
@@ -53,127 +53,19 @@ Here you will learn:
 
 ### What is an agent?
 
-The definition of LLM Agents is quite broad: all systems that use LLMs as their engine, and have the possibility to perform actions on their environment based on observations.
+The definition of LLM Agents is quite broad: all systems that use LLMs as their engine, and have access to functions called **tools**.
 
 When trying to accomplish a task, an agent can be either programmed to:
 
-- devise a series of actions and run them all at once, like our `CodeAgent`
+- devise a series of actions/tool calls and run them all at once, like our `CodeAgent`
 - or plan and execute them one by one to wait for the outcome of the each action before launching the next one, thus following a Reflexion ⇒ Action ⇒ Perception cycle. Our `ReactAgent` implements this latter framework.
 
 ![Framework of a React Agent](Doc%20agents%20ac753b9a3b934eaba22f659ba994c4bd/Untitled.png)
 
-Framework of a React Agent
+Read [our blog post](https://huggingface.co/blog/open-source-llms-as-agents) to learn more.
 
-### What is a tool?
 
-A tool is an atomic function to be used by an agent.
-
-You can for instance check the [~CalculatorTool], which we use
-
-It has a name, a description, input and output descriptions, and a __call__ method that will perform the action.
-
-Upon initialization of the agent system, the tool attributes are used to generate a tool description, then baked into the agent’s `system_prompt`  to let it know which tools it can use and why.
-
----
-
-Here is an example adapted from [our blog post](https://huggingface.co/blog/open-source-llms-as-agents) showing how powerful the ReAct agent framework can be to solve problems: Mixtral-8x7B answers the question:
-
-> “**Which city has a larger population, Guiyang or Tacheng?”**
-> 
-
-```python
-***Thought:** To answer this question, I need to find the current populations of both Guiyang and Tacheng. I will use the search tool to find this information.
-**Action:**
-{
-  "action": "search",
-  "action_input": "current population of Guiyang"
-}
-**Observation:** 4.697 million (2016)*
-
-***Thought:*** *I have obtained the population of Guiyang, which is 4.697 million (as of 2016). Now, I will use the search tool again to find the population of Tacheng.
-**Action:**
-{
-  "action": "search",
-  "action_input": "current population of Tacheng"
-}
-**Observation:**
-Population: Xinjiang: Tacheng data was reported at 1,110.000 Person th in 2021. This records a decrease from the previous number of 1,138.638 Person th for 2020.
-Population: Xinjiang: Tacheng data is updated yearly, averaging 1,023.000 Person th from Dec 2005 to 2021, with 17 observations.
-
-**Thought:**
-I have obtained the population of Tacheng, which is approximately 1.11 million (as of 2021). Comparing the two populations, Guiyang has a larger population than Tacheng.
-I now know the final answer.
-**Action:
-{
-	"action": "final_answer",
-	"action_input": "**Guiyang has a larger population, which is approximately 4.697 million (as of 2016), compared to Tacheng's population of approximately 1.11 million (as of 2021)."
-}
-**Observation:**
-Guiyang has a larger population, which is approximately 4.697 million (as of 2016), compared to Tacheng's population of approximately 1.11 million (as of 2021).*
-```
-
-### How can I build an agent?
-
-To initialize an agent, you need these arguments:
-
-- an LLM to power your agent - the agent is not exactly the LLM, it’s more like the agent is a program that uses an LLM as its engine.
-- a system prompt: what the LLM engine will be prompted with to generate its output
-- a toolbox from which the agent pick tools to execute
-- a parser to extract from the LLM output which tools are to call and with which arguments
-
-To start with, please install the `agents` extras in order to install all default dependencies.
-
-```bash
-pip install transformers[agents]
-```
-
-To build your LLM engine, you have to define a `llm_callable` method, that will be given text and return text. This callable needs to accept a `stop` argument defining stop sequences indicating when to stop generating its output. For instance as follows:
-
-```python
-from huggingface_hub import login, InferenceClient
-
-login("<YOUR_HUGGINGFACEHUB_API_TOKEN>")
-
-client = InferenceClient(model="mistralai/Mixtral-8x7B-Instruct-v0.1")
-
-def llm_callable(query: str, stop=["Task"]) -> str:
-    response = client.text_generation(query, stop_sequences=stop, return_full_text=False, max_new_tokens=1000)
-    for stop_seq in stop:
-        if response[-len(stop_seq) :] == stop_seq:
-            response = response[: -len(stop_seq)]
-    return response
-```
-
-You could use any other `llm_callable` method, as long as:
-
-- it takes a `str` as input and returns a `str`
-- it will stop generating output before the sequences passed in argument `stop`
-
-Then you can define your agent and run it.
-
-```python
-from transformers import CodeAgent
-
-agent = CodeAgent(llm_callable=llm_callable)
-
-agent.run("Draw me a picture of rivers and lakes")
-```
-
-The system prompt, toolbox and output parser were automatically defined here, but you can easily inspect them.
-
-![Untitled](Doc%20agents%20ac753b9a3b934eaba22f659ba994c4bd/Untitled%201.png)
-
-```python
-agent.system_prompt
-```
-
-[show prompt]
-
-Note that your agent is powered by a LLM, so small variations in your prompt might yield completely different results. It's important to explain as clearly as possible the task you want to perform. We go more in-depth on how to write good prompts [here](custom_tools#writing-good-user-inputs).
-
-Every [`~Agent.run`] operation is independent, so you can run it several times in a row with different tasks.
-
-Here is an example of how powerful the agent setup can be: here is an example of Mixtral-8x7b solving a GAIA task with proper uses of the search tool.
+Here is an example adapted from  showing how powerful the ReAct agent framework can be to solve problems: Mixtral-8x7B answers the question:
 
 ```
 Task: How many more blocks (also denoted as layers) in BERT base encoder than the encoder from the architecture proposed in Attention is All You Need?
@@ -215,6 +107,79 @@ Action:
 }'
 
 ```
+
+
+### What is a tool?
+
+A tool is an atomic function to be used by an agent.
+
+You can for instance check the [~CalculatorTool], which we use
+
+It has a name, a description, input and output descriptions, and a __call__ method that will perform the action.
+
+Upon initialization of the agent system, the tool attributes are used to generate a tool description, then baked into the agent’s `system_prompt`  to let it know which tools it can use and why.
+
+
+### How can I build an agent?
+
+To initialize an agent, you need these arguments:
+
+- an LLM to power your agent - the agent is not exactly the LLM, it’s more like the agent is a program that uses an LLM as its engine.
+- a system prompt: what the LLM engine will be prompted with to generate its output
+- a toolbox from which the agent pick tools to execute
+- a parser to extract from the LLM output which tools are to call and with which arguments
+
+To start with, please install the `agents` extras in order to install all default dependencies.
+
+```bash
+pip install transformers[agents]
+```
+
+To build your LLM engine, you have to define a `llm_callable` method, that will be given text and return text. This callable needs to accept a `stop` argument defining stop sequences indicating when to stop generating its output. For instance as follows:
+
+```python
+from huggingface_hub import login, InferenceClient
+
+login("<YOUR_HUGGINGFACEHUB_API_TOKEN>")
+
+client = InferenceClient(model="mistralai/Mixtral-8x7B-Instruct-v0.1")
+
+def llm_callable(query: str, stop=["Task"]) -> str:
+    response = client.text_generation(query, stop_sequences=stop, return_full_text=False, max_new_tokens=1000)
+    for stop_seq in stop:
+        if response[-len(stop_seq) :] == stop_seq:
+            response = response[: -len(stop_seq)]
+    return response
+```
+
+You could use any other `llm_callable` method, as long as:
+
+- it takes a `str` as input and returns a `str`
+- it will stop generating output _before_ the sequences passed in argument `stop`
+
+Then you can define your agent and run it.
+
+```python
+from transformers import CodeAgent
+
+agent = CodeAgent(llm_callable=llm_callable)
+
+agent.run("Draw me a picture of rivers and lakes")
+```
+
+The system prompt, toolbox and output parser were automatically defined here, but you can easily inspect them.
+
+![Untitled](Doc%20agents%20ac753b9a3b934eaba22f659ba994c4bd/Untitled%201.png)
+
+```python
+agent.system_prompt
+```
+
+[show prompt]
+
+Note that your agent is powered by a LLM, so small variations in your prompt might yield completely different results. It's important to explain as clearly as possible the task you want to perform. We go more in-depth on how to write good prompts [here](custom_tools#writing-good-user-inputs).
+
+Every [`~Agent.run`] operation is independent, so you can run it several times in a row with different tasks.
 
 
 ## Implementation of agents
@@ -332,149 +297,18 @@ This could be improved: for instance by adding explanations of the output format
 For maximum flexibility, you can overwrite the whole prompt template as explained above by passing your custom prompt as an argument:
 
 ```python
+from transformers import ReactAgent
+
 agent = ReactAgent(llm_callable, system_prompt=your_custom_prompt)
 ```
 
-```markdown
 <Tip warning={true}>
 
 Please make sure to have the `<<all_tools>>` string defined somewhere in the `template` so that the agent can be aware 
 of the tools, it has available to it.
 
 </Tip>
-```
 
-### Using custom tools
-
-In this section, we'll be leveraging two existing custom tools that are specific to image generation:
-
-- We replace [huggingface-tools/image-transformation](https://huggingface.co/spaces/huggingface-tools/image-transformation),
-  with [diffusers/controlnet-canny-tool](https://huggingface.co/spaces/diffusers/controlnet-canny-tool) to allow for more image modifications.
-- We add a new tool for image upscaling to the default toolbox: 
-  [diffusers/latent-upscaler-tool](https://huggingface.co/spaces/diffusers/latent-upscaler-tool) replace the existing image-transformation tool.
-
-We'll start by loading the custom tools with the convenient `load_tool` function:
-
-```python
-from transformers import load_tool
-
-controlnet_transformer = load_tool("diffusers/controlnet-canny-tool")
-upscaler = load_tool("diffusers/latent-upscaler-tool")
-```
-
-Upon adding custom tools to an agent, the tools' complete description is automatically
-included in the agents' prompts. Thus, it is imperative that custom tools have
-a well-written description and name in order for the agent to understand how to use them.
-Let's take a look at the description and name of `controlnet_transformer`:
-
-```python
-print(f"Description: '{controlnet_transformer.description}'")
-print(f"Name: '{controlnet_transformer.name}'")
-```
-
-gives 
-
-```python
-Description: 'This is a tool that transforms an image with ControlNet according to a prompt. 
-It takes two inputs: `image`, which should be the image to transform, and `prompt`, which should be the prompt to use to change it. It returns the modified image.'
-Name: 'image_transformer'
-```
-
-The name and description are accurate and fit the style of the [curated set of tools](./transformers_agents#a-curated-set-of-tools).
-
-Next, let's instantiate an agent with an empty toolbox, then update the toolbox directly with `controlnet_transformer` and `upscaler`:
-
-```python
-agent = CodeAgent(llm_callable)
-agent.toolbox.update_tool(controlnet_transformer)
-agent.toolbox.add_tool(upscaler)
-```
-
-The set of curated tools already has a tool with name `image_transformer` (like our `controlnet_transformer`) which is hereby replaced with our custom `controlnet_transformer` tool.
-
-<Tip>
-
-Overwriting existing tools can be beneficial if we want to use a custom tool exactly for the same task as an existing tool 
-because the agent is well-versed in using the specific task. Beware that the custom tool should follow the exact same API 
-as the overwritten tool in this case, or you should adapt the prompt template to make sure all examples using that
-tool are updated.
-
-</Tip>
-
-The upscaler tool was given the name `image_upscaler` which is not yet present in the default toolbox and is therefore simply added to the list of tools.
-You can always have a look at the toolbox that is currently available to the agent via the `agent.toolbox` attribute:
-
-```python
-print("\n".join([f"- {a}" for a in agent.toolbox.tools.keys()]))
-```
-
-```python
-- document_qa
-- image_captioner
-- image_qa
-- image_segmenter
-- transcriber
-- summarizer
-- text_classifier
-- text_qa
-- text_reader
-- translator
-- image_transformer
-- text_downloader
-- image_generator
-- video_generator
-- image_upscaler
-```
-
-Note how `image_upscaler` is now part of the agents' toolbox.
-
-Let's now try out the new tools! We will re-use the image we generated in [Transformers Agents Quickstart](./transformers_agents#single-execution-run).
-
-from diffusers.utils import load_image
-
-image = load_image(
-    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rivers_and_lakes.png"
-)
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rivers_and_lakes.png" width=200> 
-
-Let's transform the image into a beautiful winter landscape:
-
-```py
-image = agent.run("Transform the image: 'A frozen lake and snowy forest'", image=image)
-```
-
-```text
-==Explanation from the agent==
-I will use the following tool: `image_transformer` to transform the image.
-
-==Code generated by the agent==
-image = image_transformer(image, prompt="A frozen lake and snowy forest")
-```
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rivers_and_lakes_winter.png" width=200> 
-
-The new image processing tool is based on ControlNet which can make very strong modifications to the image.
-By default the image processing tool returns an image of size 512x512 pixels. Let's see if we can upscale it.
-
-```py
-image = agent.run("Upscale the image", image)
-```
-
-```text
-==Explanation from the agent==
-I will use the following tool: `image_upscaler` to upscale the image.
-
-==Code generated by the agent==
-upscaled_image = image_upscaler(image)
-```
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rivers_and_lakes_winter_upscale.png" width=400> 
-
-The agent automatically mapped our prompt "Upscale the image" to the just added upscaler tool purely based on the description and name of the upscaler tool 
-and was able to correctly run it.
-
-Next, let's have a look at how you can create a new custom tool.
 
 ### Adding new tools
 
@@ -561,7 +395,7 @@ tool.push_to_hub("hf-model-downloads")
 
 You now have your code on the Hub! Let's take a look at the final step, which is to have the agent use it.
 
-#### Having the agent use the tool
+#### Initializing an agent that uses the tool
 
 We now have our tool that lives on the Hub which can be instantiated as such (change the user name for your tool):
 
@@ -577,7 +411,10 @@ In order to use it in the agent, simply pass it to the agent initialization meth
 from transformers import CodeAgent
 
 agent = CodeAgent(llm_callable, tools=[tool])
+```
 
+
+```
 agent.run(
     "Can you read out loud the name of the model that has the most downloads in the 'text-to-video' task on the Hugging Face Hub?"
 )
@@ -606,24 +443,47 @@ name and description of the tool is paramount to having it be leveraged by the a
 
 </Tip>
 
-### Replacing existing tools
+#### Adding a new tool to an existing agent's toolbox
 
-Replacing existing tools can be done simply by assigning a new item to the agent's toolbox. Here's how one would do so:
+If you have alread initialized an agent, it can be heavy to have to reinitialize it from scratch with your desired set of tools.
+
+So you can also directly add a new tool to the toolbox of an existing agent, or even replace an existing tool.
+
+
+<Tip>
+
+The agent's prompt will reflect the new tool description. But beware when adding tools to an agent that works well!
+It can result in your tool being selected way more than others or for other
+tools to be selected instead of the one you have defined.
+
+</Tip>
+
+
+#### Replacing an existing tool in the agent's toolbox
+
+Replacing existing tools can be done simply by assigning a new item to the agent's toolbox using method `agent.toolbox.update_tool()`. Here's how one would do so:
 
 ```python
 from transformers import CodeAgent, load_tool
 
+tool_replacement = load_tool("diffusers/controlnet-canny-tool")
+
 agent = CodeAgent(llm_callable)
-agent.toolbox["image-transformation"] = load_tool("diffusers/controlnet-canny-tool")
+agent.toolbox.update_tool("image-transformation", tool_replacement)
 ```
+
 
 <Tip>
 
-Beware when replacing tools with others! This will also adjust the agent's prompt. This can be good if you have a better
-prompt suited for the task, but it can also result in your tool being selected way more than others or for other
-tools to be selected instead of the one you have defined.
+Overwriting existing tools can be beneficial if we want to use a custom tool exactly for the same task as an existing tool 
+because the agent is well-versed in using the specific task. Beware that the custom tool should follow the exact same API 
+as the overwritten tool in this case, or you should adapt the prompt template to make sure all examples using that
+tool are updated.
 
 </Tip>
+
+
+
 
 ### Leveraging gradio-tools
 
