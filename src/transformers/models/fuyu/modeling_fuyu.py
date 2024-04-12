@@ -252,7 +252,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         >>> generated_ids = model.generate(**inputs, max_new_tokens=7)
         >>> generation_text = processor.batch_decode(generated_ids[:, -7:], skip_special_tokens=True)
         >>> print(generation_text[0])
-        'A blue bus parked on the side of a road.'
+        A blue bus parked on the side of a road.
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
