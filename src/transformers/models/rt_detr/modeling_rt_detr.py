@@ -447,28 +447,28 @@ def get_contrastive_denoising_training_group(
     Creates a contrastive denoising training group using ground-truth samples. It adds noise to labels and boxes.
 
     Args:
-        targets (`List[dict]`): 
+        targets (`List[dict]`):
             The target objects, each containing 'labels' and 'boxes' for objects in an image.
-        num_classes (`int`): 
+        num_classes (`int`):
             Total number of classes in the dataset.
-        num_queries (`int`): 
+        num_queries (`int`):
             Number of query slots in the transformer.
-        class_embed (`callable`): 
+        class_embed (`callable`):
             A function or a model layer to embed class labels.
-        num_denoising_queries (`int`, *optional*, defaults to 100): 
+        num_denoising_queries (`int`, *optional*, defaults to 100):
             Number of denoising queries.
-        label_noise_ratio (`float`, *optional*, defaults to 0.5): 
+        label_noise_ratio (`float`, *optional*, defaults to 0.5):
             Ratio of noise applied to labels.
-        box_noise_scale (`float`, *optional*, defaults to 1.0): 
+        box_noise_scale (`float`, *optional*, defaults to 1.0):
             Scale of noise applied to bounding boxes.
     Returns:
-        `tuple` comprising various elements: 
+        `tuple` comprising various elements:
         - **input_query_class** (`torch.FloatTensor`) --
           Class queries with applied label noise.
         - **input_query_bbox** (`torch.FloatTensor`) --
-          Bounding box queries with applied box noise. 
+          Bounding box queries with applied box noise.
         - **attn_mask** (`torch.FloatTensor`) --
-           Attention mask for separating denoising and reconstruction queries. 
+           Attention mask for separating denoising and reconstruction queries.
         - **denoising_meta_values** (`dict`) --
           Metadata including denoising positive indices, number of groups, and split sizes.
     """
@@ -1788,7 +1788,12 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         # prepare denoising training
         if self.training and self.config.num_denoising > 0 and labels is not None:
-            denoising_class, denoising_bbox_unact, mask_flatten, denoising_meta_values = get_contrastive_denoising_training_group(
+            (
+                denoising_class,
+                denoising_bbox_unact,
+                mask_flatten,
+                denoising_meta_values,
+            ) = get_contrastive_denoising_training_group(
                 targets=labels,
                 num_classes=self.config.num_labels,
                 num_queries=self.config.num_queries,
