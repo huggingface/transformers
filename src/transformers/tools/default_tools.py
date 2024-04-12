@@ -17,6 +17,8 @@
 import math
 
 from .base import Tool
+from .python_interpreter import evaluate_python_code
+from .agents import BASE_PYTHON_TOOLS
 
 
 class CalculatorTool(Tool):
@@ -48,11 +50,21 @@ class CalculatorTool(Tool):
         return output
 
 
-class FinalAnswerTool(Tool):
-    name = "final_answer"
-    description = "Provides a final answer to the given problem"
-    inputs = {"answer": {"type": str, "description": "The final answer to the problem"}}
-    output_type = str
+class PythonEvaluatorTool(Tool):
+    name = "python_evaluator"
+    description = "This is a tool that evaluates python code. It can be used to perform calculations. It does not have access to any imports or function definitions."
 
-    def __call__(self):
-        pass
+    inputs = {
+        "code": {
+            "type": str,
+            "description": "The code snippet to evaluate. All variables used in this snippet must be defined in this same snippet, else you will get an error.",
+        }
+    }
+    output_type = str
+    available_tools = BASE_PYTHON_TOOLS.copy()
+
+    def __call__(self, code):
+        output = str(
+            evaluate_python_code(code, tools=self.available_tools)
+        )
+        return output

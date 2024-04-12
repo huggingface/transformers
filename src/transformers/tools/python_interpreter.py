@@ -17,7 +17,7 @@
 import ast
 import difflib
 from collections.abc import Mapping
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 
 class InterpretorError(ValueError):
@@ -29,7 +29,7 @@ class InterpretorError(ValueError):
     pass
 
 
-def evaluate(code: str, tools: Dict[str, Callable], state=None, chat_mode=False):
+def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, state=None, chat_mode=False):
     """
     Evaluate a python expression using the content of the variables stored in a state and only evaluating a given set
     of functions.
@@ -67,8 +67,7 @@ def evaluate(code: str, tools: Dict[str, Callable], state=None, chat_mode=False)
                 )
             else:
                 msg += f":\n{e}"
-            print(msg)
-            break
+            raise InterpretorError(msg)
         if line_result is not None:
             result = line_result
 
@@ -96,6 +95,8 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
         # Assignement -> we evaluate the assignement which should update the state
         # We return the variable assigned as it may be used to determine the final result.
         return evaluate_assign(expression, state, tools)
+    elif isinstance(expression, ast.AugAssign):
+        return evaluate_augassign(expression, state, tools)
     elif isinstance(expression, ast.Call):
         # Function call -> we return the value of the function call
         return evaluate_call(expression, state, tools)
@@ -135,10 +136,34 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
     elif isinstance(expression, ast.BinOp):
         # Binary operation -> execute operation
         return evaluate_binop(expression, state, tools)
-
     else:
         # For now we refuse anything else. Let's add things as we need them.
         raise InterpretorError(f"{expression.__class__.__name__} is not supported.")
+
+
+def evaluate_augassign(expression: ast.AugAssign, state: Dict[str, Any], tools: Dict[str, Callable]):
+    # Extract the target variable name and the operation
+    if isinstance(expression.target, ast.Name):
+        var_name = expression.target.id
+        current_value = state.get(var_name, 0)  # Assuming default of 0 if not in state
+        value_to_add = evaluate_ast(expression.value, state, tools)
+        
+        # Determine the operation and apply it
+        if isinstance(expression.op, ast.Add):
+            updated_value = current_value + value_to_add
+        elif isinstance(expression.op, ast.Sub):
+            updated_value = current_value - value_to_add
+        elif isinstance(expression.op, ast.Mult):
+            updated_value = current_value * value_to_add
+        elif isinstance(expression.op, ast.Div):
+            updated_value = current_value / value_to_add
+        # Add other operations as needed
+
+        # Update the state
+        state[var_name] = updated_value
+        return updated_value
+    else:
+        raise InterpretorError("AugAssign not supported for non-simple variable targets.")
 
 
 def evaluate_binop(binop, state, tools):
