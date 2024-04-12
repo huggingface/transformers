@@ -131,8 +131,6 @@
     title: Notebooks with examples
   - local: community
     title: Community resources
-  - local: custom_tools
-    title: Custom Tools and Prompts
   - local: troubleshooting
     title: Troubleshoot
   - local: hf_quantizer
