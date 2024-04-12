@@ -81,7 +81,8 @@ if TYPE_CHECKING:
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
-
+    else:
+        _import_structure["tokenization_mot_tf"] = ["TFGPT2Tokenizer"]
 else:
     import sys
 
