@@ -16,7 +16,6 @@
 import math
 from typing import Dict, Optional, Tuple, Union
 
-
 import numpy as np
 import torch
 from torch import nn
