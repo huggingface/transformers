@@ -46,14 +46,6 @@ else:
         "load_tf_weights_in_mot",
     ]
 
-try:
-    if not is_keras_nlp_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_mot_tf"] = ["TFGPT2Tokenizer"]
-
 if TYPE_CHECKING:
     from .configuration_mot import MOT_PRETRAINED_CONFIG_ARCHIVE_MAP, MoTConfig, MoTOnnxConfig
 
@@ -75,14 +67,6 @@ if TYPE_CHECKING:
             MoTPreTrainedModel,
             load_tf_weights_in_mot,
         )
-
-    try:
-        if not is_keras_nlp_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        _import_structure["tokenization_mot_tf"] = ["TFGPT2Tokenizer"]
 else:
     import sys
 
