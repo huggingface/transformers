@@ -126,7 +126,7 @@ class RTDetrConfig(PretrainedConfig):
             Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes
             based on the predictions from the previous layer.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
-            Whether basic arcitechture type is encoder decoder structure.
+            Whether the architecture has an encoder decoder structure.
         matcher_alpha (`float`, *optional*, defaults to 0.25):
             Parameter alpha used by the Hungarian Matcher.
         matcher_gamma (`float`, *optional*, defaults to 2.0):
