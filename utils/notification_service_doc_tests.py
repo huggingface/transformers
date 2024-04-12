@@ -245,7 +245,7 @@ class Message:
             }
 
         return [
-            {"type": "header", "text": {"type": "plain_text", "text": title.upper(), "emoji": True}},
+            {"type": "header", "text": {"type": "plain_text", "text": title, "emoji": True}},
             content,
             {"type": "section", "text": {"type": "mrkdwn", "text": failure_text}},
         ]
