@@ -63,9 +63,7 @@ if __name__ == "__main__":
 
     refined_test_collection_map = {}
     for file_dir in raw_test_collection_map.keys():
-        if "docs/source/en/" in file_dir:
-            continue
-        elif file_dir in ["docs/source/en/model_doc", "docs/source/en/tasks"]:
+        if file_dir in ["docs/source/en/model_doc", "docs/source/en/tasks"]:
             for file in raw_test_collection_map[file_dir]:
                 refined_test_collection_map[file] = file
         else:
