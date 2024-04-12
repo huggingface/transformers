@@ -51,7 +51,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
     there is no padding token in the original model.
 
     The default configuration match that of
-    [codellama/CodeLlama-7b-Instruct-hf](https://huggingface.co/codellama/CodeLlama-7b-Instruct-hf/blob/main/tokenizer_config.json)
+    [codellama/CodeLlama-7b-Instruct-hf](https://huggingface.co/meta-llama/CodeLlama-7b-Instruct-hf/blob/main/tokenizer_config.json)
     which supports prompt infilling.
 
     Args:
