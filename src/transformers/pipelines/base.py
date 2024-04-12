@@ -1181,7 +1181,6 @@ class Pipeline(_ScikitCompat):
             logger.warning_once(
                 "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please use a"
                 " dataset",
-                UserWarning,
             )
 
         is_dataset = Dataset is not None and isinstance(inputs, Dataset)
