@@ -1570,8 +1570,7 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
 
 @add_start_docstrings(
     """
-    RT-DETR Model (consisting of a backbone and encoder-decoder) outputting bounding boxes and logits to be further
-    decoded into scores and classes.
+    RT-DETR Model (consisting of a backbone and encoder-decoder) outputting raw hidden states without any head on top.
     """,
     RTDETR_START_DOCSTRING,
 )
