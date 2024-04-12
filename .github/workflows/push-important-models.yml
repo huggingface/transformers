@@ -52,11 +52,12 @@ jobs:
             echo "matrix=[$matrix_string]" >> $GITHUB_OUTPUT
   test_modified_files:
     needs: get_modified_models
-    name: Slow & FA2 tests
-    runs-on: [single-gpu, nvidia-gpu, a10, ci]
-    container:
-      image: huggingface/transformers-all-latest-gpu
-      options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    name: Slow & FA2 tests ${{ matrix.model-name }}
+    runs-on: ubuntu-latest
+    # runs-on: [single-gpu, nvidia-gpu, a10, ci]
+    # container:
+      # image: huggingface/transformers-all-latest-gpu
+      # options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     if: ${{ needs.get_modified_models.outputs.matrix != '[]' && needs.get_modified_models.outputs.matrix != '' }}
     strategy:
       fail-fast: false
@@ -66,7 +67,7 @@ jobs:
     steps:
       - name: Echo
         run: |
-          echo ${{ needs.get_modified_models.outputs.matrix }}
+          echo ${{ matrix.model-name }}
       - name: Check out code
         uses: actions/checkout@v3
       
