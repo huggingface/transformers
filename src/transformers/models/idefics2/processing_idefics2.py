@@ -118,7 +118,7 @@ class Idefics2Processor(ProcessorMixin):
         >>> from transformers import Idefics2Processor
         >>> from transformers.image_utils import load_image
 
-        >>> processor = Idefics2Processor.from_pretrained("amyeroberts/idefics2", image_seq_len=2)
+        >>> processor = Idefics2Processor.from_pretrained("HuggingFaceM4/idefics2-8b", image_seq_len=2)
 
         >>> url1 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
         >>> url2 = "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg"

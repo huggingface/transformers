@@ -30,7 +30,7 @@ class Idefics2VisionConfig(PretrainedConfig):
     Idefics2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SigLIP checkpoint
     [google/siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224) used in the Idefics2 model
-    [amyeroberts/idefics2](https://huggingface.co/amyeroberts/idefics2).
+    [HuggingFaceM4/idefics2-8b](https://huggingface.co/HuggingFaceM4/idefics2-8b).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -180,7 +180,7 @@ class Idefics2Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Idefics2Model`]. It is used to instantiate a
     Idefics2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the model of the Idefics2
-    [amyeroberts/idefics2](https://huggingface.co/amyeroberts/idefics2) architecture.
+    [HuggingFaceM4/idefics2-8b](https://huggingface.co/HuggingFaceM4/idefics2-8b) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

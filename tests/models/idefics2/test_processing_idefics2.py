@@ -28,7 +28,7 @@ if is_vision_available():
 
 class Idefics2ProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.processor = Idefics2Processor.from_pretrained("amyeroberts/idefics2", image_seq_len=2)
+        self.processor = Idefics2Processor.from_pretrained("HuggingFaceM4/idefics2-8b", image_seq_len=2)
         self.image1 = Image.open(
             BytesIO(
                 requests.get(

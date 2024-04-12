@@ -54,7 +54,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "Idefics2Config"
 
 IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "HuggingFaceM4/idefics2",
+    "HuggingFaceM4/idefics2-8b",
     # See all IDEFICS2 models at https://huggingface.co/models?filter=idefics2
 ]
 
