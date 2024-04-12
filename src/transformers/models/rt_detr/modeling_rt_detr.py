@@ -1252,7 +1252,7 @@ class RTDetrEncoder(nn.Module):
 
 class RTDetrHybridEncoder(nn.Module):
     """
-    Decoder consists of a projection layer, a set of `RTDetrEncoder`, a top-down Feature Pyramid Network
+    Decoder consisting of a projection layer, a set of `RTDetrEncoder`, a top-down Feature Pyramid Network
     (FPN) and a bottom-up Path Aggregation Network (PAN). More details on the paper: https://arxiv.org/abs/2304.08069
 
     Args:
