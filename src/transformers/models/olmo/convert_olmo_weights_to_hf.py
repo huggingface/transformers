@@ -178,7 +178,6 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
     model = OLMoForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.float32, low_cpu_mem_usage=True)
     # Avoid saving this as part of the config.
     del model.config._name_or_path
-    model.config.torch_dtype = torch.float16
     print("Saving in the Transformers format.")
     model.save_pretrained(model_path, safe_serialization=safe_serialization)
     shutil.rmtree(tmp_model_path)
