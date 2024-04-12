@@ -79,7 +79,7 @@ gym-notices==0.0.6
 h5py==3.6.0
 huggingface-hub==0.4.0
 hypothesis==6.39.4
-idna==3.3
+idna==3.7
 imageio==2.16.1
 importlib-metadata==4.11.3
 importlib-resources==5.4.0
