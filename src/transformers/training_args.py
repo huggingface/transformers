@@ -1401,8 +1401,8 @@ class TrainingArguments:
                 # Check if raw `dict` types are in any of its values
                 if any(arg in (dict, Dict) for arg in get_args(field.type)):
                     # If found, add to the list of fields that can be loaded as a `dict`
-                    dict_fields.append(name)                
-        
+                    dict_fields.append(name)
+
         # Next parse in the `dict` fields
         for name in dict_fields:
             if isinstance(getattr(self, name), str) and getattr(self, name).startswith("{"):
