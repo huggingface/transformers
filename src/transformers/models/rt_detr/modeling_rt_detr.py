@@ -1264,7 +1264,7 @@ class RTDetrHybridEncoder(nn.Module):
         self.feat_strides = config.feat_strides
         self.d_model = config.d_model
         self.encode_proj_layers = config.encode_proj_layers
-        self.pe_temperature = config.pe_temperature
+        self.positional_encoding_temperature = config.positional_encoding_temperature
         self.eval_size = config.eval_size
         self.out_channels = [self.d_model for _ in self.in_channels]
         self.out_strides = self.feat_strides
@@ -1364,7 +1364,7 @@ class RTDetrHybridEncoder(nn.Module):
                 src_flatten = hidden_states[enc_ind].flatten(2).permute(0, 2, 1)
                 if self.training or self.eval_size is None:
                     pos_embed = self.build_2d_sincos_position_embedding(
-                        width, height, self.d_model, self.pe_temperature
+                        width, height, self.d_model, self.positional_encoding_temperature
                     ).to(src_flatten.device)
                 else:
                     pos_embed = None
