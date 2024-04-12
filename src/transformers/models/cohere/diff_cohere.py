@@ -23,7 +23,7 @@ class CohereLayerNorm(nn.Module):
         return hidden_states.to(input_dtype)
 
 class CohereRotaryEmbedding(LlamaRotaryEmbedding):
-    def rotate_half(x):
+    def rotate_half(self, x):
         # Split and rotate
         x1 = x[..., ::2]
         x2 = x[..., 1::2]

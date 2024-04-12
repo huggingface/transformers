@@ -52,11 +52,12 @@ class ModelConverter:
         self.model_name = re.search(r'models/(.*?)/diff', self.diff_file).group(1)
         self.modeling_file = file.replace("diff", "modeling")
         self.registered_classes = {}
+        self.modules_to_import = []
 
     def register(self, new_class, old_class):
         # registering. Returns the old class to be usable with a new name
         self.registered_classes[new_class] = old_class
-        
+        self.modules_to_import.append([old_class, old_class.__module__])
         new_class = type(new_class, (old_class,), {})
         base_model_name = re.search(r'models\.(.*?)\.modeling', old_class.__module__).group(1)
 

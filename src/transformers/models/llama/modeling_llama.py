@@ -124,6 +124,7 @@ class LlamaRotaryEmbedding(nn.Module):
         return torch.cat((-x2, x1), dim=-1)
 
     @torch.no_grad()
+    @add_start_docstrings("")
     def forward(self, q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         """Applies Rotary Position Embedding to the query and key tensors.
 
