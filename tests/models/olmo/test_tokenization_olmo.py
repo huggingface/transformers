@@ -182,9 +182,7 @@ class OLMoIntegrationTest(unittest.TestCase):
         rust_tokenizer = self.rust_tokenizer
 
         self.assertEqual(rust_tokenizer.encode("This is a test"), [1552, 310, 247, 1071])
-        self.assertEqual(
-            rust_tokenizer.decode([1552, 310, 247, 1071], skip_special_tokens=True), "This is a test"
-        )
+        self.assertEqual(rust_tokenizer.decode([1552, 310, 247, 1071], skip_special_tokens=True), "This is a test")
 
         # bytefallback showcase
         self.assertEqual(rust_tokenizer.encode("生活的真谛是"), [20025, 46549, 5225, 48561, 33656, 238, 12105])  # fmt: skip

@@ -183,7 +183,9 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
     shutil.rmtree(tmp_model_path)
 
 
-def _write_tokenizer(output_path: Path, config: OLMoConfig, input_tokenizer_path: Path, fix_eos_token_id: bool = True) -> None:
+def _write_tokenizer(
+    output_path: Path, config: OLMoConfig, input_tokenizer_path: Path, fix_eos_token_id: bool = True
+) -> None:
     print(f"Saving a {GPTNeoXTokenizerFast.__name__} to {output_path}.")
 
     base_tokenizer = Tokenizer.from_file(str(input_tokenizer_path))
