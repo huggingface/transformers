@@ -138,8 +138,6 @@ class MultiScaleDeformableAttentionFunction(Function):
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
-if is_timm_available():
-    pass
 
 logger = logging.get_logger(__name__)
 
