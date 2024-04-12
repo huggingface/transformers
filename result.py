@@ -593,7 +593,7 @@ class CohereDecoderLayer(nn.Module):
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
 )
-class CoherePretrainedModel(PreTrainedModel):
+class CoherePreTrainedModel(PreTrainedModel):
     config_class = CohereConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True

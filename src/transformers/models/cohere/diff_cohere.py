@@ -99,6 +99,6 @@ class CohereDecoderLayer(nn.Module):
 
         return outputs
 
-CoherePretrainedModel = CohereConverter.register("CoherePretrainedModel", LlamaPreTrainedModel)
+CoherePreTrainedModel = CohereConverter.register("CoherePreTrainedModel", LlamaPreTrainedModel)
 CohereModel = CohereConverter.register("CohereModel", LlamaModel)
 CohereForCausalLM = CohereConverter.register("CohereForCausalLM", LlamaForCausalLM)
