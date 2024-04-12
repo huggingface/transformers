@@ -1149,7 +1149,7 @@ class TrainingArguments:
             )
         },
     )
-    accelerator_config: Optional[Union[dict, str, "AcceleratorConfig"]] = field(
+    accelerator_config: Optional[Union[dict, str]] = field(
         default=None,
         metadata={
             "help": (
