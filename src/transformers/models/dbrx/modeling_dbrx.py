@@ -755,13 +755,16 @@ class DbrxExpertGLU(nn.Module):
 
     def forward(self, x: torch.Tensor, expert_idx: int) -> torch.Tensor:
         # Slice in no grad context to avoid storing the entire param in backward pass
-        with torch.no_grad():
-            expert_w1 = self.w1.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx]
-            expert_v1 = self.v1.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx]
-            expert_w2 = self.w2.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx]
-        # expert_w1.requires_grad = expert_w1.requires_grad
-        # expert_v1.requires_grad = expert_v1.requires_grad
-        # expert_w2.requires_grad = expert_w2.requires_grad
+        # with torch.no_grad():
+        #     expert_w1 = self.w1.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx]
+        #     expert_v1 = self.v1.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx]
+        #     expert_w2 = self.w2.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx]
+        expert_w1 = self.w1.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx].detach()
+        expert_v1 = self.v1.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx].detach()
+        expert_w2 = self.w2.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx].detach()
+        expert_w1.requires_grad = self.w1.requires_grad
+        expert_v1.requires_grad = self.v1.requires_grad
+        expert_w2.requires_grad = self.w2.requires_grad
 
         gate_proj = x.matmul(expert_w1.t())
         up_proj = x.matmul(expert_v1.t())
