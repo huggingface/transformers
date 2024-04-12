@@ -1777,24 +1777,16 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         >>> model = Idefics2ForConditionalGeneration.from_pretrained(checkpoint)
         >>> processor = AutoProcessor.from_pretrained(checkpoint)
 
-        >>> dogs_image_url_1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_nlvr2/raw/main/image1.jpeg"
-        >>> dogs_image_url_2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_nlvr2/raw/main/image2.jpeg"
+        >>> dogs_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_nlvr2/raw/main/image1.jpeg"
 
-        >>> prompts = [
-        ...     [
-        ...         "User:",
-        ...         dogs_image_url_1,
-        ...         "Describe this image.\nAssistant: An image of two dogs.\n",
-        ...         "User:",
-        ...         dogs_image_url_2,
-        ...         "Describe this image.\nAssistant:",
-        ...     ]
-        ... ]
-        >>> inputs = processor(prompts, return_tensors="pt")
+        >>> text = [
+        ...     "User:<image>Describe this image.<end_of_utterance>\nAssistant:",
+        ]
+        >>> inputs = processor(text=text, images=dogs_url_image, return_tensors="pt")
 
         >>> generate_ids = model.generate(**inputs, max_new_tokens=6)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True)[0]
-        'User: Describe this image.\nAssistant: An image of two dogs.\nUser: Describe this image.\nAssistant: A brown dog is in a'
+        'User: Describe this image.\nAssistant: An image of two dogs.'
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
