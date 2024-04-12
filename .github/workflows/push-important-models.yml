@@ -49,7 +49,6 @@ jobs:
                 fi
             done
             matrix_string=$(printf '"%s", ' "${model_arrays[@]}" | sed 's/, $//')
-            echo $matrix_string
             echo "matrix=[$matrix_string]" >> $GITHUB_OUTPUT
   test_modified_files:
     needs: get_modified_models
