@@ -188,14 +188,9 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_flash_attn_2_inference_padding_right(self):
         pass
 
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_resize_tokens_embeddings with config.vocab_size->config.text_config.vocab_size
+    # We need to override as we need to prepare such that the image token is the last token
     def test_resize_tokens_embeddings(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.test_resize_embeddings:
-            return
+        (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -273,20 +268,11 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
             ):
                 model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=1.3)
 
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_resize_embeddings_untied with config.vocab_size->config.text_config.vocab_size
+    # We need to override as we need to prepare such that the image token is the last token
     def test_resize_embeddings_untied(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.test_resize_embeddings:
-            return
+        (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
 
         original_config.tie_word_embeddings = False
-
-        # if model cannot untied embeddings -> leave test
-        if original_config.tie_word_embeddings:
-            return
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -318,7 +304,6 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
             if output_embeds.bias is not None:
                 self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
 
-            # Ignore copy
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
@@ -326,8 +311,6 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
             model.image_token_id = model_vocab_size - 15 - 1
             inputs_dict["input_ids"][:, -n_images:] = model.image_token_id
 
-            if "decoder_input_ids" in inputs_dict:
-                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -361,22 +344,14 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     def test_flash_attn_2_inference_padding_right(self):
         pass
 
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_resize_tokens_embeddings with config.vocab_size->config.text_config.vocab_size
+    # We need to override as we need to prepare such that the image token is the last token
     def test_resize_tokens_embeddings(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.test_resize_embeddings:
-            return
+        (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config)
             model.to(torch_device)
-
-            if self.model_tester.is_training is False:
-                model.eval()
 
             model_vocab_size = config.text_config.vocab_size
             # Retrieve the embeddings and clone theme
@@ -397,7 +372,6 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
 
-            # Ignore copy
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
@@ -405,9 +379,6 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
             model.model.image_token_id = model_vocab_size - 15 - 1
             inputs_dict["input_ids"][:, -n_images:] = model.model.image_token_id
 
-            # make sure that decoder_input_ids are resized as well
-            if "decoder_input_ids" in inputs_dict:
-                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
             # Check that adding and removing tokens has not modified the first part of the embedding matrix.
@@ -446,28 +417,15 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
             ):
                 model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=1.3)
 
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_resize_embeddings_untied with config.vocab_size->config.text_config.vocab_size
+    # We need to override as we need to prepare such that the image token is the last token
     def test_resize_embeddings_untied(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.test_resize_embeddings:
-            return
+        (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
 
         original_config.tie_word_embeddings = False
-
-        # if model cannot untied embeddings -> leave test
-        if original_config.tie_word_embeddings:
-            return
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
-
-            # if no output embeddings -> leave test
-            if model.get_output_embeddings() is None:
-                continue
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
             model_vocab_size = config.text_config.vocab_size
@@ -491,7 +449,6 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
             if output_embeds.bias is not None:
                 self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
 
-            # Ignore copy
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
@@ -499,8 +456,6 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
             model.model.image_token_id = model_vocab_size - 15 - 1
             inputs_dict["input_ids"][:, -n_images:] = model.model.image_token_id
 
-            if "decoder_input_ids" in inputs_dict:
-                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
