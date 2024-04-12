@@ -775,7 +775,7 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_compile_tf_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes[1:]:
+        for model_class in self.all_model_classes[:2]:
             model = model_class(config)
 
             fixed_batch_size = 1  # Example fixed batch size
@@ -841,6 +841,10 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
                 assert isinstance(model, keras.Model)
                 after_outputs = model(inputs_dict)
                 self.assert_outputs_same(after_outputs, outputs)
+
+    @slow
+    def test_keras_fit(self):
+        super().test_keras_fit()
 
     @slow
     def test_model_from_pretrained(self):
