@@ -18,16 +18,48 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The IDEFICS2 model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The IDEFICS2 model was created by the [Hugging Face M4](https://huggingface.co/HuggingFaceM4) team and authored by Léo Tronchon, Hugo Laurencon, Victor Sanh.
+The accompanying blog post can be found [here](https://huggingface.co/blog/idefics2).
 
-The abstract from the paper is the following:
-
-*<INSERT PAPER ABSTRACT HERE>*
+IDEFICS-2 is an open multimodal model that accepts arbitrary sequences of image and text inputs and produces text
+outputs. The model can answer questions about images, describe visual content, create stories grounded on multiple
+images, or simply behave as a pure language model without visual inputs. It improves upon IDEFICS-1, notably on
+document understanding, OCR, or visual reasoning. IDEFICS-2 is lightweight (8 billion parameters) and treats
+images in their native aspect ratio and resolution, which allows for varying inference efficiency.
 
 Tips:
+- Each sample can contain multiple images, and the number of images can vary between samples. The processor will pad the inputs to the maximum number of images in a batch for input to the model.
+- The processor has a `do_image_splitting` option. If `True`, each input image will be split into 4 sub-images, and concatenated with the original to form 5 images. This is useful for increasing data efficiency and model performance. Make sure `processor.do_image_splitting` is set to `False` if the model was not trained with this option.
+- The processor has its own `apply_chat_template` method to apply a list of chat messages. These can then be passed as `text` to the processor.
 
-<INSERT TIPS ABOUT MODEL HERE>
+Example of how to use the processor on chat messages:
+```python
+import requests
+from PIL import Image
+
+url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
+url_2 = "http://images.cocodataset.org/val2017/000000219578.jpg"
+
+image_1 = Image.open(requests.get(url_1, stream=True).raw)
+image_2 = Image.open(requests.get(url_2, stream=True).raw)
+images = [image_1, image_2]
+
+messages = [{
+    "role": "user",
+    "content": [
+        {"type": "text", "text": "What’s the difference between these two images?"},
+        {"type": "image"},
+        {"type": "image"},
+    ],
+}]
+
+processor = Idefics2Processor.from_pretrained("HuggingFaceM4/idefics2-8b")
+
+text = processor.apply_chat_template(messages)
+inputs = processor(images=images, text=text)
+
+generated_text = model.generate(**inputs)
+```
 
 This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts).
 The original code can be found [here](https://huggingface.co/HuggingFaceM4/idefics2).
