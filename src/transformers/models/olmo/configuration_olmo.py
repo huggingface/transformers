@@ -31,7 +31,7 @@ class OLMoConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`OLMoModel`]. It is used to instantiate an OLMo
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the [allenai/OLMo-7B](https://huggingface.co/allenai/OLMo-7B).
+    defaults will yield a similar configuration to that of the [allenai/OLMo-7B-hf](https://huggingface.co/allenai/OLMo-7B-hf).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -100,10 +100,10 @@ class OLMoConfig(PretrainedConfig):
     ```python
     >>> from transformers import OLMoModel, OLMoConfig
 
-    >>> # Initializing a OLMo olmo-7b style configuration
+    >>> # Initializing a OLMo 7B style configuration
     >>> configuration = OLMoConfig()
 
-    >>> # Initializing a model from the olmo-7b style configuration
+    >>> # Initializing a model from the OLMo 7B style configuration
     >>> model = OLMoModel(configuration)
 
     >>> # Accessing the model configuration

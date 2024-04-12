@@ -1524,9 +1524,9 @@ NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = DeprecatedList(["uw-madison/nystro
 
 OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP = DeprecatedDict(
     {
-        "allenai/OLMo-1B": "https://huggingface.co/allenai/OLMo-1B/resolve/main/config.json",
-        "allenai/OLMo-7B": "https://huggingface.co/allenai/OLMo-7B/resolve/main/config.json",
-        "allenai/OLMo-7B-Twin-2T": "https://huggingface.co/allenai/OLMo-7B-Twin-2T/resolve/main/config.json",
+        "allenai/OLMo-1B-hf": "https://huggingface.co/allenai/OLMo-1B-hf/resolve/main/config.json",
+        "allenai/OLMo-7B-hf": "https://huggingface.co/allenai/OLMo-7B-hf/resolve/main/config.json",
+        "allenai/OLMo-7B-Twin-2T-hf": "https://huggingface.co/allenai/OLMo-7B-Twin-2T-hf/resolve/main/config.json",
     }
 )
 

@@ -42,7 +42,7 @@ if is_torch_available():
 @require_sentencepiece
 @require_tokenizers
 class OLMoTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "allenai/OLMo-1B"
+    from_pretrained_id = "allenai/OLMo-1B-hf"
 
     # `tokenizer_class` is normally supposed to be a slow tokenizer. It is set to the fast tokenizer
     # because there is no slow OLMo tokenizer and some fast tests still expect this to be set.
@@ -55,11 +55,11 @@ class OLMoTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMo-1B")
+        tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMo-1B-hf")
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_full_tokenizer(self):
-        tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMo-1B")
+        tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMo-1B-hf")
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["This", "Ġis", "Ġa", "Ġtest"])
@@ -102,11 +102,11 @@ class OLMoTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_tokenizer_integration(self):
-        expected_encoding = {'input_ids': [[22904, 398, 313, 42889, 1929, 347, 268, 1767, 263, 348, 14, 16702, 398, 285, 268, 1767, 263, 348, 14, 4025, 11273, 14, 6291, 10, 3400, 2087, 14, 27299, 35615, 313, 35, 6366, 13, 443, 5736, 14, 19, 13, 8741, 35, 6366, 66, 13, 1594, 22047, 13, 3656, 300, 49340, 13, 35974, 8695, 19552, 323, 14673, 18847, 31293, 313, 19214, 54, 10, 285, 14673, 18847, 28598, 313, 19214, 40, 10, 342, 689, 4567, 12, 3215, 11273, 3210, 275, 2233, 12, 11515, 285, 3676, 734, 2211, 1430, 875, 500, 991, 13, 8462, 22097, 348, 285, 41529, 20671, 15, 50279], [35, 6366, 310, 4158, 281, 638, 14, 24382, 3676, 12246, 30869, 14237, 432, 440, 22027, 2505, 407, 26277, 21839, 327, 1097, 1669, 285, 987, 3634, 275, 512, 8090, 15, 50279], [510, 3158, 8516, 30013, 27287, 689, 253, 22658, 4370, 15, 50279]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # fmt: skip
+        expected_encoding = {'input_ids': [[22904, 398, 313, 42889, 1929, 347, 268, 1767, 263, 348, 14, 16702, 398, 285, 268, 1767, 263, 348, 14, 4025, 11273, 14, 6291, 10, 3400, 2087, 14, 27299, 35615, 313, 35, 6366, 13, 443, 5736, 14, 19, 13, 8741, 35, 6366, 66, 13, 1594, 22047, 13, 3656, 300, 49340, 13, 35974, 8695, 19552, 323, 14673, 18847, 31293, 313, 19214, 54, 10, 285, 14673, 18847, 28598, 313, 19214, 40, 10, 342, 689, 4567, 12, 3215, 11273, 3210, 275, 2233, 12, 11515, 285, 3676, 734, 2211, 1430, 875, 500, 991, 13, 8462, 22097, 348, 285, 41529, 20671, 15], [35, 6366, 310, 4158, 281, 638, 14, 24382, 3676, 12246, 30869, 14237, 432, 440, 22027, 2505, 407, 26277, 21839, 327, 1097, 1669, 285, 987, 3634, 275, 512, 8090, 15], [510, 3158, 8516, 30013, 27287, 689, 253, 22658, 4370, 15]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # fmt: skip
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="allenai/OLMo-1B",
+            model_name="allenai/OLMo-1B-hf",
             padding=False,
         )
 
@@ -141,7 +141,7 @@ class OLMoTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 class OLMoIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        checkpoint_name = "allenai/OLMo-1B"
+        checkpoint_name = "allenai/OLMo-1B-hf"
         cls.rust_tokenizer = GPTNeoXTokenizerFast.from_pretrained(checkpoint_name)
         return cls
 
