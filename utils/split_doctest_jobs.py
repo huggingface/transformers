@@ -32,8 +32,8 @@ python utils/split_doctest_jobs.py --only_return_keys --num_splits 4
 """
 
 import argparse
-from pathlib import Path
 from collections import defaultdict
+from pathlib import Path
 
 from tests_fetcher import get_all_doctest_files
 
@@ -42,7 +42,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--only_return_keys",
-        action='store_true',
+        action="store_true",
         help="if to only return the keys (which is a list of list of files' directory or file paths).",
     )
     parser.add_argument(

@@ -12,18 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import collections
 import json
-import math
 import os
 import re
 import time
-from fnmatch import fnmatch
 from typing import Dict, List
 
 from get_ci_error_statistics import get_jobs
-
-import requests
 from slack_sdk import WebClient
 
 
