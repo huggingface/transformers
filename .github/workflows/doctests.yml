@@ -3,7 +3,7 @@ name: Doctests
 on:
   push:
     branches:
-      - fix_doctest_based_on_refactor_doctest
+      - fix_doctest_based_on_refactor_doctest_2
   repository_dispatch:
   schedule:
     - cron: "17 2 * * *"
