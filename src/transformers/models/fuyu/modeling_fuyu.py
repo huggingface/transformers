@@ -249,7 +249,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> generated_ids = model.generate(**model_inputs, max_new_tokens=7)
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=7)
         >>> generation_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         >>> print(generation_text)
         'A bus parked on the side of a road.'

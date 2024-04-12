@@ -85,6 +85,10 @@ if __name__ == "__main__":
         end = start + num_jobs_per_splits + (1 if idx < num_jobs % args.num_splits else 0)
         file_directory_splits.append(sorted_file_dirs[start:end])
 
+    file_directory_splits = [
+        ["src/transformers/models/fuyu"],
+    ]
+
     if args.only_return_keys:
         print(file_directory_splits)
     else:
