@@ -2,7 +2,7 @@ name: Slow tests on important models (on Push - A10)
 
 on:
   push:
-    branches: [ younesbelkada-patch-1 ]
+    branches: [ main ]
 
 env:
   IS_GITHUB_CI: "1"
@@ -55,10 +55,10 @@ jobs:
     needs: get_modified_models
     name: Slow & FA2 tests
     runs-on: ubuntu-latest
-    # runs-on: [single-gpu, nvidia-gpu, a10, ci]
-    # container:
-      # image: huggingface/transformers-all-latest-gpu
-      # options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    runs-on: [single-gpu, nvidia-gpu, a10, ci]
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     if: ${{ needs.get_modified_models.outputs.matrix != '[]' && needs.get_modified_models.outputs.matrix != '' && fromJson(needs.get_modified_models.outputs.matrix)[0] != null }}
     strategy:
       fail-fast: false
@@ -66,13 +66,6 @@ jobs:
         model-name: ${{ fromJson(needs.get_modified_models.outputs.matrix) }}
 
     steps:
-      - name: Echo
-        run: |
-          echo ${{ matrix.model-name }}
-          echo ${{ needs.get_modified_models.outputs.matrix == '' }}
-          echo ${{ needs.get_modified_models.outputs.matrix == ' ' }}
-          echo ${{ fromJson(needs.get_modified_models.outputs.matrix) == ' ' }}
-          echo ${{ fromJson(needs.get_modified_models.outputs.matrix)[0] == null }}
       - name: Check out code
         uses: actions/checkout@v3
       
@@ -135,11 +128,11 @@ jobs:
           status: ${{ steps.run_integration_tests.conclusion}}
           slack_token: ${{ secrets.CI_SLACK_BOT_TOKEN }}
 
-      # - name: Tailscale # In order to be able to SSH when a test fails
-      #   if: ${{ failure() || runner.debug == '1'}}
-      #   uses: huggingface/tailscale-action@ssh-improvments
-      #   with:
-      #     authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
-      #     slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
-      #     slackToken: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
-      #     waitForSSH: true
+      - name: Tailscale # In order to be able to SSH when a test fails
+        if: ${{ failure() || runner.debug == '1'}}
+        uses: huggingface/tailscale-action@ssh-improvments
+        with:
+          authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
+          slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
+          slackToken: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+          waitForSSH: true

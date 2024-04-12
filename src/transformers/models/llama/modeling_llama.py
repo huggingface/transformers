@@ -93,7 +93,6 @@ class LlamaRMSNorm(nn.Module):
 ALL_LAYERNORM_LAYERS.append(LlamaRMSNorm)
 
 
-
 class LlamaRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         super().__init__()
