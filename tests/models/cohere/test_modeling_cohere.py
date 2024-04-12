@@ -283,9 +283,7 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     )
     test_headmasking = False
     test_pruning = False
-    fx_compatible = (
-        False  # FIXME @michaelbenayoun or @fxmarty from https://github.com/huggingface/transformers/pull/29753
-    )
+    fx_compatible = True
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer

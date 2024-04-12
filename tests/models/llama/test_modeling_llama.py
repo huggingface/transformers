@@ -305,9 +305,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     test_headmasking = False
     test_pruning = False
-    fx_compatible = (
-        False  # FIXME @michaelbenayoun or @fxmarty from https://github.com/huggingface/transformers/pull/29753
-    )
+    fx_compatible = True
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -599,8 +597,18 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         pass
 
 
-@require_torch
+@require_torch_gpu
 class LlamaIntegrationTest(unittest.TestCase):
+    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
+    # Depending on the hardware we get different logits / generations
+    cuda_compute_capability_major_version = None
+
+    @classmethod
+    def setUpClass(cls):
+        if is_torch_available() and torch.cuda.is_available():
+            # 8 is for A100 / A10 and 7 for T4
+            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+
     @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
     @slow
     def test_model_7b_logits(self):
@@ -677,16 +685,25 @@ class LlamaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_compile_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
-        EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the same for all observers, and 3) the laws of physics are the same for all observers.",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
-        ]
+        EXPECTED_TEXT_COMPLETION = {
+            7: [
+                "Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the same for all observers, and 3) the laws of physics are the same for all observers.",
+                "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+            ],
+            8: [
+                "Simply put, the theory of relativity states that 1) the speed of light is the same for all observers, and 2) the laws of physics are the same for all observers.\nThe first part of the theory of relativity",
+                "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+            ],
+        }
+
         prompts = [
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="right")
-        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="sequential")
+        model = LlamaForCausalLM.from_pretrained(
+            "meta-llama/Llama-2-7b-hf", device_map="sequential", torch_dtype=torch.float16
+        )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         def decode_one_tokens(model, cur_token, input_pos, cache_position):
@@ -720,7 +737,7 @@ class LlamaIntegrationTest(unittest.TestCase):
                 cache_position += 1
 
         text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], text)
 
 
 @require_torch
@@ -765,6 +782,7 @@ end
 
     @require_torch_accelerator
     @slow
+    @unittest.skip("Model is too large")
     def test_model_7b_logits(self):
         model = LlamaForCausalLM.from_pretrained("codellama/CodeLlama-7b-hf").to(torch_device)
         tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
