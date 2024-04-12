@@ -194,7 +194,7 @@ class RTDetrDecoderOutput(ModelOutput):
 @dataclass
 class RTDetrModelOutput(ModelOutput):
     """
-    Base class for outputs of the RTDETR encoder-decoder model.
+    Base class for outputs of the RT-DETR encoder-decoder model.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
