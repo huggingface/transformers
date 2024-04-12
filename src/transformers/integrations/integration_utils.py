@@ -38,6 +38,7 @@ from ..utils import (
     flatten_dict,
     is_datasets_available,
     is_pandas_available,
+    is_tf_available,
     is_torch_available,
     logging,
 )
@@ -586,22 +587,6 @@ def rewrite_logs(d):
     return new_d
 
 
-def save_model_architecture_to_file(
-    model: Union[PreTrainedModel, TFPreTrainedModel, PushToHubMixin, torch.nn.Module], output_dir: str
-):
-    with open(f"{output_dir}/model_architecture.txt", "w+") as f:
-        if isinstance(model, PreTrainedModel):
-            print(model, file=f)
-        elif isinstance(model, TFPreTrainedModel):
-
-            def print_to_file(s):
-                print(s, file=f)
-
-            model.summary(print_fn=print_to_file)
-        elif isinstance(model, (torch.nn.Module, PushToHubMixin)) and hasattr(model, "base_model"):
-            print(model, file=f)
-
-
 class TensorBoardCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that sends the logs to [TensorBoard](https://www.tensorflow.org/tensorboard).
@@ -686,6 +671,22 @@ class TensorBoardCallback(TrainerCallback):
         if self.tb_writer:
             self.tb_writer.close()
             self.tb_writer = None
+
+
+def save_model_architecture_to_file(model: Any, output_dir: str):
+    with open(f"{output_dir}/model_architecture.txt", "w+") as f:
+        if isinstance(model, PreTrainedModel):
+            print(model, file=f)
+        elif is_tf_available() and isinstance(model, TFPreTrainedModel):
+
+            def print_to_file(s):
+                print(s, file=f)
+
+            model.summary(print_fn=print_to_file)
+        elif is_torch_available() and (
+            isinstance(model, (torch.nn.Module, PushToHubMixin)) and hasattr(model, "base_model")
+        ):
+            print(model, file=f)
 
 
 class WandbCallback(TrainerCallback):
@@ -785,9 +786,13 @@ class WandbCallback(TrainerCallback):
             self._wandb.run._label(code="transformers_trainer")
 
             # add number of model parameters to wandb config
-            if isinstance(
-                model,
-                (PreTrainedModel, TFPreTrainedModel, PushToHubMixin, torch.nn.Module),
+            if any(
+                (
+                    isinstance(model, PreTrainedModel),
+                    isinstance(model, PushToHubMixin),
+                    (is_tf_available() and isinstance(model, TFPreTrainedModel)),
+                    (is_torch_available() and isinstance(model, torch.nn.Module)),
+                )
             ):
                 self._wandb.config["model/num_parameters"] = model.num_parameters()
 
