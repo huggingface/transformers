@@ -145,7 +145,9 @@ class ImageTextToTextPipeline(Pipeline):
 
         if model_type == "vision-encoder-decoder" and self.processor.__class__.__name__ == "DonutProcessor":
             model_inputs["decoder_input_ids"] = self.processor.tokenizer(
-                text, add_special_tokens=False, return_tensors="pt"
+                text,
+                add_special_tokens=False,
+                return_tensors=self.framework,
             ).input_ids
 
         return model_inputs
@@ -159,12 +161,11 @@ class ImageTextToTextPipeline(Pipeline):
 
     def postprocess(self, model_outputs):
         records = []
-        for output_ids in model_outputs:
-            record = {
-                "generated_text": self.processor.decode(
-                    output_ids,
-                    skip_special_tokens=True,
-                )
-            }
-            records.append(record)
+        generated_texts = self.processor.batch_decode(
+            model_outputs,
+            skip_special_tokens=True,
+        )
+
+        records = [{"generated_text": text} for text in generated_texts]
+
         return records
