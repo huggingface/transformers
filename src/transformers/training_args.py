@@ -22,7 +22,7 @@ from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, get_args, get_origin
 
 from huggingface_hub import get_full_repo_name
 from packaging import version
@@ -1393,6 +1393,21 @@ class TrainingArguments:
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
 
+        # for any and all args that can use a `dict`, check if the value is a `str` and if so, load it as a `dict`
+        dict_fields = []
+        for name, field in self.__dataclass_fields__.items():
+            # `Optional` winds up being a `Union` when digging through the types
+            if get_origin(field.type) == Union:
+                # Check if raw `dict` types are in any of its values
+                if any(arg in (dict, Dict) for arg in get_args(field.type)):
+                    # If found, add to the list of fields that can be loaded as a `dict`
+                    dict_fields.append(name)                
+        
+        # Next parse in the `dict` fields
+        for name in dict_fields:
+            if isinstance(getattr(self, name), str) and getattr(self, name).startswith("{"):
+                setattr(self, name, json.loads(getattr(self, name)))
+
         if isinstance(self.evaluation_strategy, EvaluationStrategy):
             warnings.warn(
                 "using `EvaluationStrategy` for `evaluation_strategy` is deprecated and will be removed in version 5"
@@ -1774,6 +1789,7 @@ class TrainingArguments:
             if not isinstance(self.accelerator_config, (AcceleratorConfig)):
                 if self.accelerator_config is None:
                     self.accelerator_config = AcceleratorConfig()
+                # Case: passed in as a str, could be either a `path` or raw dict
                 elif isinstance(self.accelerator_config, dict):
                     self.accelerator_config = AcceleratorConfig(**self.accelerator_config)
                 else:
