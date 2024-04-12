@@ -218,7 +218,6 @@ class RTDetrConfig(PretrainedConfig):
         box_noise_scale=1.0,
         learnt_init_query=False,
         anchor_image_size=[640, 640],
-        eval_idx=-1,
         disable_custom_kernels=True,
         with_box_refine=True,
         is_encoder_decoder=True,
@@ -303,7 +302,6 @@ class RTDetrConfig(PretrainedConfig):
         self.box_noise_scale = box_noise_scale
         self.learnt_init_query = learnt_init_query
         self.anchor_image_size = anchor_image_size
-        self.eval_idx = eval_idx
         self.auxiliary_loss = auxiliary_loss
         self.disable_custom_kernels = disable_custom_kernels
         self.with_box_refine = with_box_refine
