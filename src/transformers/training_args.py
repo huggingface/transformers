@@ -1397,10 +1397,6 @@ class TrainingArguments:
             # else its likely a filename if supported
             if isinstance(passed_value, str) and passed_value.startswith("{"):
                 setattr(self, field, json.loads(passed_value))
-            # Since we default to a blank dict, set it to `None` after parsing
-            elif isinstance(passed_value, dict):
-                if passed_value == {}:
-                    setattr(self, field, None)
 
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
