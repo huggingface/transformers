@@ -1115,10 +1115,10 @@ LLAMA_GENERATION_EXAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import AutoTokenizer, OLMoForCausalLM
+    >>> from transformers import AutoTokenizer, LlamaForCausalLM
 
-    >>> model = OLMoForCausalLM.from_pretrained("allenai/OLMo-7B-hf")
-    >>> tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7b-hf")
+    >>> model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf")
+    >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 
     >>> prompt = "Hey, are you conscious? Can you talk to me?"
     >>> inputs = tokenizer(prompt, return_tensors="pt")
