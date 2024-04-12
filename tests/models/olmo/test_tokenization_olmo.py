@@ -166,40 +166,44 @@ class OLMoIntegrationTest(unittest.TestCase):
     def test_fast_special_tokens(self):
         fast_tokenizer = self.rust_tokenizer
 
+        original_add_eos_token = fast_tokenizer.add_eos_token
+
         fast_tokenizer.add_eos_token = False
-        fast = fast_tokenizer.encode("A sample test", add_special_tokens=True)
-        assert fast == [34, 3410, 1071]
+        fast = fast_tokenizer.encode("A sample test")
+        self.assertEqual(fast, [34, 3410, 1071])
 
         fast_tokenizer.add_eos_token = True
-        fast = fast_tokenizer.encode("A sample test", add_special_tokens=True)
-        assert fast == [34, 3410, 1071, 50279]
+        fast = fast_tokenizer.encode("A sample test")
+        self.assertEqual(fast, [34, 3410, 1071, 50279])
+
+        fast_tokenizer.add_eos_token = original_add_eos_token
 
     def test_simple_encode_decode(self):
         rust_tokenizer = self.rust_tokenizer
 
-        self.assertEqual(rust_tokenizer.encode("This is a test"), [1552, 310, 247, 1071, 50279])
+        self.assertEqual(rust_tokenizer.encode("This is a test"), [1552, 310, 247, 1071])
         self.assertEqual(
-            rust_tokenizer.decode([1552, 310, 247, 1071, 50279], skip_special_tokens=True), "This is a test"
+            rust_tokenizer.decode([1552, 310, 247, 1071], skip_special_tokens=True), "This is a test"
         )
 
         # bytefallback showcase
-        self.assertEqual(rust_tokenizer.encode("生活的真谛是"), [20025, 46549, 5225, 48561, 33656, 238, 12105, 50279])  # fmt: skip
+        self.assertEqual(rust_tokenizer.encode("生活的真谛是"), [20025, 46549, 5225, 48561, 33656, 238, 12105])  # fmt: skip
         self.assertEqual(
-            rust_tokenizer.decode([20025, 46549, 5225, 48561, 33656, 238, 12105, 50279], skip_special_tokens=True),
+            rust_tokenizer.decode([20025, 46549, 5225, 48561, 33656, 238, 12105], skip_special_tokens=True),
             "生活的真谛是",
         )
 
         # Inner spaces showcase
-        self.assertEqual(rust_tokenizer.encode("Hi  Hello"), [12764, 50276, 12092, 50279])
-        self.assertEqual(rust_tokenizer.decode([12764, 50276, 12092, 50279], skip_special_tokens=True), "Hi  Hello")
+        self.assertEqual(rust_tokenizer.encode("Hi  Hello"), [12764, 50276, 12092])
+        self.assertEqual(rust_tokenizer.decode([12764, 50276, 12092], skip_special_tokens=True), "Hi  Hello")
 
-        self.assertEqual(rust_tokenizer.encode("Hi   Hello"), [12764, 50275, 12092, 50279])
-        self.assertEqual(rust_tokenizer.decode([12764, 50275, 12092, 50279], skip_special_tokens=True), "Hi   Hello")
+        self.assertEqual(rust_tokenizer.encode("Hi   Hello"), [12764, 50275, 12092])
+        self.assertEqual(rust_tokenizer.decode([12764, 50275, 12092], skip_special_tokens=True), "Hi   Hello")
 
-        self.assertEqual(rust_tokenizer.encode(""), [50279])
+        self.assertEqual(rust_tokenizer.encode(""), [])
 
-        self.assertEqual(rust_tokenizer.encode(" "), [209, 50279])
+        self.assertEqual(rust_tokenizer.encode(" "), [209])
 
-        self.assertEqual(rust_tokenizer.encode("  "), [50276, 50279])
+        self.assertEqual(rust_tokenizer.encode("  "), [50276])
 
-        self.assertEqual(rust_tokenizer.encode(" Hello"), [24387, 50279])
+        self.assertEqual(rust_tokenizer.encode(" Hello"), [24387])

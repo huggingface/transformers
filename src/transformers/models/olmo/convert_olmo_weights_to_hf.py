@@ -202,7 +202,6 @@ def _write_tokenizer(output_path: Path, config: OLMoConfig, input_tokenizer_path
         pad_token=base_tokenizer.decode([pad_token_id], skip_special_tokens=False),
         unk_token=None,
         bos_token=None,
-        add_eos_token=False,
     )
 
     tokenizer.save_pretrained(output_path)
