@@ -222,7 +222,7 @@
   title: Conceptual guides
 - sections:
   - sections:
-    - local: main_classes/agents
+    - local: main_classes/agent
       title: Agents and Tools
     - local: model_doc/auto
       title: Auto Classes
