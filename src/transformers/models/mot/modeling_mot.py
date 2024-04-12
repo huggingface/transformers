@@ -781,7 +781,7 @@ MOT_INPUTS_DOCSTRING = r"""
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`GPT2Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1507,9 +1507,9 @@ class MoTDoubleHeadsModel(MoTPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import AutoTokenizer, MoTDoubleHeadsModel
+        >>> from transformers import GPT2Tokenizer, MoTDoubleHeadsModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("mot")
+        >>> tokenizer = GPT2Tokenizer.from_pretrained("mot")
         >>> model = MoTDoubleHeadsModel.from_pretrained("mot")
 
         >>> # Add a [CLS] to the vocabulary (we should train it also!)
