@@ -23,6 +23,7 @@ class CohereLayerNorm(nn.Module):
         return hidden_states.to(input_dtype)
 
 class CohereRotaryEmbedding(LlamaRotaryEmbedding):
+
     def rotate_half(self, x):
         # Split and rotate
         x1 = x[..., ::2]
@@ -30,7 +31,7 @@ class CohereRotaryEmbedding(LlamaRotaryEmbedding):
         rot_x = torch.stack([-x2, x1], dim=-1).flatten(-2)
         return rot_x
 
-    def foward(self, q, k, position_ids=None, unsqueeze_dim=1):
+    def forward(self, q, k, position_ids=None, unsqueeze_dim=1):
         dtype = q.dtype
         q,k  = q.float(), k.float()
         cos, sin = self.comput_cos_sin(q, position_ids)
