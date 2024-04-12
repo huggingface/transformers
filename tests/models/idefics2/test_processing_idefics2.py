@@ -182,14 +182,16 @@ class Idefics2ProcessorTest(unittest.TestCase):
         text_str = "In this image, we see"
         text = text_str + image_str
 
+        n_image_repeat = 5 if self.processor.image_processor.do_image_splitting else 1
+
         # fmt: off
         inputs = self.processor(text=text, images=self.image1, add_special_tokens=False)
         tokenized_sentence = self.processor.tokenizer(text_str, add_special_tokens=False)
-        expected_input_ids = [tokenized_sentence["input_ids"] + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id]]
+        expected_input_ids = [tokenized_sentence["input_ids"] + ([self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len) * n_image_repeat + [self.fake_image_token_id]]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
 
         inputs = self.processor(text=text, images=self.image1)
-        expected_input_ids = [[self.bos_token_id] + tokenized_sentence["input_ids"] + [self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len + [self.fake_image_token_id]]
+        expected_input_ids = [[self.bos_token_id] + tokenized_sentence["input_ids"] + ([self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len) * n_image_repeat + [self.fake_image_token_id]]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         # fmt: on
 

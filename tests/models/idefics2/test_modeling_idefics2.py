@@ -96,7 +96,7 @@ class Idefics2VisionText2TextModelTester:
         },
         use_cache=False,
         tie_word_embeddings=False,
-        image_token_id=32_001,
+        image_token_id=99,
     ):
         self.parent = parent
         self.is_training = is_training
@@ -145,7 +145,11 @@ class Idefics2VisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 1
+
+        # For simplicity just set the last n tokens to the image token
+        n_image_tokens_per_batch = self.num_images * self.perceiver_config["resampler_n_latents"]
+        input_ids[:, -n_image_tokens_per_batch:] = self.image_token_id
         attention_mask = input_ids.ne(1).to(torch_device)
         inputs_dict = {
             "pixel_values": pixel_values,
@@ -220,9 +224,13 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
 
+            # Ignore copy
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            # Input ids should be clamped to the maximum size of the vocabulary
-            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
+            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
+            n_images = self.model_tester.num_images * self.model_tester.perceiver_config["resampler_n_latents"]
+            model.image_token_id = model_vocab_size - 15 - 1
+            inputs_dict["input_ids"][:, -n_images:] = model.image_token_id
 
             # make sure that decoder_input_ids are resized as well
             if "decoder_input_ids" in inputs_dict:
@@ -309,9 +317,15 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
             # Check bias if present
             if output_embeds.bias is not None:
                 self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
+
+            # Ignore copy
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            # Input ids should be clamped to the maximum size of the vocabulary
-            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
+            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
+            n_images = self.model_tester.num_images * self.model_tester.perceiver_config["resampler_n_latents"]
+            model.image_token_id = model_vocab_size - 15 - 1
+            inputs_dict["input_ids"][:, -n_images:] = model.image_token_id
+
             if "decoder_input_ids" in inputs_dict:
                 inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
@@ -383,9 +397,13 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
 
+            # Ignore copy
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            # Input ids should be clamped to the maximum size of the vocabulary
-            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
+            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
+            n_images = self.model_tester.num_images * self.model_tester.perceiver_config["resampler_n_latents"]
+            model.model.image_token_id = model_vocab_size - 15 - 1
+            inputs_dict["input_ids"][:, -n_images:] = model.model.image_token_id
 
             # make sure that decoder_input_ids are resized as well
             if "decoder_input_ids" in inputs_dict:
@@ -472,9 +490,15 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
             # Check bias if present
             if output_embeds.bias is not None:
                 self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
+
+            # Ignore copy
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            # Input ids should be clamped to the maximum size of the vocabulary
-            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
+            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 2)
+            n_images = self.model_tester.num_images * self.model_tester.perceiver_config["resampler_n_latents"]
+            model.model.image_token_id = model_vocab_size - 15 - 1
+            inputs_dict["input_ids"][:, -n_images:] = model.model.image_token_id
+
             if "decoder_input_ids" in inputs_dict:
                 inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
@@ -484,7 +508,24 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 @require_torch
 class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("amyeroberts/idefics2")
+        self.processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b")
+        self.image1 = Image.open(
+            BytesIO(
+                requests.get(
+                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                ).content
+            )
+        )
+        self.image2 = Image.open(
+            BytesIO(requests.get("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg").content)
+        )
+        self.image3 = Image.open(
+            BytesIO(
+                requests.get(
+                    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                ).content
+            )
+        )
 
     def tearDown(self):
         gc.collect()
@@ -493,32 +534,15 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_integration_test(self):
         model = Idefics2ForConditionalGeneration.from_pretrained(
-            "amyeroberts/idefics2",
+            "HuggingFaceM4/idefics2-8b-base",
             torch_dtype=torch.bfloat16,
+            device_map="auto",
         )
         model.to(torch_device)
 
-        # Create pixel inputs
-        image1 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-                ).content
-            )
-        )
-        image2 = Image.open(
-            BytesIO(requests.get("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg").content)
-        )
-        image3 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
-                ).content
-            )
-        )
         # Create inputs
-        text = ["<image>In this image, we see", "bla, bla <image><image>"]
-        images = [[image1], [image2, image3]]
+        text = "<image>In this image, we see"
+        images = self.image1
         inputs = self.processor(text=text, images=images, return_tensors="pt", padding=True)
         inputs.to(torch_device)
 
@@ -533,20 +557,17 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_integration_test_4bit(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = Idefics2ForConditionalGeneration.from_pretrained("amyeroberts/idefics2", load_in_4bit=True)
+        model = Idefics2ForConditionalGeneration.from_pretrained(
+            "HuggingFaceM4/idefics2-8b-base", load_in_4bit=True, device_map="auto"
+        )
 
         # Create pixel inputs
-        image1 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-                ).content
-            )
-        )
-        inputs = self.processor(text="<image>In this image we wee", images=image1, return_tensors="pt")
+        text = ["<image>In this image, we see", "bla, bla <image><image>"]
+        images = [[self.image1], [self.image2, self.image3]]
+        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt")
 
         generated_ids = model.generate(**inputs, bad_words_ids=self.processor.bad_words_ids, max_new_tokens=10)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "In this image, we see the Statue of Liberty in the foreground and"
+        expected_generated_text = "In this image, we see the statue of liberty and the buildings in the background"
         self.assertEqual(generated_texts[0], expected_generated_text)
