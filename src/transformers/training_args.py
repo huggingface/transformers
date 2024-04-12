@@ -22,7 +22,7 @@ from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union, get_args, get_origin
+from typing import Any, Dict, List, Optional, Union
 
 from huggingface_hub import get_full_repo_name
 from packaging import version
@@ -171,6 +171,18 @@ class OptimizerNames(ExplicitEnum):
     GALORE_ADAMW_LAYERWISE = "galore_adamw_layerwise"
     GALORE_ADAMW_8BIT_LAYERWISE = "galore_adamw_8bit_layerwise"
     GALORE_ADAFACTOR_LAYERWISE = "galore_adafactor_layerwise"
+
+
+# Sometimes users will pass in a `str` repr of a dict in the CLI
+# We need to track what fields those can be. Each time a new arg
+# has a dict type, it must be added to this list
+VALID_DICT_FIELDS = [
+    "accelerator_config",
+    "fsdp_config",
+    "deepspeed",
+    "gradient_checkpointing_kwargs",
+    "lr_scheduler_kwargs",
+]
 
 
 # TODO: `TrainingArguments` users rely on it being fully mutable. In the future see if we can narrow this to a few keys: https://github.com/huggingface/transformers/pull/25903
@@ -803,11 +815,11 @@ class TrainingArguments:
         default="linear",
         metadata={"help": "The scheduler type to use."},
     )
-    lr_scheduler_kwargs: Optional[Dict] = field(
+    lr_scheduler_kwargs: Optional[Union[dict, str]] = field(
         default_factory=dict,
         metadata={
             "help": (
-                "Extra parameters for the lr_scheduler such as {'num_cycles': 1} for the cosine with hard restarts"
+                "Extra parameters for the lr_scheduler such as {'num_cycles': 1} for the cosine with hard restarts."
             )
         },
     )
@@ -1118,9 +1130,8 @@ class TrainingArguments:
             )
         },
     )
-    # Do not touch this type annotation or it will stop working in CLI
     fsdp_config: Optional[Union[dict, str]] = field(
-        default=None,
+        default_factory=dict,
         metadata={
             "help": (
                 "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The value is either a "
@@ -1137,9 +1148,8 @@ class TrainingArguments:
             )
         },
     )
-    # Do not touch this type annotation or it will stop working in CLI
-    accelerator_config: Optional[str] = field(
-        default=None,
+    accelerator_config: Optional[Union[AcceleratorConfig, dict, str]] = field(
+        default_factory=dict,
         metadata={
             "help": (
                 "Config to be used with the internal Accelerator object initializtion. The value is either a "
@@ -1147,9 +1157,8 @@ class TrainingArguments:
             )
         },
     )
-    # Do not touch this type annotation or it will stop working in CLI
-    deepspeed: Optional[str] = field(
-        default=None,
+    deepspeed: Optional[Union[dict, str]] = field(
+        default_factory=dict,
         metadata={
             "help": (
                 "Enable deepspeed and pass the path to deepspeed json config file (e.g. `ds_config.json`) or an already"
@@ -1252,8 +1261,8 @@ class TrainingArguments:
             "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
         },
     )
-    gradient_checkpointing_kwargs: Optional[dict] = field(
-        default=None,
+    gradient_checkpointing_kwargs: Optional[Union[dict, str]] = field(
+        default_factory=dict,
         metadata={
             "help": "Gradient checkpointing key word arguments such as `use_reentrant`. Will be passed to `torch.utils.checkpoint.checkpoint` through `model.gradient_checkpointing_enable`."
         },
@@ -1380,6 +1389,13 @@ class TrainingArguments:
     )
 
     def __post_init__(self):
+        # Parse in args that could be `dict` sent in from the CLI as a string
+        for field in VALID_DICT_FIELDS:
+            # We only want to do this if the str starts with a bracket to indiciate a `dict`
+            # else its likely a filename if supported
+            if isinstance(getattr(self, field), str) and getattr(self, field).startswith("{"):
+                setattr(self, field, json.loads(getattr(self, field)))
+
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
         # see https://github.com/huggingface/transformers/issues/10628
@@ -1392,21 +1408,6 @@ class TrainingArguments:
 
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
-
-        # for any and all args that can use a `dict`, check if the value is a `str` and if so, load it as a `dict`
-        dict_fields = []
-        for name, field in self.__dataclass_fields__.items():
-            # `Optional` winds up being a `Union` when digging through the types
-            if get_origin(field.type) == Union:
-                # Check if raw `dict` types are in any of its values
-                if any(arg in (dict, Dict) for arg in get_args(field.type)):
-                    # If found, add to the list of fields that can be loaded as a `dict`
-                    dict_fields.append(name)
-
-        # Next parse in the `dict` fields
-        for name in dict_fields:
-            if isinstance(getattr(self, name), str) and getattr(self, name).startswith("{"):
-                setattr(self, name, json.loads(getattr(self, name)))
 
         if isinstance(self.evaluation_strategy, EvaluationStrategy):
             warnings.warn(
@@ -1789,7 +1790,6 @@ class TrainingArguments:
             if not isinstance(self.accelerator_config, (AcceleratorConfig)):
                 if self.accelerator_config is None:
                     self.accelerator_config = AcceleratorConfig()
-                # Case: passed in as a str, could be either a `path` or raw dict
                 elif isinstance(self.accelerator_config, dict):
                     self.accelerator_config = AcceleratorConfig(**self.accelerator_config)
                 else:
