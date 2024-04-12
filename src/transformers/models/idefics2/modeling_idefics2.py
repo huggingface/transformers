@@ -1770,23 +1770,42 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoProcessor, Idefics2ForConditionalGeneration
+        >>> import requests
+        >>> import torch
+        >>> from PIL import Image
+        >>> from io import BytesIO
 
-        >>> checkpoint = "HuggingFaceM4/idefic2"
+        >>> from transformers import AutoProcessor, AutoModelForVision2Seq
+        >>> from transformers.image_utils import load_image
 
-        >>> model = Idefics2ForConditionalGeneration.from_pretrained(checkpoint)
-        >>> processor = AutoProcessor.from_pretrained(checkpoint)
+        >>> DEVICE = "cuda:0"
 
-        >>> dogs_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_nlvr2/raw/main/image1.jpeg"
+        >>> # Note that passing the image urls (instead of the actual pil images) to the processor is also possible
+        >>> image1 = load_image("https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg")
+        >>> image2 = load_image("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
+        >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
 
-        >>> text = [
-        ...     "User:<image>Describe this image.<end_of_utterance>\nAssistant:",
-        ]
-        >>> inputs = processor(text=text, images=dogs_url_image, return_tensors="pt")
+        >>> processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b-base")
+        >>> model = AutoModelForVision2Seq.from_pretrained(
+        ...     "HuggingFaceM4/idefics2-8b-base",
+        >>> ).to(DEVICE)
 
-        >>> generate_ids = model.generate(**inputs, max_new_tokens=6)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True)[0]
-        'User: Describe this image.\nAssistant: An image of two dogs.'
+        >>> BAD_WORDS_IDS = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
+        >>> EOS_WORDS_IDS = [processor.tokenizer.eos_token_id]
+
+        >>> # Create inputs
+        >>> prompts = [
+        ...   "<image>In this image, we can see the city of New York, and more specifically the Statue of Liberty.<image>In this image,",
+        ...   "In which city is that bridge located?<image>",
+        >>> ]
+        >>> images = [[image1, image2], [image3]]
+        >>> inputs = processor(text=prompts, padding=True, return_tensors="pt").to(DEVICE)
+
+        >>> # Generate
+        >>> generated_ids = model.generate(**inputs, bad_words_ids=BAD_WORDS_IDS, max_new_tokens=500)
+        >>> generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+        >>> print(generated_texts)
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
