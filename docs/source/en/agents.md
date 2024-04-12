@@ -458,16 +458,7 @@ tools to be selected instead of the one you have defined.
 
 ### Replacing an existing tool in the agent's toolbox
 
-Replacing existing tools can be done simply by updating the agent's toolbox using method `agent.toolbox.update_tool()`. Here's how one would do so:
-
-```python
-from transformers import CodeAgent, load_tool
-
-tool_replacement = load_tool("diffusers/controlnet-canny-tool")
-
-agent = CodeAgent(llm_callable)
-agent.toolbox.update_tool("image-transformation", tool_replacement)
-```
+Replacing existing tools can be done simply by updating the agent's toolbox using method `agent.toolbox.update_tool()`.
 
 
 <Tip>
