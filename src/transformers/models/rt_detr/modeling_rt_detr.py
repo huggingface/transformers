@@ -559,7 +559,7 @@ def get_contrastive_denoising_training_group(
 
 class RTDetrConvEncoder(nn.Module):
     """
-    Convolutional backbone, using either the AutoBackbone API or one from the timm library.
+    Convolutional backbone using the AutoBackbone API.
 
     nn.BatchNorm2d layers are replaced by RTDetrFrozenBatchNorm2d as defined above.
     https://github.com/lyuwenyu/RT-DETR/blob/main/rtdetr_pytorch/src/nn/backbone/presnet.py#L142
