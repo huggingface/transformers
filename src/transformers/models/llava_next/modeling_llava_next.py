@@ -557,13 +557,13 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 mask = pixel_values[:, :, 0, 0, 0] == self.pad_token_id
                 # patches_lengths is a list contaning the lengths of the patches
                 # contained in every image 
-                # print("pixel values first row, ", pixel_values[0][-1])
-                # print("mask: ", mask)
+                print("pixel values first row, ", pixel_values[0][-1])
+                print("mask: ", mask)
                 patches_lengths = torch.argmax(mask.to(torch.int), dim=1)
                 img_idcs_with_no_pad = ~mask.any(dim=1) 
-                # print("patches_ lengths before setting others", patches_lengths)
-                # print("pad token id in model: ", self.pad_token_id)
-                # print("img indices without padding: ", img_idcs_with_no_pad)
+                print("patches_ lengths before setting others", patches_lengths)
+                print("pad token id in model: ", self.pad_token_id)
+                print("img indices without padding: ", img_idcs_with_no_pad)
                 patches_lengths[img_idcs_with_no_pad] = max_num_patches
                 # print("these are the patches lengths: ", patches_lengths)
 
@@ -574,12 +574,12 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 total_patches = 0
                 for idx, img in enumerate(pixel_values):
                     unpadded_patches = patches_lengths[idx]
-                    # print("Length of unpadded patches: ", unpadded_patches)
+                    print("Length of unpadded patches: ", unpadded_patches)
                     total_patches += unpadded_patches
                     unpadded_pixel_values.append(img[:unpadded_patches])
 
                 unpadded_pixel_values = torch.cat(unpadded_pixel_values, dim=0)
-                # print("shape of unpadded pixel values : ", unpadded_pixel_values.shape)
+                print("shape of unpadded pixel values : ", unpadded_pixel_values.shape)
                 # Use the mask to index the original tensor, filtering out the rows with pad_token
 
                 reshaped_pixel_values = unpadded_pixel_values.view(total_patches, num_channels, height, width)
@@ -605,7 +605,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 new_image_features = []
                 for image_idx, image_feature in enumerate(image_features):
                     num_unpadded_patches = image_feature.shape[0]
-                    # print("num _unpadded patches: ", num_unpadded_patches)
+                    print("num _unpadded patches: ", num_unpadded_patches)
                     # image feature has shape; 5/3/4 (num_patches), 3, 336, 336
                     if image_feature.shape[0] > 1:
                         base_image_feature = image_feature[0]
@@ -618,8 +618,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                             self.config.image_grid_pinpoints,
                             self.config.vision_config.image_size,
                         )
-                        # print("the image sizes I used to obtain these num_patches: ", image_sizes[image_idx])
-                        # print("these are the num patch  and num ht: ", num_patch_height, num_patch_width)
+                        print("the image sizes I used to obtain these num_patches: ", image_sizes[image_idx])
+                        print("these are the num patch  and num ht: ", num_patch_height, num_patch_width)
                         if num_patch_height*num_patch_width + 1 != num_unpadded_patches:
                             print("Found mismatched shapes!!!!!!!!!!!!")
 
@@ -629,20 +629,20 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                             print(image_features[image_idx].shape)
                             print(pixel_values[image_idx])
                         assert num_patch_height*num_patch_width + 1 == num_unpadded_patches
-                        # print("shape of image ftrs before view: ", image_feature.shape)
+                        print("shape of image ftrs before view: ", image_feature.shape)
                         image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1) # divide 5 - 1 
                         # patches into 2x2 grid for num_patch_height, 
                         # num_patch_width  and 336x336x3
-                        # print("shape of image ftrs before permute: ", image_feature.shape)
+                        print("shape of image ftrs before permute: ", image_feature.shape)
                         image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous() # concatenate all the features
                         # 3x
-                        # print("shape of image ftrs before flatten: ", image_feature.shape)
+                        print("shape of image ftrs before flatten: ", image_feature.shape)
                         image_feature = image_feature.flatten(1, 2).flatten(2, 3)
-                        # print("shape of image feature: before unpadding: ", image_feature.shape)
+                        print("shape of image feature: before unpadding: ", image_feature.shape)
                         image_feature = unpad_image(image_feature, image_sizes[image_idx])
-                        # print("shape of image feature: before catting: ", image_feature.shape)
-                        # print("shape of image newline: ", self.image_newline.shape)
-                        # print("after transform: ", self.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1).shape)
+                        print("shape of image feature: before catting: ", image_feature.shape)
+                        print("shape of image newline: ", self.image_newline.shape)
+                        print("after transform: ", self.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1).shape)
                         image_feature = torch.cat(
                             (
                                 image_feature,
