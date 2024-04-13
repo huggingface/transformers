@@ -49,6 +49,9 @@ from ...utils.backbone_utils import load_backbone
 from .configuration_rt_detr import RTDetrConfig
 
 
+if is_scipy_available():
+    from scipy.optimize import linear_sum_assignment
+
 logger = logging.get_logger(__name__)
 
 MultiScaleDeformableAttention = None
@@ -132,10 +135,6 @@ class MultiScaleDeformableAttentionFunction(Function):
         )
 
         return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
-
-
-if is_scipy_available():
-    from scipy.optimize import linear_sum_assignment
 
 
 logger = logging.get_logger(__name__)
