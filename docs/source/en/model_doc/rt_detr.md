@@ -38,6 +38,7 @@ Initially, an image is processed using a pre-trained convolutional neural networ
 from transformers import RTDetrForObjectDetection, RTDetrImageProcessor
 from PIL import Image
 import json
+import torch
 
 image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
 with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
@@ -49,6 +50,7 @@ image_processing = RTDetrImageProcessor.from_pretrained("sbchoi/rtdetr_r50vd")
 encoding = image_processing(images=image, annotations=target, return_tensors="pt")
 model = RTDetrForObjectDetection.from_pretrained("sbchoi/rtdetr_r50vd")
 outputs = model(**encoding)
+results = image_processing.post_process_object_detection(outputs, target_sizes=torch.tensor([[480, 640]]), threshold=0.3)
 ```
 
 ## RTDetrConfig
