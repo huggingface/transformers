@@ -386,8 +386,15 @@ def get_cosine_with_min_lr_schedule_with_warmup(
     )
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
+
 def _get_wsd_scheduler_lambda(
-    current_step: int, *, num_warmup_steps: int, num_stable_steps: int, num_decay_steps: int, num_cycles: float, min_lr_ratio: float
+    current_step: int,
+    *,
+    num_warmup_steps: int,
+    num_stable_steps: int,
+    num_decay_steps: int,
+    num_cycles: float,
+    min_lr_ratio: float,
 ):
     if current_step < num_warmup_steps:
         return float(current_step) / float(max(1, num_warmup_steps))
@@ -399,6 +406,7 @@ def _get_wsd_scheduler_lambda(
         return (1.0 - min_lr_ratio) * value + min_lr_ratio
     return min_lr_ratio
 
+
 def get_wsd_schedule(
     optimizer: Optimizer,
     num_warmup_steps: int,
@@ -406,7 +414,7 @@ def get_wsd_schedule(
     num_decay_steps: int,
     min_lr_ratio: float = 0,
     num_cycles: float = 0.5,
-    last_epoch: int = -1
+    last_epoch: int = -1,
 ):
     """
     Create a schedule with a learning rate that has three stages:
