@@ -754,11 +754,7 @@ class DbrxExpertGLU(nn.Module):
         self.activation_fn = ACT2FN[act_fn_name]
 
     def forward(self, x: torch.Tensor, expert_idx: int) -> torch.Tensor:
-        # Slice in no grad context to avoid storing the entire param in backward pass
-        # with torch.no_grad():
-        #     expert_w1 = self.w1.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx]
-        #     expert_v1 = self.v1.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx]
-        #     expert_w2 = self.w2.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx]
+        # Detach experts to avoid backpropagating through the expert selection
         expert_w1 = self.w1.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx].detach()
         expert_v1 = self.v1.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx].detach()
         expert_w2 = self.w2.view(self.moe_num_experts, self.ffn_hidden_size, self.hidden_size)[expert_idx].detach()
