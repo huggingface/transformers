@@ -463,7 +463,7 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 @require_torch
 class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b")
+        self.processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b-base")
         self.image1 = Image.open(
             BytesIO(
                 requests.get(
@@ -501,11 +501,11 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor(text=text, images=images, return_tensors="pt", padding=True)
         inputs.to(torch_device)
 
-        generated_ids = model.generate(**inputs, bad_words_ids=self.processor.bad_words_ids, max_new_tokens=10)
+        generated_ids = model.generate(**inputs, max_new_tokens=10)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         # Batch affects generated text. Single batch output: ['In this image, we see the Statue of Liberty in the foreground and']
-        expected_generated_text = "In this image, we see a statue of liberty and few buildings in the background"
+        expected_generated_text = "In this image, we see the Statue of Liberty, the New York City"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @slow
@@ -521,8 +521,8 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         images = [[self.image1], [self.image2, self.image3]]
         inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt")
 
-        generated_ids = model.generate(**inputs, bad_words_ids=self.processor.bad_words_ids, max_new_tokens=10)
+        generated_ids = model.generate(**inputs, max_new_tokens=10)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "In this image, we see the statue of liberty and the buildings in the background"
+        expected_generated_text = "In this image, we see the Statue of Liberty, the Hudson River,"
         self.assertEqual(generated_texts[0], expected_generated_text)
