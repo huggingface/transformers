@@ -195,7 +195,7 @@ class RTDetrModelTester:
             dropout=self.dropout,
             activation_dropout=self.activation_dropout,
             encode_proj_layers=self.encode_proj_layers,
-            pe_temperature=self.pe_temperature,
+            positional_encoding_temperature=self.positional_encoding_temperature,
             encoder_activation_function=self.encoder_activation_function,
             activation_function=self.activation_function,
             eval_size=self.eval_size,
