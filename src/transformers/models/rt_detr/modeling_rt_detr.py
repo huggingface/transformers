@@ -1164,7 +1164,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
             if hasattr(module, "bias"):
                 module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if hasattr(module, "weight_embedding") and self.config.learnt_init_query:
+        if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             nn.init.normal_(module)
 
 
@@ -1599,7 +1599,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
             )
 
         # decoder embedding
-        if config.learnt_init_query:
+        if config.learn_initial_query:
             weight_embedding = torch.empty(1, config.num_queries, config.d_model)
             self.weight_embedding = nn.Parameter(weight_embedding, requires_grad=True)
 
@@ -1833,7 +1833,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         )
 
         # extract region features
-        if self.config.learnt_init_query:
+        if self.config.learn_initial_query:
             target = self.weight_embedding.tile([batch_size, 1, 1])
         else:
             target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))

@@ -70,7 +70,7 @@ class RTDetrModelTester:
         dropout=0.0,
         activation_dropout=0.0,
         encode_proj_layers=[2],
-        pe_temperature=10000,
+        positional_encoding_temperature=10000,
         encoder_activation_function="gelu",
         activation_function="silu",
         eval_size=None,
@@ -88,10 +88,9 @@ class RTDetrModelTester:
         num_denoising=10,
         label_noise_ratio=0.5,
         box_noise_scale=1.0,
-        learnt_init_query=False,
+        learn_initial_query=False,
         anchor_image_size=[64, 64],
         image_size=64,
-        eval_idx=-1,
         disable_custom_kernels=True,
         with_box_refine=True,
     ):
@@ -119,7 +118,7 @@ class RTDetrModelTester:
         self.dropout = dropout
         self.activation_dropout = activation_dropout
         self.encode_proj_layers = encode_proj_layers
-        self.pe_temperature = pe_temperature
+        self.positional_encoding_temperature = positional_encoding_temperature
         self.encoder_activation_function = encoder_activation_function
         self.activation_function = activation_function
         self.eval_size = eval_size
@@ -136,10 +135,9 @@ class RTDetrModelTester:
         self.num_denoising = num_denoising
         self.label_noise_ratio = label_noise_ratio
         self.box_noise_scale = box_noise_scale
-        self.learnt_init_query = learnt_init_query
+        self.learn_initial_query = learn_initial_query
         self.anchor_image_size = anchor_image_size
         self.image_size = image_size
-        self.eval_idx = eval_idx
         self.disable_custom_kernels = disable_custom_kernels
         self.with_box_refine = with_box_refine
 
@@ -214,7 +212,7 @@ class RTDetrModelTester:
             num_denoising=self.num_denoising,
             label_noise_ratio=self.label_noise_ratio,
             box_noise_scale=self.box_noise_scale,
-            learnt_init_query=self.learnt_init_query,
+            learn_initial_query=self.learn_initial_query,
             anchor_image_size=self.anchor_image_size,
             image_size=self.image_size,
             eval_idx=self.eval_idx,

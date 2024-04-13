@@ -114,7 +114,7 @@ class RTDetrConfig(PretrainedConfig):
             The fraction of denoising labels to which random noise should be added.
         box_noise_scale (`float`, *optional*, defaults to 1.0):
             Scale or magnitude of noise to be added to the bounding boxes.
-        learnt_init_query (`bool`, *optional*, defaults to `False`):
+        learn_initial_query (`bool`, *optional*, defaults to `False`):
             Indicates whether the initial query embeddings for the decoder should be learned during training
         anchor_image_size (`Tuple[int, int]`, *optional*, defaults to `[640, 640]`):
             Height and width of the input image used during evaluation to generate the bounding box anchors.
@@ -216,7 +216,7 @@ class RTDetrConfig(PretrainedConfig):
         num_denoising=100,
         label_noise_ratio=0.5,
         box_noise_scale=1.0,
-        learnt_init_query=False,
+        learn_initial_query=False,
         anchor_image_size=[640, 640],
         disable_custom_kernels=True,
         with_box_refine=True,
@@ -300,7 +300,7 @@ class RTDetrConfig(PretrainedConfig):
         self.num_denoising = num_denoising
         self.label_noise_ratio = label_noise_ratio
         self.box_noise_scale = box_noise_scale
-        self.learnt_init_query = learnt_init_query
+        self.learn_initial_query = learn_initial_query
         self.anchor_image_size = anchor_image_size
         self.auxiliary_loss = auxiliary_loss
         self.disable_custom_kernels = disable_custom_kernels
