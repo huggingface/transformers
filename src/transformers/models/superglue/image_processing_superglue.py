@@ -17,18 +17,77 @@ from typing import Dict, Optional, Union
 
 import numpy as np
 
-from ... import SuperPointImageProcessor, is_vision_available
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ... import is_vision_available
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
+    ImageInput,
+    infer_channel_dimension_format,
+    is_scaled_image,
+    make_list_of_images,
+    to_numpy_array,
+    valid_images,
 )
-from ...utils import TensorType, logging
+from ...utils import TensorType, logging, requires_backends
 
 
 if is_vision_available():
-    pass
+    import PIL
 
 logger = logging.get_logger(__name__)
+
+
+# Copied from transformers.models.superpoint.image_processing_superpoint.is_grayscale
+def is_grayscale(
+    image: ImageInput,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+):
+    if input_data_format == ChannelDimension.FIRST:
+        if image.shape[0] == 1:
+            return True
+        return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
+    elif input_data_format == ChannelDimension.LAST:
+        if image.shape[-1] == 1:
+            return True
+        return np.all(image[..., 0] == image[..., 1]) and np.all(image[..., 1] == image[..., 2])
+
+
+# Copied from transformers.models.superpoint.image_processing_superpoint.convert_to_grayscale
+def convert_to_grayscale(
+    image: ImageInput,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+) -> ImageInput:
+    """
+    Converts an image to grayscale format using the NTSC formula. Only support numpy and PIL Image. TODO support torch
+    and tensorflow grayscale conversion
+
+    This function is supposed to return a 1-channel image, but it returns a 3-channel image with the same value in each
+    channel, because of an issue that is discussed in :
+    https://github.com/huggingface/transformers/pull/25786#issuecomment-1730176446
+
+    Args:
+        image (Image):
+            The image to convert.
+        input_data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format for the input image.
+    """
+    requires_backends(convert_to_grayscale, ["vision"])
+
+    if isinstance(image, np.ndarray):
+        if input_data_format == ChannelDimension.FIRST:
+            gray_image = image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
+            gray_image = np.stack([gray_image] * 3, axis=0)
+        elif input_data_format == ChannelDimension.LAST:
+            gray_image = image[..., 0] * 0.2989 + image[..., 1] * 0.5870 + image[..., 2] * 0.1140
+            gray_image = np.stack([gray_image] * 3, axis=-1)
+        return gray_image
+
+    if not isinstance(image, PIL.Image.Image):
+        return image
+
+    image = image.convert("L")
+    return image
 
 
 class SuperGlueImageProcessor(BaseImageProcessor):
@@ -61,7 +120,13 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        self.superpoint_preprocessor = SuperPointImageProcessor(do_resize, size, do_rescale, rescale_factor, **kwargs)
+        size = size if size is not None else {"height": 480, "width": 640}
+        size = get_size_dict(size, default_to_square=False)
+
+        self.do_resize = do_resize
+        self.size = size
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
 
     def resize(
         self,
@@ -93,7 +158,16 @@ class SuperGlueImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
 
-        return self.superpoint_preprocessor.resize(image, size, data_format, input_data_format, **kwargs)
+        size = get_size_dict(size, default_to_square=False)
+
+        return resize(
+            image,
+            size=(size["height"], size["width"]),
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
+
 
     def preprocess(
         self,
@@ -145,25 +219,71 @@ class SuperGlueImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
 
-        preprocessed_images = self.superpoint_preprocessor.preprocess(
-            images,
-            do_resize,
-            size,
-            do_rescale,
-            rescale_factor,
-            return_tensors,
-            data_format,
-            input_data_format,
-            **kwargs,
-        )
+        do_resize = do_resize if do_resize is not None else self.do_resize
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
 
-        batched_images = preprocessed_images.data["pixel_values"]
-        batch_size, channels, height, width = batched_images.shape
+        size = size if size is not None else self.size
+        size = get_size_dict(size, default_to_square=False)
+
+        images = make_list_of_images(images)
+
+        if not valid_images(images):
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+
+        if do_resize and size is None:
+            raise ValueError("Size must be specified if do_resize is True.")
+
+        if do_rescale and rescale_factor is None:
+            raise ValueError("Rescale factor must be specified if do_rescale is True.")
+
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
+
+        if is_scaled_image(images[0]) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
+
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
+        if do_resize:
+            images = [self.resize(image=image, size=size, input_data_format=input_data_format) for image in images]
+
+        if do_rescale:
+            images = [
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                for image in images
+            ]
+
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
+        # Checking if image is RGB or grayscale
+        for i in range(len(images)):
+            if not is_grayscale(images[i], input_data_format):
+                images[i] = convert_to_grayscale(images[i], input_data_format=input_data_format)
+
+        images = [
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+        ]
+
+        batch_size = len(images)
 
         if batch_size % 2 != 0:
-            raise ValueError("SuperGlue takes pairs of images, but the number of images provided in impair")
+            logger.warning("SuperGlue takes pairs of images, but the number of images provided in impair, so the last image will be doubled.")
+            images.append(images[-1])
 
-        paired_batched_images = batched_images.reshape(-1, 2, channels, height, width)
-        preprocessed_images.data["pixel_values"] = paired_batched_images
+        channels, height, width = images[0].shape
+        images = np.array(images).reshape(-1, 2, channels, height, width)
 
-        return preprocessed_images
+        data = {"pixel_values": images}
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
