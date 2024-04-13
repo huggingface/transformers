@@ -117,10 +117,6 @@ SPECIAL_CASES_TO_ALLOW = {
         "t2u_variance_predictor_hidden_dim",
         "t2u_variance_predictor_kernel_size",
     ],
-    # used internally in the configuration class file
-    "OLMoConfig": [
-        "change_meta_init_to_cpu",
-    ],
 }
 
 
