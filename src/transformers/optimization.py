@@ -399,7 +399,7 @@ def _get_wsd_scheduler_lambda(
         return (1.0 - min_lr_ratio) * value + min_lr_ratio
     return min_lr_ratio
 
-def get_wsd_scheduler(
+def get_wsd_schedule(
     optimizer: Optimizer,
     num_warmup_steps: int,
     num_stable_steps: int,
@@ -456,7 +456,7 @@ TYPE_TO_SCHEDULER_FUNCTION = {
     SchedulerType.INVERSE_SQRT: get_inverse_sqrt_schedule,
     SchedulerType.REDUCE_ON_PLATEAU: get_reduce_on_plateau_schedule,
     SchedulerType.COSINE_WITH_MIN_LR: get_cosine_with_min_lr_schedule_with_warmup,
-    SchedulerType.WARMUP_STABLE_DECAY: get_wsd_scheduler,
+    SchedulerType.WARMUP_STABLE_DECAY: get_wsd_schedule,
 }
 
 
