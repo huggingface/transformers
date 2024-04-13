@@ -147,7 +147,6 @@ class GPT2Attention(nn.Module):
             ),
             persistent=False,
         )
-        self.register_buffer("masked_bias", torch.tensor(-1e4), persistent=False)
 
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
