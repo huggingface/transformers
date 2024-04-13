@@ -162,7 +162,7 @@ class RTDetrConfig(PretrainedConfig):
     >>> # Initializing a RT-DETR configuration
     >>> configuration = RTDetrConfig()
 
-    >>> # Initializing a model (with random weights) from the checkpoing/todo style configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = RTDetrModel(configuration)
 
     >>> # Accessing the model configuration
