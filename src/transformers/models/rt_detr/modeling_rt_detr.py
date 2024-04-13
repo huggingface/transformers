@@ -40,7 +40,6 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_ninja_available,
     is_scipy_available,
-    is_timm_available,
     is_torch_cuda_available,
     logging,
     replace_return_docstrings,
