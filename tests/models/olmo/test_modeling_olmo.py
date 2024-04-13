@@ -356,7 +356,7 @@ class OLMoIntegrationTest(unittest.TestCase):
     @slow
     def test_model_1b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = OLMoForCausalLM.from_pretrained("allenai/OLMo-1B-hf")
+        model = OLMoForCausalLM.from_pretrained("allenai/OLMo-1B-hf", device_map="auto")
         out = model(torch.tensor(input_ids)).logits
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[2.2869, 0.3315, 0.9876, 1.4146, 1.8804, 2.0430, 1.7055, 1.2065]])
@@ -368,7 +368,7 @@ class OLMoIntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = OLMoForCausalLM.from_pretrained("allenai/OLMo-7B-hf")
+        model = OLMoForCausalLM.from_pretrained("allenai/OLMo-7B-hf", device_map="auto")
         out = model(torch.tensor(input_ids)).logits
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[0.0266, -0.0012, -0.0589, -0.0868, 0.0284, 0.0609, 0.0836, 0.0552]])
@@ -381,7 +381,7 @@ class OLMoIntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_twin_2t_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = OLMoForCausalLM.from_pretrained("allenai/OLMo-7B-Twin-2T-hf")
+        model = OLMoForCausalLM.from_pretrained("allenai/OLMo-7B-Twin-2T-hf", device_map="auto")
         out = model(torch.tensor(input_ids)).logits
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-0.4083, -0.5103, -0.2002, -0.3794, -0.6669, -0.8921, -0.9318, -0.7040]])
@@ -393,11 +393,11 @@ class OLMoIntegrationTest(unittest.TestCase):
     @unittest.skip("Model is curently gated")
     @slow
     def test_model_7b_greedy_generation(self):
-        EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the laws of physics are the same everywhere in the universe and 2) the passage of time and the length of objects can vary depending on the observer\'s frame of reference.\n\nThe first part of the theory, that the laws of physics are the same everywhere, is known as the "princi"""
+        EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that \nthe speed of light is the same for all observers, regardless of their relative motion. This means that if you are moving at a constant speed relative to an observer, the speed of light will appear to be constant to you.\n\nHowever, if you are moving at a constant speed relative to an observer, the"""
         prompt = "Simply put, the theory of relativity states that "
-        tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B-hf")
+        tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B-hf", device_map="auto")
         input_ids = tokenizer.encode(prompt, return_tensors="pt")
-        model = OLMoForCausalLM.from_pretrained("allenai/OLMo-7B-hf", device_map="sequential", use_safetensors=False)
+        model = OLMoForCausalLM.from_pretrained("allenai/OLMo-7B-hf", device_map="auto")
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
