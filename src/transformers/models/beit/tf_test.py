@@ -521,6 +521,7 @@ class TFBeitLayer(tf.keras.layers.Layer):
         relative_position_bias: Optional["TFBeitRelativePositionBias"] = None,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
+        layer_outputs = {}
         self_attention_outputs = self.attention(
             # in Beit, layernorm is applied before self-attention
             input_tensor=self.layernorm_before(inputs=hidden_states),
@@ -530,30 +531,37 @@ class TFBeitLayer(tf.keras.layers.Layer):
             training=training,
         )
         attention_output = self_attention_outputs[0]
+        layer_outputs['attention_output'] = attention_output.numpy()
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # apply lambda_1 if present
         if self.lambda_1 is not None:
             attention_output = self.lambda_1 * attention_output
+            layer_outputs['attention_output_w_lambda'] = attention_output.numpy()
 
         # first residual connection
         hidden_states = self.drop_path(attention_output) + hidden_states
-
+        layer_outputs["residual_1"] = hidden_states.numpy()
         # in Beit, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
+        layer_outputs["layernorm_after"] = layer_output.numpy()
 
         layer_output = self.intermediate(layer_output)
+        layer_outputs["intermediate"] = layer_output.numpy()
         layer_output = self.beit_output(layer_output)
+        layer_outputs["beit_output"] = layer_output.numpy()
 
         if self.lambda_2 is not None:
             layer_output = self.lambda_2 * layer_output
+            layer_outputs["beit_output_w_lambda"] = layer_output.numpy()
 
         # second residual connection
         layer_output = self.drop_path(layer_output) + hidden_states
+        layer_outputs["residual_2"] = layer_output.numpy()
 
         outputs = (layer_output,) + outputs
 
-        return outputs
+        return outputs, layer_outputs
 
 
 # Taken and modified from here:
@@ -655,7 +663,7 @@ class TFBeitEncoder(tf.keras.layers.Layer):
     ) -> Union[tuple, TFBaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-
+        all_layer_outputs = {}
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -667,7 +675,7 @@ class TFBeitEncoder(tf.keras.layers.Layer):
             relative_position_bias = (
                 self.relative_position_bias(0.0) if self.relative_position_bias is not None else None
             )
-            layer_outputs = layer_module(
+            layer_outputs, layer_internals = layer_module(
                 hidden_states,
                 layer_head_mask,
                 output_attentions,
@@ -675,6 +683,10 @@ class TFBeitEncoder(tf.keras.layers.Layer):
             )
 
             hidden_states = layer_outputs[0]
+            all_layer_outputs[f"layer_{i}"] = {
+                "output": layer_outputs[0].numpy(),
+                "internals": layer_internals,
+            }
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -689,7 +701,7 @@ class TFBeitEncoder(tf.keras.layers.Layer):
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
-        )
+        ), all_layer_outputs
 
 
 @keras_serializable
@@ -698,11 +710,9 @@ class TFBeitMainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config: BeitConfig, add_pooling_layer: bool = True, **kwargs):
         super().__init__(**kwargs)
-
         self.config = config
         self.add_pooling_layer = add_pooling_layer
         self.embeddings = TFBeitEmbeddings(config, name="embeddings")
-
         self.encoder = TFBeitEncoder(
             config,
             window_size=self.embeddings.patch_embeddings.patch_shape,
@@ -713,20 +723,10 @@ class TFBeitMainLayer(tf.keras.layers.Layer):
             if config.use_mean_pooling
             else tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
         )
-
-        # We are setting the `data_format` like so because from here on we will revert to the
-        # NCHW output format
         self.pooler = TFBeitPooler(config, name="pooler") if add_pooling_layer else None
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         return self.embeddings.patch_embeddings
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        raise NotImplementedError
 
     @unpack_inputs
     def call(
@@ -749,10 +749,6 @@ class TFBeitMainLayer(tf.keras.layers.Layer):
             raise ValueError("You have to specify pixel_values")
 
         # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         if head_mask is not None:
             raise NotImplementedError
         else:
@@ -760,7 +756,11 @@ class TFBeitMainLayer(tf.keras.layers.Layer):
 
         embedding_output = self.embeddings(pixel_values, bool_masked_pos, training=training)
 
-        encoder_outputs = self.encoder(
+        # Get layerwise outputs
+        layerwise_outputs = {}
+        layerwise_outputs["embeddings"] = embedding_output.numpy()
+
+        encoder_outputs, all_layer_outputs = self.encoder(
             embedding_output,
             head_mask=head_mask,
             output_attentions=output_attentions,
@@ -770,8 +770,21 @@ class TFBeitMainLayer(tf.keras.layers.Layer):
         )
 
         sequence_output = encoder_outputs[0]
+        for i, layer_output in enumerate(encoder_outputs.hidden_states):
+            if i==12: continue
+            layerwise_outputs[f"encoder.layer_.{i}"] = layer_output.numpy()
+
+            sub_layer_outputs = all_layer_outputs[f"layer_{i}"]["internals"]
+            
+            for sub_layer_name, sub_layer_output in sub_layer_outputs.items():
+                layerwise_outputs[f"encoder.layer_.{i}.{sub_layer_name}"] = sub_layer_output
+
         sequence_output = self.layernorm(sequence_output)
+        layerwise_outputs["layernorm"] = sequence_output.numpy()
+
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        if pooled_output is not None:
+            layerwise_outputs["pooler"] = pooled_output.numpy()
 
         if not return_dict:
             head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
@@ -782,8 +795,7 @@ class TFBeitMainLayer(tf.keras.layers.Layer):
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-        )
-
+        ), layerwise_outputs
 
 class TFBeitPooler(tf.keras.layers.Layer):
     def __init__(self, config: BeitConfig, **kwargs):
@@ -944,7 +956,7 @@ class TFBeitModel(TFBeitPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[tuple, TFBeitModelOutputWithPooling]:
-        outputs = self.beit(
+        outputs, layerwise_outputs = self.beit(
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,
             head_mask=head_mask,
@@ -954,7 +966,7 @@ class TFBeitModel(TFBeitPreTrainedModel):
             training=training,
         )
 
-        return outputs
+        return outputs, layerwise_outputs
 
     def serving_output(self, output: TFBeitModelOutputWithPooling) -> TFBeitModelOutputWithPooling:
         hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
@@ -1037,7 +1049,7 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
         outputs = model(**inputs, labels=labels) >>> round(float(outputs.loss), 2)"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.beit(
+        outputs, layerwise_outputs = self.beit(
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,
             head_mask=head_mask,
@@ -1065,7 +1077,7 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
             logits=prediction_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-        )
+        ), layerwise_outputs
 
     def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
         hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None

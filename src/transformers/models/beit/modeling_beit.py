@@ -414,6 +414,9 @@ class BeitLayer(nn.Module):
         output_attentions: bool = False,
         relative_position_bias: Optional["BeitRelativePositionBias"] = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
+
+        layer_outputs = {}
+
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in BEiT, layernorm is applied before self-attention
             head_mask,
@@ -421,30 +424,40 @@ class BeitLayer(nn.Module):
             relative_position_bias=relative_position_bias,
         )
         attention_output = self_attention_outputs[0]
+        layer_outputs["attention_output"] = attention_output
+
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # apply lambda_1 if present
         if self.lambda_1 is not None:
             attention_output = self.lambda_1 * attention_output
+            layer_outputs["attention_output_w_lambda"] = attention_output
 
         # first residual connection
         hidden_states = self.drop_path(attention_output) + hidden_states
+        layer_outputs["residual_1"] = hidden_states
 
         # in BEiT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
+        layer_outputs["layernorm_after"] = layer_output
 
         layer_output = self.intermediate(layer_output)
+        layer_outputs["intermediate_output"] = layer_output
+
         layer_output = self.output(layer_output)
+        layer_outputs["output"] = layer_output
 
         if self.lambda_2 is not None:
             layer_output = self.lambda_2 * layer_output
+            layer_outputs["output_w_lambda"] = layer_output
 
         # second residual connection
         layer_output = self.drop_path(layer_output) + hidden_states
+        layer_outputs["residual_2"] = layer_output
 
         outputs = (layer_output,) + outputs
 
-        return outputs
+        return outputs, layer_outputs
 
 
 class BeitRelativePositionBias(nn.Module):
@@ -518,6 +531,7 @@ class BeitEncoder(nn.Module):
     ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
+        all_layer_outputs = {}
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -536,10 +550,15 @@ class BeitEncoder(nn.Module):
                 relative_position_bias = (
                     self.relative_position_bias() if self.relative_position_bias is not None else None
                 )
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions, relative_position_bias)
+                layer_outputs, layer_internals = layer_module(hidden_states, layer_head_mask, output_attentions, relative_position_bias)
 
             hidden_states = layer_outputs[0]
 
+            all_layer_outputs[f"layer_{i}"] = {
+                "output": layer_outputs[0],
+                "internals": layer_internals,
+            }
+            
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
@@ -552,7 +571,7 @@ class BeitEncoder(nn.Module):
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
-        )
+        ), all_layer_outputs
 
 
 class BeitPreTrainedModel(PreTrainedModel):
@@ -686,8 +705,10 @@ class BeitModel(BeitPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output, (patch_height, patch_width) = self.embeddings(pixel_values, bool_masked_pos)
+        layerwise_outputs = {}
+        layerwise_outputs["embeddings"] = embedding_output.detach().numpy()
 
-        encoder_outputs = self.encoder(
+        encoder_outputs, all_layer_outputs = self.encoder(
             embedding_output,
             head_mask=head_mask,
             output_attentions=output_attentions,
@@ -695,8 +716,21 @@ class BeitModel(BeitPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
+
+        for i, layer_output in enumerate(encoder_outputs.hidden_states):
+            if i==12: continue
+            layerwise_outputs[f"encoder.layer_.{i}"] = layer_output.numpy()
+
+            sub_layer_outputs = all_layer_outputs[f"layer_{i}"]["internals"]
+            
+            for sub_layer_name, sub_layer_output in sub_layer_outputs.items():
+                layerwise_outputs[f"encoder.layer_.{i}.{sub_layer_name}"] = sub_layer_output.detach().numpy()
+
         sequence_output = self.layernorm(sequence_output)
+        layerwise_outputs["layernorm"] = sequence_output.numpy()
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        if pooled_output is not None:
+            layerwise_outputs["pooler"] = pooled_output.numpy()
 
         if not return_dict:
             head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
@@ -707,7 +741,7 @@ class BeitModel(BeitPreTrainedModel):
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-        )
+        ), layerwise_outputs
 
 
 class BeitPooler(nn.Module):
@@ -799,7 +833,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.beit(
+        outputs, all_layer_outputs = self.beit(
             pixel_values,
             bool_masked_pos=bool_masked_pos,
             head_mask=head_mask,
@@ -826,7 +860,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
             logits=prediction_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-        )
+        ), all_layer_outputs
 
 
 @add_start_docstrings(
