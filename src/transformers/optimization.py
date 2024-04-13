@@ -273,7 +273,7 @@ def get_polynomial_decay_schedule_with_warmup(
 
     lr_init = optimizer.defaults["lr"]
     if not (lr_init > lr_end):
-        raise ValueError(f"lr_end ({lr_end}) must be be smaller than initial lr ({lr_init})")
+        raise ValueError(f"lr_end ({lr_end}) must be smaller than initial lr ({lr_init})")
 
     lr_lambda = partial(
         _get_polynomial_decay_schedule_with_warmup_lr_lambda,
