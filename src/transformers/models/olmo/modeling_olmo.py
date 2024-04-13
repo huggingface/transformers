@@ -1155,7 +1155,8 @@ OLMO_GENERATION_EXAMPLE = r"""
     >>> # Generate
     >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
     >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-    "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+    "Hey, are you conscious? Can you talk to me?\n\nI'm sorry, I'm not sure what you're asking.\n\nI"
+    ```
 """
 
 
@@ -1215,7 +1216,7 @@ class OLMoForCausalLM(OLMoPreTrainedModel):
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:
-        ```"""
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
