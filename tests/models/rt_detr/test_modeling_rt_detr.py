@@ -215,7 +215,6 @@ class RTDetrModelTester:
             learn_initial_query=self.learn_initial_query,
             anchor_image_size=self.anchor_image_size,
             image_size=self.image_size,
-            eval_idx=self.eval_idx,
             disable_custom_kernels=self.disable_custom_kernels,
             with_box_refine=self.with_box_refine,
         )
