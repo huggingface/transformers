@@ -118,8 +118,6 @@ class RTDetrConfig(PretrainedConfig):
             Indicates whether the initial query embeddings for the decoder should be learned during training
         anchor_image_size (`Tuple[int, int]`, *optional*, defaults to `[640, 640]`):
             Height and width of the input image used during evaluation to generate the bounding box anchors.
-        eval_idx (`int`, *optional*, defaults to -1):
-            Id of the decoder layer used to obtain the logits and bounding boxes.
         disable_custom_kernels (`bool`, *optional*, defaults to `True`):
             Whether to disable custom kernels.
         with_box_refine (`bool`, *optional*, defaults to `True`):
