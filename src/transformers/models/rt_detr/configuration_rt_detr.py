@@ -73,7 +73,7 @@ class RTDetrConfig(PretrainedConfig):
             The dropout ratio for activations inside the fully connected layer.
         encode_proj_layers (`List[int]`, *optional*, defaults to `[2]`):
             Indexes of the projected layers to be used in the encoder.
-        positioal_encoding_temperature (`int`, *optional*, defaults to 10000):
+        positional_encoding_temperature (`int`, *optional*, defaults to 10000):
             The temperature parameter used to create the positional encodings.
         encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -196,7 +196,7 @@ class RTDetrConfig(PretrainedConfig):
         dropout=0.0,
         activation_dropout=0.0,
         encode_proj_layers=[2],
-        positioal_encoding_temperature=10000,
+        positional_encoding_temperature=10000,
         encoder_activation_function="gelu",
         activation_function="silu",
         eval_size=None,
@@ -280,7 +280,7 @@ class RTDetrConfig(PretrainedConfig):
         self.activation_dropout = activation_dropout
         self.encode_proj_layers = encode_proj_layers
         self.encoder_layers = encoder_layers
-        self.positioal_encoding_temperature = positioal_encoding_temperature
+        self.positional_encoding_temperature = positional_encoding_temperature
         self.eval_size = eval_size
         self.normalize_before = normalize_before
         self.encoder_activation_function = encoder_activation_function
