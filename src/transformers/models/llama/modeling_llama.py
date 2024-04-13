@@ -50,7 +50,6 @@ from ...utils import (
 )
 from .configuration_llama import LlamaConfig
 
-
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
@@ -926,6 +925,7 @@ class LlamaModel(LlamaPreTrainedModel):
         )
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
+        self.gradient_checkpointing_kwargs = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -999,39 +999,94 @@ class LlamaModel(LlamaPreTrainedModel):
         all_self_attns = () if output_attentions else None
         next_decoder_cache = None
 
-        for decoder_layer in self.layers:
+        ###################################################################
+        ####### customized activation checkpointing with deepspeed ########
+        ###### CPU offloading and selective activation checkpointing ######
+        ###################################################################
+        if (
+            self.gradient_checkpointing 
+            and self.training
+            and 'use_deepspeed_grad_ckpt' in self.gradient_checkpointing_kwargs.keys()
+            and self.gradient_checkpointing_kwargs['use_deepspeed_grad_ckpt']
+        ):
+            if past_key_values or output_attentions or use_cache:
+                raise NotImplementedError("because torch SDPA does not need this")
+
+            def create_custom_forward(start, end):
+                def custom_forward(*inputs):
+                    output = []
+                    layers_ = self.layers[start:end]
+                    x_ = inputs[0] # hidden_states
+                    for i, layer in enumerate(layers_):
+                        x_ = layer(
+                            x_, 
+                            causal_mask,
+                            position_ids,
+                            None, # past_key_value
+                            False, # output_attentions
+                            False, # use_cache
+                            False, # cache_position
+                        )[0] # tuple to tensor
+                        output.append(x_)
+                    return output
+                return custom_forward
+
+            l = 0
+            total_num_layers = len(self.layers)
+            chunk_length = self.gradient_checkpointing_kwargs['num_checkpoints'] ## how many checkpoint do you want?
+
+            # appending first input
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+            while l < total_num_layers:
+                hidden_states_list = self._gradient_checkpointing_func(
+                    create_custom_forward(l, l+chunk_length),
                     hidden_states,
-                    causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
                 )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                )
+                l += chunk_length
+                if output_hidden_states:
+                    # appending layerwise outputs
+                    for hidden_states in hidden_states_list:
+                        all_hidden_states += (hidden_states,)
+                hidden_states = hidden_states_list[-1]
 
-            hidden_states = layer_outputs[0]
+            if output_hidden_states:
+                # input + layerwise outputs (execpt last hidden) should be the number of layers
+                all_hidden_states = all_hidden_states[:-1]
+                assert len(all_hidden_states) == len(self.layers), print(f"len(all_hidden_states) ({len(all_hidden_states)}) != len(self.layers) ({len(self.layers)})")
+                
+        else:
+            for decoder_layer in self.layers:
+                if output_hidden_states:
+                    all_hidden_states += (hidden_states,)
 
-            if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
+                if self.gradient_checkpointing and self.training:
+                    layer_outputs = self._gradient_checkpointing_func(
+                        decoder_layer.__call__,
+                        hidden_states,
+                        causal_mask,
+                        position_ids,
+                        past_key_values,
+                        output_attentions,
+                        use_cache,
+                        cache_position,
+                    )
+                else:
+                    layer_outputs = decoder_layer(
+                        hidden_states,
+                        attention_mask=causal_mask,
+                        position_ids=position_ids,
+                        past_key_value=past_key_values,
+                        output_attentions=output_attentions,
+                        use_cache=use_cache,
+                        cache_position=cache_position,
+                    )
+                hidden_states = layer_outputs[0]
+                if use_cache:
+                    next_decoder_cache = layer_outputs[2 if output_attentions else 1]
+                if output_attentions:
+                    all_self_attns += (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
 

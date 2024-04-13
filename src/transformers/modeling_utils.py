@@ -2209,14 +2209,40 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if gradient_checkpointing_kwargs is None:
             gradient_checkpointing_kwargs = {"use_reentrant": True}
 
-        gradient_checkpointing_func = functools.partial(checkpoint, **gradient_checkpointing_kwargs)
+        if (
+            gradient_checkpointing_kwargs is not None 
+            and "use_deepspeed_grad_ckpt" in gradient_checkpointing_kwargs.keys()
+            and gradient_checkpointing_kwargs["use_deepspeed_grad_ckpt"]
+        ):
+            assert torch.distributed.is_initialized(), print("deepspeed ckpt need dist.initialization because it call dist.rank() for printing ...")
+            num_checkpoints = gradient_checkpointing_kwargs["num_checkpoints"] if "num_checkpoints" in gradient_checkpointing_kwargs.keys() else 1
+            checkpoint_in_cpu = gradient_checkpointing_kwargs["checkpoint_in_cpu"] if "checkpoint_in_cpu" in gradient_checkpointing_kwargs.keys() else False
+            
+            from deepspeed.runtime.activation_checkpointing import checkpointing
+            checkpointing.configure(
+                mpu_=None, # For Megatron
+                deepspeed_config=None,
+                partition_activations=False, # For Megatron
+                contiguous_checkpointing=False, # For Megatron
+                num_checkpoints=num_checkpoints,
+                checkpoint_in_cpu=checkpoint_in_cpu,
+                synchronize=False,
+                profile=False,
+            )
+            gradient_checkpointing_func = checkpointing.checkpoint
+        else:
+            gradient_checkpointing_func = functools.partial(checkpoint, **gradient_checkpointing_kwargs)
 
         # For old GC format (transformers < 4.35.0) for models that live on the Hub
         # we will fall back to the overwritten `_set_gradient_checkpointing` method
         _is_using_old_format = "value" in inspect.signature(self._set_gradient_checkpointing).parameters
 
         if not _is_using_old_format:
-            self._set_gradient_checkpointing(enable=True, gradient_checkpointing_func=gradient_checkpointing_func)
+            self._set_gradient_checkpointing(
+                enable=True, 
+                gradient_checkpointing_func=gradient_checkpointing_func,
+                gradient_checkpointing_kwargs=gradient_checkpointing_kwargs,
+            )
         else:
             self.apply(partial(self._set_gradient_checkpointing, value=True))
             logger.warn(
@@ -2231,7 +2257,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # the gradients to make sure the gradient flows.
             self.enable_input_require_grads()
 
-    def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = checkpoint):
+    def _set_gradient_checkpointing(
+        self, enable: bool = True, 
+        gradient_checkpointing_func: Callable = checkpoint,
+        gradient_checkpointing_kwargs = False,
+    ):
         is_gradient_checkpointing_set = False
 
         # Apply it on the top-level module in case the top-level modules supports it
@@ -2240,12 +2270,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             self._gradient_checkpointing_func = gradient_checkpointing_func
             self.gradient_checkpointing = enable
             is_gradient_checkpointing_set = True
+            if hasattr(self, "gradient_checkpointing_kwargs"):
+                self.gradient_checkpointing_kwargs = gradient_checkpointing_kwargs
 
         for module in self.modules():
             if hasattr(module, "gradient_checkpointing"):
                 module._gradient_checkpointing_func = gradient_checkpointing_func
                 module.gradient_checkpointing = enable
                 is_gradient_checkpointing_set = True
+                if hasattr(module, "gradient_checkpointing_kwargs"):
+                    module.gradient_checkpointing_kwargs = gradient_checkpointing_kwargs
 
         if not is_gradient_checkpointing_set:
             raise ValueError(
