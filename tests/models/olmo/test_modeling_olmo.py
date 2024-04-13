@@ -18,13 +18,10 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import OLMoConfig, StaticCache, is_torch_available, logging, set_seed
+from transformers import OLMoConfig, is_torch_available, set_seed
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
-    CaptureLogger,
-    require_read_token,
     require_torch,
-    require_torch_gpu,
     slow,
     torch_device,
 )
