@@ -10011,16 +10011,16 @@ def get_inverse_sqrt_schedule(*args, **kwargs):
     requires_backends(get_inverse_sqrt_schedule, ["torch"])
 
 
-def get_wsd_schedule(*args, **kwargs):
-    requires_backends(get_wsd_schedule, ["torch"])
-
-
 def get_linear_schedule_with_warmup(*args, **kwargs):
     requires_backends(get_linear_schedule_with_warmup, ["torch"])
 
 
 def get_polynomial_decay_schedule_with_warmup(*args, **kwargs):
     requires_backends(get_polynomial_decay_schedule_with_warmup, ["torch"])
+
+
+def get_wsd_schedule(*args, **kwargs):
+    requires_backends(get_wsd_schedule, ["torch"])
 
 
 def get_scheduler(*args, **kwargs):

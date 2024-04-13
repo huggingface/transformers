@@ -8414,8 +8414,8 @@ if TYPE_CHECKING:
             get_inverse_sqrt_schedule,
             get_linear_schedule_with_warmup,
             get_polynomial_decay_schedule_with_warmup,
-            get_wsd_schedule,
             get_scheduler,
+            get_wsd_schedule,
         )
         from .pytorch_utils import Conv1D, apply_chunking_to_forward, prune_layer
 
