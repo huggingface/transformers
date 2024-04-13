@@ -170,7 +170,6 @@ class RTDetrConfig(PretrainedConfig):
     ```"""
 
     model_type = "rt_detr"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
