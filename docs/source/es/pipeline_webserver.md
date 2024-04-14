@@ -11,6 +11,12 @@ Crear un motor de inferencia es un tema complejo, y la "mejor" solución probabl
 
 Lo fundamental para entender es que podemos usar un iterador, tal como [en un conjunto de datos](pipeline_tutorial), ya que un servidor web es básicamente un sistema que espera solicitudes y las trata a medida que llegan.
 
+<!--
+To do:
+Check the content of es/pipeline_tutorial.md
+And update the link [en un conjunto de datos](pipeline_tutorial) -> (pipeline_tutorial#using-pipelines-on-a-dataset)
+-->
+
 Por lo general, los servidores web están multiplexados (multihilo, asíncrono, etc.) para manejar varias solicitudes simultáneamente. Por otro lado, los flujos de trabajo (y principalmente los modelos subyacentes) no son realmente ideales para el paralelismo; consumen mucha RAM, por lo que es mejor darles todos los recursos disponibles cuando se están ejecutando o es un trabajo intensivo en cómputo.
 
 Vamos a resolver esto haciendo que el servidor web maneje la carga ligera de recibir y enviar solicitudes, y que un único hilo maneje el trabajo real. Este ejemplo va a utilizar `starlette`. El marco de trabajo no es realmente importante, pero es posible que debas ajustar o cambiar el código si estás utilizando otro para lograr el mismo efecto.
