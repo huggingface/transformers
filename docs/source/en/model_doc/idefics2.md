@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The IDEFICS2 model was created by the [Hugging Face M4](https://huggingface.co/HuggingFaceM4) team and authored by Léo Tronchon, Hugo Laurencon, Victor Sanh.
+The IDEFICS-2 model was created by the [Hugging Face M4](https://huggingface.co/HuggingFaceM4) team and authored by Léo Tronchon, Hugo Laurencon, Victor Sanh.
 The accompanying blog post can be found [here](https://huggingface.co/blog/idefics2).
 
 IDEFICS-2 is an open multimodal model that accepts arbitrary sequences of image and text inputs and produces text
