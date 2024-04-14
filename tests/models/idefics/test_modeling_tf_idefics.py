@@ -896,6 +896,7 @@ class TFIdeficsForVisionText2TextTest(TFIdeficsModelTest, unittest.TestCase):
     def test_save_load(self):
         pass
 
+
 @require_tf
 @require_vision
 class TFIdeficsModelIntegrationTest(TestCasePlus):
