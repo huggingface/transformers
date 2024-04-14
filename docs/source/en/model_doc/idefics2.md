@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# IDEFICS2
+# IDEFICS-2
 
 ## Overview
 
