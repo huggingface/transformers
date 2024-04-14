@@ -21,7 +21,7 @@ Por lo general, los servidores web están multiplexados (multihilo, asíncrono, 
 
 Vamos a resolver esto haciendo que el servidor web maneje la carga ligera de recibir y enviar solicitudes, y que un único hilo maneje el trabajo real. Este ejemplo va a utilizar `starlette`. El marco de trabajo no es realmente importante, pero es posible que debas ajustar o cambiar el código si estás utilizando otro para lograr el mismo efecto.
 
-Create `server.py`:
+Crear `server.py`:
 
 ```py
 from starlette.applications import Starlette
@@ -62,28 +62,25 @@ async def startup_event():
     asyncio.create_task(server_loop(q))
 ```
 
-Now you can start it with:
+Ahora puedes empezar con:
 ```bash
 uvicorn server:app
 ```
 
-And you can query it:
+Y puedes consultarlo con:
 ```bash
 curl -X POST -d "test [MASK]" http://localhost:8000/
 #[{"score":0.7742936015129089,"token":1012,"token_str":".","sequence":"test."},...]
 ```
 
-And there you go, now you have a good idea of how to create a webserver!
+¡Y listo, ahora tienes una buena idea de cómo crear un servidor web!
 
-What is really important is that we load the model only **once**, so there are no copies
-of the model on the webserver. This way, no unnecessary RAM is being used.
-Then the queuing mechanism allows you to do fancy stuff like maybe accumulating a few
-items before inferring to use dynamic batching:
+Lo realmente importante es cargar el modelo solo **una vez**, de modo que no haya copias del modelo en el servidor web. De esta manera, no se utiliza RAM innecesariamente. Luego, el mecanismo de queuing te permite hacer cosas sofisticadas como acumular algunos elementos antes de inferir para usar el agrupamiento dinámico:
 
 <Tip warning={true}>
 
-The code sample below is intentionally written like pseudo-code for readability.
-Do not run this without checking if it makes sense for your system resources!
+El ejemplo de código a continuación está escrito intencionalmente como seudocódigo para facilitar la lectura.
+¡No lo ejecutes sin verificar si tiene sentido para los recursos de tu sistema!
 
 </Tip>
 
@@ -104,58 +101,34 @@ for rq, out in zip(queues, outs):
     await rq.put(out)
 ```
 
-Again, the proposed code is optimized for readability, not for being the best code.
-First of all, there's no batch size limit which is usually not a 
-great idea. Next, the timeout is reset on every queue fetch, meaning you could
-wait much more than 1ms before running the inference (delaying the first request 
-by that much). 
+Nuevamente, el código propuesto está optimizado para la legibilidad, no para ser el mejor código.
+En primer lugar, no hay límite de tamaño de lote, lo cual generalmente no es una buena idea. Luego, el tiempo de espera se restablece en cada obtención de la cola, lo que significa que podrías esperar mucho más de 1ms antes de ejecutar la inferencia (retrasando la primera solicitud en esa cantidad).
 
-It would be better to have a single 1ms deadline.
+Sería mejor tener un único plazo de 1ms.
 
-This will always wait for 1ms even if the queue is empty, which might not be the
-best since you probably want to start doing inference if there's nothing in the queue.
-But maybe it does make sense if batching is really crucial for your use case.
-Again, there's really no one best solution.
+Esto siempre esperará 1ms incluso si la cola está vacía, lo que podría no ser lo mejor ya que probablemente quieras comenzar a hacer inferencias si no hay nada en la cola. Pero tal vez tenga sentido si el agrupamiento es realmente crucial para tu caso de uso. Nuevamente, no hay una solución única y mejor.
 
 
-## Few things you might want to consider
+## Algunas cosas que podrías considerar
 
-### Error checking
+### Comprobación de errores
 
-There's a lot that can go wrong in production: out of memory, out of space,
-loading the model might fail, the query might be wrong, the query might be
-correct but still fail to run because of a model misconfiguration, and so on.
+Hay muchas cosas que pueden salir mal en producción: falta de memoria, falta de espacio, cargar el modelo podría fallar, la consulta podría ser incorrecta, la consulta podría ser correcta pero aún así fallar debido a una mala configuración del modelo, y así sucesivamente.
 
-Generally, it's good if the server outputs the errors to the user, so
-adding a lot of `try..except` statements to show those errors is a good
-idea. But keep in mind it may also be a security risk to reveal all those errors depending 
-on your security context.
+Generalmente, es bueno que el servidor muestre los errores al usuario, por lo que agregar muchos bloques `try..except` para mostrar esos errores es una buena idea. Pero ten en cuenta que también puede ser un riesgo de seguridad revelar todos esos errores dependiendo de tu contexto de seguridad.
 
-### Circuit breaking
+### Interrupción de circuito
 
-Webservers usually look better when they do circuit breaking. It means they 
-return proper errors when they're overloaded instead of just waiting for the query indefinitely. Return a 503 error instead of waiting for a super long time or a 504 after a long time.
+Los servidores web suelen verse mejor cuando hacen interrupciones de circuitos. Significa que devuelven errores adecuados cuando están sobrecargados en lugar de simplemente esperar la consulta indefinidamente. Devolver un error 503 en lugar de esperar un tiempo muy largo o un error 504 después de mucho tiempo.
 
-This is relatively easy to implement in the proposed code since there is a single queue.
-Looking at the queue size is a basic way to start returning errors before your 
-webserver fails under load.
+Esto es relativamente fácil de implementar en el código propuesto ya que hay una sola cola. Mirar el tamaño de la cola es una forma básica de empezar a devolver errores antes de que tu servidor web falle bajo carga.
 
-### Blocking the main thread
+### Bloqueo del hilo principal
 
-Currently PyTorch is not async aware, and computation will block the main
-thread while running. That means it would be better if PyTorch was forced to run
-on its own thread/process. This wasn't done here because the code is a lot more
-complex (mostly because threads and async and queues don't play nice together).
-But ultimately it does the same thing.
+Actualmente, PyTorch no es consciente de la asincronía, y el cálculo bloqueará el hilo principal mientras se ejecuta. Esto significa que sería mejor si PyTorch se viera obligado a ejecutarse en su propio hilo/proceso. Esto no se hizo aquí porque el código es mucho más complejo (principalmente porque los hilos, la asincronía y las colas no se llevan bien juntos). Pero en última instancia, hace lo mismo.
 
-This would be important if the inference of single items were long (> 1s) because 
-in this case, it means every query during inference would have to wait for 1s before
-even receiving an error.
+Esto sería importante si la inferencia de elementos individuales fuera larga (> 1s) porque en este caso, significa que cada consulta durante la inferencia tendría que esperar 1s antes de recibir incluso un error.
 
-### Dynamic batching
+### Procesamiento por lotes dinámico
 
-In general, batching is not necessarily an improvement over passing 1 item at 
-a time (see [batching details](./main_classes/pipelines#pipeline-batching) for more information). But it can be very effective
-when used in the correct setting. In the API, there is no dynamic
-batching by default (too much opportunity for a slowdown). But for BLOOM inference -
-which is a very large model - dynamic batching is **essential** to provide a decent experience for everyone.
+En general, el procesamiento por lotes no es necesariamente una mejora respecto a pasar 1 elemento a la vez (ver [procesamiento por lotes](https://huggingface.co/docs/transformers/main_classes/pipelines#pipeline-batching) para más información). Pero puede ser muy efectivo cuando se usa en el entorno correcto. En la API, no hay procesamiento por lotes dinámico por defecto (demasiada oportunidad para una desaceleración). Pero para la inferencia de BLOOM - que es un modelo muy grande - el procesamiento por lotes dinámico es **esencial** para proporcionar una experiencia decente para todos.
