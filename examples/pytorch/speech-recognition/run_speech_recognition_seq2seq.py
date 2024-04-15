@@ -452,19 +452,17 @@ def main():
             "only be set for multilingual checkpoints."
         )
 
-    # TODO (Sanchit): deprecate these arguments in v4.40
+    # TODO (Sanchit): deprecate these arguments in v4.41
     if model_args.forced_decoder_ids is not None:
         logger.warning(
-            "The use of `forced_decoder_ids` is deprecated and will be removed in v4.40."
+            "The use of `forced_decoder_ids` is deprecated and will be removed in v4.41."
             "Please use the `language` and `task` arguments instead"
         )
         model.generation_config.forced_decoder_ids = model_args.forced_decoder_ids
-    else:
-        model.generation_config.forced_decoder_ids = None
 
     if model_args.suppress_tokens is not None:
         logger.warning(
-            "The use of `suppress_tokens` is deprecated and will be removed in v4.40."
+            "The use of `suppress_tokens` is deprecated and will be removed in v4.41."
             "Should you need `suppress_tokens`, please manually set them in the fine-tuning script."
         )
         model.generation_config.suppress_tokens = model_args.suppress_tokens
