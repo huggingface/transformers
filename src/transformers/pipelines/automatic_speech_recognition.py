@@ -411,6 +411,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if len(inputs.shape) != 1:
             raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
 
+        if not chunk_length_s:
+            chunk_length_s = inputs.shape[0] / self.feature_extractor.sampling_rate
+
         if chunk_length_s:
             if stride_length_s is None:
                 stride_length_s = chunk_length_s / 6
