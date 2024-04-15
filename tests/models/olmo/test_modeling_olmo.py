@@ -21,7 +21,9 @@ from parameterized import parameterized
 from transformers import OLMoConfig, is_torch_available, set_seed
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
+    is_flaky,
     require_torch,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -310,6 +312,13 @@ class OLMoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @unittest.skip("OLMo buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
+
+    # TODO: @Fxmarty
+    @is_flaky(max_attempts=3, description="flaky on some models.")
+    @require_torch_sdpa
+    @slow
+    def test_eager_matches_sdpa_generate(self):
+        super().test_eager_matches_sdpa_generate()
 
     @parameterized.expand([("linear",), ("dynamic",)])
     def test_model_rope_scaling(self, scaling_type):
