@@ -7051,6 +7051,27 @@ def load_tf_weights_in_realm(*args, **kwargs):
     requires_backends(load_tf_weights_in_realm, ["torch"])
 
 
+class RecurrentGemmaForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RecurrentGemmaModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RecurrentGemmaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
