@@ -1146,8 +1146,8 @@ OLMO_GENERATION_EXAMPLE = r"""
     ```python
     >>> from transformers import AutoTokenizer, OLMoForCausalLM
 
-    >>> model = OLMoForCausalLM.from_pretrained("allenai/OLMo-7B-hf")
-    >>> tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B-hf")
+    >>> model = OLMoForCausalLM.from_pretrained("allenai/OLMo-1B-hf")
+    >>> tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-1B-hf")
 
     >>> prompt = "Hey, are you conscious? Can you talk to me?"
     >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1155,7 +1155,7 @@ OLMO_GENERATION_EXAMPLE = r"""
     >>> # Generate
     >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
     >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-    "Hey, are you conscious? Can you talk to me?\nI'm sorry, I'm sorry, I'm sorry, I'm sorry, I"
+    "Hey, are you conscious? Can you talk to me?\nI’m not sure if you’re conscious of this, but I’m"
     ```
 """
 
