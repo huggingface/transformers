@@ -17,12 +17,20 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {
-    "configuration_vitpose": ["VITPOSE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTPoseConfig", "ViTPoseOnnxConfig"]
-}
+_import_structure = {"configuration_vitpose": ["VITPOSE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTPoseConfig"]}
+
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_vitpose"] = ["ViTPoseImageProcessor"]
+
 
 try:
     if not is_torch_available():
@@ -38,7 +46,15 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_vitpose import VITPOSE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTPoseConfig, ViTPoseOnnxConfig
+    from .configuration_vitpose import VITPOSE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTPoseConfig
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_vitpose import ViTPoseImageProcessor
 
     try:
         if not is_torch_available():

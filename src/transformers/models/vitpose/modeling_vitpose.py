@@ -504,7 +504,7 @@ class ViTPoseModel(ViTPosePreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        pooled_output = None
 
         if not return_dict:
             head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)

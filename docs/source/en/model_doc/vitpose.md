@@ -25,6 +25,12 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/ViTAE-Transformer/ViTPose).
 
 
+## ViTPoseImageProcessor
+
+[[autodoc]] ViTPoseImageProcessor
+    - preprocess
+
+
 ## ViTPoseConfig
 
 [[autodoc]] ViTPoseConfig

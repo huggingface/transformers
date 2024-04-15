@@ -21,18 +21,35 @@ URL: https://github.com/vitae-transformer/vitpose
 import argparse
 from pathlib import Path
 
+import numpy as np
 import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import ViTFeatureExtractor, ViTPoseConfig, ViTPoseForPoseEstimation
-from transformers.utils import logging
+from transformers import ViTPoseConfig, ViTPoseForPoseEstimation, ViTPoseImageProcessor
 
 
-# from pathlib import Path
+def get_config(model_name):
+    config = ViTPoseConfig()
+    # size of the architecture
+    if "small" in model_name:
+        config.hidden_size = 768
+        config.intermediate_size = 2304
+        config.num_hidden_layers = 8
+        config.num_attention_heads = 8
+    elif "large" in model_name:
+        config.hidden_size = 1024
+        config.intermediate_size = 4096
+        config.num_hidden_layers = 24
+        config.num_attention_heads = 16
+    elif "huge" in model_name:
+        config.hidden_size = 1280
+        config.intermediate_size = 5120
+        config.num_hidden_layers = 32
+        config.num_attention_heads = 16
 
-logging.set_verbosity_info()
-logger = logging.get_logger(__name__)
+    return config
 
 
 def rename_key(name):
@@ -101,24 +118,7 @@ def convert_vitpose_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     """
 
     # define default ViTPose configuration
-    config = ViTPoseConfig()
-
-    # size of the architecture
-    if "small" in model_name:
-        config.hidden_size = 768
-        config.intermediate_size = 2304
-        config.num_hidden_layers = 8
-        config.num_attention_heads = 8
-    elif "large" in model_name:
-        config.hidden_size = 1024
-        config.intermediate_size = 4096
-        config.num_hidden_layers = 24
-        config.num_attention_heads = 16
-    elif "huge" in model_name:
-        config.hidden_size = 1280
-        config.intermediate_size = 5120
-        config.num_hidden_layers = 32
-        config.num_attention_heads = 16
+    config = get_config(model_name)
 
     # load HuggingFace model
     model = ViTPoseForPoseEstimation(config)
@@ -126,25 +126,77 @@ def convert_vitpose_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
 
     # load state_dict of original model, remove and rename some keys
     state_dict = torch.load(checkpoint_path, map_location="cpu")["state_dict"]
+
+    for name, param in state_dict.items():
+        print(name, param.shape)
+
     new_state_dict = convert_state_dict(state_dict, dim=config.hidden_size)
     model.load_state_dict(new_state_dict)
 
-    # Check outputs on an image, prepared by ViTFeatureExtractor
-    image_processor = ViTFeatureExtractor(size=config.image_size[::-1])
-    encoding = image_processor(images=prepare_img(), return_tensors="pt")
-    pixel_values = encoding["pixel_values"]
+    # TODO create image processor
+    image_processor = ViTPoseImageProcessor()
+    # image_processor = ViTImageProcessor(size=config.image_size[::-1])
+    # encoding = image_processor(images=prepare_img(), return_tensors="pt")
+    # pixel_values = encoding["pixel_values"]
+
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="vitpose_batch_data.pt", repo_type="dataset")
+    pixel_values = torch.load(filepath, map_location="cpu")["img"]
+    img_metas = torch.load(filepath, map_location="cpu")["img_metas"]
 
     print("Shape of pixel values:", pixel_values.shape)
     outputs = model(pixel_values)
 
-    # TODO assert logits
+    # TODO assert logits (output heatmap)
     print("Shape of logits:", outputs.logits.shape)
+    print("First values of output heatmp:", outputs.logits[0, 0, :3, :3])
+
+    # TODO verify postprocessing
+    batch_size = pixel_values.shape[0]
+    heatmaps = outputs.logits.cpu().numpy()
+
+    if "bbox_id" in img_metas[0]:
+        bbox_ids = []
+    else:
+        bbox_ids = None
+
+    c = np.zeros((batch_size, 2), dtype=np.float32)
+    s = np.zeros((batch_size, 2), dtype=np.float32)
+    image_paths = []
+    score = np.ones(batch_size)
+    for i in range(batch_size):
+        c[i, :] = img_metas[i]["center"]
+        s[i, :] = img_metas[i]["scale"]
+        image_paths.append(img_metas[i]["image_file"])
+
+        if "bbox_score" in img_metas[i]:
+            score[i] = np.array(img_metas[i]["bbox_score"]).reshape(-1)
+        if bbox_ids is not None:
+            bbox_ids.append(img_metas[i]["bbox_id"])
+
+    preds, maxvals = image_processor.keypoints_from_heatmaps(heatmaps, center=c, scale=s)
+
+    all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
+    all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
+    all_preds[:, :, 0:2] = preds[:, :, 0:2]
+    all_preds[:, :, 2:3] = maxvals
+    all_boxes[:, 0:2] = c[:, 0:2]
+    all_boxes[:, 2:4] = s[:, 0:2]
+    all_boxes[:, 4] = np.prod(s * 200.0, axis=1)
+    all_boxes[:, 5] = score
+
+    result = {}
+
+    result["preds"] = all_preds
+    result["boxes"] = all_boxes
+    result["image_paths"] = image_paths
+    result["bbox_ids"] = bbox_ids
+
+    print(result["boxes"])
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-        print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
+        print(f"Saving model and image processor for {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        print(f"Saving feature extractor to {pytorch_dump_folder_path}")
         image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
