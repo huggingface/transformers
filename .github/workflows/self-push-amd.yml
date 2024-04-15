@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout transformers
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
@@ -121,7 +121,7 @@ jobs:
           python3 utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
 
       - name: Report fetched tests
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: test_fetched
           path: /transformers/test_preparation.txt
@@ -239,7 +239,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
@@ -288,7 +288,7 @@ jobs:
           echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
           echo "env.CI_SHA = ${{ env.CI_SHA }}"
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         # To avoid failure when multiple commits are merged into `main` in a short period of time.
         # Checking out to an old commit beyond the fetch depth will get an error `fatal: reference is not a tree: ...
         # (Only required for `workflow_run` event, where we get the latest HEAD on `main` instead of the event commit)
@@ -303,7 +303,7 @@ jobs:
           git checkout ${{ env.CI_SHA }}
           echo "log = $(git log -n 1)"
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
       - name: Send message to Slack
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
