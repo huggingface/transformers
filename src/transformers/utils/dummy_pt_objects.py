@@ -9076,6 +9076,30 @@ class VitMattePreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class ViTPoseForPoseEstimation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ViTPoseModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ViTPosePreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 VITS_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -9231,34 +9255,6 @@ class Wav2Vec2ConformerForAudioFrameClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class ViTPoseForPoseEstimation(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class ViTPoseModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class ViTPosePreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class Wav2Vec2ForAudioFrameClassification(metaclass=DummyObject):
 class Wav2Vec2ConformerForCTC(metaclass=DummyObject):
     _backends = ["torch"]
 

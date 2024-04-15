@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Google AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -47,7 +47,7 @@ class ViTPoseConfig(PretrainedConfig):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to `[16, 16]`):
             The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to `3`):
+        num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
@@ -60,9 +60,9 @@ class ViTPoseConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -70,7 +70,7 @@ class ViTPoseConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        num_keypoints (`int`, *optional*, defaults to `17`):
+        num_keypoints (`int`, *optional*, defaults to 17):
             The number of keypoints.
 
     Example:
@@ -87,6 +87,7 @@ class ViTPoseConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "vitpose"
 
     def __init__(
@@ -105,7 +106,7 @@ class ViTPoseConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         qkv_bias=True,
         num_keypoints=17,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -126,7 +127,6 @@ class ViTPoseConfig(PretrainedConfig):
 
 
 class ViTPoseOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

@@ -926,10 +926,10 @@ _import_structure = {
         "ViTHybridConfig",
     ],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
-    "models.vitpose": ["VITPOSE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTPoseConfig"],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
     "models.vitdet": ["VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitDetConfig"],
     "models.vitmatte": ["VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitMatteConfig"],
+    "models.vitpose": ["VITPOSE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTPoseConfig"],
     "models.vits": [
         "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VitsConfig",
@@ -3619,14 +3619,6 @@ else:
             "ViTPreTrainedModel",
         ]
     )
-    _import_structure["models.vitpose"].extend(
-        [
-            "VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ViTPoseModel",
-            "ViTPosePreTrainedModel",
-            "ViTPoseForPoseEstimation",
-        ]
-    )
     _import_structure["models.vit_hybrid"].extend(
         [
             "VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3665,6 +3657,14 @@ else:
             "VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST",
             "VitMatteForImageMatting",
             "VitMattePreTrainedModel",
+        ]
+    )
+    _import_structure["models.vitpose"].extend(
+        [
+            "VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ViTPoseForPoseEstimation",
+            "ViTPoseModel",
+            "ViTPosePreTrainedModel",
         ]
     )
     _import_structure["models.vits"].extend(
@@ -5832,10 +5832,10 @@ if TYPE_CHECKING:
         ViTHybridConfig,
     )
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
-    from .models.vitpose import VITPOSE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTPoseConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
     from .models.vitdet import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP, VitDetConfig
     from .models.vitmatte import VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP, VitMatteConfig
+    from .models.vitpose import VITPOSE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTPoseConfig
     from .models.vits import (
         VITS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         VitsConfig,
@@ -8134,12 +8134,6 @@ if TYPE_CHECKING:
             ViTMAEModel,
             ViTMAEPreTrainedModel,
         )
-        from .models.vitpose import (
-            VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ViTPoseForPoseEstimation,
-            ViTPoseModel,
-            ViTPosePreTrainedModel,
-        )
         from .models.vit_msn import (
             VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViTMSNForImageClassification,
@@ -8156,6 +8150,12 @@ if TYPE_CHECKING:
             VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST,
             VitMatteForImageMatting,
             VitMattePreTrainedModel,
+        )
+        from .models.vitpose import (
+            VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ViTPoseForPoseEstimation,
+            ViTPoseModel,
+            ViTPosePreTrainedModel,
         )
         from .models.vits import (
             VITS_PRETRAINED_MODEL_ARCHIVE_LIST,

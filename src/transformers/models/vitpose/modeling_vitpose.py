@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 University of Sydney and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 University of Sydney and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -191,7 +191,6 @@ class ViTPoseSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -249,7 +248,6 @@ class ViTPoseIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
@@ -341,17 +339,11 @@ class ViTPoseEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     layer_head_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
@@ -373,7 +365,6 @@ class ViTPoseEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->ViTPose,vit->vitpose
 class ViTPosePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -384,22 +375,27 @@ class ViTPosePreTrainedModel(PreTrainedModel):
     base_model_prefix = "vitpose"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["ViTPoseEmbeddings", "ViTPoseLayer"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
+            # `trunc_normal_cpu` not implemented in `half` issues
+            module.weight.data = nn.init.trunc_normal_(
+                module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
+            ).to(module.weight.dtype)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module: ViTPoseEncoder, value: bool = False) -> None:
-        if isinstance(module, ViTPoseEncoder):
-            module.gradient_checkpointing = value
+        elif isinstance(module, ViTPoseEmbeddings):
+            module.position_embeddings.data = nn.init.trunc_normal_(
+                module.position_embeddings.data.to(torch.float32),
+                mean=0.0,
+                std=self.config.initializer_range,
+            ).to(module.position_embeddings.dtype)
 
 
 VITPOSE_START_DOCSTRING = r"""
@@ -441,7 +437,7 @@ VITPOSE_INPUTS_DOCSTRING = r"""
     VITPOSE_START_DOCSTRING,
 )
 class ViTPoseModel(ViTPosePreTrainedModel):
-    def __init__(self, config: ViTPoseConfig, add_pooling_layer: bool = True):
+    def __init__(self, config: ViTPoseConfig):
         super().__init__(config)
         self.config = config
 
@@ -449,7 +445,6 @@ class ViTPoseModel(ViTPosePreTrainedModel):
         self.encoder = ViTPoseEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = ViTPosePooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -523,28 +518,12 @@ class ViTPoseModel(ViTPosePreTrainedModel):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->ViTPose
-class ViTPosePooler(nn.Module):
-    def __init__(self, config: ViTPoseConfig):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
-
-    def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
-
-
 class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
     def __init__(self, config: ViTPoseConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.vit = ViTPoseModel(config, add_pooling_layer=False)
+        self.vit = ViTPoseModel(config)
 
         # Keypoint head
         final_conv_kernel = 3

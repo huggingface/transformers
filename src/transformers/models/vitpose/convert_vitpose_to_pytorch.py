@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team.
+# Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,11 +19,12 @@ URL: https://github.com/vitae-transformer/vitpose
 
 
 import argparse
+from pathlib import Path
 
+import requests
 import torch
 from PIL import Image
 
-import requests
 from transformers import ViTFeatureExtractor, ViTPoseConfig, ViTPoseForPoseEstimation
 from transformers.utils import logging
 
@@ -94,7 +95,7 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_vitpose_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path):
+def convert_vitpose_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub):
     """
     Copy/paste/tweak model's weights to our ViTPose structure.
     """
@@ -129,8 +130,8 @@ def convert_vitpose_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     model.load_state_dict(new_state_dict)
 
     # Check outputs on an image, prepared by ViTFeatureExtractor
-    feature_extractor = ViTFeatureExtractor(size=config.image_size[::-1])
-    encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
+    image_processor = ViTFeatureExtractor(size=config.image_size[::-1])
+    encoding = image_processor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
     print("Shape of pixel values:", pixel_values.shape)
@@ -139,11 +140,17 @@ def convert_vitpose_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     # TODO assert logits
     print("Shape of logits:", outputs.logits.shape)
 
-    # Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    # print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
-    # model.save_pretrained(pytorch_dump_folder_path)
-    # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    if pytorch_dump_folder_path is not None:
+        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+        print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
+        model.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+        image_processor.save_pretrained(pytorch_dump_folder_path)
+
+    if push_to_hub:
+        print(f"Pushing model and image processor for {model_name} to hub")
+        model.push_to_hub(f"nielsr/{model_name}")
+        image_processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
@@ -157,13 +164,16 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--checkpoint_path",
-        default="/Users/nielsrogge/Documents/ViTPose/Original checkpoints/vitpose-b-simple.pth",
+        default="/Users/nielsrogge/Documents/ViTPose/vitpose-b-simple.pth",
         type=str,
         help="Path to the original PyTorch checkpoint (.pt file).",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
+    parser.add_argument(
+        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+    )
 
     args = parser.parse_args()
-    convert_vitpose_checkpoint(args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path)
+    convert_vitpose_checkpoint(args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@
 # limitations under the License.
 """Feature extractor class for ViTPose."""
 
-from typing import Optional, Union
 import math
+from typing import Optional, Union
 
 import numpy as np
 from PIL import Image
@@ -37,16 +37,16 @@ logger = logging.get_logger(__name__)
 def get_warp_matrix(theta, size_input, size_dst, size_target):
     """
     Source: https://github.com/open-mmlab/mmpose/blob/master/mmpose/core/post_processing/post_transforms.py
-    
+
     Calculate the transformation matrix under the constraint of unbiased. Paper ref: Huang et al. The Devil is in the
     Details: Delving into Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
-    
+
     Args:
         theta (float): Rotation angle in degrees.
         size_input (np.ndarray): Size of input image [w, h].
         size_dst (np.ndarray): Size of output image [w, h].
         size_target (np.ndarray): Size of ROI in input plane [w, h].
-    
+
     Returns:
         np.ndarray: A matrix for transformation.
     """
@@ -56,20 +56,20 @@ def get_warp_matrix(theta, size_input, size_dst, size_target):
     scale_y = size_dst[1] / size_target[1]
     matrix[0, 0] = math.cos(theta) * scale_x
     matrix[0, 1] = -math.sin(theta) * scale_x
-    matrix[0, 2] = scale_x * (-0.5 * size_input[0] * math.cos(theta) +
-                              0.5 * size_input[1] * math.sin(theta) +
-                              0.5 * size_target[0])
+    matrix[0, 2] = scale_x * (
+        -0.5 * size_input[0] * math.cos(theta) + 0.5 * size_input[1] * math.sin(theta) + 0.5 * size_target[0]
+    )
     matrix[1, 0] = math.sin(theta) * scale_y
     matrix[1, 1] = math.cos(theta) * scale_y
-    matrix[1, 2] = scale_y * (-0.5 * size_input[0] * math.sin(theta) -
-                              0.5 * size_input[1] * math.cos(theta) +
-                              0.5 * size_target[1])
+    matrix[1, 2] = scale_y * (
+        -0.5 * size_input[0] * math.sin(theta) - 0.5 * size_input[1] * math.cos(theta) + 0.5 * size_target[1]
+    )
     return matrix
 
 
-class ViTPoseFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
+class ViTPoseImageProcessor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
-    Constructs a ViTPose feature extractor.
+    Constructs a ViTPose image processor.
 
     This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.
@@ -90,13 +90,7 @@ class ViTPoseFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixi
     model_input_names = ["pixel_values"]
 
     def __init__(
-        self,
-        do_affine_transform=True,
-        do_rescale=True,
-        do_normalize=True,
-        image_mean=None,
-        image_std=None,
-        **kwargs
+        self, do_affine_transform=True, do_rescale=True, do_normalize=True, image_mean=None, image_std=None, **kwargs
     ):
         super().__init__(**kwargs)
         self.do_affine_transform = do_affine_transform
@@ -107,13 +101,13 @@ class ViTPoseFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixi
 
     def affine_transform(self, image):
         raise NotImplementedError("To do")
-        
-        #transformation = get_warp_matrix(r, c * 2.0, image_size - 1.0, s * 200.0)
 
-        #image = image.transform(transformation, Image.AFFINE, resample=Image.BILINEAR)
+        # transformation = get_warp_matrix(r, c * 2.0, image_size - 1.0, s * 200.0)
 
-        #return image
-    
+        # image = image.transform(transformation, Image.AFFINE, resample=Image.BILINEAR)
+
+        # return image
+
     def __call__(
         self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
     ) -> BatchFeature:

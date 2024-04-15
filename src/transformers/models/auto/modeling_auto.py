@@ -238,9 +238,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vit", "ViTModel"),
         ("vit_hybrid", "ViTHybridModel"),
         ("vit_mae", "ViTMAEModel"),
-        ("vitpose", "ViTPoseModel"),
         ("vit_msn", "ViTMSNModel"),
         ("vitdet", "VitDetModel"),
+        ("vitpose", "ViTPoseModel"),
         ("vits", "VitsModel"),
         ("vivit", "VivitModel"),
         ("wav2vec2", "Wav2Vec2Model"),
@@ -555,7 +555,6 @@ MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
         ("swin", "SwinForMaskedImageModeling"),
         ("swinv2", "Swinv2ForMaskedImageModeling"),
         ("vit", "ViTForMaskedImageModeling"),
-        ("vitpose", "ViTPoseForMaskedImageModeling"),
     ]
 )
 
@@ -622,7 +621,6 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("swinv2", "Swinv2ForImageClassification"),
         ("van", "VanForImageClassification"),
         ("vit", "ViTForImageClassification"),
-        ("vitpose", "ViTPoseForImageClassification"),
         ("vit_hybrid", "ViTHybridForImageClassification"),
         ("vit_msn", "ViTMSNForImageClassification"),
     ]
