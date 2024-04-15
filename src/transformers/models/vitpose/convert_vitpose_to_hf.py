@@ -30,6 +30,23 @@ from PIL import Image
 from transformers import ViTPoseConfig, ViTPoseForPoseEstimation, ViTPoseImageProcessor
 
 
+def _xywh2xyxy(bbox_xywh):
+    """Transform the bbox format from xywh to x1y1x2y2.
+
+    Args:
+        bbox_xywh (ndarray): Bounding boxes (with scores),
+            shaped (n, 4) or (n, 5). (left, top, width, height, [score])
+    Returns:
+        np.ndarray: Bounding boxes (with scores), shaped (n, 4) or
+          (n, 5). (left, top, right, bottom, [score])
+    """
+    bbox_xyxy = bbox_xywh.copy()
+    bbox_xyxy[:, 2] = bbox_xyxy[:, 2] + bbox_xyxy[:, 0] - 1
+    bbox_xyxy[:, 3] = bbox_xyxy[:, 3] + bbox_xyxy[:, 1] - 1
+
+    return bbox_xyxy
+
+
 def get_config(model_name):
     config = ViTPoseConfig()
     # size of the architecture
@@ -209,8 +226,40 @@ def convert_vitpose_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     result["boxes"] = all_boxes
     result["image_paths"] = image_paths
     result["bbox_ids"] = bbox_ids
+    result["output_heatmap"] = None  # return_heatmap = False for inference in mmpose
 
-    # print(result)
+    print(result)
+    poses, heatmap = result["preds"], result["output_heatmap"]
+
+    # create final results by adding person bbox information
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="vitpose_person_results.pt", repo_type="dataset")
+    person_results = torch.load(filepath, map_location="cpu")
+    bboxes = np.array([box["bbox"] for box in person_results])
+    bboxes_xyxy = _xywh2xyxy(bboxes)
+
+    pose_results = []
+    for pose, person_result, bbox_xyxy in zip(poses, person_results, bboxes_xyxy):
+        pose_result = person_result.copy()
+        pose_result["keypoints"] = pose
+        pose_result["bbox"] = bbox_xyxy
+        pose_results.append(pose_result)
+
+    print("Pose results:", pose_results)
+
+    # Verify pose_results
+    # This is a list of dictionaries, containing the bounding box and keypoints per detected person
+    assert torch.allclose(
+        torch.from_numpy(pose_results[0]["bbox"]).float(), torch.tensor([412.8, 157.61, 464.85, 294.62])
+    )
+    assert torch.allclose(
+        torch.from_numpy(pose_results[1]["bbox"]).float(), torch.tensor([384.43, 172.21, 398.55, 206.95])
+    )
+    assert pose_results[0]["keypoints"].shape == (17, 3)
+    assert pose_results[1]["keypoints"].shape == (17, 3)
+    assert torch.allclose(
+        torch.from_numpy(pose_results[1]["keypoints"][0, :3]),
+        torch.tensor([3.98180511e02, 1.81808380e02, 8.66642594e-01]),
+    )
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
