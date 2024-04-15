@@ -79,7 +79,7 @@ deps = {
     "tf2onnx": "tf2onnx",
     "timeout-decorator": "timeout-decorator",
     "timm": "timm",
-    "tokenizers": "tokenizers>=0.16,<0.19",
+    "tokenizers": "tokenizers>=0.16,<0.17",
     "torch": "torch",
     "torchaudio": "torchaudio",
     "torchvision": "torchvision",
