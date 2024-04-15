@@ -37,7 +37,6 @@ from .utils.import_utils import (
 
 if is_vision_available():
     import PIL
-    from PIL import Image
 
     from .image_utils import PILImageResampling
 
@@ -764,11 +763,8 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     if image.mode == "RGB":
         return image
 
-    image_rgba = image.convert("RGBA")
-    background = Image.new("RGBA", image_rgba.size, (255, 255, 255))
-    alpha_composite = Image.alpha_composite(background, image_rgba)
-    alpha_composite = alpha_composite.convert("RGB")
-    return alpha_composite
+    image = image.convert("RGB")
+    return image
 
 
 def flip_channel_order(

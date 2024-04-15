@@ -19,7 +19,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import PaddingMode, convert_to_rgb, pad, resize, to_channel_dimension_format
+from ...image_transforms import PaddingMode, pad, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -34,10 +34,15 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, logging
+from ...utils import TensorType, is_vision_available, logging
 
 
 logger = logging.get_logger(__name__)
+
+
+if is_vision_available():
+    import PIL
+    from PIL import Image
 
 
 def get_resize_output_image_size(image, size, input_data_format) -> Tuple[int, int]:
@@ -147,6 +152,30 @@ def make_pixel_mask(
     mask = np.zeros(output_size, dtype=np.int64)
     mask[:input_height, :input_width] = 1
     return mask
+
+
+# FIXME Amy: merge this function with the one in image_transforms.py
+def convert_to_rgb(image: ImageInput) -> ImageInput:
+    """
+    Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
+    as is.
+    Args:
+        image (Image):
+            The image to convert.
+    """
+    if not isinstance(image, PIL.Image.Image):
+        return image
+
+    # `image.convert("RGB")` would only work for .jpg images, as it creates a wrong background
+    # for transparent images. The call to `alpha_composite` handles this case
+    if image.mode == "RGB":
+        return image
+
+    image_rgba = image.convert("RGBA")
+    background = Image.new("RGBA", image_rgba.size, (255, 255, 255))
+    alpha_composite = Image.alpha_composite(background, image_rgba)
+    alpha_composite = alpha_composite.convert("RGB")
+    return alpha_composite
 
 
 class Idefics2ImageProcessor(BaseImageProcessor):
