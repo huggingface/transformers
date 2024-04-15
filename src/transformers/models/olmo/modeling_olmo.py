@@ -1155,7 +1155,7 @@ OLMO_GENERATION_EXAMPLE = r"""
     >>> # Generate
     >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
     >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-    "Hey, are you conscious? Can you talk to me?\n\nI'm sorry, I'm not sure what you're asking.\n\nI"
+    "Hey, are you conscious? Can you talk to me?\nI'm sorry, I'm sorry, I'm sorry, I'm sorry, I"
     ```
 """
 
