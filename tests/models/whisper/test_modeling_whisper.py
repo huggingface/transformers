@@ -1750,14 +1750,12 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_generation_multilingual(self):
-        torch_device = "cpu"
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
 
-        token = os.getenv("HF_HUB_READ_TOKEN", True)
-        ds = load_dataset("mozilla-foundation/common_voice_6_1", "ja", split="test", streaming=True, token=token)
+        ds = load_dataset("facebook/multilingual_librispeech", "german", split="test", streaming=True)
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
         input_speech = next(iter(ds))["audio"]["array"]
@@ -1765,27 +1763,17 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = input_features.to(torch_device)
 
         generated_ids = model.generate(
-            input_features, do_sample=False, max_length=20, language="<|ja|>", task="transcribe"
+            input_features, do_sample=False, max_length=20, language="<|de|>", task="transcribe"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-
-        EXPECTED_TRANSCRIPT = "木村さんに電話を貸してもらいました"
+        EXPECTED_TRANSCRIPT = " Mein sechster Sohn scheint, wenigstens auf den ersten Blick,"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
         generated_ids = model.generate(
-            input_features, do_sample=False, max_length=20, language="<|en|>", task="transcribe"
+            input_features, do_sample=False, max_length=20, language="<|de|>", task="translate"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-
-        EXPECTED_TRANSCRIPT = " Kimura-san called me."
-        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
-
-        generated_ids = model.generate(
-            input_features, do_sample=False, max_length=20, language="<|ja|>", task="translate"
-        )
-        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-
-        EXPECTED_TRANSCRIPT = " I borrowed a phone from Kimura san"
+        EXPECTED_TRANSCRIPT = " My sixth son seems, at least at first glance, the most deeply-minded"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
