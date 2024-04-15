@@ -21,8 +21,8 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "sbucaille/superglue_indoor": "https://huggingface.co/stevenbucaille/superglue_indoor/blob/main/config.json",
-    "sbucaille/superglue_outdoor": "https://huggingface.co/stevenbucaille/superglue_outdoor/blob/main/config.json",
+    "stevenbucaille/superglue_indoor": "https://huggingface.co/stevenbucaille/superglue_indoor/blob/main/config.json",
+    "stevenbucaille/superglue_outdoor": "https://huggingface.co/stevenbucaille/superglue_outdoor/blob/main/config.json",
 }
 
 
@@ -31,7 +31,7 @@ class SuperGlueConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`SuperGlueModel`]. It is used to instantiate a
     SuperGlue model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SuperGlue
-    [sbucaille/superglue_indoor](https://huggingface.co/stevenbucaille/superglue_indoor) architecture.
+    [stevenbucaille/superglue_indoor](https://huggingface.co/stevenbucaille/superglue_indoor) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -47,6 +47,8 @@ class SuperGlueConfig(PretrainedConfig):
         num_heads (`int`, *optional*, defaults to 4): The number of heads in the GNN layers.
         sinkhorn_iterations (`int`, *optional*, defaults to 100): The number of Sinkhorn iterations.
         matching_threshold (`float`, *optional*, defaults to 0.2): The matching threshold.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Examples:
         ```python
@@ -71,6 +73,7 @@ class SuperGlueConfig(PretrainedConfig):
         num_heads: int = 4,
         sinkhorn_iterations: int = 100,
         matching_threshold: float = 0.2,
+        initializer_range=0.02,
         **kwargs,
     ):
         # Check whether all gnn_layers_types are either 'self' or 'cross'
@@ -98,5 +101,6 @@ class SuperGlueConfig(PretrainedConfig):
             keypoint_detector_config = CONFIG_MAPPING["superpoint"]()
 
         self.keypoint_detector_config = keypoint_detector_config
+        self.initializer_range = initializer_range
 
         super().__init__(**kwargs)

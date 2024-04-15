@@ -14,7 +14,9 @@ from transformers import (
     SuperGlueForImageMatching,
     SuperGlueImageProcessor,
 )
-from transformers.models.superpoint.modeling_superpoint import ImagePointDescriptionOutput
+from transformers.models.superpoint.modeling_superpoint import (
+    ImagePointDescriptionOutput,
+)
 
 
 def get_superglue_config():
@@ -36,14 +38,25 @@ def create_rename_keys(config, state_dict):
     n = len([3] + config.keypoint_encoder_sizes + [config.descriptor_dim])
     for i in range(n * 2 + 1):
         if ((i + 1) % 3) != 0:
-            rename_keys.append((f"kenc.encoder.{i}.weight", f"keypoint_encoder.encoder.layers.{i}.weight"))
+            rename_keys.append(
+                (
+                    f"kenc.encoder.{i}.weight",
+                    f"keypoint_encoder.encoder.layers.{i}.weight",
+                )
+            )
             rename_keys.append((f"kenc.encoder.{i}.bias", f"keypoint_encoder.encoder.layers.{i}.bias"))
             if ((i % 3) - 1) == 0:
                 rename_keys.append(
-                    (f"kenc.encoder.{i}.running_mean", f"keypoint_encoder.encoder.layers.{i}.running_mean")
+                    (
+                        f"kenc.encoder.{i}.running_mean",
+                        f"keypoint_encoder.encoder.layers.{i}.running_mean",
+                    )
                 )
                 rename_keys.append(
-                    (f"kenc.encoder.{i}.running_var", f"keypoint_encoder.encoder.layers.{i}.running_var")
+                    (
+                        f"kenc.encoder.{i}.running_var",
+                        f"keypoint_encoder.encoder.layers.{i}.running_var",
+                    )
                 )
                 rename_keys.append(
                     (
@@ -54,21 +67,61 @@ def create_rename_keys(config, state_dict):
 
     # gnn
     for i in range(len(config.gnn_layers_types)):
-        rename_keys.append((f"gnn.layers.{i}.attn.merge.weight", f"gnn.layers.{i}.attention.merge.weight"))
+        rename_keys.append(
+            (
+                f"gnn.layers.{i}.attn.merge.weight",
+                f"gnn.layers.{i}.attention.merge.weight",
+            )
+        )
         rename_keys.append((f"gnn.layers.{i}.attn.merge.bias", f"gnn.layers.{i}.attention.merge.bias"))
         for j in range(3):
-            rename_keys.append((f"gnn.layers.{i}.attn.proj.{j}.weight", f"gnn.layers.{i}.attention.proj.{j}.weight"))
-            rename_keys.append((f"gnn.layers.{i}.attn.proj.{j}.bias", f"gnn.layers.{i}.attention.proj.{j}.bias"))
-        for j in range(len([config.descriptor_dim * 2, config.descriptor_dim * 2, config.descriptor_dim]) + 1):
+            rename_keys.append(
+                (
+                    f"gnn.layers.{i}.attn.proj.{j}.weight",
+                    f"gnn.layers.{i}.attention.proj.{j}.weight",
+                )
+            )
+            rename_keys.append(
+                (
+                    f"gnn.layers.{i}.attn.proj.{j}.bias",
+                    f"gnn.layers.{i}.attention.proj.{j}.bias",
+                )
+            )
+        for j in range(
+            len(
+                [
+                    config.descriptor_dim * 2,
+                    config.descriptor_dim * 2,
+                    config.descriptor_dim,
+                ]
+            )
+            + 1
+        ):
             if j != 2:
-                rename_keys.append((f"gnn.layers.{i}.mlp.{j}.weight", f"gnn.layers.{i}.mlp.layers.{j}.weight"))
-                rename_keys.append((f"gnn.layers.{i}.mlp.{j}.bias", f"gnn.layers.{i}.mlp.layers.{j}.bias"))
+                rename_keys.append(
+                    (
+                        f"gnn.layers.{i}.mlp.{j}.weight",
+                        f"gnn.layers.{i}.mlp.layers.{j}.weight",
+                    )
+                )
+                rename_keys.append(
+                    (
+                        f"gnn.layers.{i}.mlp.{j}.bias",
+                        f"gnn.layers.{i}.mlp.layers.{j}.bias",
+                    )
+                )
                 if j == 1:
                     rename_keys.append(
-                        (f"gnn.layers.{i}.mlp.{j}.running_mean", f"gnn.layers.{i}.mlp.layers.{j}.running_mean")
+                        (
+                            f"gnn.layers.{i}.mlp.{j}.running_mean",
+                            f"gnn.layers.{i}.mlp.layers.{j}.running_mean",
+                        )
                     )
                     rename_keys.append(
-                        (f"gnn.layers.{i}.mlp.{j}.running_var", f"gnn.layers.{i}.mlp.layers.{j}.running_var")
+                        (
+                            f"gnn.layers.{i}.mlp.{j}.running_var",
+                            f"gnn.layers.{i}.mlp.layers.{j}.running_var",
+                        )
                     )
                     rename_keys.append(
                         (
@@ -266,13 +319,14 @@ def convert_superglue_checkpoint(checkpoint_url, pytorch_dump_folder_path, save_
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         print(f"Saving model to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
+        preprocessor.save_pretrained(pytorch_dump_folder_path)
 
         if push_to_hub:
             print("Pushing model to the hub...")
             model_name = "superglue"
             if (
                 checkpoint_url
-                == "https://github.com/magicleap/SuperGluePretrainedNetwork/raw/master/models/weights/superglue_outdoor.pth"
+                == "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/models/weights/superglue_outdoor.pth"
             ):
                 model_name += "_outdoor"
             elif (
@@ -281,7 +335,12 @@ def convert_superglue_checkpoint(checkpoint_url, pytorch_dump_folder_path, save_
             ):
                 model_name += "_indoor"
 
-            model.push_to_hub(repo_id=model_name, organization="stevenbucaille", commit_message="Add model")
+            model.push_to_hub(
+                repo_id=model_name,
+                organization="stevenbucaille",
+                commit_message="Add model",
+            )
+            preprocessor.push_to_hub(model_name)
 
 
 if __name__ == "__main__":
@@ -301,7 +360,16 @@ if __name__ == "__main__":
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument("--save_model", action="store_true", help="Save model to local")
-    parser.add_argument("--push_to_hub", action="store_true", help="Push model and image preprocessor to the hub")
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Push model and image preprocessor to the hub",
+    )
 
     args = parser.parse_args()
-    convert_superglue_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.save_model, args.push_to_hub)
+    convert_superglue_checkpoint(
+        args.checkpoint_url,
+        args.pytorch_dump_folder_path,
+        args.save_model,
+        args.push_to_hub,
+    )

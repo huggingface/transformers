@@ -168,7 +168,6 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
-
     def preprocess(
         self,
         images,
@@ -278,7 +277,9 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         batch_size = len(images)
 
         if batch_size % 2 != 0:
-            logger.warning("SuperGlue takes pairs of images, but the number of images provided in impair, so the last image will be doubled.")
+            logger.warning(
+                "SuperGlue takes pairs of images, but the number of images provided in impair, so the last image will be doubled."
+            )
             images.append(images[-1])
 
         channels, height, width = images[0].shape

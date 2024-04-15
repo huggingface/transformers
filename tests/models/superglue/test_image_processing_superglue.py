@@ -30,15 +30,15 @@ if is_vision_available():
 
 class SuperGlueImageProcessingTester(unittest.TestCase):
     def __init__(
-            self,
-            parent,
-            batch_size=7,
-            num_channels=3,
-            image_size=18,
-            min_resolution=30,
-            max_resolution=400,
-            do_resize=True,
-            size=None,
+        self,
+        parent,
+        batch_size=7,
+        num_channels=3,
+        image_size=18,
+        min_resolution=30,
+        max_resolution=400,
+        do_resize=True,
+        size=None,
     ):
         size = size if size is not None else {"height": 480, "width": 640}
         self.parent = parent
