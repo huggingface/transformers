@@ -879,10 +879,6 @@ class DbrxBlock(nn.Module):
                 returned and can be used to speed up decoding (see `past_key_values`).
             cache_position (`torch.LongTensor`, optional): position ids of the cache
         """
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
 
         # Norm + Attention + Norm
         resid_states, hidden_states, self_attn_weights, present_key_value = self.norm_attn_norm(
