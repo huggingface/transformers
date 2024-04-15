@@ -15,7 +15,6 @@
 """ PyTorch DBRX model. """
 
 import math
-import warnings
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
@@ -447,7 +446,7 @@ class DbrxFlashAttention2(DbrxAttention):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value  # type: ignore
+        return attn_output, attn_weights, past_key_value
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
@@ -734,7 +733,7 @@ class DbrxRouter(nn.Module):
 
         weights = weights.to(hidden_states.dtype)
         top_weights = top_weights.to(hidden_states.dtype)
-        return weights, top_weights, top_experts  # type: ignore
+        return weights, top_weights, top_experts
 
 
 class DbrxExpertGLU(nn.Module):
@@ -753,7 +752,9 @@ class DbrxExpertGLU(nn.Module):
             raise ValueError(f"FFN activation function has unhandled kwargs {ffn_act_fn=}")
         self.activation_fn = ACT2FN[act_fn_name]
 
-    def forward(self, x: torch.Tensor, expert_w1: torch.Tensor, expert_v1: torch.Tensor, expert_w2: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, expert_w1: torch.Tensor, expert_v1: torch.Tensor, expert_w2: torch.Tensor
+    ) -> torch.Tensor:
         gate_proj = x.matmul(expert_w1.t())
         up_proj = x.matmul(expert_v1.t())
         gate_proj = self.activation_fn(gate_proj)
@@ -782,9 +783,15 @@ class DbrxExperts(nn.Module):
 
         expert_mask = nn.functional.one_hot(top_experts, num_classes=self.moe_num_experts).permute(2, 1, 0)
         # Chunk experts at once to avoid storing full parameter multiple times in autograd
-        w1_chunked = self.mlp.w1.view(self.mlp.moe_num_experts, self.mlp.ffn_hidden_size, self.mlp.hidden_size).chunk(self.moe_num_experts, dim=0)
-        v1_chunked = self.mlp.v1.view(self.mlp.moe_num_experts, self.mlp.ffn_hidden_size, self.mlp.hidden_size).chunk(self.moe_num_experts, dim=0)
-        w2_chunked = self.mlp.w2.view(self.mlp.moe_num_experts, self.mlp.ffn_hidden_size, self.mlp.hidden_size).chunk(self.moe_num_experts, dim=0)
+        w1_chunked = self.mlp.w1.view(self.mlp.moe_num_experts, self.mlp.ffn_hidden_size, self.mlp.hidden_size).chunk(
+            self.moe_num_experts, dim=0
+        )
+        v1_chunked = self.mlp.v1.view(self.mlp.moe_num_experts, self.mlp.ffn_hidden_size, self.mlp.hidden_size).chunk(
+            self.moe_num_experts, dim=0
+        )
+        w2_chunked = self.mlp.w2.view(self.mlp.moe_num_experts, self.mlp.ffn_hidden_size, self.mlp.hidden_size).chunk(
+            self.moe_num_experts, dim=0
+        )
         w1_chunked = [w1.squeeze(dim=0) for w1 in w1_chunked]
         v1_chunked = [v1.squeeze(dim=0) for v1 in v1_chunked]
         w2_chunked = [w2.squeeze(dim=0) for w2 in w2_chunked]
@@ -797,7 +804,10 @@ class DbrxExperts(nn.Module):
             topk_list = topk_idx
 
             expert_tokens = x[None, token_list].reshape(-1, hidden_size)
-            expert_out = self.mlp(expert_tokens, w1_chunked[expert_idx], v1_chunked[expert_idx], w2_chunked[expert_idx]) * top_weights[token_list, topk_list, None]
+            expert_out = (
+                self.mlp(expert_tokens, w1_chunked[expert_idx], v1_chunked[expert_idx], w2_chunked[expert_idx])
+                * top_weights[token_list, topk_list, None]
+            )
 
             out.index_add_(0, token_idx, expert_out)
 
@@ -1040,20 +1050,18 @@ class DbrxModel(DbrxPreTrainedModel):
         if use_cache:  # kept for BC (cache positions)
             if not isinstance(past_key_values, StaticCache):
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-                past_seen_tokens = past_key_values.get_seq_length(  # type: ignore
-                )
+                past_seen_tokens = past_key_values.get_seq_length()
 
         if cache_position is None:
             if isinstance(past_key_values, StaticCache):
                 raise ValueError("cache_position is a required argument when using StaticCache.")
-            cache_position = torch.arange(  # type: ignore
+            cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)  # type: ignore
-
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)  # type: ignore
+            position_ids = cache_position.unsqueeze(0)
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
 
         # embed positions
         hidden_states = inputs_embeds
@@ -1066,7 +1074,7 @@ class DbrxModel(DbrxPreTrainedModel):
 
         for block in self.blocks:
             if output_hidden_states:
-                all_hidden_states += (hidden_states,)  # type: ignore
+                all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
                 block_outputs = self._gradient_checkpointing_func(
@@ -1098,23 +1106,21 @@ class DbrxModel(DbrxPreTrainedModel):
                 next_decoder_cache = block_outputs[2 if output_attentions else 1]
 
             if output_attentions:
-                all_self_attns += (block_outputs[1],)  # type: ignore
+                all_self_attns += (block_outputs[1],)
 
             if output_router_logits:
-                all_router_logits += (block_outputs[-1],)  # type: ignore
+                all_router_logits += (block_outputs[-1],)
 
         hidden_states = self.norm_f(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
-            all_hidden_states += (hidden_states,)  # type: ignore
+            all_hidden_states += (hidden_states,)
 
         next_cache = None
         if use_cache:
             next_cache = (
-                next_decoder_cache.to_legacy_cache()  # type: ignore
-                if isinstance(next_decoder_cache, Cache)
-                else next_decoder_cache
+                next_decoder_cache.to_legacy_cache() if isinstance(next_decoder_cache, Cache) else next_decoder_cache
             )
         if not return_dict:
             return tuple(
@@ -1185,7 +1191,7 @@ class DbrxModel(DbrxPreTrainedModel):
             # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
             is_tracing = (
                 torch.jit.is_tracing()
-                or isinstance(input_tensor, torch.fx.Proxy)  # type: ignore
+                or isinstance(input_tensor, torch.fx.Proxy)
                 or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
             )
             if not is_tracing and torch.any(attention_mask != 1):
@@ -1398,7 +1404,7 @@ class DbrxForCausalLM(DbrxPreTrainedModel):
             model_inputs = {"input_ids": input_ids.contiguous()}
 
         model_inputs.update(
-            {  # type: ignore
+            {
                 "position_ids": position_ids,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
