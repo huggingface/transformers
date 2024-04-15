@@ -28,49 +28,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "google/realm-cc-news-pretrained-embedder": (
-            "https://huggingface.co/google/realm-cc-news-pretrained-embedder/resolve/main/vocab.txt"
-        ),
-        "google/realm-cc-news-pretrained-encoder": (
-            "https://huggingface.co/google/realm-cc-news-pretrained-encoder/resolve/main/vocab.txt"
-        ),
-        "google/realm-cc-news-pretrained-scorer": (
-            "https://huggingface.co/google/realm-cc-news-pretrained-scorer/resolve/main/vocab.txt"
-        ),
-        "google/realm-cc-news-pretrained-openqa": (
-            "https://huggingface.co/google/realm-cc-news-pretrained-openqa/aresolve/main/vocab.txt"
-        ),
-        "google/realm-orqa-nq-openqa": "https://huggingface.co/google/realm-orqa-nq-openqa/resolve/main/vocab.txt",
-        "google/realm-orqa-nq-reader": "https://huggingface.co/google/realm-orqa-nq-reader/resolve/main/vocab.txt",
-        "google/realm-orqa-wq-openqa": "https://huggingface.co/google/realm-orqa-wq-openqa/resolve/main/vocab.txt",
-        "google/realm-orqa-wq-reader": "https://huggingface.co/google/realm-orqa-wq-reader/resolve/main/vocab.txt",
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/realm-cc-news-pretrained-embedder": 512,
-    "google/realm-cc-news-pretrained-encoder": 512,
-    "google/realm-cc-news-pretrained-scorer": 512,
-    "google/realm-cc-news-pretrained-openqa": 512,
-    "google/realm-orqa-nq-openqa": 512,
-    "google/realm-orqa-nq-reader": 512,
-    "google/realm-orqa-wq-openqa": 512,
-    "google/realm-orqa-wq-reader": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "google/realm-cc-news-pretrained-embedder": {"do_lower_case": True},
-    "google/realm-cc-news-pretrained-encoder": {"do_lower_case": True},
-    "google/realm-cc-news-pretrained-scorer": {"do_lower_case": True},
-    "google/realm-cc-news-pretrained-openqa": {"do_lower_case": True},
-    "google/realm-orqa-nq-openqa": {"do_lower_case": True},
-    "google/realm-orqa-nq-reader": {"do_lower_case": True},
-    "google/realm-orqa-wq-openqa": {"do_lower_case": True},
-    "google/realm-orqa-wq-reader": {"do_lower_case": True},
-}
-
 
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
@@ -132,15 +89,12 @@ class RealmTokenizer(PreTrainedTokenizer):
 
             This should likely be deactivated for Japanese (see this
             [issue](https://github.com/huggingface/transformers/issues/328)).
-        strip_accents: (`bool`, *optional*):
+        strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -155,22 +109,8 @@ class RealmTokenizer(PreTrainedTokenizer):
         mask_token="[MASK]",
         tokenize_chinese_chars=True,
         strip_accents=None,
-        **kwargs
+        **kwargs,
     ):
-        super().__init__(
-            do_lower_case=do_lower_case,
-            do_basic_tokenize=do_basic_tokenize,
-            never_split=never_split,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            pad_token=pad_token,
-            cls_token=cls_token,
-            mask_token=mask_token,
-            tokenize_chinese_chars=tokenize_chinese_chars,
-            strip_accents=strip_accents,
-            **kwargs,
-        )
-
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
@@ -186,7 +126,20 @@ class RealmTokenizer(PreTrainedTokenizer):
                 tokenize_chinese_chars=tokenize_chinese_chars,
                 strip_accents=strip_accents,
             )
-        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
+        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=str(unk_token))
+        super().__init__(
+            do_lower_case=do_lower_case,
+            do_basic_tokenize=do_basic_tokenize,
+            never_split=never_split,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            tokenize_chinese_chars=tokenize_chinese_chars,
+            strip_accents=strip_accents,
+            **kwargs,
+        )
 
     @property
     def do_lower_case(self):
@@ -203,7 +156,6 @@ class RealmTokenizer(PreTrainedTokenizer):
         split_tokens = []
         if self.do_basic_tokenize:
             for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
-
                 # If the token is part of the never_split set
                 if token in self.basic_tokenizer.never_split:
                     split_tokens.append(token)
@@ -295,7 +247,7 @@ class RealmTokenizer(PreTrainedTokenizer):
             if encoded_token_type_ids is not None:
                 output_data["token_type_ids"].append(encoded_token_type_ids)
 
-        output_data = dict((key, item) for key, item in output_data.items() if len(item) != 0)
+        output_data = {key: item for key, item in output_data.items() if len(item) != 0}
 
         return BatchEncoding(output_data, tensor_type=return_tensors)
 

@@ -20,10 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CVT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/cvt-13": "https://huggingface.co/microsoft/cvt-13/resolve/main/config.json",
-    # See all Cvt models at https://huggingface.co/models?filter=cvt
-}
+
+from ..deprecated._archive_maps import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class CvtConfig(PretrainedConfig):
@@ -85,17 +83,18 @@ class CvtConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CvtModel, CvtConfig
+    >>> from transformers import CvtConfig, CvtModel
 
     >>> # Initializing a Cvt msft/cvt style configuration
     >>> configuration = CvtConfig()
 
-    >>> # Initializing a model from the msft/cvt style configuration
+    >>> # Initializing a model (with random weights) from the msft/cvt style configuration
     >>> model = CvtModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "cvt"
 
     def __init__(
@@ -121,7 +120,7 @@ class CvtConfig(PretrainedConfig):
         stride_q=[1, 1, 1],
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.num_channels = num_channels

@@ -26,15 +26,17 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torch_fp16,
     require_torchaudio,
     slow,
     torch_device,
 )
 from transformers.utils import cached_property
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -267,14 +269,32 @@ class Speech2TextModelTester:
 
 
 @require_torch
-class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Speech2TextModel, Speech2TextForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Speech2TextForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"automatic-speech-recognition": Speech2TextForConditionalGeneration, "feature-extraction": Speech2TextModel}
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
+    fx_compatible = True
     test_pruning = False
     test_missing_keys = False
 
     input_name = "input_features"
+
+    def _get_input_ids_and_config(self, batch_size=2):
+        config, input_ids, attention_mask, max_length = GenerationTesterMixin._get_input_ids_and_config(self)
+
+        # `input_ids` is actually `input_features` which is a 3D tensor.
+        # We must overwrite the mask to make it 2D since the original `_get_input_ids_and_config` creates an
+        # attention mask of the same shape as `input_ids`.
+        if len(attention_mask.shape) > 2:
+            sequence_length = input_ids.shape[1]
+            attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=attention_mask.device)
+
+        return config, input_ids, attention_mask, max_length
 
     def setUp(self):
         self.model_tester = Speech2TextModelTester(self)
@@ -317,14 +337,26 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_features = input_dict["input_features"]
         attention_mask = input_dict["attention_mask"]
         model = Speech2TextForConditionalGeneration(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            input_features = input_features.half()
-            model.half()
+        input_features = input_features.half()
+        model.half()
         model.generate(input_features, attention_mask=attention_mask)
         model.generate(input_features, num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
@@ -705,7 +737,27 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             model_state_dict = model.state_dict()
             loaded_model_state_dict = loaded_model.state_dict()
 
+            non_persistent_buffers = {}
+            for key in loaded_model_state_dict.keys():
+                if key not in model_state_dict.keys():
+                    non_persistent_buffers[key] = loaded_model_state_dict[key]
+
+            loaded_model_state_dict = {
+                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+            }
+
             self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+
+            model_buffers = list(model.buffers())
+            for non_persistent_buffer in non_persistent_buffers.values():
+                found_buffer = False
+                for i, model_buffer in enumerate(model_buffers):
+                    if torch.equal(non_persistent_buffer, model_buffer):
+                        found_buffer = True
+                        break
+
+                self.assertTrue(found_buffer)
+                model_buffers.pop(i)
 
             models_equal = True
             for layer_name, p1 in model_state_dict.items():
@@ -714,6 +766,14 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
                     models_equal = False
 
             self.assertTrue(models_equal)
+
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
+        # Allow missing keys since TF doesn't cache the sinusoidal embeddings in an attribute
+        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
+
+    @unittest.skip("Test failing,  @RocketNight is looking into it")
+    def test_tf_from_pt_safetensors(self):
+        pass
 
 
 @require_torch

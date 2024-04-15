@@ -116,8 +116,8 @@ class ModelArguments:
         default=0.05,
         metadata={
             "help": (
-                "Probability of each feature vector along the time axis to be chosen as the start of the vector"
-                "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
+                "Probability of each feature vector along the time axis to be chosen as the start of the vector "
+                "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature "
                 "vectors will be masked along the time axis."
             )
         },
@@ -287,7 +287,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "If :obj:`True`, will use the token generated when running"
-                ":obj:`transformers-cli login` as HTTP bearer authorization for remote files."
+                ":obj:`huggingface-cli login` as HTTP bearer authorization for remote files."
             )
         },
     )
@@ -327,7 +327,6 @@ class DataTrainingArguments:
 
 @dataclass
 class SpeechDataCollatorWithPadding:
-
     processor: AutoProcessor
     decoder_start_token_id: Optional[int] = None
     padding: Union[bool, str] = "longest"
@@ -336,7 +335,7 @@ class SpeechDataCollatorWithPadding:
     pad_to_multiple_of_labels: Optional[int] = None
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
-        # split inputs and labels since they have to be of different lenghts and need
+        # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         input_features = [{"input_values": feature["input_values"]} for feature in features]
 
@@ -349,13 +348,12 @@ class SpeechDataCollatorWithPadding:
 
         if self.pad_labels:
             label_features = [{"input_ids": feature["labels"]} for feature in features]
-            with self.processor.as_target_processor():
-                labels_batch = self.processor.pad(
-                    label_features,
-                    padding=self.padding,
-                    pad_to_multiple_of=self.pad_to_multiple_of_labels,
-                    return_tensors="pt",
-                )
+            labels_batch = self.processor.pad(
+                labels=label_features,
+                padding=self.padding,
+                pad_to_multiple_of=self.pad_to_multiple_of_labels,
+                return_tensors="pt",
+            )
 
             # replace padding with -100 to ignore loss correctly
             labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
@@ -402,7 +400,7 @@ def create_vocabulary_from_data(
         | (set(vocabs["predict"]["vocab"][0]) if "predict" in vocabs else set())
     )
 
-    vocab_dict = {v: k for k, v in enumerate(sorted(list(vocab_set)))}
+    vocab_dict = {v: k for k, v in enumerate(sorted(vocab_set))}
 
     # replace white space with delimiter token
     if word_delimiter_token is not None:
@@ -457,7 +455,7 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
         f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
     # Set the verbosity to info of the Transformers logger (on main process only):
@@ -504,7 +502,7 @@ def main():
             data_args.dataset_name,
             config_name,
             split=data_args.train_split_name,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
             cache_dir=model_args.cache_dir,
         )
 
@@ -530,7 +528,7 @@ def main():
             data_args.dataset_name,
             config_name,
             split=data_args.eval_split_name,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
             cache_dir=model_args.cache_dir,
         )
 
@@ -542,7 +540,7 @@ def main():
             data_args.dataset_name,
             config_name,
             split=data_args.predict_split_name,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
             cache_dir=model_args.cache_dir,
         )
 
@@ -597,7 +595,7 @@ def main():
     # 3. Next, let's load the config as we might need it to create
     # the tokenizer
     config = AutoConfig.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, token=data_args.use_auth_token
     )
 
     if is_text_target:
@@ -653,11 +651,11 @@ def main():
     if is_text_target:
         tokenizer = AutoTokenizer.from_pretrained(
             tokenizer_name_or_path,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
             **tokenizer_kwargs,
         )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, token=data_args.use_auth_token
     )
 
     # adapt config
@@ -696,14 +694,14 @@ def main():
             model_args.model_name_or_path,
             cache_dir=model_args.cache_dir,
             config=config,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
         )
     elif config.is_encoder_decoder:
         model = AutoModelForSpeechSeq2Seq.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=model_args.cache_dir,
             config=config,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
         )
         if model.config.decoder_start_token_id is None:
             raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
@@ -712,7 +710,7 @@ def main():
             model_args.model_name_or_path,
             cache_dir=model_args.cache_dir,
             config=config,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
         )
 
     # freeze encoder
@@ -864,7 +862,6 @@ def main():
 
     # Training
     if training_args.do_train:
-
         # use last checkpoint if exist
         if last_checkpoint is not None:
             checkpoint = last_checkpoint

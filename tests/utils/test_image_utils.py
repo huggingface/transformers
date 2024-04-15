@@ -13,13 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import tempfile
 import unittest
 
 import datasets
 import numpy as np
+import pytest
+from huggingface_hub.file_download import http_get
+from requests import ConnectTimeout, ReadTimeout
 
+from tests.pipelines.test_pipelines_document_question_answering import INVOICE_URL
 from transformers import is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision
+from transformers.image_utils import ChannelDimension, get_channel_dimension_axis, make_list_of_images
+from transformers.testing_utils import is_flaky, require_torch, require_vision
 
 
 if is_torch_available():
@@ -29,7 +36,7 @@ if is_vision_available():
     import PIL.Image
 
     from transformers import ImageFeatureExtractionMixin
-    from transformers.image_utils import load_image
+    from transformers.image_utils import get_image_size, infer_channel_dimension_format, load_image
 
 
 def get_random_image(height, width):
@@ -58,13 +65,13 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         array3 = feature_extractor.to_numpy_array(image, rescale=False)
         self.assertTrue(array3.dtype, np.uint8)
         self.assertEqual(array3.shape, (3, 16, 32))
-        self.assertTrue(np.array_equal(array1, array3.astype(np.float32) / 255.0))
+        self.assertTrue(np.array_equal(array1, array3.astype(np.float32) * (1 / 255.0)))
 
         # Conversion with no rescale and not channel first
         array4 = feature_extractor.to_numpy_array(image, rescale=False, channel_first=False)
         self.assertTrue(array4.dtype, np.uint8)
         self.assertEqual(array4.shape, (16, 32, 3))
-        self.assertTrue(np.array_equal(array2, array4.astype(np.float32) / 255.0))
+        self.assertTrue(np.array_equal(array2, array4.astype(np.float32) * (1 / 255.0)))
 
     def test_conversion_array_to_array(self):
         feature_extractor = ImageFeatureExtractionMixin()
@@ -74,13 +81,13 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         array1 = feature_extractor.to_numpy_array(array)
         self.assertTrue(array1.dtype, np.float32)
         self.assertEqual(array1.shape, (3, 16, 32))
-        self.assertTrue(np.array_equal(array1, array.transpose(2, 0, 1).astype(np.float32) / 255.0))
+        self.assertTrue(np.array_equal(array1, array.transpose(2, 0, 1).astype(np.float32) * (1 / 255.0)))
 
         # Same with no permute
         array2 = feature_extractor.to_numpy_array(array, channel_first=False)
         self.assertTrue(array2.dtype, np.float32)
         self.assertEqual(array2.shape, (16, 32, 3))
-        self.assertTrue(np.array_equal(array2, array.astype(np.float32) / 255.0))
+        self.assertTrue(np.array_equal(array2, array.astype(np.float32) * (1 / 255.0)))
 
         # Force rescale to False
         array3 = feature_extractor.to_numpy_array(array, rescale=False)
@@ -100,6 +107,58 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertEqual(array5.shape, (3, 16, 32))
         self.assertTrue(np.array_equal(array5, array1))
 
+    def test_make_list_of_images_numpy(self):
+        # Test a single image is converted to a list of 1 image
+        images = np.random.randint(0, 256, (16, 32, 3))
+        images_list = make_list_of_images(images)
+        self.assertEqual(len(images_list), 1)
+        self.assertTrue(np.array_equal(images_list[0], images))
+        self.assertIsInstance(images_list, list)
+
+        # Test a batch of images is converted to a list of images
+        images = np.random.randint(0, 256, (4, 16, 32, 3))
+        images_list = make_list_of_images(images)
+        self.assertEqual(len(images_list), 4)
+        self.assertTrue(np.array_equal(images_list[0], images[0]))
+        self.assertIsInstance(images_list, list)
+
+        # Test a list of images is not modified
+        images = [np.random.randint(0, 256, (16, 32, 3)) for _ in range(4)]
+        images_list = make_list_of_images(images)
+        self.assertEqual(len(images_list), 4)
+        self.assertTrue(np.array_equal(images_list[0], images[0]))
+        self.assertIsInstance(images_list, list)
+
+        # Test batched masks with no channel dimension are converted to a list of masks
+        masks = np.random.randint(0, 2, (4, 16, 32))
+        masks_list = make_list_of_images(masks, expected_ndims=2)
+        self.assertEqual(len(masks_list), 4)
+        self.assertTrue(np.array_equal(masks_list[0], masks[0]))
+        self.assertIsInstance(masks_list, list)
+
+    @require_torch
+    def test_make_list_of_images_torch(self):
+        # Test a single image is converted to a list of 1 image
+        images = torch.randint(0, 256, (16, 32, 3))
+        images_list = make_list_of_images(images)
+        self.assertEqual(len(images_list), 1)
+        self.assertTrue(np.array_equal(images_list[0], images))
+        self.assertIsInstance(images_list, list)
+
+        # Test a batch of images is converted to a list of images
+        images = torch.randint(0, 256, (4, 16, 32, 3))
+        images_list = make_list_of_images(images)
+        self.assertEqual(len(images_list), 4)
+        self.assertTrue(np.array_equal(images_list[0], images[0]))
+        self.assertIsInstance(images_list, list)
+
+        # Test a list of images is left unchanged
+        images = [torch.randint(0, 256, (16, 32, 3)) for _ in range(4)]
+        images_list = make_list_of_images(images)
+        self.assertEqual(len(images_list), 4)
+        self.assertTrue(np.array_equal(images_list[0], images[0]))
+        self.assertIsInstance(images_list, list)
+
     @require_torch
     def test_conversion_torch_to_array(self):
         feature_extractor = ImageFeatureExtractionMixin()
@@ -110,13 +169,13 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         array1 = feature_extractor.to_numpy_array(array)
         self.assertTrue(array1.dtype, np.float32)
         self.assertEqual(array1.shape, (3, 16, 32))
-        self.assertTrue(np.array_equal(array1, array.transpose(2, 0, 1).astype(np.float32) / 255.0))
+        self.assertTrue(np.array_equal(array1, array.transpose(2, 0, 1).astype(np.float32) * (1 / 255.0)))
 
         # Same with no permute
         array2 = feature_extractor.to_numpy_array(array, channel_first=False)
         self.assertTrue(array2.dtype, np.float32)
         self.assertEqual(array2.shape, (16, 32, 3))
-        self.assertTrue(np.array_equal(array2, array.astype(np.float32) / 255.0))
+        self.assertTrue(np.array_equal(array2, array.astype(np.float32) * (1 / 255.0)))
 
         # Force rescale to False
         array3 = feature_extractor.to_numpy_array(array, rescale=False)
@@ -160,7 +219,7 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertTrue(np.array_equal(np.array(image2), array))
 
         # If the array has floating type, it's rescaled by default.
-        image3 = feature_extractor.to_pil_image(array.astype(np.float32) / 255.0)
+        image3 = feature_extractor.to_pil_image(array.astype(np.float32) * (1 / 255.0))
         self.assertTrue(isinstance(image3, PIL.Image.Image))
         self.assertTrue(np.array_equal(np.array(image3), array))
 
@@ -170,7 +229,7 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertTrue(np.array_equal(np.array(image4), array))
 
         # And with floats + channel first.
-        image5 = feature_extractor.to_pil_image(array.transpose(2, 0, 1).astype(np.float32) / 255.0)
+        image5 = feature_extractor.to_pil_image(array.transpose(2, 0, 1).astype(np.float32) * (1 / 255.0))
         self.assertTrue(isinstance(image5, PIL.Image.Image))
         self.assertTrue(np.array_equal(np.array(image5), array))
 
@@ -201,7 +260,7 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertTrue(np.array_equal(np.array(image4), array))
 
         # And with floats + channel first.
-        image5 = feature_extractor.to_pil_image(tensor.permute(2, 0, 1).float() / 255.0)
+        image5 = feature_extractor.to_pil_image(tensor.permute(2, 0, 1).float() * (1 / 255.0))
         self.assertTrue(isinstance(image5, PIL.Image.Image))
         self.assertTrue(np.array_equal(np.array(image5), array))
 
@@ -316,7 +375,7 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertEqual(normalized_image.shape, (3, 16, 32))
 
         # During the conversion rescale and channel first will be applied.
-        expected = array.transpose(2, 0, 1).astype(np.float32) / 255.0
+        expected = array.transpose(2, 0, 1).astype(np.float32) * (1 / 255.0)
         np_mean = np.array(mean).astype(np.float32)[:, None, None]
         np_std = np.array(std).astype(np.float32)[:, None, None]
         expected = (expected - np_mean) / np_std
@@ -424,6 +483,17 @@ class ImageFeatureExtractionTester(unittest.TestCase):
 
 @require_vision
 class LoadImageTester(unittest.TestCase):
+    def test_load_img_url(self):
+        img = load_image(INVOICE_URL)
+        img_arr = np.array(img)
+
+        self.assertEqual(img_arr.shape, (1061, 750, 3))
+
+    @is_flaky()
+    def test_load_img_url_timeout(self):
+        with self.assertRaises((ReadTimeout, ConnectTimeout)):
+            load_image(INVOICE_URL, timeout=0.001)
+
     def test_load_img_local(self):
         img = load_image("./tests/fixtures/tests_samples/COCO/000000039769.png")
         img_arr = np.array(img)
@@ -433,10 +503,46 @@ class LoadImageTester(unittest.TestCase):
             (480, 640, 3),
         )
 
-    def test_load_img_rgba(self):
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
+    def test_load_img_base64_prefix(self):
+        try:
+            tmp_file = tempfile.mktemp()
+            with open(tmp_file, "wb") as f:
+                http_get(
+                    "https://huggingface.co/datasets/hf-internal-testing/dummy-base64-images/raw/main/image_0.txt", f
+                )
 
-        img = load_image(dataset[0]["file"])  # img with mode RGBA
+            with open(tmp_file, encoding="utf-8") as b64:
+                img = load_image(b64.read())
+                img_arr = np.array(img)
+
+        finally:
+            os.remove(tmp_file)
+
+        self.assertEqual(img_arr.shape, (64, 32, 3))
+
+    def test_load_img_base64(self):
+        try:
+            tmp_file = tempfile.mktemp()
+            with open(tmp_file, "wb") as f:
+                http_get(
+                    "https://huggingface.co/datasets/hf-internal-testing/dummy-base64-images/raw/main/image_1.txt", f
+                )
+
+            with open(tmp_file, encoding="utf-8") as b64:
+                img = load_image(b64.read())
+                img_arr = np.array(img)
+
+        finally:
+            os.remove(tmp_file)
+
+        self.assertEqual(img_arr.shape, (64, 32, 3))
+
+    def test_load_img_rgba(self):
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
+
+        img = load_image(dataset[0]["image"])  # img with mode RGBA
         img_arr = np.array(img)
 
         self.assertEqual(
@@ -445,9 +551,11 @@ class LoadImageTester(unittest.TestCase):
         )
 
     def test_load_img_la(self):
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
 
-        img = load_image(dataset[1]["file"])  # img with mode LA
+        img = load_image(dataset[1]["image"])  # img with mode LA
         img_arr = np.array(img)
 
         self.assertEqual(
@@ -456,9 +564,11 @@ class LoadImageTester(unittest.TestCase):
         )
 
     def test_load_img_l(self):
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
 
-        img = load_image(dataset[2]["file"])  # img with mode L
+        img = load_image(dataset[2]["image"])  # img with mode L
         img_arr = np.array(img)
 
         self.assertEqual(
@@ -467,10 +577,11 @@ class LoadImageTester(unittest.TestCase):
         )
 
     def test_load_img_exif_transpose(self):
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
-        img_file = dataset[3]["file"]
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
 
-        img_without_exif_transpose = PIL.Image.open(img_file)
+        img_without_exif_transpose = dataset[3]["image"]
         img_arr_without_exif_transpose = np.array(img_without_exif_transpose)
 
         self.assertEqual(
@@ -478,10 +589,85 @@ class LoadImageTester(unittest.TestCase):
             (333, 500, 3),
         )
 
-        img_with_exif_transpose = load_image(img_file)
+        img_with_exif_transpose = load_image(dataset[3]["image"])
         img_arr_with_exif_transpose = np.array(img_with_exif_transpose)
 
         self.assertEqual(
             img_arr_with_exif_transpose.shape,
             (500, 333, 3),
         )
+
+
+class UtilFunctionTester(unittest.TestCase):
+    def test_get_image_size(self):
+        # Test we can infer the size and channel dimension of an image.
+        image = np.random.randint(0, 256, (32, 64, 3))
+        self.assertEqual(get_image_size(image), (32, 64))
+
+        image = np.random.randint(0, 256, (3, 32, 64))
+        self.assertEqual(get_image_size(image), (32, 64))
+
+        # Test the channel dimension can be overriden
+        image = np.random.randint(0, 256, (3, 32, 64))
+        self.assertEqual(get_image_size(image, channel_dim=ChannelDimension.LAST), (3, 32))
+
+    def test_infer_channel_dimension(self):
+        # Test we fail with invalid input
+        with pytest.raises(ValueError):
+            infer_channel_dimension_format(np.random.randint(0, 256, (10, 10)))
+
+        with pytest.raises(ValueError):
+            infer_channel_dimension_format(np.random.randint(0, 256, (10, 10, 10, 10, 10)))
+
+        # Test we fail if neither first not last dimension is of size 3 or 1
+        with pytest.raises(ValueError):
+            infer_channel_dimension_format(np.random.randint(0, 256, (10, 1, 50)))
+
+        # But if we explicitly set one of the number of channels to 50 it works
+        inferred_dim = infer_channel_dimension_format(np.random.randint(0, 256, (10, 1, 50)), num_channels=50)
+        self.assertEqual(inferred_dim, ChannelDimension.LAST)
+
+        # Test we correctly identify the channel dimension
+        image = np.random.randint(0, 256, (3, 4, 5))
+        inferred_dim = infer_channel_dimension_format(image)
+        self.assertEqual(inferred_dim, ChannelDimension.FIRST)
+
+        image = np.random.randint(0, 256, (1, 4, 5))
+        inferred_dim = infer_channel_dimension_format(image)
+        self.assertEqual(inferred_dim, ChannelDimension.FIRST)
+
+        image = np.random.randint(0, 256, (4, 5, 3))
+        inferred_dim = infer_channel_dimension_format(image)
+        self.assertEqual(inferred_dim, ChannelDimension.LAST)
+
+        image = np.random.randint(0, 256, (4, 5, 1))
+        inferred_dim = infer_channel_dimension_format(image)
+        self.assertEqual(inferred_dim, ChannelDimension.LAST)
+
+        # We can take a batched array of images and find the dimension
+        image = np.random.randint(0, 256, (1, 3, 4, 5))
+        inferred_dim = infer_channel_dimension_format(image)
+        self.assertEqual(inferred_dim, ChannelDimension.FIRST)
+
+    def test_get_channel_dimension_axis(self):
+        # Test we correctly identify the channel dimension
+        image = np.random.randint(0, 256, (3, 4, 5))
+        inferred_axis = get_channel_dimension_axis(image)
+        self.assertEqual(inferred_axis, 0)
+
+        image = np.random.randint(0, 256, (1, 4, 5))
+        inferred_axis = get_channel_dimension_axis(image)
+        self.assertEqual(inferred_axis, 0)
+
+        image = np.random.randint(0, 256, (4, 5, 3))
+        inferred_axis = get_channel_dimension_axis(image)
+        self.assertEqual(inferred_axis, 2)
+
+        image = np.random.randint(0, 256, (4, 5, 1))
+        inferred_axis = get_channel_dimension_axis(image)
+        self.assertEqual(inferred_axis, 2)
+
+        # We can take a batched array of images and find the dimension
+        image = np.random.randint(0, 256, (1, 3, 4, 5))
+        inferred_axis = get_channel_dimension_axis(image)
+        self.assertEqual(inferred_axis, 1)

@@ -15,6 +15,10 @@ This code can be modified to experiment with other research on retrival augmente
 
 To start training, use the bash script (finetune_rag_ray_end2end.sh) in this folder. This script also includes descriptions on each command-line argument used.
 
+# Latest Update
+
+⚠️ Updated the rag-end2end-retriever to be compatible with PL==1.6.4 and RAY==1.13.0 (latest versions to the date 2022-June-11)
+
 # Note
 
 ⚠️ This project should be run with pytorch-lightning==1.3.1 which has a potential security vulnerability
@@ -22,12 +26,14 @@ To start training, use the bash script (finetune_rag_ray_end2end.sh) in this fol
 # Testing
 
 The following two bash scripts can be used to quickly test the implementation.
-1. sh ./test_run/test_rag_new_features.sh
-    - Tests the newly added functions (set_context_encoder and set_context_encoder_tokenizer) related to modeling rag.
-    - This is sufficient to check the model's ability to use the set functions correctly.
-2. sh ./test_run/test_finetune.sh script
+1. sh ./test_run/test_finetune.sh script
     - Tests the full end-to-end fine-tuning ability with a dummy knowlendge-base and dummy training dataset (check test_dir directory).
     - Users can replace the dummy dataset and knowledge-base with their own to do their own finetuning.
+    - Please read the comments in the test_finetune.sh file.
+2. sh ./test_run/test_rag_new_features.sh
+    - Tests the newly added functions (set_context_encoder and set_context_encoder_tokenizer) related to modeling rag.
+    - This is sufficient to check the model's ability to use the set functions correctly.
+
 
 
 # Comparison of end2end RAG (including DPR finetuning)  VS original-RAG

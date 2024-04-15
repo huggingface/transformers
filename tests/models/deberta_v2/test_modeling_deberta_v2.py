@@ -19,6 +19,7 @@ from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -32,7 +33,6 @@ if is_torch_available():
         DebertaV2ForTokenClassification,
         DebertaV2Model,
     )
-    from transformers.models.deberta_v2.modeling_deberta_v2 import DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class DebertaV2ModelTester(object):
@@ -47,7 +47,7 @@ class DebertaV2ModelTester(object):
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -226,8 +226,7 @@ class DebertaV2ModelTester(object):
 
 
 @require_torch
-class DebertaV2ModelTest(ModelTesterMixin, unittest.TestCase):
-
+class DebertaV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             DebertaV2Model,
@@ -240,7 +239,20 @@ class DebertaV2ModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": DebertaV2Model,
+            "fill-mask": DebertaV2ForMaskedLM,
+            "question-answering": DebertaV2ForQuestionAnswering,
+            "text-classification": DebertaV2ForSequenceClassification,
+            "token-classification": DebertaV2ForTokenClassification,
+            "zero-shot": DebertaV2ForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
+    fx_compatible = True
     test_torchscript = False
     test_pruning = False
     test_head_masking = False
@@ -279,9 +291,9 @@ class DebertaV2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DebertaV2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/deberta-v2-xlarge"
+        model = DebertaV2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
@@ -298,7 +310,8 @@ class DebertaV2ModelIntegrationTest(unittest.TestCase):
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
-        output = model(input_ids, attention_mask=attention_mask)[0]
+        with torch.no_grad():
+            output = model(input_ids, attention_mask=attention_mask)[0]
         # compare the actual values for a slice.
         expected_slice = torch.tensor(
             [[[0.2356, 0.1948, 0.0369], [-0.1063, 0.3586, -0.5152], [-0.6399, -0.0259, -0.2525]]]

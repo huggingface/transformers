@@ -41,7 +41,7 @@ class TeacherModelArguments:
         default="This example is {}.",
         metadata={
             "help": (
-                "Template used to turn class names into mock hypotheses for teacher NLI model. Must include {{}}"
+                "Template used to turn class names into mock hypotheses for teacher NLI model. Must include {{}} "
                 "where class name is inserted."
             )
         },
@@ -53,7 +53,7 @@ class TeacherModelArguments:
         default=False,
         metadata={
             "help": (
-                "Allow multiple classes to be true rather than forcing them to sum to 1 (sometimes called"
+                "Allow multiple classes to be true rather than forcing them to sum to 1 (sometimes called "
                 "multi-class multi-label classification)."
             )
         },
@@ -98,7 +98,7 @@ class DistillTrainingArguments(TrainingArguments):
         default=True,
         metadata={
             "help": (
-                "Whether to evaluate the agreement of the final student predictions and the teacher predictions"
+                "Whether to evaluate the agreement of the final student predictions and the teacher predictions "
                 "after training."
             )
         },
@@ -107,7 +107,7 @@ class DistillTrainingArguments(TrainingArguments):
         default=0,
         metadata={
             "help": (
-                "Limit the total amount of checkpoints."
+                "Limit the total amount of checkpoints. "
                 "Deletes the older checkpoints in the output_dir. Default is 0 (no checkpoints)."
             )
         },
@@ -303,7 +303,7 @@ def main():
         student_args.student_name_or_path, num_labels=len(class_names)
     )
     tokenizer = AutoTokenizer.from_pretrained(student_args.student_name_or_path, use_fast=data_args.use_fast_tokenizer)
-    model.config.id2label = {i: label for i, label in enumerate(class_names)}
+    model.config.id2label = dict(enumerate(class_names))
     model.config.label2id = {label: i for i, label in enumerate(class_names)}
 
     # 4. train student on teacher predictions

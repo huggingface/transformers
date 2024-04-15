@@ -20,10 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "bert-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/config.json",
-    # QDQBERT models can be loaded from any BERT checkpoint, available at https://huggingface.co/models?filter=bert
-}
+
+from ..deprecated._archive_maps import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class QDQBertConfig(PretrainedConfig):
@@ -31,7 +29,7 @@ class QDQBertConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`QDQBertModel`]. It is used to instantiate an
     QDQBERT model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the BERT
-    [bert-base-uncased](https://huggingface.co/bert-base-uncased) architecture.
+    [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -53,7 +51,7 @@ class QDQBertConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):
@@ -65,6 +63,8 @@ class QDQBertConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -74,15 +74,16 @@ class QDQBertConfig(PretrainedConfig):
     ```python
     >>> from transformers import QDQBertModel, QDQBertConfig
 
-    >>> # Initializing a QDQBERT bert-base-uncased style configuration
+    >>> # Initializing a QDQBERT google-bert/bert-base-uncased style configuration
     >>> configuration = QDQBertConfig()
 
-    >>> # Initializing a model from the bert-base-uncased style configuration
+    >>> # Initializing a model from the google-bert/bert-base-uncased style configuration
     >>> model = QDQBertModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "qdqbert"
 
     def __init__(
@@ -100,11 +101,10 @@ class QDQBertConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         use_cache=True,
-        is_encoder_decoder=False,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

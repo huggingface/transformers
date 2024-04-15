@@ -19,11 +19,8 @@ import os
 from shutil import copyfile
 from typing import Dict, List, Optional, Tuple, Union
 
-from transformers.models.layoutlmv2.tokenization_layoutlmv2 import LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
-
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_base import (
-    ENCODE_KWARGS_DOCSTRING,
     BatchEncoding,
     EncodedInput,
     PreTokenizedInput,
@@ -34,8 +31,6 @@ from ...tokenization_utils_base import (
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, is_sentencepiece_available, logging
 from ..xlm_roberta.tokenization_xlm_roberta_fast import (
-    PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES,
-    PRETRAINED_VOCAB_FILES_MAP,
     VOCAB_FILES_NAMES,
 )
 
@@ -47,6 +42,109 @@ else:
 
 
 logger = logging.get_logger(__name__)
+
+LAYOUTXLM_ENCODE_KWARGS_DOCSTRING = r"""
+            add_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to encode the sequences with the special tokens relative to their model.
+            padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
+                Activates and controls padding. Accepts the following values:
+
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
+            truncation (`bool`, `str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
+                Activates and controls truncation. Accepts the following values:
+
+                - `True` or `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or
+                  to the maximum acceptable input length for the model if that argument is not provided. This will
+                  truncate token by token, removing a token from the longest sequence in the pair if a pair of
+                  sequences (or a batch of pairs) is provided.
+                - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will only
+                  truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+                - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided. This will only
+                  truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+                - `False` or `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
+                  greater than the model maximum admissible input size).
+            max_length (`int`, *optional*):
+                Controls the maximum length to use by one of the truncation/padding parameters.
+
+                If left unset or set to `None`, this will use the predefined model maximum length if a maximum length
+                is required by one of the truncation/padding parameters. If the model has no specific maximum input
+                length (like XLNet) truncation/padding to a maximum length will be deactivated.
+            stride (`int`, *optional*, defaults to 0):
+                If set to a number along with `max_length`, the overflowing tokens returned when
+                `return_overflowing_tokens=True` will contain some tokens from the end of the truncated sequence
+                returned to provide some overlap between truncated and overflowing sequences. The value of this
+                argument defines the number of overlapping tokens.
+            pad_to_multiple_of (`int`, *optional*):
+                If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
+                the use of Tensor Cores on NVIDIA hardware with compute capability `>= 7.5` (Volta).
+            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+                If set, will return tensors instead of list of python integers. Acceptable values are:
+
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return Numpy `np.ndarray` objects.
+            return_token_type_ids (`bool`, *optional*):
+                Whether to return token type IDs. If left to the default, will return the token type IDs according to
+                the specific tokenizer's default, defined by the `return_outputs` attribute.
+
+                [What are token type IDs?](../glossary#token-type-ids)
+            return_attention_mask (`bool`, *optional*):
+                Whether to return the attention mask. If left to the default, will return the attention mask according
+                to the specific tokenizer's default, defined by the `return_outputs` attribute.
+
+                [What are attention masks?](../glossary#attention-mask)
+            return_overflowing_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not to return overflowing token sequences. If a pair of sequences of input ids (or a batch
+                of pairs) is provided with `truncation_strategy = longest_first` or `True`, an error is raised instead
+                of returning overflowing tokens.
+            return_special_tokens_mask (`bool`, *optional*, defaults to `False`):
+                Whether or not to return special tokens mask information.
+            return_offsets_mapping (`bool`, *optional*, defaults to `False`):
+                Whether or not to return `(char_start, char_end)` for each token.
+
+                This is only available on fast tokenizers inheriting from [`PreTrainedTokenizerFast`], if using
+                Python's tokenizer, this method will raise `NotImplementedError`.
+            return_length  (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the lengths of the encoded inputs.
+            verbose (`bool`, *optional*, defaults to `True`):
+                Whether or not to print more information and warnings.
+            **kwargs: passed to the `self.tokenize()` method
+
+        Return:
+            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model.
+
+              [What are input IDs?](../glossary#input-ids)
+
+            - **bbox** -- List of bounding boxes to be fed to a model.
+
+            - **token_type_ids** -- List of token type ids to be fed to a model (when `return_token_type_ids=True` or
+              if *"token_type_ids"* is in `self.model_input_names`).
+
+              [What are token type IDs?](../glossary#token-type-ids)
+
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names`).
+
+              [What are attention masks?](../glossary#attention-mask)
+
+            - **labels** -- List of labels to be fed to a model. (when `word_labels` is specified).
+            - **overflowing_tokens** -- List of overflowing tokens sequences (when a `max_length` is specified and
+              `return_overflowing_tokens=True`).
+            - **num_truncated_tokens** -- Number of tokens truncated (when a `max_length` is specified and
+              `return_overflowing_tokens=True`).
+            - **special_tokens_mask** -- List of 0s and 1s, with 1 specifying added special tokens and 0 specifying
+              regular sequence tokens (when `add_special_tokens=True` and `return_special_tokens_mask=True`).
+            - **length** -- The length of the inputs (when `return_length=True`).
+"""
 
 
 class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
@@ -112,8 +210,6 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = LayoutXLMTokenizer
 
@@ -133,7 +229,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         pad_token_box=[0, 0, 0, 0],
         pad_token_label=-100,
         only_label_first_subword=True,
-        **kwargs
+        **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
@@ -157,7 +253,6 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.vocab_file = vocab_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
         # additional properties
         self.cls_token_box = cls_token_box
@@ -166,7 +261,11 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         self.pad_token_label = pad_token_label
         self.only_label_first_subword = only_label_first_subword
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        return os.path.isfile(self.vocab_file) if self.vocab_file else False
+
+    @add_end_docstrings(LAYOUTXLM_ENCODE_KWARGS_DOCSTRING)
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
@@ -175,7 +274,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
@@ -187,7 +286,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
@@ -206,6 +305,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
             word_labels (`List[int]`, `List[List[int]]`, *optional*):
                 Word-level integer labels (for token classification tasks such as FUNSD, CORD).
         """
+
         # Input type checking for clearer error
         def _is_valid_text_input(t):
             if isinstance(t, str):
@@ -348,7 +448,6 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         verbose: bool = True,
         **kwargs,
     ) -> BatchEncoding:
-
         if not isinstance(batch_text_or_text_pairs, list):
             raise TypeError(f"batch_text_or_text_pairs has to be a list (got {type(batch_text_or_text_pairs)})")
 
@@ -500,9 +599,8 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
-
         # make it a batched input
         # 2 options:
         # 1) only text, in case text must be a list of str
@@ -574,7 +672,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
                     - 'right': pads on the right of the sequences
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
+                `>= 7.5` (Volta).
             return_attention_mask:
                 (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """

@@ -22,7 +22,6 @@ from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -45,14 +44,9 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "YituTech/conv-bert-base"
 _CONFIG_FOR_DOC = "ConvBertConfig"
-_TOKENIZER_FOR_DOC = "ConvBertTokenizer"
 
-CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "YituTech/conv-bert-base",
-    "YituTech/conv-bert-medium-small",
-    "YituTech/conv-bert-small",
-    # See all ConvBERT models at https://huggingface.co/models?filter=convbert
-]
+
+from ..deprecated._archive_maps import CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def load_tf_weights_in_convbert(model, config, tf_checkpoint_path):
@@ -193,13 +187,12 @@ class ConvBertEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        if version.parse(torch.__version__) > version.parse("1.6.0"):
-            self.register_buffer(
-                "token_type_ids",
-                torch.zeros(self.position_ids.size(), dtype=torch.long),
-                persistent=False,
-            )
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
+        self.register_buffer(
+            "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
+        )
 
     def forward(
         self,
@@ -250,8 +243,6 @@ class ConvBertPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_convbert
     base_model_prefix = "convbert"
     supports_gradient_checkpointing = True
-    authorized_missing_keys = [r"position_ids"]
-    authorized_unexpected_keys = [r"convbert\.embeddings_project\.weight", r"convbert\.embeddings_project\.bias"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -268,10 +259,6 @@ class ConvBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ConvBertEncoder):
-            module.gradient_checkpointing = value
 
 
 class SeparableConv1D(nn.Module):
@@ -321,7 +308,7 @@ class ConvBertSelfAttention(nn.Module):
         if config.hidden_size % self.num_attention_heads != 0:
             raise ValueError("hidden_size should be divisible by num_attention_heads")
 
-        self.attention_head_size = config.hidden_size // config.num_attention_heads
+        self.attention_head_size = (config.hidden_size // self.num_attention_heads) // 2
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
@@ -418,7 +405,10 @@ class ConvBertSelfAttention(nn.Module):
         conv_out = torch.reshape(conv_out_layer, [batch_size, -1, self.num_attention_heads, self.attention_head_size])
         context_layer = torch.cat([context_layer, conv_out], 2)
 
-        new_context_layer_shape = context_layer.size()[:-2] + (self.head_ratio * self.all_head_size,)
+        # conv and context
+        new_context_layer_shape = context_layer.size()[:-2] + (
+            self.num_attention_heads * self.attention_head_size * 2,
+        )
         context_layer = context_layer.view(*new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
@@ -634,20 +624,14 @@ class ConvBertEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
@@ -714,7 +698,7 @@ CONVBERT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`ConvBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -795,7 +779,6 @@ class ConvBertModel(ConvBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -821,13 +804,14 @@ class ConvBertModel(ConvBertPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
-            batch_size, seq_length = input_shape
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if attention_mask is None:
@@ -868,12 +852,13 @@ class ConvBertGeneratorPredictions(nn.Module):
     def __init__(self, config):
         super().__init__()
 
+        self.activation = get_activation("gelu")
         self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
         self.dense = nn.Linear(config.hidden_size, config.embedding_size)
 
     def forward(self, generator_hidden_states: torch.FloatTensor) -> torch.FloatTensor:
         hidden_states = self.dense(generator_hidden_states)
-        hidden_states = get_activation("gelu")(hidden_states)
+        hidden_states = self.activation(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
 
         return hidden_states
@@ -881,6 +866,8 @@ class ConvBertGeneratorPredictions(nn.Module):
 
 @add_start_docstrings("""ConvBERT Model with a `language modeling` head on top.""", CONVBERT_START_DOCSTRING)
 class ConvBertForMaskedLM(ConvBertPreTrainedModel):
+    _tied_weights_keys = ["generator.lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -899,7 +886,6 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1003,7 +989,6 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1101,7 +1086,6 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
         CONVBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1197,7 +1181,6 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1275,7 +1258,6 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

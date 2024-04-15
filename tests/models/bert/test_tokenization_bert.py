@@ -34,7 +34,7 @@ from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 @require_tokenizers
 class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "google-bert/bert-base-uncased"
     tokenizer_class = BertTokenizer
     rust_tokenizer_class = BertTokenizerFast
     test_rust_tokenizer = True
@@ -183,6 +183,12 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.tokenize(" \tHeLLo!how  \n Are yoU? [UNK]"), ["HeLLo", "!", "how", "Are", "yoU", "?", "[UNK]"]
         )
 
+    def test_basic_tokenizer_splits_on_punctuation(self):
+        tokenizer = BasicTokenizer()
+        text = "a\n'll !!to?'d of, can't."
+        expected = ["a", "'", "ll", "!", "!", "to", "?", "'", "d", "of", ",", "can", "'", "t", "."]
+        self.assertListEqual(tokenizer.tokenize(text), expected)
+
     def test_wordpiece_tokenizer(self):
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"]
 
@@ -237,7 +243,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("bert-base-uncased")
+        tokenizer = self.tokenizer_class.from_pretrained("google-bert/bert-base-uncased")
 
         text = tokenizer.encode("sequence builders", add_special_tokens=False)
         text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
@@ -305,7 +311,6 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         text_with_chinese_char = "".join(list_of_commun_chinese_char)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-
                 kwargs["tokenize_chinese_chars"] = True
                 tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)

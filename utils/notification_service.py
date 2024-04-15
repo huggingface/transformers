@@ -16,7 +16,6 @@ import ast
 import collections
 import functools
 import json
-import math
 import operator
 import os
 import re
@@ -25,6 +24,8 @@ import time
 from typing import Dict, List, Optional, Union
 
 import requests
+from get_ci_error_statistics import get_jobs
+from get_previous_daily_ci import get_last_daily_ci_reports
 from slack_sdk import WebClient
 
 
@@ -98,7 +99,15 @@ def dicts_to_sum(objects: Union[Dict[str, Dict], List[dict]]):
 
 
 class Message:
-    def __init__(self, title: str, ci_title: str, model_results: Dict, additional_results: Dict):
+    def __init__(
+        self,
+        title: str,
+        ci_title: str,
+        model_results: Dict,
+        additional_results: Dict,
+        selected_warnings: List = None,
+        prev_ci_artifacts=None,
+    ):
         self.title = title
         self.ci_title = ci_title
 
@@ -116,10 +125,17 @@ class Message:
         # Failures and success of the additional tests
         self.n_additional_success = sum(r["success"] for r in additional_results.values())
 
-        all_additional_failures = dicts_to_sum([r["failed"] for r in additional_results.values()])
-        self.n_additional_single_gpu_failures = all_additional_failures["single"]
-        self.n_additional_multi_gpu_failures = all_additional_failures["multi"]
-        self.n_additional_unknown_gpu_failures = all_additional_failures["unclassified"]
+        if len(additional_results) > 0:
+            # `dicts_to_sum` uses `dicts_to_sum` which requires a non empty dictionary. Let's just add an empty entry.
+            all_additional_failures = dicts_to_sum([r["failed"] for r in additional_results.values()])
+            self.n_additional_single_gpu_failures = all_additional_failures["single"]
+            self.n_additional_multi_gpu_failures = all_additional_failures["multi"]
+            self.n_additional_unknown_gpu_failures = all_additional_failures["unclassified"]
+        else:
+            self.n_additional_single_gpu_failures = 0
+            self.n_additional_multi_gpu_failures = 0
+            self.n_additional_unknown_gpu_failures = 0
+
         self.n_additional_failures = (
             self.n_additional_single_gpu_failures
             + self.n_additional_multi_gpu_failures
@@ -135,6 +151,12 @@ class Message:
         self.additional_results = additional_results
 
         self.thread_ts = None
+
+        if selected_warnings is None:
+            selected_warnings = []
+        self.selected_warnings = selected_warnings
+
+        self.prev_ci_artifacts = prev_ci_artifacts
 
     @property
     def time(self) -> str:
@@ -186,8 +208,9 @@ class Message:
             "text": {
                 "type": "plain_text",
                 "text": (
-                    f"There were {self.n_failures} failures, out of {self.n_tests} tests.\nThe suite ran in"
-                    f" {self.time}."
+                    f"There were {self.n_failures} failures, out of {self.n_tests} tests.\n"
+                    f"Number of model failures: {self.n_model_failures}.\n"
+                    f"The suite ran in {self.time}."
                 ),
                 "emoji": True,
             },
@@ -195,6 +218,38 @@ class Message:
                 "type": "button",
                 "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
                 "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+            },
+        }
+
+    @property
+    def warnings(self) -> Dict:
+        # If something goes wrong, let's avoid the CI report failing to be sent.
+        button_text = "Check warnings (Link not found)"
+        # Use the workflow run link
+        job_link = f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+
+        for job in github_actions_jobs:
+            if "Extract warnings in CI artifacts" in job["name"] and job["conclusion"] == "success":
+                button_text = "Check warnings"
+                # Use the actual job link
+                job_link = job["html_url"]
+                break
+
+        huggingface_hub_warnings = [x for x in self.selected_warnings if "huggingface_hub" in x]
+        text = f"There are {len(self.selected_warnings)} warnings being selected."
+        text += f"\n{len(huggingface_hub_warnings)} of them are from `huggingface_hub`."
+
+        return {
+            "type": "section",
+            "text": {
+                "type": "plain_text",
+                "text": text,
+                "emoji": True,
+            },
+            "accessory": {
+                "type": "button",
+                "text": {"type": "plain_text", "text": button_text, "emoji": True},
+                "url": job_link,
             },
         }
 
@@ -233,18 +288,51 @@ class Message:
                     individual_reports.append(key)
 
         header = "Single |  Multi | Category\n"
-        category_failures_report = header + "\n".join(sorted(individual_reports))
+        category_failures_report = prepare_reports(
+            title="The following modeling categories had failures", header=header, reports=individual_reports
+        )
 
-        return {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"The following modeling categories had failures:\n\n```\n{category_failures_report}\n```",
-            },
-        }
+        return {"type": "section", "text": {"type": "mrkdwn", "text": category_failures_report}}
+
+    def compute_diff_for_failure_reports(self, curr_failure_report, prev_failure_report):  # noqa
+        # Remove the leading and training parts that don't contain failure count information.
+        model_failures = curr_failure_report.split("\n")[3:-2]
+        prev_model_failures = prev_failure_report.split("\n")[3:-2]
+        entries_changed = set(model_failures).difference(prev_model_failures)
+
+        prev_map = {}
+        for f in prev_model_failures:
+            items = [x.strip() for x in f.split("| ")]
+            prev_map[items[-1]] = [int(x) for x in items[:-1]]
+
+        curr_map = {}
+        for f in entries_changed:
+            items = [x.strip() for x in f.split("| ")]
+            curr_map[items[-1]] = [int(x) for x in items[:-1]]
+
+        diff_map = {}
+        for k, v in curr_map.items():
+            if k not in prev_map:
+                diff_map[k] = v
+            else:
+                diff = [x - y for x, y in zip(v, prev_map[k])]
+                if max(diff) > 0:
+                    diff_map[k] = diff
+
+        entries_changed = []
+        for model_name, diff_values in diff_map.items():
+            diff = [str(x) for x in diff_values]
+            diff = [f"+{x}" if (x != "0" and not x.startswith("-")) else x for x in diff]
+            diff = [x.rjust(9) for x in diff]
+            device_report = " | ".join(diff) + " | "
+            report = f"{device_report}{model_name}"
+            entries_changed.append(report)
+        entries_changed = sorted(entries_changed, key=lambda s: s.split("| ")[-1])
+
+        return entries_changed
 
     @property
-    def model_failures(self) -> Dict:
+    def model_failures(self) -> List[Dict]:
         # Obtain per-model failures
         def per_model_sum(model_category_dict):
             return dicts_to_sum(model_category_dict["failed"].values())
@@ -300,23 +388,80 @@ class Message:
 
                 model_reports.append(report)
 
+        # (Possibly truncated) reports for the current workflow run - to be sent to Slack channels
         model_header = "Single PT |  Multi PT | Single TF |  Multi TF |     Other | Category\n"
-        sorted_model_reports = sorted(model_reports, key=lambda s: s.split("] ")[-1])
-        model_failures_report = model_header + "\n".join(sorted_model_reports)
+        sorted_model_reports = sorted(model_reports, key=lambda s: s.split("| ")[-1])
+        model_failures_report = prepare_reports(
+            title="These following model modules had failures", header=model_header, reports=sorted_model_reports
+        )
 
         module_header = "Single |  Multi | Category\n"
-        sorted_module_reports = sorted(other_module_reports, key=lambda s: s.split("] ")[-1])
-        module_failures_report = module_header + "\n".join(sorted_module_reports)
+        sorted_module_reports = sorted(other_module_reports, key=lambda s: s.split("| ")[-1])
+        module_failures_report = prepare_reports(
+            title="The following non-model modules had failures", header=module_header, reports=sorted_module_reports
+        )
 
-        report = ""
+        # To be sent to Slack channels
+        model_failure_sections = [
+            {"type": "section", "text": {"type": "mrkdwn", "text": model_failures_report}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": module_failures_report}},
+        ]
 
-        if len(model_reports):
-            report += f"These following model modules had failures:\n```\n{model_failures_report}\n```\n\n"
+        # Save the complete (i.e. no truncation) failure tables (of the current workflow run)
+        # (to be uploaded as artifacts)
 
-        if len(other_module_reports):
-            report += f"The following non-model modules had failures:\n```\n{module_failures_report}\n```\n\n"
+        model_failures_report = prepare_reports(
+            title="These following model modules had failures",
+            header=model_header,
+            reports=sorted_model_reports,
+            to_truncate=False,
+        )
+        file_path = os.path.join(os.getcwd(), "prev_ci_results/model_failures_report.txt")
+        with open(file_path, "w", encoding="UTF-8") as fp:
+            fp.write(model_failures_report)
 
-        return {"type": "section", "text": {"type": "mrkdwn", "text": report}}
+        module_failures_report = prepare_reports(
+            title="The following non-model modules had failures",
+            header=module_header,
+            reports=sorted_module_reports,
+            to_truncate=False,
+        )
+        file_path = os.path.join(os.getcwd(), "prev_ci_results/module_failures_report.txt")
+        with open(file_path, "w", encoding="UTF-8") as fp:
+            fp.write(module_failures_report)
+
+        if self.prev_ci_artifacts is not None:
+            # if the last run produces artifact named `prev_ci_results`
+            if (
+                "prev_ci_results" in self.prev_ci_artifacts
+                and "model_failures_report.txt" in self.prev_ci_artifacts["prev_ci_results"]
+            ):
+                # Compute the difference of the previous/current (model failure) table
+                prev_model_failures = self.prev_ci_artifacts["prev_ci_results"]["model_failures_report.txt"]
+                entries_changed = self.compute_diff_for_failure_reports(model_failures_report, prev_model_failures)
+                if len(entries_changed) > 0:
+                    # Save the complete difference
+                    diff_report = prepare_reports(
+                        title="Changed model modules failures",
+                        header=model_header,
+                        reports=entries_changed,
+                        to_truncate=False,
+                    )
+                    file_path = os.path.join(os.getcwd(), "prev_ci_results/changed_model_failures_report.txt")
+                    with open(file_path, "w", encoding="UTF-8") as fp:
+                        fp.write(diff_report)
+
+                    # To be sent to Slack channels
+                    diff_report = prepare_reports(
+                        title="*Changed model modules failures*",
+                        header=model_header,
+                        reports=entries_changed,
+                    )
+                    model_failure_sections.append(
+                        {"type": "section", "text": {"type": "mrkdwn", "text": diff_report}},
+                    )
+
+        return model_failure_sections
 
     @property
     def additional_failures(self) -> Dict:
@@ -337,15 +482,11 @@ class Message:
                 individual_reports.append(report)
 
         header = "Single |  Multi | Category\n"
-        failures_report = header + "\n".join(sorted(individual_reports))
+        failures_report = prepare_reports(
+            title="The following non-modeling tests had failures", header=header, reports=individual_reports
+        )
 
-        return {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"The following non-modeling tests had failures:\n```\n{failures_report}\n```",
-            },
-        }
+        return {"type": "section", "text": {"type": "mrkdwn", "text": failures_report}}
 
     @property
     def payload(self) -> str:
@@ -358,7 +499,10 @@ class Message:
             blocks.append(self.failures)
 
         if self.n_model_failures > 0:
-            blocks.extend([self.category_failures, self.model_failures])
+            blocks.append(self.category_failures)
+            for block in self.model_failures:
+                if block["text"]["text"]:
+                    blocks.append(block)
 
         if self.n_additional_failures > 0:
             blocks.append(self.additional_failures)
@@ -366,49 +510,107 @@ class Message:
         if self.n_model_failures == 0 and self.n_additional_failures == 0:
             blocks.append(self.no_failures)
 
+        if len(self.selected_warnings) > 0:
+            blocks.append(self.warnings)
+
+        new_failure_blocks = self.get_new_model_failure_blocks(with_header=False)
+        if len(new_failure_blocks) > 0:
+            blocks.extend(new_failure_blocks)
+
         return json.dumps(blocks)
 
     @staticmethod
-    def error_out():
-        payload = [
-            {
-                "type": "section",
-                "text": {
-                    "type": "plain_text",
-                    "text": "There was an issue running the tests.",
-                },
-                "accessory": {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
-                    "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
-                },
-            }
-        ]
+    def error_out(title, ci_title="", runner_not_available=False, runner_failed=False, setup_failed=False):
+        blocks = []
+        title_block = {"type": "header", "text": {"type": "plain_text", "text": title}}
+        blocks.append(title_block)
+
+        if ci_title:
+            ci_title_block = {"type": "section", "text": {"type": "mrkdwn", "text": ci_title}}
+            blocks.append(ci_title_block)
+
+        offline_runners = []
+        if runner_not_available:
+            text = "💔 CI runners are not available! Tests are not run. 😭"
+            result = os.environ.get("OFFLINE_RUNNERS")
+            if result is not None:
+                offline_runners = json.loads(result)
+        elif runner_failed:
+            text = "💔 CI runners have problems! Tests are not run. 😭"
+        elif setup_failed:
+            text = "💔 Setup job failed. Tests are not run. 😭"
+        else:
+            text = "💔 There was an issue running the tests. 😭"
+
+        error_block_1 = {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": text,
+            },
+        }
+
+        text = ""
+        if len(offline_runners) > 0:
+            text = "\n  • " + "\n  • ".join(offline_runners)
+            text = f"The following runners are offline:\n{text}\n\n"
+        text += "🙏 Let's fix it ASAP! 🙏"
+
+        error_block_2 = {
+            "type": "section",
+            "text": {
+                "type": "plain_text",
+                "text": text,
+            },
+            "accessory": {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
+                "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+            },
+        }
+        blocks.extend([error_block_1, error_block_2])
+
+        payload = json.dumps(blocks)
 
         print("Sending the following payload")
-        print(json.dumps({"blocks": json.loads(payload)}))
+        print(json.dumps({"blocks": blocks}))
 
         client.chat_postMessage(
-            channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
-            text="There was an issue running the tests.",
+            channel=SLACK_REPORT_CHANNEL_ID,
+            text=text,
             blocks=payload,
         )
 
     def post(self):
+        payload = self.payload
         print("Sending the following payload")
-        print(json.dumps({"blocks": json.loads(self.payload)}))
+        print(json.dumps({"blocks": json.loads(payload)}))
 
         text = f"{self.n_failures} failures out of {self.n_tests} tests," if self.n_failures else "All tests passed."
 
         self.thread_ts = client.chat_postMessage(
-            channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
-            blocks=self.payload,
+            channel=SLACK_REPORT_CHANNEL_ID,
+            blocks=payload,
             text=text,
         )
 
     def get_reply_blocks(self, job_name, job_result, failures, device, text):
-        if len(failures) > 2500:
-            failures = "\n".join(failures.split("\n")[:20]) + "\n\n[Truncated]"
+        """
+        failures: A list with elements of the form {"line": full test name, "trace": error trace}
+        """
+        # `text` must be less than 3001 characters in Slack SDK
+        # keep some room for adding "[Truncated]" when necessary
+        MAX_ERROR_TEXT = 3000 - len("[Truncated]")
+
+        failure_text = ""
+        for idx, error in enumerate(failures):
+            new_text = failure_text + f'*{error["line"]}*\n_{error["trace"]}_\n\n'
+            if len(new_text) > MAX_ERROR_TEXT:
+                # `failure_text` here has length <= 3000
+                failure_text = failure_text + "[Truncated]"
+                break
+            # `failure_text` here has length <= MAX_ERROR_TEXT
+            failure_text = new_text
 
         title = job_name
         if device is not None:
@@ -416,18 +618,84 @@ class Message:
 
         content = {"type": "section", "text": {"type": "mrkdwn", "text": text}}
 
-        if job_result["job_link"] is not None:
+        # TODO: Make sure we always have a valid job link (or at least a way not to break the report sending)
+        # Currently we get the device from a job's artifact name.
+        # If a device is found, the job name should contain the device type, for example, `XXX (single-gpu)`.
+        # This could be done by adding `machine_type` in a job's `strategy`.
+        # (If `job_result["job_link"][device]` is `None`, we get an error: `... [ERROR] must provide a string ...`)
+        if job_result["job_link"] is not None and job_result["job_link"][device] is not None:
             content["accessory"] = {
                 "type": "button",
                 "text": {"type": "plain_text", "text": "GitHub Action job", "emoji": True},
-                "url": job_result["job_link"],
+                "url": job_result["job_link"][device],
             }
 
         return [
             {"type": "header", "text": {"type": "plain_text", "text": title.upper(), "emoji": True}},
             content,
-            {"type": "section", "text": {"type": "mrkdwn", "text": failures}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": failure_text}},
         ]
+
+    def get_new_model_failure_blocks(self, with_header=True):
+        if self.prev_ci_artifacts is None:
+            return {}
+
+        sorted_dict = sorted(self.model_results.items(), key=lambda t: t[0])
+
+        prev_model_results = {}
+        if (
+            "prev_ci_results" in self.prev_ci_artifacts
+            and "model_results.json" in self.prev_ci_artifacts["prev_ci_results"]
+        ):
+            prev_model_results = json.loads(self.prev_ci_artifacts["prev_ci_results"]["model_results.json"])
+
+        all_failure_lines = {}
+        for job, job_result in sorted_dict:
+            if len(job_result["failures"]):
+                devices = sorted(job_result["failures"].keys(), reverse=True)
+                for device in devices:
+                    failures = job_result["failures"][device]
+                    prev_error_lines = {}
+                    if job in prev_model_results and device in prev_model_results[job]["failures"]:
+                        prev_error_lines = {error["line"] for error in prev_model_results[job]["failures"][device]}
+
+                    url = None
+                    if job_result["job_link"] is not None and job_result["job_link"][device] is not None:
+                        url = job_result["job_link"][device]
+
+                    for idx, error in enumerate(failures):
+                        if error["line"] in prev_error_lines:
+                            continue
+
+                        new_text = f'{error["line"]}\n\n'
+
+                        if new_text not in all_failure_lines:
+                            all_failure_lines[new_text] = []
+
+                        all_failure_lines[new_text].append(f"<{url}|{device}>" if url is not None else device)
+
+        MAX_ERROR_TEXT = 3000 - len("[Truncated]") - len("```New model failures```\n\n")
+        failure_text = ""
+        for line, devices in all_failure_lines.items():
+            new_text = failure_text + f"{'|'.join(devices)} gpu\n{line}"
+            if len(new_text) > MAX_ERROR_TEXT:
+                # `failure_text` here has length <= 3000
+                failure_text = failure_text + "[Truncated]"
+                break
+            # `failure_text` here has length <= MAX_ERROR_TEXT
+            failure_text = new_text
+
+        blocks = []
+        if failure_text:
+            if with_header:
+                blocks.append(
+                    {"type": "header", "text": {"type": "plain_text", "text": "New model failures", "emoji": True}}
+                )
+            else:
+                failure_text = f"*New model failures*\n\n{failure_text}"
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": failure_text}})
+
+        return blocks
 
     def post_reply(self):
         if self.thread_ts is None:
@@ -447,7 +715,7 @@ class Message:
                     print(json.dumps({"blocks": blocks}))
 
                     client.chat_postMessage(
-                        channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
+                        channel=SLACK_REPORT_CHANNEL_ID,
                         text=f"Results for {job}",
                         blocks=blocks,
                         thread_ts=self.thread_ts["ts"],
@@ -463,14 +731,14 @@ class Message:
                         job_result,
                         failures,
                         device,
-                        text=f"Number of failures: {sum(job_result['failed'].values())}",
+                        text=f'Number of failures: {job_result["failed"][device]}',
                     )
 
                     print("Sending the following reply")
                     print(json.dumps({"blocks": blocks}))
 
                     client.chat_postMessage(
-                        channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
+                        channel=SLACK_REPORT_CHANNEL_ID,
                         text=f"Results for {job}",
                         blocks=blocks,
                         thread_ts=self.thread_ts["ts"],
@@ -478,45 +746,35 @@ class Message:
 
                     time.sleep(1)
 
+        blocks = self.get_new_model_failure_blocks()
+        if blocks:
+            print("Sending the following reply")
+            print(json.dumps({"blocks": blocks}))
 
-def get_job_links():
-    run_id = os.environ["GITHUB_RUN_ID"]
-    url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{run_id}/jobs?per_page=100"
-    result = requests.get(url).json()
-    jobs = {}
+            client.chat_postMessage(
+                channel=SLACK_REPORT_CHANNEL_ID,
+                text="Results for new failures",
+                blocks=blocks,
+                thread_ts=self.thread_ts["ts"],
+            )
 
-    try:
-        jobs.update({job["name"]: job["html_url"] for job in result["jobs"]})
-        pages_to_iterate_over = math.ceil((result["total_count"] - 100) / 100)
-
-        for i in range(pages_to_iterate_over):
-            result = requests.get(url + f"&page={i + 2}").json()
-            jobs.update({job["name"]: job["html_url"] for job in result["jobs"]})
-
-        return jobs
-    except Exception as e:
-        print("Unknown error, could not fetch links.", e)
-
-    return {}
+            time.sleep(1)
 
 
-def retrieve_artifact(name: str, gpu: Optional[str]):
+def retrieve_artifact(artifact_path: str, gpu: Optional[str]):
     if gpu not in [None, "single", "multi"]:
         raise ValueError(f"Invalid GPU for artifact. Passed GPU: `{gpu}`.")
 
-    if gpu is not None:
-        name = f"{gpu}-gpu_{name}"
-
     _artifact = {}
 
-    if os.path.exists(name):
-        files = os.listdir(name)
+    if os.path.exists(artifact_path):
+        files = os.listdir(artifact_path)
         for file in files:
             try:
-                with open(os.path.join(name, file)) as f:
+                with open(os.path.join(artifact_path, file)) as f:
                     _artifact[file.split(".")[0]] = f.read()
             except UnicodeDecodeError as e:
-                raise ValueError(f"Could not open {os.path.join(name, file)}.") from e
+                raise ValueError(f"Could not open {os.path.join(artifact_path, file)}.") from e
 
     return _artifact
 
@@ -539,8 +797,14 @@ def retrieve_available_artifacts():
 
     directories = filter(os.path.isdir, os.listdir())
     for directory in directories:
-        if directory.startswith("single-gpu"):
-            artifact_name = directory[len("single-gpu") + 1 :]
+        artifact_name = directory
+
+        name_parts = artifact_name.split("_postfix_")
+        if len(name_parts) > 1:
+            artifact_name = name_parts[0]
+
+        if artifact_name.startswith("single-gpu"):
+            artifact_name = artifact_name[len("single-gpu") + 1 :]
 
             if artifact_name in _available_artifacts:
                 _available_artifacts[artifact_name].single_gpu = True
@@ -549,8 +813,8 @@ def retrieve_available_artifacts():
 
             _available_artifacts[artifact_name].add_path(directory, gpu="single")
 
-        elif directory.startswith("multi-gpu"):
-            artifact_name = directory[len("multi-gpu") + 1 :]
+        elif artifact_name.startswith("multi-gpu"):
+            artifact_name = artifact_name[len("multi-gpu") + 1 :]
 
             if artifact_name in _available_artifacts:
                 _available_artifacts[artifact_name].multi_gpu = True
@@ -559,7 +823,6 @@ def retrieve_available_artifacts():
 
             _available_artifacts[artifact_name].add_path(directory, gpu="multi")
         else:
-            artifact_name = directory
             if artifact_name not in _available_artifacts:
                 _available_artifacts[artifact_name] = Artifact(artifact_name)
 
@@ -568,21 +831,139 @@ def retrieve_available_artifacts():
     return _available_artifacts
 
 
+def prepare_reports(title, header, reports, to_truncate=True):
+    report = ""
+
+    MAX_ERROR_TEXT = 3000 - len("[Truncated]")
+    if not to_truncate:
+        MAX_ERROR_TEXT = float("inf")
+
+    if len(reports) > 0:
+        # `text` must be less than 3001 characters in Slack SDK
+        # keep some room for adding "[Truncated]" when necessary
+
+        for idx in range(len(reports)):
+            _report = header + "\n".join(reports[: idx + 1])
+            new_report = f"{title}:\n```\n{_report}\n```\n"
+            if len(new_report) > MAX_ERROR_TEXT:
+                # `report` here has length <= 3000
+                report = report + "[Truncated]"
+                break
+            report = new_report
+
+    return report
+
+
 if __name__ == "__main__":
+    SLACK_REPORT_CHANNEL_ID = os.environ["SLACK_REPORT_CHANNEL"]
+
+    # runner_status = os.environ.get("RUNNER_STATUS")
+    # runner_env_status = os.environ.get("RUNNER_ENV_STATUS")
+    setup_status = os.environ.get("SETUP_STATUS")
+
+    # runner_not_available = True if runner_status is not None and runner_status != "success" else False
+    # runner_failed = True if runner_env_status is not None and runner_env_status != "success" else False
+    # Let's keep the lines regardig runners' status (we might be able to use them again in the future)
+    runner_not_available = False
+    runner_failed = False
+    # Some jobs don't depend (`needs`) on the job `setup`: in this case, the status of the job `setup` is `skipped`.
+    setup_failed = False if setup_status in ["skipped", "success"] else True
+
+    org = "huggingface"
+    repo = "transformers"
+    repository_full_name = f"{org}/{repo}"
 
     # This env. variable is set in workflow file (under the job `send_results`).
     ci_event = os.environ["CI_EVENT"]
 
-    arguments = sys.argv[1:][0]
-    try:
-        models = ast.literal_eval(arguments)
-        # Need to change from elements like `models/bert` to `models_bert` (the ones used as artifact names).
-        models = [x.replace("models/", "models_") for x in models]
-    except SyntaxError:
-        Message.error_out()
-        raise ValueError("Errored out.")
+    # To find the PR number in a commit title, for example, `Add AwesomeFormer model (#99999)`
+    pr_number_re = re.compile(r"\(#(\d+)\)$")
 
-    github_actions_job_links = get_job_links()
+    title = f"🤗 Results of the {ci_event} tests."
+    # Add Commit/PR title with a link for push CI
+    # (check the title in 2 env. variables - depending on the CI is triggered via `push` or `workflow_run` event)
+    ci_title_push = os.environ.get("CI_TITLE_PUSH")
+    ci_title_workflow_run = os.environ.get("CI_TITLE_WORKFLOW_RUN")
+    ci_title = ci_title_push if ci_title_push else ci_title_workflow_run
+
+    ci_sha = os.environ.get("CI_SHA")
+
+    ci_url = None
+    if ci_sha:
+        ci_url = f"https://github.com/{repository_full_name}/commit/{ci_sha}"
+
+    if ci_title is not None:
+        if ci_url is None:
+            raise ValueError(
+                "When a title is found (`ci_title`), it means a `push` event or a `workflow_run` even (triggered by "
+                "another `push` event), and the commit SHA has to be provided in order to create the URL to the "
+                "commit page."
+            )
+        ci_title = ci_title.strip().split("\n")[0].strip()
+
+        # Retrieve the PR title and author login to complete the report
+        commit_number = ci_url.split("/")[-1]
+        ci_detail_url = f"https://api.github.com/repos/{repository_full_name}/commits/{commit_number}"
+        ci_details = requests.get(ci_detail_url).json()
+        ci_author = ci_details["author"]["login"]
+
+        merged_by = None
+        # Find the PR number (if any) and change the url to the actual PR page.
+        numbers = pr_number_re.findall(ci_title)
+        if len(numbers) > 0:
+            pr_number = numbers[0]
+            ci_detail_url = f"https://api.github.com/repos/{repository_full_name}/pulls/{pr_number}"
+            ci_details = requests.get(ci_detail_url).json()
+
+            ci_author = ci_details["user"]["login"]
+            ci_url = f"https://github.com/{repository_full_name}/pull/{pr_number}"
+
+            merged_by = ci_details["merged_by"]["login"]
+
+        if merged_by is None:
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author}"
+        else:
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author} | Merged by: {merged_by}"
+
+    elif ci_sha:
+        ci_title = f"<{ci_url}|commit: {ci_sha}>"
+
+    else:
+        ci_title = ""
+
+    if runner_not_available or runner_failed or setup_failed:
+        Message.error_out(title, ci_title, runner_not_available, runner_failed, setup_failed)
+        exit(0)
+
+    # sys.argv[0] is always `utils/notification_service.py`.
+    arguments = sys.argv[1:]
+    # In our usage in `.github/workflows/slack-report.yml`, we always pass an argument when calling this script.
+    # The argument could be an empty string `""` if a job doesn't depend on the job `setup`.
+    if arguments[0] == "":
+        models = []
+    else:
+        model_list_as_str = arguments[0]
+        try:
+            folder_slices = ast.literal_eval(model_list_as_str)
+            # Need to change from elements like `models/bert` to `models_bert` (the ones used as artifact names).
+            models = [x.replace("models/", "models_") for folders in folder_slices for x in folders]
+        except Exception:
+            Message.error_out(title, ci_title)
+            raise ValueError("Errored out.")
+
+    github_actions_jobs = get_jobs(
+        workflow_run_id=os.environ["GITHUB_RUN_ID"], token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+    )
+    github_actions_job_links = {job["name"]: job["html_url"] for job in github_actions_jobs}
+
+    artifact_name_to_job_map = {}
+    for job in github_actions_jobs:
+        for step in job["steps"]:
+            if step["name"].startswith("Test suite reports artifacts: "):
+                artifact_name = step["name"][len("Test suite reports artifacts: ") :]
+                artifact_name_to_job_map[artifact_name] = job
+                break
+
     available_artifacts = retrieve_available_artifacts()
 
     modeling_categories = [
@@ -608,6 +989,7 @@ if __name__ == "__main__":
             "success": 0,
             "time_spent": "",
             "failures": {},
+            "job_link": {},
         }
         for model in models
         if f"run_all_tests_gpu_{model}_test_reports" in available_artifacts
@@ -617,14 +999,11 @@ if __name__ == "__main__":
 
     for model in model_results.keys():
         for artifact_path in available_artifacts[f"run_all_tests_gpu_{model}_test_reports"].paths:
-            artifact = retrieve_artifact(artifact_path["name"], artifact_path["gpu"])
+            artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             if "stats" in artifact:
                 # Link to the GitHub Action job
-                model_results[model]["job_link"] = github_actions_job_links.get(
-                    # The job names use `matrix.folder` which contain things like `models/bert` instead of `models_bert`
-                    f"Model tests ({model.replace('models_', 'models/')}, {artifact_path['gpu']}-gpu)"
-                )
-
+                job = artifact_name_to_job_map[artifact_path["path"]]
+                model_results[model]["job_link"][artifact_path["gpu"]] = job["html_url"]
                 failed, success, time_spent = handle_test_results(artifact["stats"])
                 model_results[model]["success"] += success
                 model_results[model]["time_spent"] += time_spent[1:-1] + ", "
@@ -632,17 +1011,16 @@ if __name__ == "__main__":
                 stacktraces = handle_stacktraces(artifact["failures_line"])
 
                 for line in artifact["summary_short"].split("\n"):
-                    if re.search("FAILED", line):
-
-                        line = line.replace("FAILED ", "")
+                    if line.startswith("FAILED "):
+                        line = line[len("FAILED ") :]
                         line = line.split()[0].replace("\n", "")
 
                         if artifact_path["gpu"] not in model_results[model]["failures"]:
-                            model_results[model]["failures"][artifact_path["gpu"]] = ""
+                            model_results[model]["failures"][artifact_path["gpu"]] = []
 
-                        model_results[model]["failures"][
-                            artifact_path["gpu"]
-                        ] += f"*{line}*\n_{stacktraces.pop(0)}_\n\n"
+                        model_results[model]["failures"][artifact_path["gpu"]].append(
+                            {"line": line, "trace": stacktraces.pop(0)}
+                        )
 
                         if re.search("test_modeling_tf_", line):
                             model_results[model]["failed"]["TensorFlow"][artifact_path["gpu"]] += 1
@@ -674,16 +1052,38 @@ if __name__ == "__main__":
 
     # Additional runs
     additional_files = {
-        "Examples directory": "run_examples_gpu",
         "PyTorch pipelines": "run_tests_torch_pipeline_gpu",
         "TensorFlow pipelines": "run_tests_tf_pipeline_gpu",
+        "Examples directory": "run_examples_gpu",
         "Torch CUDA extension tests": "run_tests_torch_cuda_extensions_gpu_test_reports",
     }
 
-    if ci_event == "push":
+    if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
         del additional_files["Examples directory"]
         del additional_files["PyTorch pipelines"]
         del additional_files["TensorFlow pipelines"]
+    elif ci_event.startswith("Scheduled CI (AMD)"):
+        del additional_files["TensorFlow pipelines"]
+        del additional_files["Torch CUDA extension tests"]
+    elif ci_event.startswith("Push CI (AMD)"):
+        additional_files = {}
+
+    # A map associating the job names (specified by `inputs.job` in a workflow file) with the keys of
+    # `additional_files`. This is used to remove some entries in `additional_files` that are not concerned by a
+    # specific job. See below.
+    job_to_test_map = {
+        "run_pipelines_torch_gpu": "PyTorch pipelines",
+        "run_pipelines_tf_gpu": "TensorFlow pipelines",
+        "run_examples_gpu": "Examples directory",
+        "run_all_tests_torch_cuda_extensions_gpu": "Torch CUDA extension tests",
+    }
+
+    # Remove some entries in `additional_files` if they are not concerned.
+    test_name = None
+    job_name = os.getenv("CI_TEST_JOB")
+    if job_name in job_to_test_map:
+        test_name = job_to_test_map[job_name]
+    additional_files = {k: v for k, v in additional_files.items() if k == test_name}
 
     additional_results = {
         key: {
@@ -692,24 +1092,23 @@ if __name__ == "__main__":
             "time_spent": "",
             "error": False,
             "failures": {},
-            "job_link": github_actions_job_links.get(key),
+            "job_link": {},
         }
         for key in additional_files.keys()
     }
 
     for key in additional_results.keys():
-
         # If a whole suite of test fails, the artifact isn't available.
         if additional_files[key] not in available_artifacts:
             additional_results[key]["error"] = True
             continue
 
         for artifact_path in available_artifacts[additional_files[key]].paths:
-            if artifact_path["gpu"] is not None:
-                additional_results[key]["job_link"] = github_actions_job_links.get(
-                    f"{key} ({artifact_path['gpu']}-gpu)"
-                )
-            artifact = retrieve_artifact(artifact_path["name"], artifact_path["gpu"])
+            # Link to the GitHub Action job
+            job = artifact_name_to_job_map[artifact_path["path"]]
+            additional_results[key]["job_link"][artifact_path["gpu"]] = job["html_url"]
+
+            artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             stacktraces = handle_stacktraces(artifact["failures_line"])
 
             failed, success, time_spent = handle_test_results(artifact["stats"])
@@ -722,59 +1121,57 @@ if __name__ == "__main__":
 
             if failed:
                 for line in artifact["summary_short"].split("\n"):
-                    if re.search("FAILED", line):
-                        line = line.replace("FAILED ", "")
+                    if line.startswith("FAILED "):
+                        line = line[len("FAILED ") :]
                         line = line.split()[0].replace("\n", "")
 
                         if artifact_path["gpu"] not in additional_results[key]["failures"]:
-                            additional_results[key]["failures"][artifact_path["gpu"]] = ""
+                            additional_results[key]["failures"][artifact_path["gpu"]] = []
 
-                        additional_results[key]["failures"][
-                            artifact_path["gpu"]
-                        ] += f"*{line}*\n_{stacktraces.pop(0)}_\n\n"
+                        additional_results[key]["failures"][artifact_path["gpu"]].append(
+                            {"line": line, "trace": stacktraces.pop(0)}
+                        )
 
-    # To find the PR number in a commit title, for example, `Add AwesomeFormer model (#99999)`
-    pr_number_re = re.compile(r"\(#(\d+)\)$")
+    # Let's only check the warning for the model testing job. Currently, the job `run_extract_warnings` is only run
+    # when `inputs.job` (in the workflow file) is `run_tests_gpu`. The reason is: otherwise we need to save several
+    # artifacts with different names which complicates the logic for an insignificant part of the CI workflow reporting.
+    selected_warnings = []
+    if job_name == "run_tests_gpu":
+        if "warnings_in_ci" in available_artifacts:
+            directory = available_artifacts["warnings_in_ci"].paths[0]["path"]
+            with open(os.path.join(directory, "selected_warnings.json")) as fp:
+                selected_warnings = json.load(fp)
 
-    title = f"🤗 Results of the {ci_event} tests."
-    # Add PR title with a link for push CI
-    ci_title = os.environ.get("CI_TITLE")
-    ci_url = os.environ.get("CI_COMMIT_URL")
+    if not os.path.isdir(os.path.join(os.getcwd(), "prev_ci_results")):
+        os.makedirs(os.path.join(os.getcwd(), "prev_ci_results"))
 
-    if ci_title is not None:
-        assert ci_url is not None
-        ci_title = ci_title.strip().split("\n")[0].strip()
+    # Only the model testing job is concerned: this condition is to avoid other jobs to upload the empty list as
+    # results.
+    if job_name == "run_tests_gpu":
+        with open("prev_ci_results/model_results.json", "w", encoding="UTF-8") as fp:
+            json.dump(model_results, fp, indent=4, ensure_ascii=False)
 
-        # Retrieve the PR title and author login to complete the report
-        commit_number = ci_url.split("/")[-1]
-        ci_detail_url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit_number}"
-        ci_details = requests.get(ci_detail_url).json()
-        ci_author = ci_details["author"]["login"]
+    prev_ci_artifacts = None
+    target_workflow = "huggingface/transformers/.github/workflows/self-scheduled.yml@refs/heads/main"
+    if os.environ.get("CI_WORKFLOW_REF") == target_workflow:
+        # Get the last previously completed CI's failure tables
+        artifact_names = ["prev_ci_results"]
+        output_dir = os.path.join(os.getcwd(), "previous_reports")
+        os.makedirs(output_dir, exist_ok=True)
+        prev_ci_artifacts = get_last_daily_ci_reports(
+            artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+        )
 
-        merged_by = None
-        # Find the PR number (if any) and change the url to the actual PR page.
-        numbers = pr_number_re.findall(ci_title)
-        if len(numbers) > 0:
-            pr_number = numbers[0]
-            ci_detail_url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
-            ci_details = requests.get(ci_detail_url).json()
+    message = Message(
+        title,
+        ci_title,
+        model_results,
+        additional_results,
+        selected_warnings=selected_warnings,
+        prev_ci_artifacts=prev_ci_artifacts,
+    )
 
-            ci_author = ci_details["user"]["login"]
-            ci_url = f"https://github.com/huggingface/transformers/pull/{pr_number}"
-
-            merged_by = ci_details["merged_by"]["login"]
-
-        if merged_by is None:
-            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author}"
-        else:
-            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author} | Merged by: {merged_by}"
-
-    else:
-        ci_title = ""
-
-    message = Message(title, ci_title, model_results, additional_results)
-
-    # send report only if there is any failure
-    if message.n_failures:
+    # send report only if there is any failure (for push CI)
+    if message.n_failures or (ci_event != "push" and not ci_event.startswith("Push CI (AMD)")):
         message.post()
         message.post_reply()

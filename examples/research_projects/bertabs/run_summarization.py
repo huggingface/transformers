@@ -6,10 +6,10 @@ import sys
 from collections import namedtuple
 
 import torch
+from modeling_bertabs import BertAbs, build_predictor
 from torch.utils.data import DataLoader, SequentialSampler
 from tqdm import tqdm
 
-from modeling_bertabs import BertAbs, build_predictor
 from transformers import BertTokenizer
 
 from .utils_summarization import (
@@ -29,7 +29,7 @@ Batch = namedtuple("Batch", ["document_names", "batch_size", "src", "segs", "mas
 
 
 def evaluate(args):
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", do_lower_case=True)
+    tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased", do_lower_case=True)
     model = BertAbs.from_pretrained("remi/bertabs-finetuned-extractive-abstractive-summarization")
     model.to(args.device)
     model.eval()
@@ -45,7 +45,6 @@ def evaluate(args):
         generated_summaries = []
 
         import nltk
-
         import rouge
 
         nltk.download("punkt")

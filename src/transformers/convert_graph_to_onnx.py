@@ -61,9 +61,9 @@ class OnnxConverterArgumentParser(ArgumentParser):
             "--model",
             type=str,
             required=True,
-            help="Model's id or path (ex: bert-base-cased)",
+            help="Model's id or path (ex: google-bert/bert-base-cased)",
         )
-        self.add_argument("--tokenizer", type=str, help="Tokenizer's id or path (ex: bert-base-cased)")
+        self.add_argument("--tokenizer", type=str, help="Tokenizer's id or path (ex: google-bert/bert-base-cased)")
         self.add_argument(
             "--framework",
             type=str,
@@ -133,7 +133,7 @@ def check_onnxruntime_requirements(minimum_version: Version):
 
 def ensure_valid_input(model, tokens, input_names):
     """
-    Ensure input are presented in the correct order, without any Non
+    Ensure inputs are presented in the correct order, without any Non
 
     Args:
         model: The model used to forward the input data
@@ -279,32 +279,16 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
         input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "pt")
         ordered_input_names, model_args = ensure_valid_input(nlp.model, tokens, input_names)
 
-        # PyTorch deprecated the `enable_onnx_checker` and `use_external_data_format` arguments in v1.11,
-        # so we check the torch version for backwards compatibility
-        if parse(torch.__version__) <= parse("1.10.99"):
-            export(
-                nlp.model,
-                model_args,
-                f=output.as_posix(),
-                input_names=ordered_input_names,
-                output_names=output_names,
-                dynamic_axes=dynamic_axes,
-                do_constant_folding=True,
-                use_external_data_format=use_external_format,
-                enable_onnx_checker=True,
-                opset_version=opset,
-            )
-        else:
-            export(
-                nlp.model,
-                model_args,
-                f=output.as_posix(),
-                input_names=ordered_input_names,
-                output_names=output_names,
-                dynamic_axes=dynamic_axes,
-                do_constant_folding=True,
-                opset_version=opset,
-            )
+        export(
+            nlp.model,
+            model_args,
+            f=output.as_posix(),
+            input_names=ordered_input_names,
+            output_names=output_names,
+            dynamic_axes=dynamic_axes,
+            do_constant_folding=True,
+            opset_version=opset,
+        )
 
 
 def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
@@ -326,7 +310,6 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
 
     try:
         import tensorflow as tf
-
         import tf2onnx
         from tf2onnx import __version__ as t2ov
 
@@ -356,7 +339,7 @@ def convert(
     tokenizer: Optional[str] = None,
     use_external_format: bool = False,
     pipeline_name: str = "feature-extraction",
-    **model_kwargs
+    **model_kwargs,
 ):
     """
     Convert the pipeline object to the ONNX Intermediate Representation (IR) format
@@ -433,29 +416,67 @@ def quantize(onnx_model_path: Path) -> Path:
     Returns: The Path generated for the quantized
     """
     import onnx
-    from onnxruntime.quantization import QuantizationMode, quantize
+    import onnxruntime
+    from onnx.onnx_pb import ModelProto
+    from onnxruntime.quantization import QuantizationMode
+    from onnxruntime.quantization.onnx_quantizer import ONNXQuantizer
+    from onnxruntime.quantization.registry import IntegerOpsRegistry
 
+    # Load the ONNX model
     onnx_model = onnx.load(onnx_model_path.as_posix())
 
-    # Discussed with @yufenglee from ONNX runtime, this will be address in the next release of onnxruntime
-    print(
-        "As of onnxruntime 1.4.0, models larger than 2GB will fail to quantize due to protobuf constraint.\n"
-        "This limitation will be removed in the next release of onnxruntime."
-    )
+    if parse(onnx.__version__) < parse("1.5.0"):
+        print(
+            "Models larger than 2GB will fail to quantize due to protobuf constraint.\n"
+            "Please upgrade to onnxruntime >= 1.5.0."
+        )
 
-    quantized_model = quantize(
-        model=onnx_model,
-        quantization_mode=QuantizationMode.IntegerOps,
-        force_fusions=True,
-        symmetric_weight=True,
-    )
+    # Copy it
+    copy_model = ModelProto()
+    copy_model.CopyFrom(onnx_model)
+
+    # Construct quantizer
+    # onnxruntime renamed input_qType to activation_qType in v1.13.1, so we
+    # check the onnxruntime version to ensure backward compatibility.
+    # See also: https://github.com/microsoft/onnxruntime/pull/12873
+    if parse(onnxruntime.__version__) < parse("1.13.1"):
+        quantizer = ONNXQuantizer(
+            model=copy_model,
+            per_channel=False,
+            reduce_range=False,
+            mode=QuantizationMode.IntegerOps,
+            static=False,
+            weight_qType=True,
+            input_qType=False,
+            tensors_range=None,
+            nodes_to_quantize=None,
+            nodes_to_exclude=None,
+            op_types_to_quantize=list(IntegerOpsRegistry),
+        )
+    else:
+        quantizer = ONNXQuantizer(
+            model=copy_model,
+            per_channel=False,
+            reduce_range=False,
+            mode=QuantizationMode.IntegerOps,
+            static=False,
+            weight_qType=True,
+            activation_qType=False,
+            tensors_range=None,
+            nodes_to_quantize=None,
+            nodes_to_exclude=None,
+            op_types_to_quantize=list(IntegerOpsRegistry),
+        )
+
+    # Quantize and export
+    quantizer.quantize_model()
 
     # Append "-quantized" at the end of the model's name
     quantized_model_path = generate_identified_filename(onnx_model_path, "-quantized")
 
     # Save model
     print(f"Quantized model has been written at {quantized_model_path}: \N{heavy check mark}")
-    onnx.save_model(quantized_model, quantized_model_path.as_posix())
+    onnx.save_model(quantizer.model.model, quantized_model_path.as_posix())
 
     return quantized_model_path
 

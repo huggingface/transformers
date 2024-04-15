@@ -22,17 +22,35 @@ from transformers import (
 )
 from transformers.data.processors.squad import SquadExample
 from transformers.pipelines import QuestionAnsweringArgumentHandler, pipeline
-from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch, slow
+from transformers.testing_utils import (
+    is_pipeline_test,
+    nested_simplify,
+    require_tf,
+    require_torch,
+    require_torch_or_tf,
+    slow,
+)
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
+
+
+# These 2 model types require different inputs than those of the usual text models.
+_TO_SKIP = {"LayoutLMv2Config", "LayoutLMv3Config"}
 
 
 @is_pipeline_test
-class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class QAPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_QUESTION_ANSWERING_MAPPING
     tf_model_mapping = TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    if model_mapping is not None:
+        model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
+    if tf_model_mapping is not None:
+        tf_model_mapping = {
+            config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
+        }
+
+    def get_test_pipeline(self, model, tokenizer, processor):
         if isinstance(model.config, LxmertConfig):
             # This is an bimodal model, we need to find a more consistent way
             # to switch on those models.
@@ -94,7 +112,7 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             question_answerer(question="In what field is HuggingFace working ?", context=None)
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris.", topk=20
+            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris.", top_k=20
         )
         self.assertEqual(
             outputs, [{"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)} for i in range(20)]
@@ -107,11 +125,13 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         self.assertEqual(outputs, {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)})
 
         # Using batch is OK
+        if question_answerer.tokenizer.pad_token_id is None:
+            question_answerer.tokenizer.pad_token_id = question_answerer.model.config.eos_token_id
         new_outputs = question_answerer(
             question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris." * 20, batch_size=2
         )
         self.assertEqual(new_outputs, {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)})
-        self.assertEqual(outputs, new_outputs)
+        self.assertEqual(nested_simplify(outputs), nested_simplify(new_outputs))
 
     @require_torch
     def test_small_model_pt(self):
@@ -124,6 +144,18 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         )
 
         self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+
+    @require_torch
+    def test_small_model_pt_iterator(self):
+        # https://github.com/huggingface/transformers/issues/18510
+        pipe = pipeline(model="sshleifer/tiny-distilbert-base-cased-distilled-squad", batch_size=16, framework="pt")
+
+        def data():
+            for i in range(10):
+                yield {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."}
+
+        for outputs in pipe(data()):
+            self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
 
     @require_torch
     def test_small_model_pt_softmax_trick(self):
@@ -158,6 +190,26 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         )
 
         self.assertEqual(nested_simplify(outputs), {"score": 0.028, "start": 0, "end": 11, "answer": "HuggingFace"})
+
+    @slow
+    @require_torch
+    def test_small_model_japanese(self):
+        question_answerer = pipeline(
+            "question-answering",
+            model="KoichiYasuoka/deberta-base-japanese-aozora-ud-head",
+        )
+        output = question_answerer(question="国語", context="全学年にわたって小学校の国語の教科書に挿し絵が用いられている")  # fmt: skip
+
+        # Wrong answer, the whole text is identified as one "word" since the tokenizer does not include
+        # a pretokenizer
+        self.assertEqual(nested_simplify(output),{"score": 1.0, "start": 0, "end": 30, "answer": "全学年にわたって小学校の国語の教科書に挿し絵が用いられている"})  # fmt: skip
+
+        # Disable word alignment
+        output = question_answerer(question="国語", context="全学年にわたって小学校の国語の教科書に挿し絵が用いられている", align_to_words=False)  # fmt: skip
+        self.assertEqual(
+            nested_simplify(output),
+            {"score": 1.0, "start": 15, "end": 18, "answer": "教科書"},
+        )
 
     @slow
     @require_torch
@@ -310,7 +362,7 @@ between them. It's straightforward to train your models with one before loading 
         self.assertEqual(nested_simplify(outputs), {"score": 0.979, "start": 27, "end": 32, "answer": "Paris"})
 
 
-@is_pipeline_test
+@require_torch_or_tf
 class QuestionAnsweringArgumentHandlerTests(unittest.TestCase):
     def test_argument_handler(self):
         qa = QuestionAnsweringArgumentHandler()

@@ -25,11 +25,6 @@ from ...utils import TensorType, is_torch_available, logging
 
 logger = logging.get_logger(__name__)
 
-MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/config.json",
-    # See all Marian models at https://huggingface.co/models?filter=marian
-}
-
 
 class MarianConfig(PretrainedConfig):
     r"""
@@ -43,7 +38,7 @@ class MarianConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50265):
+        vocab_size (`int`, *optional*, defaults to 58101):
             Vocabulary size of the Marian model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`MarianModel`] or [`TFMarianModel`].
         d_model (`int`, *optional*, defaults to 1024):
@@ -69,17 +64,15 @@ class MarianConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        classifier_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for classifier.
         max_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         scale_embedding (`bool`, *optional*, defaults to `False`):
@@ -104,13 +97,14 @@ class MarianConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "marian"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
 
     def __init__(
         self,
-        vocab_size=50265,
+        vocab_size=58101,
         decoder_vocab_size=None,
         max_position_embeddings=1024,
         encoder_layers=12,
@@ -130,13 +124,12 @@ class MarianConfig(PretrainedConfig):
         activation_dropout=0.0,
         init_std=0.02,
         decoder_start_token_id=58100,
-        classifier_dropout=0.0,
         scale_embedding=False,
         pad_token_id=58100,
         eos_token_id=0,
         forced_eos_token_id=0,
         share_encoder_decoder_embeddings=True,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.decoder_vocab_size = decoder_vocab_size or vocab_size
@@ -155,7 +148,6 @@ class MarianConfig(PretrainedConfig):
         self.init_std = init_std
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop
-        self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
@@ -392,3 +384,7 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
             flattened_output = super(OnnxSeq2SeqConfigWithPast, self)._flatten_past_key_values_(
                 flattened_output, name, idx, t
             )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4

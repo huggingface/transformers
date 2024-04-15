@@ -5,25 +5,28 @@ import numpy as np
 
 from ..utils import (
     add_end_docstrings,
-    is_tensorflow_probability_available,
     is_tf_available,
     is_torch_available,
     requires_backends,
 )
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Dataset, Pipeline, PipelineException
+from .base import ArgumentHandler, Dataset, Pipeline, PipelineException, build_pipeline_init_args
 
 
 if is_torch_available():
     import torch
 
-    from ..models.auto.modeling_auto import MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING
+    from ..models.auto.modeling_auto import (
+        MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
+        MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
+    )
 
-if is_tf_available() and is_tensorflow_probability_available():
+if is_tf_available():
     import tensorflow as tf
 
-    import tensorflow_probability as tfp
-
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING
+    from ..models.auto.modeling_tf_auto import (
+        TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
+        TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
+    )
 
 
 class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
@@ -79,11 +82,29 @@ class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
         return tqa_pipeline_inputs
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class TableQuestionAnsweringPipeline(Pipeline):
     """
     Table Question Answering pipeline using a `ModelForTableQuestionAnswering`. This pipeline is only available in
     PyTorch.
+
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> oracle = pipeline(model="google/tapas-base-finetuned-wtq")
+    >>> table = {
+    ...     "Repository": ["Transformers", "Datasets", "Tokenizers"],
+    ...     "Stars": ["36542", "4512", "3934"],
+    ...     "Contributors": ["651", "77", "34"],
+    ...     "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+    ... }
+    >>> oracle(query="How many stars does the transformers repository have?", table=table)
+    {'answer': 'AVERAGE > 36542', 'coordinates': [(0, 1)], 'cells': ['36542'], 'aggregator': 'AVERAGE'}
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     This tabular question answering pipeline can currently be loaded from [`pipeline`] using the following task
     identifier: `"table-question-answering"`.
@@ -99,11 +120,13 @@ class TableQuestionAnsweringPipeline(Pipeline):
         super().__init__(*args, **kwargs)
         self._args_parser = args_parser
 
-        self.check_model_type(
-            TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING
-            if self.framework == "tf"
-            else MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING
-        )
+        if self.framework == "tf":
+            mapping = TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES.copy()
+            mapping.update(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES)
+        else:
+            mapping = MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES.copy()
+            mapping.update(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES)
+        self.check_model_type(mapping)
 
         self.aggregate = bool(getattr(self.model.config, "aggregation_labels", None)) and bool(
             getattr(self.model.config, "num_aggregation_labels", None)
@@ -224,8 +247,9 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
                 all_logits.append(logits)
 
-                dist_per_token = tfp.distributions.Bernoulli(logits=logits)
-                probabilities = dist_per_token.probs_parameter() * tf.cast(attention_mask_example, tf.float32)
+                probabilities = tf.math.sigmoid(tf.cast(logits, tf.float32)) * tf.cast(
+                    attention_mask_example, tf.float32
+                )
 
                 coords_to_probs = collections.defaultdict(list)
                 token_type_ids_example = token_type_ids_example
@@ -352,7 +376,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
         inputs["table"] = table
         return inputs
 
-    def _forward(self, model_inputs, sequential=False):
+    def _forward(self, model_inputs, sequential=False, **generate_kwargs):
         table = model_inputs.pop("table")
 
         if self.type == "tapas":
@@ -361,7 +385,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
             else:
                 outputs = self.batch_inference(**model_inputs)
         else:
-            outputs = self.model.generate(**model_inputs)
+            outputs = self.model.generate(**model_inputs, **generate_kwargs)
         model_outputs = {"model_inputs": model_inputs, "table": table, "outputs": outputs}
         return model_outputs
 

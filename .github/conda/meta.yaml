@@ -16,7 +16,6 @@ requirements:
     - pip
     - numpy >=1.17
     - dataclasses
-    - importlib_metadata
     - huggingface_hub
     - packaging
     - filelock
@@ -25,13 +24,14 @@ requirements:
     - sacremoses
     - regex !=2019.12.17
     - protobuf
-    - tokenizers >=0.10.1,<0.11.0
+    - tokenizers >=0.11.1,!=0.11.3,<0.13
     - pyyaml >=5.1
+    - safetensors
+    - fsspec
   run:
     - python
     - numpy >=1.17
     - dataclasses
-    - importlib_metadata
     - huggingface_hub
     - packaging
     - filelock
@@ -40,8 +40,10 @@ requirements:
     - sacremoses
     - regex !=2019.12.17
     - protobuf
-    - tokenizers >=0.10.1,<0.11.0
+    - tokenizers >=0.11.1,!=0.11.3,<0.13
     - pyyaml >=5.1
+    - safetensors
+    - fsspec
 
 test:
   imports:

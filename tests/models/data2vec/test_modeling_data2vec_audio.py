@@ -26,6 +26,7 @@ from transformers.testing_utils import is_pt_flax_cross_test, require_soundfile,
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -58,7 +59,7 @@ class Data2VecAudioModelTester:
         conv_bias=False,
         num_conv_pos_embeddings=16,
         num_conv_pos_embedding_groups=2,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         hidden_dropout_prob=0.1,
         intermediate_size=20,
@@ -282,8 +283,8 @@ class Data2VecAudioModelTester:
             input_values[i, input_lengths[i] :] = 0.0
 
             if max_length_labels[i] < labels.shape[-1]:
-                # it's important that we make sure that target lenghts are at least
-                # one shorter than logit lenghts to prevent -inf
+                # it's important that we make sure that target lengths are at least
+                # one shorter than logit lengths to prevent -inf
                 labels[i, max_length_labels[i] - 1 :] = -100
 
         loss = model(input_values, labels=labels).loss
@@ -358,7 +359,7 @@ class Data2VecAudioModelTester:
 
 
 @require_torch
-class Data2VecAudioModelTest(ModelTesterMixin, unittest.TestCase):
+class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             Data2VecAudioForCTC,
@@ -369,6 +370,15 @@ class Data2VecAudioModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "audio-classification": Data2VecAudioForSequenceClassification,
+            "automatic-speech-recognition": Data2VecAudioForCTC,
+            "feature-extraction": Data2VecAudioModel,
+        }
+        if is_torch_available()
+        else {}
     )
     test_pruning = False
     test_headmasking = False
@@ -506,7 +516,7 @@ class Data2VecAudioModelTest(ModelTesterMixin, unittest.TestCase):
                     "objective.weight",
                 ]
                 if param.requires_grad:
-                    if any([x in name for x in uniform_init_parms]):
+                    if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
@@ -535,7 +545,7 @@ class Data2VecAudioModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_mask_feature_prob_ctc(self):
         model = Data2VecAudioForCTC.from_pretrained(
-            "facebook/data2vec-audio-base-960h", mask_feature_prob=0.2, mask_feature_length=2
+            "hf-internal-testing/tiny-random-data2vec-seq-class", mask_feature_prob=0.2, mask_feature_length=2
         )
         model.to(torch_device).train()
         processor = Wav2Vec2Processor.from_pretrained(
@@ -554,7 +564,7 @@ class Data2VecAudioModelTest(ModelTesterMixin, unittest.TestCase):
             attention_mask=batch["attention_mask"].to(torch_device),
         ).logits
 
-        self.assertEqual(logits.shape, (4, 299, 32))
+        self.assertEqual(logits.shape, (4, 1498, 32))
 
     def test_mask_time_prob_ctc(self):
         model = Data2VecAudioForCTC.from_pretrained(

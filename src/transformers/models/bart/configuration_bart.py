@@ -26,11 +26,6 @@ from ...utils import TensorType, is_torch_available, logging
 
 logger = logging.get_logger(__name__)
 
-BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/bart-large": "https://huggingface.co/facebook/bart-large/resolve/main/config.json",
-    # See all BART models at https://huggingface.co/models?filter=bart
-}
-
 
 class BartConfig(PretrainedConfig):
     r"""
@@ -77,17 +72,17 @@ class BartConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         scale_embedding (`bool`, *optional*, defaults to `False`):
             Scale embeddings by diving by sqrt(d_model).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        num_labels: (`int`, *optional*, defaults to 3):
+        num_labels (`int`, *optional*, defaults to 3):
             The number of labels to use in [`BartForSequenceClassification`].
         forced_eos_token_id (`int`, *optional*, defaults to 2):
             The id of the token to force as the last generated token when `max_length` is reached. Usually set to
@@ -96,17 +91,18 @@ class BartConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BartModel, BartConfig
+    >>> from transformers import BartConfig, BartModel
 
     >>> # Initializing a BART facebook/bart-large style configuration
     >>> configuration = BartConfig()
 
-    >>> # Initializing a model from the facebook/bart-large style configuration
+    >>> # Initializing a model (with random weights) from the facebook/bart-large style configuration
     >>> model = BartModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "bart"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
@@ -139,7 +135,7 @@ class BartConfig(PretrainedConfig):
         is_encoder_decoder=True,
         decoder_start_token_id=2,
         forced_eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

@@ -1,9 +1,8 @@
 import os
 
+import jsonlines
 import numpy as np
 from tqdm import tqdm
-
-import jsonlines
 
 
 DOC_STRIDE = 2048
@@ -51,7 +50,7 @@ def _get_single_answer(example):
         answer["remove_it"] = False
 
     cols = ["start_token", "end_token", "start_byte", "end_byte", "text"]
-    if not all([isinstance(answer[k], list) for k in cols]):
+    if not all(isinstance(answer[k], list) for k in cols):
         raise ValueError("Issue in ID", example["id"])
 
     return answer
@@ -315,12 +314,12 @@ if __name__ == "__main__":
 
     data = data["train" if PROCESS_TRAIN == "true" else "validation"]
 
-    fn_kwargs = dict(
-        tokenizer=tokenizer,
-        doc_stride=DOC_STRIDE,
-        max_length=MAX_LENGTH,
-        assertion=False,
-    )
+    fn_kwargs = {
+        "tokenizer": tokenizer,
+        "doc_stride": DOC_STRIDE,
+        "max_length": MAX_LENGTH,
+        "assertion": False,
+    }
     data = data.map(prepare_inputs, fn_kwargs=fn_kwargs)
     data = data.remove_columns(["annotations", "document", "id", "question"])
     print(data)

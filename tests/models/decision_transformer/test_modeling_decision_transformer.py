@@ -21,18 +21,16 @@ import unittest
 from transformers import DecisionTransformerConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import DecisionTransformerModel
-    from transformers.models.decision_transformer.modeling_decision_transformer import (
-        DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
 
 
 class DecisionTransformerModelTester:
@@ -131,10 +129,10 @@ class DecisionTransformerModelTester:
 
 
 @require_torch
-class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DecisionTransformerModel,) if is_torch_available() else ()
     all_generative_model_classes = ()
+    pipeline_model_mapping = {"feature-extraction": DecisionTransformerModel} if is_torch_available() else {}
 
     # Ignoring of a failing test from GenerationTesterMixin, as the model does not use inputs_ids
     test_generate_without_input_ids = False
@@ -163,9 +161,9 @@ class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unit
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DecisionTransformerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "edbeeching/decision-transformer-gym-hopper-medium"
+        model = DecisionTransformerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -206,7 +204,9 @@ class DecisionTransformerModelIntegrationTest(unittest.TestCase):
         torch.manual_seed(0)
         state = torch.randn(1, 1, config.state_dim).to(device=torch_device, dtype=torch.float32)  # env.reset()
 
-        expected_outputs = torch.tensor([[0.2384, -0.2955, 0.8741], [0.6765, -0.0793, -0.1298]], device=torch_device)
+        expected_outputs = torch.tensor(
+            [[0.242793, -0.28693074, 0.8742613], [0.67815274, -0.08101085, -0.12952147]], device=torch_device
+        )
 
         returns_to_go = torch.tensor(TARGET_RETURN, device=torch_device, dtype=torch.float32).reshape(1, 1, 1)
         states = state

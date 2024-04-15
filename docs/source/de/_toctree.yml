@@ -1,0 +1,44 @@
+- sections:
+  - local: index
+    title: 🤗 Transformers
+  - local: quicktour
+    title: Schnellstart
+  - local: installation
+    title: Installation
+  title: Erste Schritte
+- sections:
+  - local: pipeline_tutorial
+    title: Pipelines für Inferenzen
+  - local: autoclass_tutorial
+    title: Laden von vortrainierten Instanzen mit einer AutoClass
+  - local: preprocessing
+    title: Vorverarbeiten
+  - local: training
+    title: Optimierung eines vortrainierten Modells
+  - local: run_scripts
+    title: Trainieren mit einem Skript
+  - local: accelerate
+    title: Verteiltes Training mit 🤗 Accelerate
+  - local: peft
+    title: Laden und Trainieren von Adaptern mit 🤗 PEFT
+  - local: model_sharing
+    title: Ein Modell teilen
+  - local: transformers_agents
+    title: Agents
+  - local: llm_tutorial
+    title: Generation with LLMs
+  title: Tutorials
+- sections:
+  - local: contributing
+    title: Wie kann man zu 🤗 Transformers beitragen?
+  - local: add_new_model
+    title: Wie fügt man ein Modell zu 🤗 Transformers hinzu?
+  - local: add_tensorflow_model
+    title: Wie konvertiert man ein 🤗 Transformers-Modell in TensorFlow?
+  - local: add_new_pipeline
+    title: Wie fügt man eine Pipeline zu 🤗 Transformers hinzu?
+  - local: testing
+    title: Testen
+  - local: pr_checks
+    title: Überprüfung einer Pull Request
+  title: Contribute

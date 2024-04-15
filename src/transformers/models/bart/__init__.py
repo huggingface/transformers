@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -53,6 +49,7 @@ else:
         "BartForQuestionAnswering",
         "BartForSequenceClassification",
         "BartModel",
+        "BartPreTrainedModel",
         "BartPretrainedModel",
         "PretrainedBartModel",
     ]
@@ -63,7 +60,12 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_tf_bart"] = ["TFBartForConditionalGeneration", "TFBartModel", "TFBartPretrainedModel"]
+    _import_structure["modeling_tf_bart"] = [
+        "TFBartForConditionalGeneration",
+        "TFBartForSequenceClassification",
+        "TFBartModel",
+        "TFBartPretrainedModel",
+    ]
 
 try:
     if not is_flax_available():
@@ -106,6 +108,7 @@ if TYPE_CHECKING:
             BartForQuestionAnswering,
             BartForSequenceClassification,
             BartModel,
+            BartPreTrainedModel,
             BartPretrainedModel,
             PretrainedBartModel,
         )
@@ -116,7 +119,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_tf_bart import TFBartForConditionalGeneration, TFBartModel, TFBartPretrainedModel
+        from .modeling_tf_bart import (
+            TFBartForConditionalGeneration,
+            TFBartForSequenceClassification,
+            TFBartModel,
+            TFBartPretrainedModel,
+        )
 
     try:
         if not is_flax_available():

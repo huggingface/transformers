@@ -20,9 +20,11 @@ Fine-tuning the library models for summarization.
 
 import json
 import logging
+import math
 import os
 import sys
 import time
+import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from functools import partial
@@ -30,21 +32,22 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import datasets
-import nltk  # Here to have a nice missing dependency error message early on
-import numpy as np
-from datasets import Dataset, load_dataset, load_metric
-from tqdm import tqdm
-
+import evaluate
 import jax
 import jax.numpy as jnp
+import nltk  # Here to have a nice missing dependency error message early on
+import numpy as np
 import optax
-import transformers
+from datasets import Dataset, load_dataset
 from filelock import FileLock
 from flax import jax_utils, traverse_util
-from flax.jax_utils import unreplicate
+from flax.jax_utils import pad_shard_unpad, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
-from huggingface_hub import Repository
+from huggingface_hub import HfApi
+from tqdm import tqdm
+
+import transformers
 from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
@@ -54,7 +57,7 @@ from transformers import (
     HfArgumentParser,
     is_tensorboard_available,
 )
-from transformers.utils import get_full_repo_name, is_offline_mode
+from transformers.utils import is_offline_mode, send_example_telemetry
 
 
 logger = logging.getLogger(__name__)
@@ -119,6 +122,12 @@ class TrainingArguments:
         default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
     )
     hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+    gradient_checkpointing: bool = field(
+        default=False,
+        metadata={
+            "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
+        },
+    )
 
     def __post_init__(self):
         if self.output_dir is not None:
@@ -150,7 +159,7 @@ class ModelArguments:
         default=None,
         metadata={
             "help": (
-                "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+                "The model checkpoint for weights initialization. Don't set if you want to train a model from scratch."
             )
         },
     )
@@ -180,12 +189,28 @@ class ModelArguments:
             )
         },
     )
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
     use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
+        },
+    )
+    trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-                "with private models)."
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+                "execute code present on the Hub on your local machine."
             )
         },
     )
@@ -243,7 +268,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "The maximum total sequence length for validation target text after tokenization. Sequences longer "
-                "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
+                "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`. "
                 "This argument is also used to override the `max_length` param of `model.generate`, which is used "
                 "during evaluation."
             )
@@ -287,7 +312,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
     )
     num_beams: Optional[int] = field(
-        default=None,
+        default=1,
         metadata={
             "help": (
                 "Number of beams to use for evaluation. This argument will be passed to `model.generate`, "
@@ -300,8 +325,13 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-        if self.dataset_name is None and self.train_file is None and self.validation_file is None:
-            raise ValueError("Need either a dataset name or a training/validation file.")
+        if (
+            self.dataset_name is None
+            and self.train_file is None
+            and self.validation_file is None
+            and self.test_file is None
+        ):
+            raise ValueError("Need either a dataset name or a training, validation, or test file.")
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
@@ -309,6 +339,9 @@ class DataTrainingArguments:
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
                 assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+            if self.test_file is not None:
+                extension = self.test_file.split(".")[-1]
+                assert extension in ["csv", "json"], "`test_file` should be a csv or a json file."
         if self.val_max_target_length is None:
             self.val_max_target_length = self.max_target_length
 
@@ -335,26 +368,28 @@ class TrainState(train_state.TrainState):
         return jax_utils.replicate(self).replace(dropout_rng=shard_prng_key(self.dropout_rng))
 
 
-def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuffle: bool = False):
+def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuffle: bool = False, drop_last=True):
     """
-    Returns batches of size `batch_size` from truncated `dataset`, sharded over all local devices.
-    Shuffle batches if `shuffle` is `True`.
+    Returns batches of size `batch_size` from `dataset`. If `drop_last` is set to `False`, the final batch may be incomplete,
+    and range in size from 1 to `batch_size`. Shuffle batches if `shuffle` is `True`.
     """
-    steps_per_epoch = len(dataset) // batch_size
-
     if shuffle:
         batch_idx = jax.random.permutation(rng, len(dataset))
+        batch_idx = np.asarray(batch_idx)
     else:
-        batch_idx = jnp.arange(len(dataset))
+        batch_idx = np.arange(len(dataset))
 
-    batch_idx = batch_idx[: steps_per_epoch * batch_size]  # Skip incomplete batch.
-    batch_idx = batch_idx.reshape((steps_per_epoch, batch_size))
+    if drop_last:
+        steps_per_epoch = len(dataset) // batch_size
+        batch_idx = batch_idx[: steps_per_epoch * batch_size]  # Skip incomplete batch.
+        batch_idx = batch_idx.reshape((steps_per_epoch, batch_size))
+    else:
+        steps_per_epoch = math.ceil(len(dataset) / batch_size)
+        batch_idx = np.array_split(batch_idx, steps_per_epoch)
 
     for idx in batch_idx:
         batch = dataset[idx]
-        batch = {k: jnp.array(v) for k, v in batch.items()}
-
-        batch = shard(batch)
+        batch = {k: np.array(v) for k, v in batch.items()}
 
         yield batch
 
@@ -374,7 +409,7 @@ def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
 
 def create_learning_rate_fn(
     train_ds_size: int, train_batch_size: int, num_train_epochs: int, num_warmup_steps: int, learning_rate: float
-) -> Callable[[int], jnp.array]:
+) -> Callable[[int], jnp.ndarray]:
     """Returns a linear warmup, linear_decay learning rate function."""
     steps_per_epoch = train_ds_size // train_batch_size
     num_train_steps = steps_per_epoch * num_train_epochs
@@ -399,6 +434,19 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    if model_args.use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
+            FutureWarning,
+        )
+        if model_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        model_args.token = model_args.use_auth_token
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_summarization", model_args, data_args, framework="flax")
+
     if (
         os.path.exists(training_args.output_dir)
         and os.listdir(training_args.output_dir)
@@ -406,7 +454,7 @@ def main():
         and not training_args.overwrite_output_dir
     ):
         raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty."
+            f"Output directory ({training_args.output_dir}) already exists and is not empty. "
             "Use --overwrite_output_dir to overcome."
         )
 
@@ -430,13 +478,13 @@ def main():
 
     # Handle the repository creation
     if training_args.push_to_hub:
-        if training_args.hub_model_id is None:
-            repo_name = get_full_repo_name(
-                Path(training_args.output_dir).absolute().name, token=training_args.hub_token
-            )
-        else:
-            repo_name = training_args.hub_model_id
-        repo = Repository(training_args.output_dir, clone_from=repo_name)
+        # Retrieve of infer repo_name
+        repo_name = training_args.hub_model_id
+        if repo_name is None:
+            repo_name = Path(training_args.output_dir).absolute().name
+        # Create repo and retrieve repo_id
+        api = HfApi()
+        repo_id = api.create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
 
     # Get the datasets: you can either provide your own CSV/JSON training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
@@ -452,7 +500,7 @@ def main():
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
             keep_in_memory=False,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     else:
         data_files = {}
@@ -469,10 +517,10 @@ def main():
             extension,
             data_files=data_files,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     # Load pretrained model and tokenizer
 
@@ -480,13 +528,15 @@ def main():
         config = AutoConfig.from_pretrained(
             model_args.config_name,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     elif model_args.model_name_or_path:
         config = AutoConfig.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
@@ -497,18 +547,20 @@ def main():
             model_args.tokenizer_name,
             cache_dir=model_args.cache_dir,
             use_fast=model_args.use_fast_tokenizer,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     elif model_args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=model_args.cache_dir,
             use_fast=model_args.use_fast_tokenizer,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+            "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
@@ -518,15 +570,19 @@ def main():
             config=config,
             seed=training_args.seed,
             dtype=getattr(jnp, model_args.dtype),
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         model = FlaxAutoModelForSeq2SeqLM.from_config(
             config,
             seed=training_args.seed,
             dtype=getattr(jnp, model_args.dtype),
-            use_auth_token=True if model_args.use_auth_token else None,
+            trust_remote_code=model_args.trust_remote_code,
         )
+
+    if training_args.gradient_checkpointing:
+        model.enable_gradient_checkpointing()
 
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
@@ -536,10 +592,16 @@ def main():
     # Preprocessing the datasets.
     # We need to tokenize inputs and targets.
     if training_args.do_train:
+        if "train" not in dataset:
+            raise ValueError("--do_train requires a train dataset")
         column_names = dataset["train"].column_names
     elif training_args.do_eval:
+        if "validation" not in dataset:
+            raise ValueError("--do_eval requires a validation dataset")
         column_names = dataset["validation"].column_names
     elif training_args.do_predict:
+        if "test" not in dataset:
+            raise ValueError("--do_predict requires a test dataset")
         column_names = dataset["test"].column_names
     else:
         logger.info("There is nothing to do. Please pass `do_train`, `do_eval` and/or `do_predict`.")
@@ -583,10 +645,13 @@ def main():
         )
 
         # Setup the tokenizer for targets
-        with tokenizer.as_target_tokenizer():
-            labels = tokenizer(
-                targets, max_length=max_target_length, padding="max_length", truncation=True, return_tensors="np"
-            )
+        labels = tokenizer(
+            text_target=targets,
+            max_length=max_target_length,
+            padding="max_length",
+            truncation=True,
+            return_tensors="np",
+        )
 
         model_inputs["labels"] = labels["input_ids"]
         decoder_input_ids = shift_tokens_right_fn(
@@ -600,8 +665,6 @@ def main():
         return model_inputs
 
     if training_args.do_train:
-        if "train" not in dataset:
-            raise ValueError("--do_train requires a train dataset")
         train_dataset = dataset["train"]
         if data_args.max_train_samples is not None:
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
@@ -617,8 +680,6 @@ def main():
 
     if training_args.do_eval:
         max_target_length = data_args.val_max_target_length
-        if "validation" not in dataset:
-            raise ValueError("--do_eval requires a validation dataset")
         eval_dataset = dataset["validation"]
         if data_args.max_eval_samples is not None:
             max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
@@ -634,8 +695,6 @@ def main():
 
     if training_args.do_predict:
         max_target_length = data_args.val_max_target_length
-        if "test" not in dataset:
-            raise ValueError("--do_predict requires a test dataset")
         predict_dataset = dataset["test"]
         if data_args.max_predict_samples is not None:
             max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
@@ -650,7 +709,7 @@ def main():
         )
 
     # Metric
-    metric = load_metric("rouge")
+    metric = evaluate.load("rouge", cache_dir=model_args.cache_dir)
 
     def postprocess_text(preds, labels):
         preds = [pred.strip() for pred in preds]
@@ -670,12 +729,9 @@ def main():
         decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
 
         result = metric.compute(predictions=decoded_preds, references=decoded_labels, use_stemmer=True)
-        # Extract a few results from ROUGE
-        result = {key: value.mid.fmeasure * 100 for key, value in result.items()}
-
+        result = {k: round(v * 100, 4) for k, v in result.items()}
         prediction_lens = [np.count_nonzero(pred != tokenizer.pad_token_id) for pred in preds]
         result["gen_len"] = np.mean(prediction_lens)
-        result = {k: round(v, 4) for k, v in result.items()}
         return result
 
     # Enable tensorboard only on the master node
@@ -703,7 +759,8 @@ def main():
     # Store some constant
     num_epochs = int(training_args.num_train_epochs)
     train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
-    eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
+    per_device_eval_batch_size = int(training_args.per_device_eval_batch_size)
+    eval_batch_size = per_device_eval_batch_size * jax.device_count()
     steps_per_epoch = len(train_dataset) // train_batch_size
     total_train_steps = steps_per_epoch * num_epochs
 
@@ -720,15 +777,17 @@ def main():
     # to bias and LayerNorm scale parameters. decay_mask_fn returns a
     # mask boolean with the same structure as the parameters.
     # The mask is True for parameters that should be decayed.
-    # Note that this mask is specifically adapted for FlaxBart.
-    # For FlaxT5, one should correct the layer norm parameter naming
-    # accordingly - see `run_t5_mlm_flax.py` e.g.
     def decay_mask_fn(params):
         flat_params = traverse_util.flatten_dict(params)
-        layer_norm_params = [
-            (name, "scale") for name in ["self_attn_layer_norm", "layernorm_embedding", "final_layer_norm"]
-        ]
-        flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_params) for path in flat_params}
+        # find out all LayerNorm parameters
+        layer_norm_candidates = ["layernorm", "layer_norm", "ln"]
+        layer_norm_named_params = {
+            layer[-2:]
+            for layer_norm_name in layer_norm_candidates
+            for layer in flat_params.keys()
+            if layer_norm_name in "".join(layer).lower()
+        }
+        flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params) for path in flat_params}
         return traverse_util.unflatten_dict(flat_mask)
 
     # create adam optimizer
@@ -763,8 +822,9 @@ def main():
 
         # ignore padded tokens from loss
         loss = loss * padding_mask
-        loss = loss.sum() / padding_mask.sum()
-        return loss
+        loss = loss.sum()
+        num_labels = padding_mask.sum()
+        return loss, num_labels
 
     # Define gradient update step fn
     def train_step(state, batch, label_smoothing_factor=0.0):
@@ -773,29 +833,38 @@ def main():
         def compute_loss(params):
             labels = batch.pop("labels")
             logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
-            loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
-            return loss
+            loss, num_labels = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
+            return loss, num_labels
 
-        grad_fn = jax.value_and_grad(compute_loss)
-        loss, grad = grad_fn(state.params)
-        grad = jax.lax.pmean(grad, "batch")
+        grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
+        (loss, num_labels), grad = grad_fn(state.params)
+        num_labels = jax.lax.psum(num_labels, "batch")
 
+        # true loss = total loss / total samples
+        loss = jax.lax.psum(loss, "batch")
+        loss = jax.tree_util.tree_map(lambda x: x / num_labels, loss)
+
+        # true grad = total grad / total samples
+        grad = jax.lax.psum(grad, "batch")
+        grad = jax.tree_util.tree_map(lambda x: x / num_labels, grad)
         new_state = state.apply_gradients(grads=grad, dropout_rng=new_dropout_rng)
 
         metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}
-        metrics = jax.lax.pmean(metrics, axis_name="batch")
-
         return new_state, metrics
 
     # Define eval fn
     def eval_step(params, batch, label_smoothing_factor=0.0):
         labels = batch.pop("labels")
         logits = model(**batch, params=params, train=False)[0]
-        loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
 
-        # summarize metrics
+        loss, num_labels = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
+        num_labels = jax.lax.psum(num_labels, "batch")
+
+        # true loss = total loss / total samples
+        loss = jax.lax.psum(loss, "batch")
+        loss = jax.tree_util.tree_map(lambda x: x / num_labels, loss)
+
         metrics = {"loss": loss}
-        metrics = jax.lax.pmean(metrics, axis_name="batch")
         return metrics
 
     # Define generation function
@@ -843,6 +912,7 @@ def main():
         # train
         for _ in tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False):
             batch = next(train_loader)
+            batch = shard(batch)
             state, train_metric = p_train_step(state, batch)
             train_metrics.append(train_metric)
 
@@ -860,25 +930,27 @@ def main():
         eval_preds = []
         eval_labels = []
 
-        eval_loader = data_loader(input_rng, eval_dataset, eval_batch_size)
-        eval_steps = len(eval_dataset) // eval_batch_size
+        eval_loader = data_loader(input_rng, eval_dataset, eval_batch_size, drop_last=False)
+        eval_steps = math.ceil(len(eval_dataset) / eval_batch_size)
         for _ in tqdm(range(eval_steps), desc="Evaluating...", position=2, leave=False):
             # Model forward
             batch = next(eval_loader)
             labels = batch["labels"]
 
-            metrics = p_eval_step(state.params, batch)
+            metrics = pad_shard_unpad(p_eval_step, static_return=True)(
+                state.params, batch, min_device_batch=per_device_eval_batch_size
+            )
             eval_metrics.append(metrics)
 
             # generation
             if data_args.predict_with_generate:
-                generated_ids = p_generate_step(state.params, batch)
+                generated_ids = pad_shard_unpad(p_generate_step)(state.params, batch)
                 eval_preds.extend(jax.device_get(generated_ids.reshape(-1, gen_kwargs["max_length"])))
-                eval_labels.extend(jax.device_get(labels.reshape(-1, labels.shape[-1])))
+                eval_labels.extend(labels)
 
         # normalize eval metrics
         eval_metrics = get_metrics(eval_metrics)
-        eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
+        eval_metrics = jax.tree_util.tree_map(jnp.mean, eval_metrics)
 
         # compute ROUGE metrics
         rouge_desc = ""
@@ -899,11 +971,17 @@ def main():
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
-            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+            params = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state.params))
             model.save_pretrained(training_args.output_dir, params=params)
             tokenizer.save_pretrained(training_args.output_dir)
             if training_args.push_to_hub:
-                repo.push_to_hub(commit_message=f"Saving weights and logs of epoch {epoch}", blocking=False)
+                api.upload_folder(
+                    commit_message=f"Saving weights and logs of epoch {epoch}",
+                    folder_path=training_args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=training_args.hub_token,
+                )
 
     # ======================== Prediction loop ==============================
     if training_args.do_predict:
@@ -913,25 +991,27 @@ def main():
         pred_generations = []
         pred_labels = []
 
-        pred_loader = data_loader(input_rng, predict_dataset, eval_batch_size)
-        pred_steps = len(predict_dataset) // eval_batch_size
+        pred_loader = data_loader(input_rng, predict_dataset, eval_batch_size, drop_last=False)
+        pred_steps = math.ceil(len(predict_dataset) / eval_batch_size)
         for _ in tqdm(range(pred_steps), desc="Predicting...", position=2, leave=False):
             # Model forward
             batch = next(pred_loader)
             labels = batch["labels"]
 
-            metrics = p_eval_step(state.params, batch)
+            metrics = pad_shard_unpad(p_eval_step, static_return=True)(
+                state.params, batch, min_device_batch=per_device_eval_batch_size
+            )
             pred_metrics.append(metrics)
 
             # generation
             if data_args.predict_with_generate:
-                generated_ids = p_generate_step(state.params, batch)
+                generated_ids = pad_shard_unpad(p_generate_step)(state.params, batch)
                 pred_generations.extend(jax.device_get(generated_ids.reshape(-1, gen_kwargs["max_length"])))
-                pred_labels.extend(jax.device_get(labels.reshape(-1, labels.shape[-1])))
+                pred_labels.extend(labels)
 
         # normalize prediction metrics
         pred_metrics = get_metrics(pred_metrics)
-        pred_metrics = jax.tree_map(jnp.mean, pred_metrics)
+        pred_metrics = jax.tree_util.tree_map(jnp.mean, pred_metrics)
 
         # compute ROUGE metrics
         rouge_desc = ""

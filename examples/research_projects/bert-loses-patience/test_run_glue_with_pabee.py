@@ -4,6 +4,7 @@ import sys
 from unittest.mock import patch
 
 import run_glue_with_pabee
+
 from transformers.testing_utils import TestCasePlus
 
 
@@ -28,7 +29,7 @@ class PabeeTests(TestCasePlus):
         testargs = f"""
             run_glue_with_pabee.py
             --model_type albert
-            --model_name_or_path albert-base-v2
+            --model_name_or_path albert/albert-base-v2
             --data_dir ./tests/fixtures/tests_samples/MRPC/
             --output_dir {tmp_dir}
             --overwrite_output_dir

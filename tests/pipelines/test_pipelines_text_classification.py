@@ -20,15 +20,26 @@ from transformers import (
     TextClassificationPipeline,
     pipeline,
 )
-from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch, slow
+from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch, slow, torch_device
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
+
+
+# These 2 model types require different inputs than those of the usual text models.
+_TO_SKIP = {"LayoutLMv2Config", "LayoutLMv3Config"}
 
 
 @is_pipeline_test
-class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class TextClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+
+    if model_mapping is not None:
+        model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
+    if tf_model_mapping is not None:
+        tf_model_mapping = {
+            config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
+        }
 
     @require_torch
     def test_small_model_pt(self):
@@ -39,15 +50,57 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         outputs = text_classifier("This is great !")
         self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
 
+        outputs = text_classifier("This is great !", top_k=2)
+        self.assertEqual(
+            nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}, {"label": "LABEL_1", "score": 0.496}]
+        )
+
+        outputs = text_classifier(["This is great !", "This is bad"], top_k=2)
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                [{"label": "LABEL_0", "score": 0.504}, {"label": "LABEL_1", "score": 0.496}],
+                [{"label": "LABEL_0", "score": 0.504}, {"label": "LABEL_1", "score": 0.496}],
+            ],
+        )
+
+        outputs = text_classifier("This is great !", top_k=1)
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
+
+        # Legacy behavior
+        outputs = text_classifier("This is great !", return_all_scores=False)
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
+
+        outputs = text_classifier("This is great !", return_all_scores=True)
+        self.assertEqual(
+            nested_simplify(outputs), [[{"label": "LABEL_0", "score": 0.504}, {"label": "LABEL_1", "score": 0.496}]]
+        )
+
+        outputs = text_classifier(["This is great !", "Something else"], return_all_scores=True)
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                [{"label": "LABEL_0", "score": 0.504}, {"label": "LABEL_1", "score": 0.496}],
+                [{"label": "LABEL_0", "score": 0.504}, {"label": "LABEL_1", "score": 0.496}],
+            ],
+        )
+
+        outputs = text_classifier(["This is great !", "Something else"], return_all_scores=False)
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {"label": "LABEL_0", "score": 0.504},
+                {"label": "LABEL_0", "score": 0.504},
+            ],
+        )
+
     @require_torch
     def test_accepts_torch_device(self):
-        import torch
-
         text_classifier = pipeline(
             task="text-classification",
             model="hf-internal-testing/tiny-random-distilbert",
             framework="pt",
-            device=torch.device("cpu"),
+            device=torch_device,
         )
 
         outputs = text_classifier("This is great !")
@@ -86,7 +139,7 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         outputs = text_classifier("Birds are a type of animal")
         self.assertEqual(nested_simplify(outputs), [{"label": "POSITIVE", "score": 0.988}])
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         text_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer)
         return text_classifier, ["HuggingFace is in", "This is another test"]
 
@@ -107,6 +160,15 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         )
         self.assertTrue(outputs[0]["label"] in model.config.id2label.values())
         self.assertTrue(outputs[1]["label"] in model.config.id2label.values())
+
+        # Forcing to get all results with `top_k=None`
+        # This is NOT the legacy format
+        outputs = text_classifier(valid_inputs, top_k=None)
+        N = len(model.config.id2label.values())
+        self.assertEqual(
+            nested_simplify(outputs),
+            [[{"label": ANY(str), "score": ANY(float)}] * N, [{"label": ANY(str), "score": ANY(float)}] * N],
+        )
 
         valid_inputs = {"text": "HuggingFace is in ", "text_pair": "Paris is in France"}
         outputs = text_classifier(valid_inputs)

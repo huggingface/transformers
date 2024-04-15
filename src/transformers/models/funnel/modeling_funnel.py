@@ -47,21 +47,11 @@ from .configuration_funnel import FunnelConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "FunnelConfig"
-_TOKENIZER_FOR_DOC = "FunnelTokenizer"
 _CHECKPOINT_FOR_DOC = "funnel-transformer/small"
 
-FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "funnel-transformer/small",  # B4-4-4H768
-    "funnel-transformer/small-base",  # B4-4-4H768, no decoder
-    "funnel-transformer/medium",  # B6-3x2-3x2H768
-    "funnel-transformer/medium-base",  # B6-3x2-3x2H768, no decoder
-    "funnel-transformer/intermediate",  # B6-6-6H768
-    "funnel-transformer/intermediate-base",  # B6-6-6H768, no decoder
-    "funnel-transformer/large",  # B8-8-8H1024
-    "funnel-transformer/large-base",  # B8-8-8H1024, no decoder
-    "funnel-transformer/xlarge-base",  # B10-10-10H1024
-    "funnel-transformer/xlarge",  # B10-10-10H1024, no decoder
-]
+
+from ..deprecated._archive_maps import FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
 
 INF = 1e6
 
@@ -236,8 +226,8 @@ class FunnelAttentionStructure(nn.Module):
         if self.config.attention_type == "factorized":
             # Notations from the paper, appending A.2.2, final formula.
             # We need to create and return the matrices phi, psi, pi and omega.
-            pos_seq = torch.arange(0, seq_len, 1.0, dtype=dtype, device=device)
-            freq_seq = torch.arange(0, d_model // 2, 1.0, dtype=dtype, device=device)
+            pos_seq = torch.arange(0, seq_len, 1.0, dtype=torch.int64, device=device).to(dtype)
+            freq_seq = torch.arange(0, d_model // 2, 1.0, dtype=torch.int64, device=device).to(dtype)
             inv_freq = 1 / (10000 ** (freq_seq / (d_model // 2)))
             sinusoid = pos_seq[:, None] * inv_freq[None]
             sin_embed = torch.sin(sinusoid)
@@ -253,17 +243,17 @@ class FunnelAttentionStructure(nn.Module):
         else:
             # Notations from the paper, appending A.2.1, final formula.
             # We need to create and return all the possible vectors R for all blocks and shifts.
-            freq_seq = torch.arange(0, d_model // 2, 1.0, dtype=dtype, device=device)
+            freq_seq = torch.arange(0, d_model // 2, 1.0, dtype=torch.int64, device=device).to(dtype)
             inv_freq = 1 / (10000 ** (freq_seq / (d_model // 2)))
             # Maximum relative positions for the first input
-            rel_pos_id = torch.arange(-seq_len * 2, seq_len * 2, 1.0, dtype=dtype, device=device)
+            rel_pos_id = torch.arange(-seq_len * 2, seq_len * 2, 1.0, dtype=torch.int64, device=device).to(dtype)
             zero_offset = seq_len * 2
             sinusoid = rel_pos_id[:, None] * inv_freq[None]
             sin_embed = self.sin_dropout(torch.sin(sinusoid))
             cos_embed = self.cos_dropout(torch.cos(sinusoid))
             pos_embed = torch.cat([sin_embed, cos_embed], dim=-1)
 
-            pos = torch.arange(0, seq_len, dtype=dtype, device=device)
+            pos = torch.arange(0, seq_len, dtype=torch.int64, device=device).to(dtype)
             pooled_pos = pos
             position_embeds_list = []
             for block_index in range(0, self.config.num_blocks):
@@ -777,7 +767,7 @@ class FunnelDiscriminatorPredictions(nn.Module):
     def forward(self, discriminator_hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(discriminator_hidden_states)
         hidden_states = ACT2FN[self.config.hidden_act](hidden_states)
-        logits = self.dense_prediction(hidden_states).squeeze()
+        logits = self.dense_prediction(hidden_states).squeeze(-1)
         return logits
 
 
@@ -883,7 +873,7 @@ FUNNEL_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -942,7 +932,6 @@ class FunnelBaseModel(FunnelPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small-base",
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -968,6 +957,7 @@ class FunnelBaseModel(FunnelPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -1020,7 +1010,6 @@ class FunnelModel(FunnelPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1044,6 +1033,7 @@ class FunnelModel(FunnelPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -1144,10 +1134,10 @@ class FunnelForPreTraining(FunnelPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import FunnelTokenizer, FunnelForPreTraining
+        >>> from transformers import AutoTokenizer, FunnelForPreTraining
         >>> import torch
 
-        >>> tokenizer = FunnelTokenizer.from_pretrained("funnel-transformer/small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("funnel-transformer/small")
         >>> model = FunnelForPreTraining.from_pretrained("funnel-transformer/small")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -1193,6 +1183,8 @@ class FunnelForPreTraining(FunnelPreTrainedModel):
 
 @add_start_docstrings("""Funnel Transformer Model with a `language modeling` head on top.""", FUNNEL_START_DOCSTRING)
 class FunnelForMaskedLM(FunnelPreTrainedModel):
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config: FunnelConfig) -> None:
         super().__init__(config)
 
@@ -1210,7 +1202,6 @@ class FunnelForMaskedLM(FunnelPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1285,7 +1276,6 @@ class FunnelForSequenceClassification(FunnelPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small-base",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1376,7 +1366,6 @@ class FunnelForMultipleChoice(FunnelPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small-base",
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1463,7 +1452,6 @@ class FunnelForTokenClassification(FunnelPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1536,7 +1524,6 @@ class FunnelForQuestionAnswering(FunnelPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

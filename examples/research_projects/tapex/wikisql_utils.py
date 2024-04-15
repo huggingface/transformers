@@ -23,8 +23,6 @@ import re
 # Original: https://github.com/google-research/tapas/master/wikisql_utils.py
 from typing import Any, List, Text
 
-import six
-
 
 EMPTY_ANSWER = "none"
 EMPTY_ANSWER_AGG = "none"
@@ -32,7 +30,7 @@ EMPTY_ANSWER_AGG = "none"
 
 def _split_thousands(delimiter, value):
     split = value.split(delimiter)
-    return len(split) > 1 and any(map(lambda x: len(x) == 3, split))
+    return len(split) > 1 and any((len(x) == 3 for x in split))
 
 
 def convert_to_float(value):
@@ -49,7 +47,7 @@ def convert_to_float(value):
         return value
     if isinstance(value, int):
         return float(value)
-    if not isinstance(value, six.string_types):
+    if not isinstance(value, str):
         raise ValueError("Argument value is not a string. Can't parse it as float")
     sanitized = value
 
@@ -125,7 +123,7 @@ _TOKENIZER = re.compile(r"\w+|[^\w\s]+", re.UNICODE | re.MULTILINE | re.DOTALL)
 
 
 def _normalize_for_match(x):
-    return [t for t in _TOKENIZER.findall(x.lower())]
+    return list(_TOKENIZER.findall(x.lower()))
 
 
 def _compare(operator, src, tgt):

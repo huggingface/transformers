@@ -33,7 +33,7 @@ if is_apex_available():
     from apex import amp
 
 
-if version.parse(torch.__version__) >= version.parse("1.6"):
+if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.6"):
     _is_native_amp_available = True
     from torch.cuda.amp import autocast
 
@@ -69,19 +69,19 @@ class ModelArguments:
     hidden_dropout: Optional[float] = field(
         default=0.1,
         metadata={
-            "help": "The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler."
+            "help": "The dropout probability for all fully connected layers in the embeddings, encoder, and pooler."
         },
     )
     feat_proj_dropout: Optional[float] = field(
         default=0.1,
-        metadata={"help": "The dropout probabilitiy for all 1D convolutional layers in feature extractor."},
+        metadata={"help": "The dropout probability for all 1D convolutional layers in feature extractor."},
     )
     mask_time_prob: Optional[float] = field(
         default=0.05,
         metadata={
             "help": (
-                "Propability of each feature vector along the time axis to be chosen as the start of the vector"
-                "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
+                "Propability of each feature vector along the time axis to be chosen as the start of the vector "
+                "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature "
                 "vectors will be masked along the time axis. This is only relevant if ``apply_spec_augment is True``."
             )
         },
@@ -173,7 +173,7 @@ class DataCollatorCTCWithPadding:
     pad_to_multiple_of_labels: Optional[int] = None
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
-        # split inputs and labels since they have to be of different lenghts and need
+        # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         input_features = [{"input_values": feature["input_values"]} for feature in features]
         label_features = [{"input_ids": feature["labels"]} for feature in features]
@@ -185,14 +185,13 @@ class DataCollatorCTCWithPadding:
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
         )
-        with self.processor.as_target_processor():
-            labels_batch = self.processor.pad(
-                label_features,
-                padding=self.padding,
-                max_length=self.max_length_labels,
-                pad_to_multiple_of=self.pad_to_multiple_of_labels,
-                return_tensors="pt",
-            )
+        labels_batch = self.processor.pad(
+            labels=label_features,
+            padding=self.padding,
+            max_length=self.max_length_labels,
+            pad_to_multiple_of=self.pad_to_multiple_of_labels,
+            return_tensors="pt",
+        )
 
         # replace padding with -100 to ignore loss correctly
         labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
@@ -414,10 +413,11 @@ def main():
         assert (
             len(set(batch["sampling_rate"])) == 1
         ), f"Make sure all inputs have the same sampling rate of {processor.feature_extractor.sampling_rate}."
-        batch["input_values"] = processor(batch["speech"], sampling_rate=batch["sampling_rate"][0]).input_values
-        # Setup the processor for targets
-        with processor.as_target_processor():
-            batch["labels"] = processor(batch["target_text"]).input_ids
+
+        processed_batch = processor(
+            audio=batch["speech"], text=batch["target_text"], sampling_rate=batch["sampling_rate"][0]
+        )
+        batch.update(processed_batch)
         return batch
 
     train_dataset = train_dataset.map(

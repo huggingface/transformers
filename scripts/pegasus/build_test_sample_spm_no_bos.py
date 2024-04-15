@@ -13,14 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# this script builds a small sample spm file tests/fixtures/test_sentencepiece_no_bos.model, with features needed by pegasus 
+# this script builds a small sample spm file tests/fixtures/test_sentencepiece_no_bos.model, with features needed by pegasus
 
 # 1. pip install sentencepiece
-# 
+#
 # 2. wget https://raw.githubusercontent.com/google/sentencepiece/master/data/botchan.txt
 
 # 3. build
 import sentencepiece as spm
+
 
 # pegasus:
 # 1. no bos

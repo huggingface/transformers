@@ -28,6 +28,7 @@ SAMPLE_ENTITY_VOCAB = get_tests_dir("fixtures/test_entity_vocab.json")
 
 
 class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "studio-ousia/mluke-base"
     tokenizer_class = MLukeTokenizer
     test_rust_tokenizer = False
     from_pretrained_kwargs = {"cls_token": "<s>"}
@@ -41,7 +42,6 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         kwargs.update(self.special_tokens_map)
         kwargs.update({"task": task})
         tokenizer = MLukeTokenizer(vocab_file=SAMPLE_VOCAB, entity_vocab_file=SAMPLE_ENTITY_VOCAB, **kwargs)
-        tokenizer.sanitize_special_tokens()
         return tokenizer
 
     def get_input_output_texts(self, tokenizer):

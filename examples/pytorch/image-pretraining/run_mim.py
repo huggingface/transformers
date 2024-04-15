@@ -16,6 +16,7 @@
 import logging
 import os
 import sys
+import warnings
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -27,17 +28,17 @@ from torchvision.transforms import Compose, Lambda, Normalize, RandomHorizontalF
 import transformers
 from transformers import (
     CONFIG_MAPPING,
-    FEATURE_EXTRACTOR_MAPPING,
+    IMAGE_PROCESSOR_MAPPING,
     MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
     AutoConfig,
-    AutoFeatureExtractor,
+    AutoImageProcessor,
     AutoModelForMaskedImageModeling,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
 )
 from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version
+from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
@@ -48,7 +49,7 @@ Any model supported by the AutoModelForMaskedImageModeling API can be used.
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.20.0.dev0")
+check_min_version("4.40.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-pretraining/requirements.txt")
 
@@ -104,7 +105,7 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-        data_files = dict()
+        data_files = {}
         if self.train_dir is not None:
             data_files["train"] = self.train_dir
         if self.validation_dir is not None:
@@ -115,7 +116,7 @@ class DataTrainingArguments:
 @dataclass
 class ModelArguments:
     """
-    Arguments pertaining to which model/config/feature extractor we are going to pre-train.
+    Arguments pertaining to which model/config/image processor we are going to pre-train.
     """
 
     model_name_or_path: str = field(
@@ -152,13 +153,29 @@ class ModelArguments:
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    feature_extractor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
+    image_processor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
     use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
+        },
+    )
+    trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-                "with private models)."
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+                "execute code present on the Hub on your local machine."
             )
         },
     )
@@ -239,12 +256,29 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    if model_args.use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
+            FutureWarning,
+        )
+        if model_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        model_args.token = model_args.use_auth_token
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_mim", model_args, data_args)
+
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
+
+    if training_args.should_log:
+        # The default of training_args.log_level is passive, so we set log level at info here to have that default.
+        transformers.utils.logging.set_verbosity_info()
 
     log_level = training_args.get_process_log_level()
     logger.setLevel(log_level)
@@ -254,8 +288,8 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
+        + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
 
@@ -280,7 +314,7 @@ def main():
         data_args.dataset_config_name,
         data_files=data_args.data_files,
         cache_dir=model_args.cache_dir,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
     )
 
     # If we don't have a validation split, split off a percentage of train as validation.
@@ -297,7 +331,8 @@ def main():
     config_kwargs = {
         "cache_dir": model_args.cache_dir,
         "revision": model_args.model_revision,
-        "use_auth_token": True if model_args.use_auth_token else None,
+        "token": model_args.token,
+        "trust_remote_code": model_args.trust_remote_code,
     }
     if model_args.config_name_or_path:
         config = AutoConfig.from_pretrained(model_args.config_name_or_path, **config_kwargs)
@@ -330,17 +365,16 @@ def main():
         }
     )
 
-    # create feature extractor
-    if model_args.feature_extractor_name:
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_args.feature_extractor_name, **config_kwargs)
+    # create image processor
+    if model_args.image_processor_name:
+        image_processor = AutoImageProcessor.from_pretrained(model_args.image_processor_name, **config_kwargs)
     elif model_args.model_name_or_path:
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_args.model_name_or_path, **config_kwargs)
+        image_processor = AutoImageProcessor.from_pretrained(model_args.model_name_or_path, **config_kwargs)
     else:
-        FEATURE_EXTRACTOR_TYPES = {
-            conf.model_type: feature_extractor_class
-            for conf, feature_extractor_class in FEATURE_EXTRACTOR_MAPPING.items()
+        IMAGE_PROCESSOR_TYPES = {
+            conf.model_type: image_processor_class for conf, image_processor_class in IMAGE_PROCESSOR_MAPPING.items()
         }
-        feature_extractor = FEATURE_EXTRACTOR_TYPES[model_args.model_type]()
+        image_processor = IMAGE_PROCESSOR_TYPES[model_args.model_type]()
 
     # create model
     if model_args.model_name_or_path:
@@ -350,11 +384,12 @@ def main():
             config=config,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         logger.info("Training new model from scratch")
-        model = AutoModelForMaskedImageModeling.from_config(config)
+        model = AutoModelForMaskedImageModeling.from_config(config, trust_remote_code=model_args.trust_remote_code)
 
     if training_args.do_train:
         column_names = ds["train"].column_names
@@ -378,7 +413,7 @@ def main():
             RandomResizedCrop(model_args.image_size, scale=(0.67, 1.0), ratio=(3.0 / 4.0, 4.0 / 3.0)),
             RandomHorizontalFlip(),
             ToTensor(),
-            Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std),
+            Normalize(mean=image_processor.image_mean, std=image_processor.image_std),
         ]
     )
 
@@ -423,7 +458,7 @@ def main():
         args=training_args,
         train_dataset=ds["train"] if training_args.do_train else None,
         eval_dataset=ds["validation"] if training_args.do_eval else None,
-        tokenizer=feature_extractor,
+        tokenizer=image_processor,
         data_collator=collate_fn,
     )
 

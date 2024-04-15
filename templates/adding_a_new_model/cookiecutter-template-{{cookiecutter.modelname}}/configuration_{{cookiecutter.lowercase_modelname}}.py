@@ -20,11 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-{{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/{{cookiecutter.checkpoint_identifier}}/resolve/main/config.json",
-    # See all {{cookiecutter.modelname}} models at https://huggingface.co/models?filter={{cookiecutter.lowercase_modelname}}
-}
-
 
 class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
     r"""
@@ -56,7 +51,7 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler.
             If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):
@@ -107,10 +102,10 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see
             https://arxiv.org/abs/1909.11556) for more details.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see
             https://arxiv.org/abs/1909.11556) for more details.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -137,7 +132,7 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
     {% else -%}
     keys_to_ignore_at_inference = ["past_key_values"]
     {% endif -%}
-    
+
     {% if cookiecutter.is_encoder_decoder_model == "False" %}
     {%- else %}
     attribute_map = {
@@ -163,7 +158,6 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         use_cache=True,
-        is_encoder_decoder=False,
         {% else -%}
         vocab_size=50265,
         max_position_embeddings=1024,
@@ -239,4 +233,3 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
             **kwargs
         )
 
-    

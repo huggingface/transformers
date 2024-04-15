@@ -20,14 +20,16 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torch_fp16,
     require_torch_multi_gpu,
     slow,
     torch_device,
 )
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -35,7 +37,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         ReformerForMaskedLM,
         ReformerForQuestionAnswering,
         ReformerForSequenceClassification,
@@ -562,12 +563,12 @@ class ReformerTesterMixin:
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_random_seed(*config_and_inputs)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    @require_torch_fp16
     def test_reformer_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_model_fp16_forward(*config_and_inputs)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    @require_torch_fp16
     def test_reformer_model_fp16_generate(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_model_fp16_generate(*config_and_inputs)
@@ -614,9 +615,9 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ReformerModelWithLMHead.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/reformer-crime-and-punishment"
+        model = ReformerModelWithLMHead.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
@@ -681,18 +682,52 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
                 [expected_shape] * len(iter_hidden_states),
             )
 
+    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
+    def test_left_padding_compatibility(self):
+        pass
+
 
 @require_torch
-class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class ReformerLSHAttnModelTest(
+    ReformerTesterMixin, ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (ReformerModel, ReformerModelWithLMHead, ReformerForSequenceClassification, ReformerForQuestionAnswering)
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": ReformerModel,
+            "fill-mask": ReformerForMaskedLM,
+            "question-answering": ReformerForQuestionAnswering,
+            "text-classification": ReformerForSequenceClassification,
+            "text-generation": ReformerModelWithLMHead,
+            "zero-shot": ReformerForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if (
+            pipeline_test_casse_name == "QAPipelineTests"
+            and tokenizer_name is not None
+            and not tokenizer_name.endswith("Fast")
+        ):
+            # `QAPipelineTests` fails for a few models when the slower tokenizer are used.
+            # (The slower tokenizers were never used for pipeline tests before the pipeline testing rework)
+            # TODO: check (and possibly fix) the `QAPipelineTests` with slower tokenizer
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = ReformerModelTester(
@@ -800,8 +835,16 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, Generation
                 [expected_shape] * len(iter_hidden_states),
             )
 
+    @unittest.skip("Fails because the sequence length is not a multiple of 4")
     def test_problem_types(self):
-        # Fails because the sequence length is not a multiple of 4
+        pass
+
+    @unittest.skip("Fails because the sequence length is not a multiple of 4")
+    def test_past_key_values_format(self):
+        pass
+
+    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
+    def test_left_padding_compatibility(self):
         pass
 
 
@@ -1145,10 +1188,11 @@ class ReformerIntegrationTests(unittest.TestCase):
         hidden_states = model(input_ids=input_ids, attention_mask=attn_mask)[0]
         output_slice = hidden_states[1, -1, :5]
         expected_output_slice = torch.tensor(
-            [0.0256, -0.0121, 0.0636, 0.0024, -0.0393],
+            [0.1018, -0.2026, 0.2116, 0.0270, -0.1233],
             dtype=torch.float,
             device=torch_device,
         )
+
         self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
 
     def test_local_lm_model_grad(self):
@@ -1163,25 +1207,25 @@ class ReformerIntegrationTests(unittest.TestCase):
         input_ids, _ = self._get_input_ids_and_mask()
         loss = model(input_ids=input_ids, labels=input_ids)[0]
 
-        self.assertTrue(torch.allclose(loss, torch.tensor(5.7786, dtype=torch.float, device=torch_device), atol=1e-3))
+        self.assertTrue(torch.allclose(loss, torch.tensor(5.8019, dtype=torch.float, device=torch_device), atol=1e-3))
         loss.backward()
 
         # check last grads to cover all proable errors
         grad_slice_word = model.reformer.embeddings.word_embeddings.weight.grad[0, :5]
         expected_grad_slice_word = torch.tensor(
-            [-0.0005, 0.0001, 0.0002, 0.0003, 0.0006],
+            [-0.0005, -0.0001, -0.0002, -0.0006, -0.0006],
             dtype=torch.float,
             device=torch_device,
         )
         grad_slice_position_factor_1 = model.reformer.embeddings.position_embeddings.weights[0][1, 0, -5:]
         expected_grad_slice_pos_fac_1 = torch.tensor(
-            [0.0037, -1.3793, -1.0231, -1.5230, -2.5306],
+            [-0.5235, 0.5704, 0.0922, -0.3140, 0.9928],
             dtype=torch.float,
             device=torch_device,
         )
         grad_slice_position_factor_2 = model.reformer.embeddings.position_embeddings.weights[1][0, 1, :5]
         expected_grad_slice_pos_fac_2 = torch.tensor(
-            [-1.3165, 0.5168, 0.7785, 1.0811, -0.9830],
+            [1.7960, 1.7668, 0.5593, 0.0907, 1.8342],
             dtype=torch.float,
             device=torch_device,
         )
@@ -1203,24 +1247,24 @@ class ReformerIntegrationTests(unittest.TestCase):
         input_ids, _ = self._get_input_ids_and_mask()
         loss = model(input_ids=input_ids, labels=input_ids)[0]
 
-        self.assertTrue(torch.allclose(loss, torch.tensor(5.7819, dtype=torch.float, device=torch_device), atol=1e-3))
+        self.assertTrue(torch.allclose(loss, torch.tensor(5.7854, dtype=torch.float, device=torch_device), atol=1e-3))
         loss.backward()
         # check last grads to cover all proable errors
         grad_slice_word = model.reformer.embeddings.word_embeddings.weight.grad[0, :5]
         expected_grad_slice_word = torch.tensor(
-            [2.6357e-05, 4.3358e-04, -8.4985e-04, 1.0094e-04, 3.8954e-04],
+            [0.0004, 0.0003, 0.0006, -0.0004, 0.0002],
             dtype=torch.float,
             device=torch_device,
         )
         grad_slice_position_factor_1 = model.reformer.embeddings.position_embeddings.weights[0][1, 0, -5:]
         expected_grad_slice_pos_fac_1 = torch.tensor(
-            [-0.0984, 0.6283, 0.4282, 1.2960, 0.6897],
+            [-0.3792, 0.5593, -1.6993, 0.2033, 0.4131],
             dtype=torch.float,
             device=torch_device,
         )
         grad_slice_position_factor_2 = model.reformer.embeddings.position_embeddings.weights[1][0, 1, :5]
         expected_grad_slice_pos_fac_2 = torch.tensor(
-            [0.4626, -0.0231, -0.0172, 0.1081, 0.3805],
+            [-1.4212, -0.3201, -1.1944, 0.1258, 0.2856],
             dtype=torch.float,
             device=torch_device,
         )

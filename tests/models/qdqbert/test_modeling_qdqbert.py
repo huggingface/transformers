@@ -23,6 +23,7 @@ from transformers.testing_utils import require_pytorch_quantization, require_tor
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -38,7 +39,6 @@ if is_torch_available():
         QDQBertLMHeadModel,
         QDQBertModel,
     )
-    from transformers.models.qdqbert.modeling_qdqbert import QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class QDQBertModelTester:
@@ -53,7 +53,7 @@ class QDQBertModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -419,8 +419,7 @@ class QDQBertModelTester:
 
 @require_torch
 @require_pytorch_quantization
-class QDQBertModelTest(ModelTesterMixin, unittest.TestCase):
-
+class QDQBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             QDQBertModel,
@@ -436,6 +435,19 @@ class QDQBertModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (QDQBertLMHeadModel,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": QDQBertModel,
+            "fill-mask": QDQBertForMaskedLM,
+            "question-answering": QDQBertForQuestionAnswering,
+            "text-classification": QDQBertForSequenceClassification,
+            "text-generation": QDQBertLMHeadModel,
+            "token-classification": QDQBertForTokenClassification,
+            "zero-shot": QDQBertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = QDQBertModelTester(self)
@@ -524,9 +536,9 @@ class QDQBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = QDQBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google-bert/bert-base-uncased"
+        model = QDQBertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     # Override
     def test_feed_forward_chunking(self):
@@ -550,7 +562,7 @@ class QDQBertModelIntegrationTest(unittest.TestCase):
         quant_nn.QuantLinear.set_default_quant_desc_input(input_desc)
         quant_nn.QuantLinear.set_default_quant_desc_weight(weight_desc)
 
-        model = QDQBertModel.from_pretrained("bert-base-uncased")
+        model = QDQBertModel.from_pretrained("google-bert/bert-base-uncased")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         output = model(input_ids, attention_mask=attention_mask)[0]

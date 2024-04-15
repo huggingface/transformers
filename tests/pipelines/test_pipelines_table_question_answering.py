@@ -20,6 +20,7 @@ from transformers import (
     AutoTokenizer,
     TableQuestionAnsweringPipeline,
     TFAutoModelForTableQuestionAnswering,
+    is_torch_available,
     pipeline,
 )
 from transformers.testing_utils import (
@@ -28,15 +29,18 @@ from transformers.testing_utils import (
     require_tensorflow_probability,
     require_tf,
     require_torch,
-    require_torch_scatter,
     slow,
 )
 
-from .test_pipelines_common import PipelineTestCaseMeta
+
+if is_torch_available():
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_12
+else:
+    is_torch_greater_or_equal_than_1_12 = False
 
 
 @is_pipeline_test
-class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class TQAPipelineTests(unittest.TestCase):
     # Putting it there for consistency, but TQA do not have fast tokenizer
     # which are needed to generate automatic tests
     model_mapping = MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING
@@ -146,8 +150,8 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
                 },
             )
 
+    @unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
     @require_torch
-    @require_torch_scatter
     def test_small_model_pt(self):
         model_id = "lysandre/tiny-tapas-random-wtq"
         model = AutoModelForTableQuestionAnswering.from_pretrained(model_id)
@@ -249,8 +253,8 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
                 },
             )
 
+    @unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
     @require_torch
-    @require_torch_scatter
     def test_slow_tokenizer_sqa_pt(self):
         model_id = "lysandre/tiny-tapas-random-sqa"
         model = AutoModelForTableQuestionAnswering.from_pretrained(model_id)
@@ -491,8 +495,9 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
                 },
             )
 
+    @unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
     @slow
-    @require_torch_scatter
+    @require_torch
     def test_integration_wtq_pt(self):
         table_querier = pipeline("table-question-answering")
 
@@ -585,8 +590,9 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         ]
         self.assertListEqual(results, expected_results)
 
+    @unittest.skipIf(not is_torch_greater_or_equal_than_1_12, reason="Tapas is only available in torch v1.12+")
     @slow
-    @require_torch_scatter
+    @require_torch
     def test_integration_sqa_pt(self):
         table_querier = pipeline(
             "table-question-answering",

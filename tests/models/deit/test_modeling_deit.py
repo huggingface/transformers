@@ -15,17 +15,24 @@
 """ Testing suite for the PyTorch DeiT model. """
 
 
-import inspect
 import unittest
 import warnings
 
 from transformers import DeiTConfig
-from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_accelerate,
+    require_torch,
+    require_torch_accelerator,
+    require_torch_fp16,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -33,21 +40,22 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        MODEL_MAPPING,
         DeiTForImageClassification,
         DeiTForImageClassificationWithTeacher,
         DeiTForMaskedImageModeling,
         DeiTModel,
     )
-    from transformers.models.deit.modeling_deit import DEIT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.auto.modeling_auto import (
+        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+        MODEL_MAPPING_NAMES,
+    )
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DeiTFeatureExtractor
+    from transformers import DeiTImageProcessor
 
 
 class DeiTModelTester:
@@ -61,7 +69,7 @@ class DeiTModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -131,11 +139,40 @@ class DeiTModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    def create_and_check_for_masked_image_modeling(self, config, pixel_values, labels):
+        model = DeiTForMaskedImageModeling(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+        self.parent.assertEqual(
+            result.reconstruction.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
+        )
+
+        # test greyscale images
+        config.num_channels = 1
+        model = DeiTForMaskedImageModeling(config)
+        model.to(torch_device)
+        model.eval()
+
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        result = model(pixel_values)
+        self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, 1, self.image_size, self.image_size))
+
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
         model = DeiTForImageClassification(config)
         model.to(torch_device)
         model.eval()
+        result = model(pixel_values, labels=labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+
+        # test greyscale images
+        config.num_channels = 1
+        model = DeiTForImageClassification(config)
+        model.to(torch_device)
+        model.eval()
+
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
@@ -151,7 +188,7 @@ class DeiTModelTester:
 
 
 @require_torch
-class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
+class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as DeiT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -166,6 +203,14 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "image-feature-extraction": DeiTModel,
+            "image-classification": (DeiTForImageClassification, DeiTForImageClassificationWithTeacher),
+        }
+        if is_torch_available()
+        else {}
     )
 
     test_pruning = False
@@ -192,21 +237,13 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
-
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_for_masked_image_modeling(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -232,7 +269,7 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             # DeiTForImageClassificationWithTeacher supports inference-only
             if (
-                model_class in get_values(MODEL_MAPPING)
+                model_class.__name__ in MODEL_MAPPING_NAMES.values()
                 or model_class.__name__ == "DeiTForImageClassificationWithTeacher"
             ):
                 continue
@@ -252,7 +289,7 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in get_values(MODEL_MAPPING) or not model_class.supports_gradient_checkpointing:
+            if model_class.__name__ in MODEL_MAPPING_NAMES.values() or not model_class.supports_gradient_checkpointing:
                 continue
             # DeiTForImageClassificationWithTeacher supports inference-only
             if model_class.__name__ == "DeiTForImageClassificationWithTeacher":
@@ -265,6 +302,18 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
             loss = model(**inputs).loss
             loss.backward()
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     def test_problem_types(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -276,10 +325,10 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             if (
-                model_class
+                model_class.__name__
                 not in [
-                    *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
-                    *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+                    *MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values(),
+                    *MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES.values(),
                 ]
                 or model_class.__name__ == "DeiTForImageClassificationWithTeacher"
             ):
@@ -287,7 +336,6 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
 
             for problem_type in problem_types:
                 with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
-
                     config.problem_type = problem_type["title"]
                     config.num_labels = problem_type["num_labels"]
 
@@ -318,9 +366,9 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DEIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DeiTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/deit-base-distilled-patch16-224"
+        model = DeiTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -333,9 +381,9 @@ def prepare_img():
 @require_vision
 class DeiTModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
-            DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+            DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
             if is_vision_available()
             else None
         )
@@ -346,12 +394,13 @@ class DeiTModelIntegrationTest(unittest.TestCase):
             torch_device
         )
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
 
         # verify the logits
         expected_shape = torch.Size((1, 1000))
@@ -360,3 +409,24 @@ class DeiTModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([-1.0266, 0.1912, -1.2861]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+    @slow
+    @require_accelerate
+    @require_torch_accelerator
+    @require_torch_fp16
+    def test_inference_fp16(self):
+        r"""
+        A small test to make sure that inference work in half precision without any problem.
+        """
+        model = DeiTModel.from_pretrained(
+            "facebook/deit-base-distilled-patch16-224", torch_dtype=torch.float16, device_map="auto"
+        )
+        image_processor = self.default_image_processor
+
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt")
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # forward pass to make sure inference works in fp16
+        with torch.no_grad():
+            _ = model(pixel_values)

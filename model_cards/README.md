@@ -15,11 +15,7 @@ You can either:
 
 **What if you want to create or update a model card for a model you don't have write access to?**
 
-In that case, given that we don't have a Pull request system yet on huggingface.co (🤯),
-you can open an issue here, post the card's content, and tag the model author(s) and/or the Hugging Face team.
-
-We might implement a more seamless process at some point, so your early feedback is precious!
-Please let us know of any suggestion.
+In that case, you can open a [Hub pull request](https://huggingface.co/docs/hub/repositories-pull-requests-discussions)! Check out the [announcement](https://huggingface.co/blog/community-update) of this feature for more details 🤗.
 
 ### What happened to the model cards here?
 

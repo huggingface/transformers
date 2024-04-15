@@ -16,15 +16,19 @@
 Speech processor class for Wav2Vec2
 """
 import os
-from contextlib import contextmanager
+import warnings
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
-from multiprocessing import get_context
+from multiprocessing import Pool, get_context, get_start_method
 from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Union
 
 import numpy as np
 
 from ...processing_utils import ProcessorMixin
-from ...utils import ModelOutput, requires_backends
+from ...utils import ModelOutput, logging, requires_backends
+
+
+logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
@@ -46,18 +50,18 @@ class Wav2Vec2DecoderWithLMOutput(ModelOutput):
         text (list of `str` or `str`):
             Decoded logits in text from. Usually the speech transcription.
         logit_score (list of `float` or `float`):
-            Total logit score of the beam associated with produced text.
+            Total logit score of the beams associated with produced text.
         lm_score (list of `float`):
-            Fused lm_score of the beam associated with produced text.
+            Fused lm_score of the beams associated with produced text.
         word_offsets (list of `List[Dict[str, Union[int, str]]]` or `List[Dict[str, Union[int, str]]]`):
             Offsets of the decoded words. In combination with sampling rate and model downsampling rate word offsets
             can be used to compute time stamps for each word.
     """
 
-    text: Union[List[str], str]
-    logit_score: Union[List[float], float] = None
-    lm_score: Union[List[float], float] = None
-    word_offsets: Union[List[ListOfDict], ListOfDict] = None
+    text: Union[List[List[str]], List[str], str]
+    logit_score: Union[List[List[float]], List[float], float] = None
+    lm_score: Union[List[List[float]], List[float], float] = None
+    word_offsets: Union[List[List[ListOfDict]], List[ListOfDict], ListOfDict] = None
 
 
 class Wav2Vec2ProcessorWithLM(ProcessorMixin):
@@ -73,6 +77,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         decoder (`pyctcdecode.BeamSearchDecoderCTC`):
             An instance of [`pyctcdecode.BeamSearchDecoderCTC`]. The decoder is a required input.
     """
+
     feature_extractor_class = "Wav2Vec2FeatureExtractor"
     tokenizer_class = "Wav2Vec2CTCTokenizer"
 
@@ -99,6 +104,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
         self.decoder = decoder
         self.current_processor = self.feature_extractor
+        self._in_target_context_manager = False
 
     def save_pretrained(self, save_directory):
         super().save_pretrained(save_directory)
@@ -113,7 +119,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
         This class method is simply calling Wav2Vec2FeatureExtractor's
         [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`], Wav2Vec2CTCTokenizer's
-        [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`], and
+        [`~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`], and
         [`pyctcdecode.BeamSearchDecoderCTC.load_from_hf_hub`].
 
         Please refer to the docstrings of the methods above for more information.
@@ -125,8 +131,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
                 This can be either:
 
                 - a string, the *model id* of a pretrained feature_extractor hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                  huggingface.co.
                 - a path to a *directory* containing a feature extractor file saved using the
                   [`~SequenceFeatureExtractor.save_pretrained`] method, e.g., `./my_model_directory/`.
                 - a path or url to a saved feature extractor JSON *file*, e.g.,
@@ -151,10 +156,10 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
             # make sure that only relevant filenames are downloaded
             language_model_filenames = os.path.join(BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY, "*")
             alphabet_filename = BeamSearchDecoderCTC._ALPHABET_SERIALIZED_FILENAME
-            allow_regex = [language_model_filenames, alphabet_filename]
+            allow_patterns = [language_model_filenames, alphabet_filename]
 
             decoder = BeamSearchDecoderCTC.load_from_hf_hub(
-                pretrained_model_name_or_path, allow_regex=allow_regex, **kwargs
+                pretrained_model_name_or_path, allow_patterns=allow_patterns, **kwargs
             )
 
         # set language model attributes
@@ -214,7 +219,36 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         Wav2Vec2CTCTokenizer's [`~Wav2Vec2CTCTokenizer.__call__`]. Please refer to the docstring of the above two
         methods for more information.
         """
-        return self.current_processor(*args, **kwargs)
+        # For backward compatibility
+        if self._in_target_context_manager:
+            return self.current_processor(*args, **kwargs)
+
+        if "raw_speech" in kwargs:
+            warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
+            audio = kwargs.pop("raw_speech")
+        else:
+            audio = kwargs.pop("audio", None)
+        sampling_rate = kwargs.pop("sampling_rate", None)
+        text = kwargs.pop("text", None)
+        if len(args) > 0:
+            audio = args[0]
+            args = args[1:]
+
+        if audio is None and text is None:
+            raise ValueError("You need to specify either an `audio` or `text` input to process.")
+
+        if audio is not None:
+            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
+        if text is not None:
+            encodings = self.tokenizer(text, **kwargs)
+
+        if text is None:
+            return inputs
+        elif audio is None:
+            return encodings
+        else:
+            inputs["labels"] = encodings["input_ids"]
+            return inputs
 
     def pad(self, *args, **kwargs):
         """
@@ -224,11 +258,33 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         Wav2Vec2CTCTokenizer's [`~Wav2Vec2CTCTokenizer.pad`]. Please refer to the docstring of the above two methods
         for more information.
         """
-        return self.current_processor.pad(*args, **kwargs)
+        # For backward compatibility
+        if self._in_target_context_manager:
+            return self.current_processor.pad(*args, **kwargs)
+
+        input_features = kwargs.pop("input_features", None)
+        labels = kwargs.pop("labels", None)
+        if len(args) > 0:
+            input_features = args[0]
+            args = args[1:]
+
+        if input_features is not None:
+            input_features = self.feature_extractor.pad(input_features, *args, **kwargs)
+        if labels is not None:
+            labels = self.tokenizer.pad(labels, **kwargs)
+
+        if labels is None:
+            return input_features
+        elif input_features is None:
+            return labels
+        else:
+            input_features["labels"] = labels["input_ids"]
+            return input_features
 
     def batch_decode(
         self,
         logits: np.ndarray,
+        pool: Optional[Pool] = None,
         num_processes: Optional[int] = None,
         beam_width: Optional[int] = None,
         beam_prune_logp: Optional[float] = None,
@@ -240,22 +296,39 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         unk_score_offset: Optional[float] = None,
         lm_score_boundary: Optional[bool] = None,
         output_word_offsets: bool = False,
+        n_best: int = 1,
     ):
         """
         Batch decode output logits to audio transcription with language model support.
 
         <Tip>
 
-        This function makes use of Python's multiprocessing.
+        This function makes use of Python's multiprocessing. Currently, multiprocessing is available only on Unix
+        systems (see this [issue](https://github.com/kensho-technologies/pyctcdecode/issues/65)).
+
+        If you are decoding multiple batches, consider creating a `Pool` and passing it to `batch_decode`. Otherwise,
+        `batch_decode` will be very slow since it will create a fresh `Pool` for each call. See usage example below.
 
         </Tip>
 
         Args:
             logits (`np.ndarray`):
                 The logits output vector of the model representing the log probabilities for each token.
+            pool (`multiprocessing.Pool`, *optional*):
+                An optional user-managed pool. If not set, one will be automatically created and closed. The pool
+                should be instantiated *after* `Wav2Vec2ProcessorWithLM`. Otherwise, the LM won't be available to the
+                pool's sub-processes.
+
+                <Tip>
+
+                Currently, only pools created with a 'fork' context can be used. If a 'spawn' pool is passed, it will
+                be ignored and sequential decoding will be used instead.
+
+                </Tip>
+
             num_processes (`int`, *optional*):
-                Number of processes on which the function should be parallelized over. Defaults to the number of
-                available CPUs.
+                If `pool` is not set, number of processes on which the function should be parallelized over. Defaults
+                to the number of available CPUs.
             beam_width (`int`, *optional*):
                 Maximum number of beams at each step in decoding. Defaults to pyctcdecode's DEFAULT_BEAM_WIDTH.
             beam_prune_logp (`int`, *optional*):
@@ -278,20 +351,27 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
             output_word_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output word offsets. Word offsets can be used in combination with the sampling rate
                 and model downsampling rate to compute the time-stamps of transcribed words.
+            n_best (`int`, *optional*, defaults to `1`):
+                Number of best hypotheses to return. If `n_best` is greater than 1, the returned `text` will be a list
+                of lists of strings, `logit_score` will be a list of lists of floats, and `lm_score` will be a list of
+                lists of floats, where the length of the outer list will correspond to the batch size and the length of
+                the inner list will correspond to the number of returned hypotheses . The value should be >= 1.
 
                 <Tip>
 
-                Please take a look at the Example of [`~model.wav2vec2_with_lm.processing_wav2vec2_with_lm.decode`] to
-                better understand how to make use of `output_word_offsets`.
-                [`~model.wav2vec2_with_lm.processing_wav2vec2_with_lm.batch_decode`] works the same way with batched
-                output.
+                Please take a look at the Example of [`~Wav2Vec2ProcessorWithLM.decode`] to better understand how to
+                make use of `output_word_offsets`. [`~Wav2Vec2ProcessorWithLM.batch_decode`] works the same way with
+                batched output.
 
                 </Tip>
 
         Returns:
-            [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`] or `tuple`.
+            [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`].
 
+        Example:
+            See [Decoding multiple audios](#decoding-multiple-audios).
         """
+
         from pyctcdecode.constants import (
             DEFAULT_BEAM_WIDTH,
             DEFAULT_HOTWORD_WEIGHT,
@@ -313,35 +393,78 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         # create multiprocessing pool and list numpy arrays
         # filter out logits padding
         logits_list = [array[(array != -100.0).all(axis=-1)] for array in logits]
-        pool = get_context("fork").Pool(num_processes)
+
+        # create a pool if necessary while also using it as a context manager to close itself
+        if pool is None:
+            # fork is safe to use only on Unix, see "Contexts and start methods" section on
+            # multiprocessing's docs (https://docs.python.org/3/library/multiprocessing.html#contexts-and-start-methods)
+            default_context = get_start_method()
+
+            if default_context == "fork":
+                cm = pool = get_context().Pool(num_processes)
+            else:
+                logger.warning(
+                    "Parallel batch decoding is not currently supported in this platform. "
+                    "Falling back to sequential decoding."
+                )
+                cm = nullcontext()
+        else:
+            # pool is managed by the user, so we don't need to close it
+            cm = nullcontext()
+
+            if num_processes is not None:
+                logger.warning(
+                    "Parameter `num_process` was passed, but it will be ignored since `pool` was also specified."
+                )
 
         # pyctcdecode
-        decoded_beams = self.decoder.decode_beams_batch(
-            pool,
-            logits_list=logits_list,
-            beam_width=beam_width,
-            beam_prune_logp=beam_prune_logp,
-            token_min_logp=token_min_logp,
-            hotwords=hotwords,
-            hotword_weight=hotword_weight,
-        )
-
-        # clone multi-processing pool
-        pool.close()
+        with cm:
+            decoded_beams = self.decoder.decode_beams_batch(
+                pool=pool,
+                logits_list=logits_list,
+                beam_width=beam_width,
+                beam_prune_logp=beam_prune_logp,
+                token_min_logp=token_min_logp,
+                hotwords=hotwords,
+                hotword_weight=hotword_weight,
+            )
 
         # extract text and scores
         batch_texts, logit_scores, lm_scores, word_offsets = [], [], [], []
+
         for d in decoded_beams:
-            batch_texts.append(d[0][0])
-            logit_scores.append(d[0][-2])
-            lm_scores.append(d[0][-1])
-            word_offsets.append([{"word": t[0], "start_offset": t[1][0], "end_offset": t[1][1]} for t in d[0][1]])
+            batch_texts.append([beam[0] for beam in d])
+            logit_scores.append([beam[-2] for beam in d])
+            lm_scores.append([beam[-1] for beam in d])
+
+            # word_offsets.append([{"word": t[0], "start_offset": t[1][0], "end_offset": t[1][1]} for t in d[0][1]])
+
+            word_offsets.append(
+                [
+                    [
+                        {"word": word, "start_offset": start_offset, "end_offset": end_offset}
+                        for word, (start_offset, end_offset) in beam[1]
+                    ]
+                    for beam in d
+                ]
+            )
 
         word_offsets = word_offsets if output_word_offsets else None
 
-        return Wav2Vec2DecoderWithLMOutput(
-            text=batch_texts, logit_score=logit_scores, lm_score=lm_scores, word_offsets=word_offsets
-        )
+        if n_best == 1:
+            return Wav2Vec2DecoderWithLMOutput(
+                text=[hyps[0] for hyps in batch_texts],
+                logit_score=[hyps[0] for hyps in logit_scores],
+                lm_score=[hyps[0] for hyps in lm_scores],
+                word_offsets=[hyps[0] for hyps in word_offsets] if word_offsets is not None else None,
+            )
+        else:
+            return Wav2Vec2DecoderWithLMOutput(
+                text=[hyps[:n_best] for hyps in batch_texts],
+                logit_score=[hyps[:n_best] for hyps in logit_scores],
+                lm_score=[hyps[:n_best] for hyps in lm_scores],
+                word_offsets=[hyps[:n_best] for hyps in word_offsets] if word_offsets is not None else None,
+            )
 
     def decode(
         self,
@@ -356,6 +479,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         unk_score_offset: Optional[float] = None,
         lm_score_boundary: Optional[bool] = None,
         output_word_offsets: bool = False,
+        n_best: int = 1,
     ):
         """
         Decode output logits to audio transcription with language model support.
@@ -386,16 +510,19 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
             output_word_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output word offsets. Word offsets can be used in combination with the sampling rate
                 and model downsampling rate to compute the time-stamps of transcribed words.
+            n_best (`int`, *optional*, defaults to `1`):
+                Number of best hypotheses to return. If `n_best` is greater than 1, the returned `text` will be a list
+                of strings, `logit_score` will be a list of floats, and `lm_score` will be a list of floats, where the
+                length of these lists will correspond to the number of returned hypotheses. The value should be >= 1.
 
                 <Tip>
 
-                Please take a look at the example of [`~models.wav2vec2_with_lm.processing_wav2vec2_with_lm.decode`] to
-                better understand how to make use of `output_word_offsets`.
+                Please take a look at the example below to better understand how to make use of `output_word_offsets`.
 
                 </Tip>
 
         Returns:
-            [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`] or `tuple`.
+            [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`].
 
         Example:
 
@@ -411,7 +538,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         >>> processor = AutoProcessor.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
 
         >>> # load first sample of English common_voice
-        >>> dataset = load_dataset("common_voice", "en", split="train", streaming=True)
+        >>> dataset = load_dataset("mozilla-foundation/common_voice_11_0", "en", split="train", streaming=True)
         >>> dataset = dataset.cast_column("audio", datasets.Audio(sampling_rate=16_000))
         >>> dataset_iter = iter(dataset)
         >>> sample = next(dataset_iter)
@@ -434,10 +561,10 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         ...     }
         ...     for d in outputs.word_offsets
         ... ]
-        >>> # compare word offsets with audio `common_voice_en_100038.mp3` online on the dataset viewer:
-        >>> # https://huggingface.co/datasets/common_voice/viewer/en/train
+        >>> # compare word offsets with audio `en_train_0/common_voice_en_19121553.mp3` online on the dataset viewer:
+        >>> # https://huggingface.co/datasets/mozilla-foundation/common_voice_11_0/viewer/en
         >>> word_offsets[:4]
-        [{'word': 'WHY', 'start_time': 1.42, 'end_time': 1.54}, {'word': 'DOES', 'start_time': 1.64, 'end_time': 1.88}, {'word': 'A', 'start_time': 2.12, 'end_time': 2.14}, {'word': 'MILE', 'start_time': 2.26, 'end_time': 2.46}]
+        [{'word': 'THE', 'start_time': 0.68, 'end_time': 0.78}, {'word': 'TRACK', 'start_time': 0.88, 'end_time': 1.1}, {'word': 'APPEARS', 'start_time': 1.18, 'end_time': 1.66}, {'word': 'ON', 'start_time': 1.86, 'end_time': 1.92}]
         ```"""
 
         from pyctcdecode.constants import (
@@ -471,24 +598,51 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         word_offsets = None
         if output_word_offsets:
             word_offsets = [
-                {"word": word, "start_offset": start_offset, "end_offset": end_offset}
-                for word, (start_offset, end_offset) in decoded_beams[0][2]
+                [
+                    {"word": word, "start_offset": start_offset, "end_offset": end_offset}
+                    for word, (start_offset, end_offset) in beam[2]
+                ]
+                for beam in decoded_beams
             ]
+        logit_scores = [beam[-2] for beam in decoded_beams]
 
-        # more output features will be added in the future
-        return Wav2Vec2DecoderWithLMOutput(
-            text=decoded_beams[0][0],
-            logit_score=decoded_beams[0][-2],
-            lm_score=decoded_beams[0][-1],
-            word_offsets=word_offsets,
-        )
+        lm_scores = [beam[-1] for beam in decoded_beams]
+
+        hypotheses = [beam[0] for beam in decoded_beams]
+
+        if n_best > len(decoded_beams):
+            logger.info(
+                "N-best size is larger than the number of generated hypotheses, all hypotheses will be returned."
+            )
+
+        if n_best == 1:
+            return Wav2Vec2DecoderWithLMOutput(
+                text=hypotheses[0],
+                logit_score=logit_scores[0],
+                lm_score=lm_scores[0],
+                word_offsets=word_offsets[0] if word_offsets is not None else None,
+            )
+        else:
+            return Wav2Vec2DecoderWithLMOutput(
+                text=hypotheses[:n_best],
+                logit_score=logit_scores[:n_best],
+                lm_score=lm_scores[:n_best],
+                word_offsets=word_offsets[:n_best] if word_offsets is not None else None,
+            )
 
     @contextmanager
     def as_target_processor(self):
         """
-        Temporarily sets the tokenizer for processing the input. Useful for encoding the labels when fine-tuning
+        Temporarily sets the processor for processing the target. Useful for encoding the labels when fine-tuning
         Wav2Vec2.
         """
+        warnings.warn(
+            "`as_target_processor` is deprecated and will be removed in v5 of Transformers. You can process your "
+            "labels by using the argument `text` of the regular `__call__` method (either in the same call as "
+            "your audio inputs, or in a separate call."
+        )
+        self._in_target_context_manager = True
         self.current_processor = self.tokenizer
         yield
         self.current_processor = self.feature_extractor
+        self._in_target_context_manager = False

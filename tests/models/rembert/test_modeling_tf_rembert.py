@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import RemBertConfig, is_tf_available
@@ -21,6 +23,7 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -51,7 +54,7 @@ class TFRemBertModelTester:
         hidden_size=32,
         input_embedding_size=18,
         output_embedding_size=43,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -76,7 +79,7 @@ class TFRemBertModelTester:
         self.hidden_size = 32
         self.input_embedding_size = input_embedding_size
         self.output_embedding_size = output_embedding_size
-        self.num_hidden_layers = 5
+        self.num_hidden_layers = 2
         self.num_attention_heads = 4
         self.intermediate_size = 37
         self.hidden_act = "gelu"
@@ -570,8 +573,7 @@ class TFRemBertModelTester:
 
 
 @require_tf
-class TFRemBertModelTest(TFModelTesterMixin, unittest.TestCase):
-
+class TFRemBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFRemBertModel,
@@ -584,6 +586,19 @@ class TFRemBertModelTest(TFModelTesterMixin, unittest.TestCase):
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFRemBertModel,
+            "fill-mask": TFRemBertForMaskedLM,
+            "question-answering": TFRemBertForQuestionAnswering,
+            "text-classification": TFRemBertForSequenceClassification,
+            "text-generation": TFRemBertForCausalLM,
+            "token-classification": TFRemBertForTokenClassification,
+            "zero-shot": TFRemBertForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
     )
 
     test_head_masking = False

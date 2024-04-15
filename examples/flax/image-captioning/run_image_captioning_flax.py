@@ -22,6 +22,7 @@ import logging
 import os
 import sys
 import time
+import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from functools import partial
@@ -29,30 +30,31 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import datasets
-import nltk  # Here to have a nice missing dependency error message early on
-import numpy as np
-from datasets import Dataset, load_dataset, load_metric
-from PIL import Image
-from tqdm import tqdm
-
+import evaluate
 import jax
 import jax.numpy as jnp
+import nltk  # Here to have a nice missing dependency error message early on
+import numpy as np
 import optax
-import transformers
+from datasets import Dataset, load_dataset
 from filelock import FileLock
 from flax import jax_utils, traverse_util
 from flax.jax_utils import unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
-from huggingface_hub import Repository
+from huggingface_hub import HfApi
+from PIL import Image
+from tqdm import tqdm
+
+import transformers
 from transformers import (
-    AutoFeatureExtractor,
+    AutoImageProcessor,
     AutoTokenizer,
     FlaxVisionEncoderDecoderModel,
     HfArgumentParser,
     is_tensorboard_available,
 )
-from transformers.utils import get_full_repo_name, is_offline_mode
+from transformers.utils import is_offline_mode, send_example_telemetry
 
 
 logger = logging.getLogger(__name__)
@@ -105,12 +107,12 @@ class TrainingArguments:
         default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
     )
     _block_size_doc = """
-        The default value `0` will preprocess (tokenization + feature extraction) the whole dataset before training and
+        The default value `0` will preprocess (tokenization + image processing) the whole dataset before training and
         cache the results. This uses more disk space, but avoids (repeated) processing time during training. This is a
         good option if your disk space is large enough to store the whole processed dataset.
         If a positive value is given, the captions in the dataset will be tokenized before training and the results are
         cached. During training, it iterates the dataset in chunks of size `block_size`. On each block, images are
-        transformed by the feature extractor with the results being kept in memory (no cache), and batches of size
+        transformed by the image processor with the results being kept in memory (no cache), and batches of size
         `batch_size` are yielded before processing the next block. This could avoid the heavy disk usage when the
         dataset is large.
         """
@@ -181,12 +183,28 @@ class ModelArguments:
             )
         },
     )
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
     use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
+        },
+    )
+    trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-                "with private models)."
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+                "execute code present on the Hub on your local machine."
             )
         },
     )
@@ -238,7 +256,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "The maximum total sequence length for validation target text after tokenization. Sequences longer "
-                "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
+                "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`. "
                 "This argument is also used to override the `max_length` param of `model.generate`, which is used "
                 "during evaluation."
             )
@@ -297,10 +315,12 @@ class DataTrainingArguments:
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+                if extension not in ["csv", "json"]:
+                    raise ValueError(f"`train_file` should be a csv or a json file, got {extension}.")
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+                if extension not in ["csv", "json"]:
+                    raise ValueError(f"`validation_file` should be a csv or a json file, got {extension}.")
         if self.val_max_target_length is None:
             self.val_max_target_length = self.max_target_length
 
@@ -334,7 +354,6 @@ def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuf
         batch_idx = np.arange(len(dataset))
 
     for idx in range(steps):
-
         start_idx = batch_size * idx
         end_idx = batch_size * (idx + 1)
 
@@ -346,7 +365,6 @@ def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuf
 
 
 def write_metric(summary_writer, metrics, train_time, step, metric_key_prefix="train"):
-
     if train_time:
         summary_writer.scalar("train_time", train_time, step)
 
@@ -363,7 +381,7 @@ def write_metric(summary_writer, metrics, train_time, step, metric_key_prefix="t
 
 def create_learning_rate_fn(
     train_ds_size: int, train_batch_size: int, num_train_epochs: int, num_warmup_steps: int, learning_rate: float
-) -> Callable[[int], jnp.array]:
+) -> Callable[[int], jnp.ndarray]:
     """Returns a linear warmup, linear_decay learning rate function."""
     steps_per_epoch = train_ds_size // train_batch_size
     num_train_steps = steps_per_epoch * num_train_epochs
@@ -388,6 +406,19 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    if model_args.use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
+            FutureWarning,
+        )
+        if model_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        model_args.token = model_args.use_auth_token
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_image_captioning", model_args, data_args, framework="flax")
+
     if (
         os.path.exists(training_args.output_dir)
         and os.listdir(training_args.output_dir)
@@ -395,7 +426,7 @@ def main():
         and not training_args.overwrite_output_dir
     ):
         raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty."
+            f"Output directory ({training_args.output_dir}) already exists and is not empty. "
             "Use --overwrite_output_dir to overcome."
         )
 
@@ -419,13 +450,13 @@ def main():
 
     # Handle the repository creation
     if training_args.push_to_hub:
-        if training_args.hub_model_id is None:
-            repo_name = get_full_repo_name(
-                Path(training_args.output_dir).absolute().name, token=training_args.hub_token
-            )
-        else:
-            repo_name = training_args.hub_model_id
-        repo = Repository(training_args.output_dir, clone_from=repo_name)
+        # Retrieve of infer repo_name
+        repo_name = training_args.hub_model_id
+        if repo_name is None:
+            repo_name = Path(training_args.output_dir).absolute().name
+        # Create repo and retrieve repo_id
+        api = HfApi()
+        repo_id = api.create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
 
     # Get the datasets: you can either provide your own CSV/JSON training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
@@ -442,7 +473,7 @@ def main():
             cache_dir=model_args.cache_dir,
             keep_in_memory=False,
             data_dir=data_args.data_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     else:
         data_files = {}
@@ -459,28 +490,31 @@ def main():
             extension,
             data_files=data_files,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     # Load pretrained model and tokenizer
     model = FlaxVisionEncoderDecoderModel.from_pretrained(
         model_args.model_name_or_path,
         seed=training_args.seed,
         dtype=getattr(jnp, model_args.dtype),
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
-    feature_extractor = AutoFeatureExtractor.from_pretrained(
+    image_processor = AutoImageProcessor.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer.pad_token = tokenizer.convert_ids_to_tokens(model.config.pad_token_id)
 
@@ -499,7 +533,12 @@ def main():
     # Get the column names for input/target.
     dataset_columns = image_captioning_name_mapping.get(data_args.dataset_name, None)
     if data_args.image_column is None:
-        assert dataset_columns is not None
+        if dataset_columns is None:
+            raise ValueError(
+                f"`--dataset_name` {data_args.dataset_name} not found in dataset '{data_args.dataset_name}'. Make sure"
+                " to set `--dataset_name` to the correct dataset name, one of"
+                f" {', '.join(image_captioning_name_mapping.keys())}."
+            )
         image_column = dataset_columns[0]
     else:
         image_column = data_args.image_column
@@ -508,7 +547,12 @@ def main():
                 f"--image_column' value '{data_args.image_column}' needs to be one of: {', '.join(column_names)}"
             )
     if data_args.caption_column is None:
-        assert dataset_columns is not None
+        if dataset_columns is None:
+            raise ValueError(
+                f"`--dataset_name` {data_args.dataset_name} not found in dataset '{data_args.dataset_name}'. Make sure"
+                " to set `--dataset_name` to the correct dataset name, one of"
+                f" {', '.join(image_captioning_name_mapping.keys())}."
+            )
         caption_column = dataset_columns[1]
     else:
         caption_column = data_args.caption_column
@@ -530,7 +574,7 @@ def main():
         for image_file in examples[image_column]:
             try:
                 image = Image.open(image_file)
-                feature_extractor(images=image, return_tensors="np")
+                image_processor(images=image, return_tensors="np")
                 bools.append(True)
             except Exception:
                 bools.append(False)
@@ -547,11 +591,14 @@ def main():
         targets = captions
 
         model_inputs = {}
-        # Setup the tokenizer for targets
-        with tokenizer.as_target_tokenizer():
-            labels = tokenizer(
-                targets, max_length=max_target_length, padding="max_length", truncation=True, return_tensors="np"
-            )
+
+        labels = tokenizer(
+            text_target=targets,
+            max_length=max_target_length,
+            padding="max_length",
+            truncation=True,
+            return_tensors="np",
+        )
         model_inputs["labels"] = labels["input_ids"]
         decoder_input_ids = shift_tokens_right_fn(
             labels["input_ids"], model.config.pad_token_id, model.config.decoder_start_token_id
@@ -563,9 +610,9 @@ def main():
 
         return model_inputs
 
-    def feature_extraction_fn(examples, check_image=True):
+    def image_processing_fn(examples, check_image=True):
         """
-        Run feature extraction on images
+        Run preprocessing on images
 
         If `check_image` is `True`, the examples that fails during `Image.open()` will be caught and discarded.
         Otherwise, an exception will be thrown.
@@ -590,18 +637,18 @@ def main():
         else:
             images = [Image.open(image_file) for image_file in examples[image_column]]
 
-        encoder_inputs = feature_extractor(images=images, return_tensors="np")
+        encoder_inputs = image_processor(images=images, return_tensors="np")
         model_inputs["pixel_values"] = encoder_inputs.pixel_values
 
         return model_inputs
 
     def preprocess_fn(examples, max_target_length, check_image=True):
-        """Run tokenization + image feature extraction"""
+        """Run tokenization + image processing"""
 
         model_inputs = {}
         # This contains image path column
         model_inputs.update(tokenization_fn(examples, max_target_length))
-        model_inputs.update(feature_extraction_fn(model_inputs, check_image=check_image))
+        model_inputs.update(image_processing_fn(model_inputs, check_image=check_image))
         # Remove image path column
         model_inputs.pop(image_column)
 
@@ -625,22 +672,22 @@ def main():
         }
     )
 
-    # If `block_size` is `0`, tokenization & image feature extraction is done at the beginning
-    run_feat_ext_at_beginning = training_args.block_size == 0
+    # If `block_size` is `0`, tokenization & image processing is done at the beginning
+    run_img_proc_at_beginning = training_args.block_size == 0
     # Used in .map() below
-    function_kwarg = preprocess_fn if run_feat_ext_at_beginning else tokenization_fn
+    function_kwarg = preprocess_fn if run_img_proc_at_beginning else tokenization_fn
     # `features` is used only for the final preprocessed dataset (for the performance purpose).
-    features_kwarg = features if run_feat_ext_at_beginning else None
-    # Keep `image_column` if the feature extraction is done during training
-    remove_columns_kwarg = [x for x in column_names if x != image_column or run_feat_ext_at_beginning]
-    processor_names = "tokenizer and feature extractor" if run_feat_ext_at_beginning else "tokenizer"
+    features_kwarg = features if run_img_proc_at_beginning else None
+    # Keep `image_column` if the image processing is done during training
+    remove_columns_kwarg = [x for x in column_names if x != image_column or run_img_proc_at_beginning]
+    processor_names = "tokenizer and image processor" if run_img_proc_at_beginning else "tokenizer"
 
     # Store some constant
     train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
     eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
     if training_args.block_size % train_batch_size > 0 or training_args.block_size % eval_batch_size > 0:
         raise ValueError(
-            "`training_args.block_size` needs to be a multiple of the global train/eval batch size."
+            "`training_args.block_size` needs to be a multiple of the global train/eval batch size. "
             f"Got {training_args.block_size}, {train_batch_size} and {eval_batch_size} respectively instead."
         )
 
@@ -652,9 +699,9 @@ def main():
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
             train_dataset = train_dataset.select(range(max_train_samples))
         # remove problematic examples
-        # (if feature extraction is performed at the beginning, the filtering is done during preprocessing below
+        # (if image processing is performed at the beginning, the filtering is done during preprocessing below
         # instead here.)
-        if not run_feat_ext_at_beginning:
+        if not run_img_proc_at_beginning:
             train_dataset = train_dataset.filter(filter_fn, batched=True, num_proc=data_args.preprocessing_num_workers)
         train_dataset = train_dataset.map(
             function=function_kwarg,
@@ -667,7 +714,7 @@ def main():
             fn_kwargs={"max_target_length": data_args.max_target_length},
             features=features_kwarg,
         )
-        if run_feat_ext_at_beginning:
+        if run_img_proc_at_beginning:
             # set format (for performance) since the dataset is ready to be used
             train_dataset = train_dataset.with_format("numpy")
 
@@ -686,9 +733,9 @@ def main():
             max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
             eval_dataset = eval_dataset.select(range(max_eval_samples))
         # remove problematic examples
-        # (if feature extraction is performed at the beginning, the filtering is done during preprocessing below
+        # (if image processing is performed at the beginning, the filtering is done during preprocessing below
         # instead here.)
-        if not run_feat_ext_at_beginning:
+        if not run_img_proc_at_beginning:
             eval_dataset = eval_dataset.filter(filter_fn, batched=True, num_proc=data_args.preprocessing_num_workers)
         eval_dataset = eval_dataset.map(
             function=function_kwarg,
@@ -701,7 +748,7 @@ def main():
             fn_kwargs={"max_target_length": data_args.val_max_target_length},
             features=features_kwarg,
         )
-        if run_feat_ext_at_beginning:
+        if run_img_proc_at_beginning:
             # set format (for performance) since the dataset is ready to be used
             eval_dataset = eval_dataset.with_format("numpy")
 
@@ -716,9 +763,9 @@ def main():
             max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
             predict_dataset = predict_dataset.select(range(max_predict_samples))
         # remove problematic examples
-        # (if feature extraction is performed at the beginning, the filtering is done during preprocessing below
+        # (if image processing is performed at the beginning, the filtering is done during preprocessing below
         # instead here.)
-        if not run_feat_ext_at_beginning:
+        if not run_img_proc_at_beginning:
             predict_dataset = predict_dataset.filter(
                 filter_fn, batched=True, num_proc=data_args.preprocessing_num_workers
             )
@@ -733,7 +780,7 @@ def main():
             fn_kwargs={"max_target_length": data_args.val_max_target_length},
             features=features_kwarg,
         )
-        if run_feat_ext_at_beginning:
+        if run_img_proc_at_beginning:
             # set format (for performance) since the dataset is ready to be used
             predict_dataset = predict_dataset.with_format("numpy")
 
@@ -752,8 +799,8 @@ def main():
         """
         Wrap the simple `data_loader` in a block-wise way if `block_size` > 0, else it's the same as `data_loader`.
 
-        If `block_size` > 0, it requires `ds` to have a column that gives image paths in order to perform image feature
-        extraction (with the column name being specified by `image_column`). The tokenization should be done before
+        If `block_size` > 0, it requires `ds` to have a column that gives image paths in order to perform image
+        processing (with the column name being specified by `image_column`). The tokenization should be done before
         training in this case.
         """
 
@@ -774,11 +821,9 @@ def main():
         num_splits = steps // steps_per_block + int(steps % steps_per_block > 0)
 
         for idx in range(num_splits):
-
             if not block_size:
                 _ds = ds
             else:
-
                 start_idx = block_size * idx
                 end_idx = block_size * (idx + 1)
 
@@ -787,7 +832,7 @@ def main():
                 _ds = ds.select(selected_indices)
 
                 _ds = _ds.map(
-                    feature_extraction_fn,
+                    image_processing_fn,
                     batched=True,
                     num_proc=data_args.preprocessing_num_workers,
                     remove_columns=[image_column],
@@ -796,7 +841,7 @@ def main():
                     keep_in_memory=keep_in_memory,
                     # The images are already checked either in `.filter()` or in `preprocess_fn()`
                     fn_kwargs={"check_image": False},
-                    desc=f"Running feature extraction on {split} dataset".replace("  ", " "),
+                    desc=f"Running image processing on {split} dataset".replace("  ", " "),
                 )
                 _ds = _ds.with_format("numpy")
 
@@ -807,7 +852,7 @@ def main():
                 yield batch
 
     # Metric
-    metric = load_metric("rouge")
+    metric = evaluate.load("rouge", cache_dir=model_args.cache_dir)
 
     def postprocess_text(preds, labels):
         preds = [pred.strip() for pred in preds]
@@ -871,15 +916,17 @@ def main():
     # to bias and LayerNorm scale parameters. decay_mask_fn returns a
     # mask boolean with the same structure as the parameters.
     # The mask is True for parameters that should be decayed.
-    # Note that this mask is specifically adapted for FlaxBart.
-    # For FlaxT5, one should correct the layer norm parameter naming
-    # accordingly - see `run_t5_mlm_flax.py` e.g.
     def decay_mask_fn(params):
         flat_params = traverse_util.flatten_dict(params)
-        layer_norm_params = [
-            (name, "scale") for name in ["self_attn_layer_norm", "layernorm_embedding", "final_layer_norm"]
-        ]
-        flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_params) for path in flat_params}
+        # find out all LayerNorm parameters
+        layer_norm_candidates = ["layernorm", "layer_norm", "ln"]
+        layer_norm_named_params = {
+            layer[-2:]
+            for layer_norm_name in layer_norm_candidates
+            for layer in flat_params.keys()
+            if layer_norm_name in "".join(layer).lower()
+        }
+        flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params) for path in flat_params}
         return traverse_util.unflatten_dict(flat_mask)
 
     # create adam optimizer
@@ -914,8 +961,9 @@ def main():
 
         # ignore padded tokens from loss
         loss = loss * padding_mask
-        loss = loss.sum() / padding_mask.sum()
-        return loss
+        loss = loss.sum()
+        num_labels = padding_mask.sum()
+        return loss, num_labels
 
     # Define gradient update step fn
     def train_step(state, batch, label_smoothing_factor=0.0):
@@ -924,29 +972,38 @@ def main():
         def compute_loss(params):
             labels = batch.pop("labels")
             logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
-            loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
-            return loss
+            loss, num_labels = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
+            return loss, num_labels
 
-        grad_fn = jax.value_and_grad(compute_loss)
-        loss, grad = grad_fn(state.params)
-        grad = jax.lax.pmean(grad, "batch")
+        grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
+        (loss, num_labels), grad = grad_fn(state.params)
+        num_labels = jax.lax.psum(num_labels, "batch")
 
+        # true loss = total loss / total samples
+        loss = jax.lax.psum(loss, "batch")
+        loss = jax.tree_util.tree_map(lambda x: x / num_labels, loss)
+
+        # true grad = total grad / total samples
+        grad = jax.lax.psum(grad, "batch")
+        grad = jax.tree_util.tree_map(lambda x: x / num_labels, grad)
         new_state = state.apply_gradients(grads=grad, dropout_rng=new_dropout_rng)
 
         metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}
-        metrics = jax.lax.pmean(metrics, axis_name="batch")
-
         return new_state, metrics
 
     # Define eval fn
     def eval_step(params, batch, label_smoothing_factor=0.0):
         labels = batch.pop("labels")
         logits = model(**batch, params=params, train=False)[0]
-        loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
 
-        # summarize metrics
+        loss, num_labels = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
+        num_labels = jax.lax.psum(num_labels, "batch")
+
+        # true loss = total loss / total samples
+        loss = jax.lax.psum(loss, "batch")
+        loss = jax.tree_util.tree_map(lambda x: x / num_labels, loss)
+
         metrics = {"loss": loss}
-        metrics = jax.lax.pmean(metrics, axis_name="batch")
         return metrics
 
     # Define generation function
@@ -999,11 +1056,17 @@ def main():
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
-            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+            params = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state.params))
             model.save_pretrained(os.path.join(training_args.output_dir, ckpt_dir), params=params)
             tokenizer.save_pretrained(os.path.join(training_args.output_dir, ckpt_dir))
             if training_args.push_to_hub:
-                repo.push_to_hub(commit_message=commit_msg, blocking=False)
+                api.upload_folder(
+                    commit_message=commit_msg,
+                    folder_path=training_args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=training_args.hub_token,
+                )
 
     def evaluation_loop(
         rng: jax.random.PRNGKey,
@@ -1012,7 +1075,6 @@ def main():
         ckpt_dir: str = "",
         is_prediction=False,
     ):
-
         logger.info(f"*** {'Predict' if is_prediction else 'Evaluate'} ***")
 
         metrics = []
@@ -1052,7 +1114,7 @@ def main():
         if metrics:
             # normalize metrics
             metrics = get_metrics(metrics)
-            metrics = jax.tree_map(jnp.mean, metrics)
+            metrics = jax.tree_util.tree_map(jnp.mean, metrics)
 
         # compute ROUGE metrics
         generations = []
@@ -1091,12 +1153,10 @@ def main():
             logger.info(desc)
 
         if jax.process_index() == 0:
-
             if not os.path.isdir(os.path.join(training_args.output_dir, ckpt_dir)):
                 os.makedirs(os.path.join(training_args.output_dir, ckpt_dir), exist_ok=True)
 
             if metrics:
-
                 # Save metrics (only for the evaluation/prediction being done along with training)
                 if has_tensorboard and training_args.do_train:
                     write_metric(
@@ -1131,7 +1191,6 @@ def main():
     input_rng = None
 
     if training_args.do_train:
-
         cur_step = 0
         train_time = 0
         epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
@@ -1154,7 +1213,6 @@ def main():
 
             # train
             for batch_idx, _ in enumerate(tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False)):
-
                 cur_step += 1
                 batch = next(train_batches)
                 batch_start = time.time()
@@ -1165,7 +1223,6 @@ def main():
 
                 # log and save info
                 if training_args.logging_steps > 0 and cur_step % training_args.logging_steps == 0:
-
                     _train_metric = unreplicate(train_metric)
                     desc = (
                         f"Epoch... ({epoch + 1}/{num_epochs} | Step: {cur_step} | Loss: {_train_metric['loss']} |"
@@ -1205,7 +1262,6 @@ def main():
 
             # log and save info
             if training_args.logging_steps <= 0:
-
                 logger.info(desc)
 
                 with open(os.path.join(training_args.output_dir, "log"), "a", encoding="UTF-8") as fp:

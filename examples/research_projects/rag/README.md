@@ -17,7 +17,7 @@ Read more about RAG  at https://arxiv.org/abs/2005.11401.
 
 # Finetuning
 
-Our finetuning logic is based on scripts from [`examples/seq2seq`](https://github.com/huggingface/transformers/tree/main/examples/seq2seq). We accept training data in the same format as specified there - we expect a directory consisting of 6 text files:
+Our finetuning logic is based on scripts from [`examples/legacy/seq2seq`](https://github.com/huggingface/transformers/tree/main/examples/legacy/seq2seq). We accept training data in the same format as specified there - we expect a directory consisting of 6 text files:
 ```bash
 train.source
 train.target
@@ -45,7 +45,7 @@ We publish two `base` models which can serve as a starting point for finetuning 
 The `base` models initialize the question encoder with [`facebook/dpr-question_encoder-single-nq-base`](https://huggingface.co/facebook/dpr-question_encoder-single-nq-base) and the generator with [`facebook/bart-large`](https://huggingface.co/facebook/bart-large).
 
 If you would like to initialize finetuning with a base model using different question encoder and generator architectures, you can build it with a consolidation script, e.g.:
-```
+```bash
 python examples/research_projects/rag/consolidate_rag_checkpoint.py \
     --model_type rag_sequence \
     --generator_name_or_path facebook/bart-large-cnn \

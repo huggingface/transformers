@@ -31,23 +31,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/s2t-wav2vec2-large-en-de": (
-            "https://huggingface.co/facebook/s2t-wav2vec2-large-en-de/resolve/main/vocab.json"
-        ),
-    },
-    "tokenizer_config_file": {
-        "facebook/s2t-wav2vec2-large-en-de": (
-            "https://huggingface.co/facebook/s2t-wav2vec2-large-en-de/resolve/main/tokenizer_config.json"
-        ),
-    },
-    "merges_file": {
-        "facebook/s2t-wav2vec2-large-en-de": (
-            "https://huggingface.co/facebook/s2t-wav2vec2-large-en-de/resolve/main/merges.txt"
-        ),
-    },
-}
 
 BPE_TOKEN_MERGES = "</w>"
 BPE_TOKEN_VOCAB = "@@ "
@@ -67,7 +50,6 @@ def get_pairs(word):
 
 
 # Speech2Text2 has no max input length
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/s2t-wav2vec2-large-en-de": 1024}
 
 
 class Speech2Text2Tokenizer(PreTrainedTokenizer):
@@ -95,8 +77,6 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -108,17 +88,8 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         do_lower_case=False,
         merges_file=None,
-        **kwargs
+        **kwargs,
     ):
-        super().__init__(
-            unk_token=unk_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            do_lower_case=do_lower_case,
-            **kwargs,
-        )
-
         self.do_lower_case = do_lower_case
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
@@ -137,6 +108,14 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
             merges = [tuple(merge.split()[:2]) for merge in merges]
             self.bpe_ranks = dict(zip(merges, range(len(merges))))
             self.cache = {}
+        super().__init__(
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            do_lower_case=do_lower_case,
+            **kwargs,
+        )
 
     @property
     def vocab_size(self) -> int:
@@ -200,7 +179,7 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
         if self.bpe_ranks is None:
             raise ValueError(
                 "This tokenizer was instantiated without a `merges.txt` file, so"
-                " that it can only be used for decoding, not for encoding."
+                " that it can only be used for decoding, not for encoding. "
                 "Make sure to provide `merges.txt` file at instantiation to enable "
                 "encoding."
             )
@@ -213,7 +192,7 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
         split_tokens = []
         for token in text:
             if token:
-                split_tokens.extend([t for t in self.bpe(token).split(" ")])
+                split_tokens.extend(list(self.bpe(token).split(" ")))
 
         return split_tokens
 
@@ -250,7 +229,7 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, ensure_ascii=False))
+            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         index = 0
         if self.bpe_ranks is None:

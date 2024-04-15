@@ -20,12 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/trocr-base-handwritten": (
-        "https://huggingface.co/microsoft/trocr-base-handwritten/resolve/main/config.json"
-    ),
-    # See all TrOCR models at https://huggingface.co/models?filter=trocr
-}
+
+from ..deprecated._archive_maps import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class TrOCRConfig(PretrainedConfig):
@@ -63,11 +59,9 @@ class TrOCRConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        classifier_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for classifier.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -82,17 +76,18 @@ class TrOCRConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import TrOCRForCausalLM, TrOCRConfig
+    >>> from transformers import TrOCRConfig, TrOCRForCausalLM
 
     >>> # Initializing a TrOCR-base style configuration
     >>> configuration = TrOCRConfig()
 
-    >>> # Initializing a model from the TrOCR-base style configuration
+    >>> # Initializing a model (with random weights) from the TrOCR-base style configuration
     >>> model = TrOCRForCausalLM(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "trocr"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
@@ -114,17 +109,16 @@ class TrOCRConfig(PretrainedConfig):
         attention_dropout=0.0,
         activation_dropout=0.0,
         decoder_start_token_id=2,
-        classifier_dropout=0.0,
         init_std=0.02,
         decoder_layerdrop=0.0,
-        use_cache=False,
+        use_cache=True,
         scale_embedding=False,
         use_learned_position_embeddings=True,
         layernorm_embedding=True,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.d_model = d_model
@@ -136,7 +130,6 @@ class TrOCRConfig(PretrainedConfig):
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
-        self.classifier_dropout = classifier_dropout
         self.init_std = init_std
         self.decoder_layerdrop = decoder_layerdrop
         self.use_cache = use_cache

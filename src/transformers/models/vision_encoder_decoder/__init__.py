@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +23,9 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_vision_encoder_decoder": ["VisionEncoderDecoderConfig"]}
+_import_structure = {
+    "configuration_vision_encoder_decoder": ["VisionEncoderDecoderConfig", "VisionEncoderDecoderOnnxConfig"]
+}
 
 try:
     if not is_torch_available():
@@ -54,7 +52,7 @@ else:
     _import_structure["modeling_flax_vision_encoder_decoder"] = ["FlaxVisionEncoderDecoderModel"]
 
 if TYPE_CHECKING:
-    from .configuration_vision_encoder_decoder import VisionEncoderDecoderConfig
+    from .configuration_vision_encoder_decoder import VisionEncoderDecoderConfig, VisionEncoderDecoderOnnxConfig
 
     try:
         if not is_torch_available():

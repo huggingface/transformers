@@ -28,6 +28,7 @@ from .utils import ParameterFormat, compute_effective_axis_dimension, compute_se
 if TYPE_CHECKING:
     from ..configuration_utils import PretrainedConfig
     from ..feature_extraction_utils import FeatureExtractionMixin
+    from ..image_processing_utils import ImageProcessingMixin
     from ..tokenization_utils_base import PreTrainedTokenizerBase
 
 
@@ -77,18 +78,34 @@ class OnnxConfig(ABC):
         "causal-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
         "image-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "image-segmentation": OrderedDict(
+            {
+                "logits": {0: "batch", 1: "sequence"},
+                "pred_boxes": {0: "batch", 1: "sequence"},
+                "pred_masks": {0: "batch", 1: "sequence"},
+            }
+        ),
         "masked-im": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "masked-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "multiple-choice": OrderedDict({"logits": {0: "batch"}}),
+        "object-detection": OrderedDict(
+            {
+                "logits": {0: "batch", 1: "sequence"},
+                "pred_boxes": {0: "batch", 1: "sequence"},
+            }
+        ),
         "question-answering": OrderedDict(
             {
                 "start_logits": {0: "batch", 1: "sequence"},
                 "end_logits": {0: "batch", 1: "sequence"},
             }
         ),
+        "semantic-segmentation": OrderedDict({"logits": {0: "batch", 1: "num_labels", 2: "height", 3: "width"}}),
         "seq2seq-lm": OrderedDict({"logits": {0: "batch", 1: "decoder_sequence"}}),
         "sequence-classification": OrderedDict({"logits": {0: "batch"}}),
         "token-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "vision2seq-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "speech2seq-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
     }
 
     def __init__(self, config: "PretrainedConfig", task: str = "default", patching_specs: List[PatchingSpec] = None):
@@ -215,9 +232,9 @@ class OnnxConfig(ABC):
             `bool`: Whether the installed version of PyTorch is compatible with the model.
         """
         if is_torch_available():
-            from transformers.utils import torch_version
+            from transformers.utils import get_torch_version
 
-            return torch_version >= self.torch_onnx_minimum_version
+            return version.parse(get_torch_version()) >= self.torch_onnx_minimum_version
         else:
             return False
 
@@ -247,9 +264,22 @@ class OnnxConfig(ABC):
             images.append(Image.fromarray(data.astype("uint8")).convert("RGB"))
         return images
 
+    def _generate_dummy_audio(
+        self, batch_size: int = 2, sampling_rate: int = 22050, time_duration: float = 5.0, frequency: int = 220
+    ):
+        audio_data = []
+        for _ in range(batch_size):
+            # time variable
+            t = np.linspace(0, time_duration, int(time_duration * sampling_rate), endpoint=False)
+
+            # generate pure sine wave at `frequency` Hz
+            audio_data.append(0.5 * np.sin(2 * np.pi * frequency * t))
+
+        return audio_data
+
     def generate_dummy_inputs(
         self,
-        preprocessor: Union["PreTrainedTokenizerBase", "FeatureExtractionMixin"],
+        preprocessor: Union["PreTrainedTokenizerBase", "FeatureExtractionMixin", "ImageProcessingMixin"],
         batch_size: int = -1,
         seq_length: int = -1,
         num_choices: int = -1,
@@ -258,13 +288,16 @@ class OnnxConfig(ABC):
         num_channels: int = 3,
         image_width: int = 40,
         image_height: int = 40,
+        sampling_rate: int = 22050,
+        time_duration: float = 5.0,
+        frequency: int = 220,
         tokenizer: "PreTrainedTokenizerBase" = None,
     ) -> Mapping[str, Any]:
         """
         Generate inputs to provide to the ONNX exporter for the specific framework
 
         Args:
-            preprocessor: ([`PreTrainedTokenizerBase`] or [`FeatureExtractionMixin`]):
+            preprocessor: ([`PreTrainedTokenizerBase`], [`FeatureExtractionMixin`], or [`ImageProcessingMixin`]):
                 The preprocessor associated with this model configuration.
             batch_size (`int`, *optional*, defaults to -1):
                 The batch size to export the model for (-1 means dynamic axis).
@@ -282,11 +315,18 @@ class OnnxConfig(ABC):
                 The width of the generated images.
             image_height (`int`, *optional*, defaults to 40):
                 The height of the generated images.
+            sampling_rate (`int`, *optional* defaults to 22050)
+                The sampling rate for audio data generation.
+            time_duration (`float`, *optional* defaults to 5.0)
+                Total seconds of sampling for audio data generation.
+            frequency (`int`, *optional* defaults to 220)
+                The desired natural frequency of generated audio.
 
         Returns:
             Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
         """
         from ..feature_extraction_utils import FeatureExtractionMixin
+        from ..image_processing_utils import ImageProcessingMixin
         from ..tokenization_utils_base import PreTrainedTokenizerBase
 
         if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
@@ -310,7 +350,12 @@ class OnnxConfig(ABC):
                 seq_length, fixed_dimension=OnnxConfig.default_fixed_sequence, num_token_to_add=token_to_add
             )
             # Generate dummy inputs according to compute batch and sequence
-            dummy_input = [" ".join([preprocessor.unk_token]) * seq_length] * batch_size
+            input_token = (
+                preprocessor.unk_token
+                if (preprocessor.unk_token is not None and len(preprocessor.unk_token) > 0)
+                else "0"
+            )
+            dummy_input = [" ".join([input_token]) * seq_length] * batch_size
             if self.task == "multiple-choice":
                 # If dynamic axis (-1) we forward with a fixed dimension of 4 candidate answers to avoid optimizations
                 # made by ONNX
@@ -325,15 +370,46 @@ class OnnxConfig(ABC):
                     tokenized_input[k] = [v[i : i + num_choices] for i in range(0, len(v), num_choices)]
                 return dict(tokenized_input.convert_to_tensors(tensor_type=framework))
             return dict(preprocessor(dummy_input, return_tensors=framework))
+        elif isinstance(preprocessor, ImageProcessingMixin):
+            if preprocessor.model_input_names[0] != "pixel_values":
+                raise ValueError(
+                    f"The `preprocessor` is an image processor ({preprocessor.__class__.__name__}) and expects"
+                    f' `model_input_names[0]` to be "pixel_values", but got {preprocessor.model_input_names[0]}'
+                )
+            # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
+            batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
+            dummy_input = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
+            return dict(preprocessor(images=dummy_input, return_tensors=framework))
         elif isinstance(preprocessor, FeatureExtractionMixin) and preprocessor.model_input_names[0] == "pixel_values":
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
             batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
             dummy_input = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
             return dict(preprocessor(images=dummy_input, return_tensors=framework))
+        elif (
+            isinstance(preprocessor, FeatureExtractionMixin) and preprocessor.model_input_names[0] == "input_features"
+        ):
+            # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
+            batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
+            dummy_input = self._generate_dummy_audio(batch_size, sampling_rate, time_duration, frequency)
+            return dict(preprocessor(dummy_input, return_tensors=framework))
         else:
             raise ValueError(
                 "Unable to generate dummy inputs for the model. Please provide a tokenizer or a preprocessor."
             )
+
+    def generate_dummy_inputs_onnxruntime(self, reference_model_inputs: Mapping[str, Any]) -> Mapping[str, Any]:
+        """
+        Generate inputs for ONNX Runtime using the reference model inputs. Override this to run inference with seq2seq
+        models which have the encoder and decoder exported as separate ONNX files.
+
+        Args:
+            reference_model_inputs ([`Mapping[str, Tensor]`):
+                Reference inputs for the model.
+
+        Returns:
+            `Mapping[str, Tensor]`: The mapping holding the kwargs to provide to the model's forward function
+        """
+        return reference_model_inputs
 
     def patch_ops(self):
         for spec in self._patching_specs:
@@ -437,7 +513,6 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         is_pair: bool = False,
         framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
-
         # TODO: should we set seq_length = 1 when self.use_past = True?
         common_inputs = super().generate_dummy_inputs(
             tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
@@ -472,14 +547,18 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 
         return common_inputs
 
-    def fill_with_past_key_values_(self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str):
+    def fill_with_past_key_values_(
+        self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str, inverted_values_shape: bool = False
+    ):
         """
-        Fill the input_or_ouputs mapping with past_key_values dynamic axes considering.
+        Fill the input_or_outputs mapping with past_key_values dynamic axes considering.
 
         Args:
             inputs_or_outputs: The mapping to fill.
             direction: either "inputs" or "outputs", it specifies whether input_or_outputs is the input mapping or the
                 output mapping, this is important for axes naming.
+            inverted_values_shape:
+                If `True`, store values on dynamic axis 1, else on axis 2.
 
         """
         if direction not in ["inputs", "outputs"]:
@@ -488,7 +567,10 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         name = "past_key_values" if direction == "inputs" else "present"
         for i in range(self.num_layers):
             inputs_or_outputs[f"{name}.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
-            inputs_or_outputs[f"{name}.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
+            if inverted_values_shape:
+                inputs_or_outputs[f"{name}.{i}.value"] = {0: "batch", 1: "past_sequence + sequence"}
+            else:
+                inputs_or_outputs[f"{name}.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
 
     def _flatten_past_key_values_(self, flattened_output, name, idx, t):
         flattened_output[f"{name}.{idx}.key"] = t[0]
@@ -563,7 +645,6 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
         is_pair: bool = False,
         framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
-
         encoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
             tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
         )

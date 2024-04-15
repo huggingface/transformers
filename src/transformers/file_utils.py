@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,13 +17,15 @@ File utilities: utilities related to download and cache models
 This module should not be update anymore and is only left for backward compatibility.
 """
 
+from huggingface_hub import get_full_repo_name  # for backward compatibility
+from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEMETRY  # for backward compatibility
+
 from . import __version__
 
 # Backward compatibility imports, to make sure all those objects can be found in file_utils
 from .utils import (
     CLOUDFRONT_DISTRIB_PREFIX,
     CONFIG_NAME,
-    DISABLE_TELEMETRY,
     DUMMY_INPUTS,
     DUMMY_MASK,
     ENV_VARS_TRUE_AND_AUTO_VALUES,
@@ -69,31 +67,27 @@ from .utils import (
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    cached_path,
     cached_property,
     copy_func,
     default_cache_path,
     define_sagemaker_information,
-    filename_to_url,
     get_cached_models,
     get_file_from_repo,
-    get_from_cache,
-    get_full_repo_name,
-    get_list_of_files,
+    get_torch_version,
     has_file,
-    hf_bucket_url,
-    http_get,
     http_user_agent,
     is_apex_available,
+    is_bs4_available,
     is_coloredlogs_available,
     is_datasets_available,
     is_detectron2_available,
     is_faiss_available,
     is_flax_available,
     is_ftfy_available,
+    is_g2p_en_available,
     is_in_notebook,
+    is_ipex_available,
     is_librosa_available,
-    is_local_clone,
     is_offline_mode,
     is_onnx_available,
     is_pandas_available,
@@ -104,13 +98,12 @@ from .utils import (
     is_pyctcdecode_available,
     is_pytesseract_available,
     is_pytorch_quantization_available,
-    is_remote_url,
     is_rjieba_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
-    is_scatter_available,
     is_scipy_available,
     is_sentencepiece_available,
+    is_seqio_available,
     is_sklearn_available,
     is_soundfile_availble,
     is_spacy_available,
@@ -126,19 +119,15 @@ from .utils import (
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
-    is_torch_onnx_dict_inputs_support_available,
+    is_torch_mps_available,
     is_torch_tf32_available,
-    is_torch_tpu_available,
+    is_torch_xla_available,
     is_torchaudio_available,
     is_training_run_on_sagemaker,
     is_vision_available,
     replace_return_docstrings,
     requires_backends,
-    tf_required,
     to_numpy,
     to_py_obj,
     torch_only_method,
-    torch_required,
-    torch_version,
-    url_to_filename,
 )

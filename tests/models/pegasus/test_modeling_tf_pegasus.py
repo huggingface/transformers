@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
+from __future__ import annotations
+
 import unittest
 
 from transformers import AutoTokenizer, PegasusConfig, is_tf_available
@@ -22,6 +23,7 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -45,7 +47,7 @@ class TFPegasusModelTester:
         use_labels=False,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_dropout_prob=0.1,
@@ -175,9 +177,20 @@ def prepare_pegasus_inputs_dict(
 
 
 @require_tf
-class TFPegasusModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFPegasusModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFPegasusForConditionalGeneration, TFPegasusModel) if is_tf_available() else ()
     all_generative_model_classes = (TFPegasusForConditionalGeneration,) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": TFPegasusForConditionalGeneration,
+            "feature-extraction": TFPegasusModel,
+            "summarization": TFPegasusForConditionalGeneration,
+            "text2text-generation": TFPegasusForConditionalGeneration,
+            "translation": TFPegasusForConditionalGeneration,
+        }
+        if is_tf_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_onnx = False
@@ -192,142 +205,6 @@ class TFPegasusModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_decoder_model_past_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    def test_compile_tf_model(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
-        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
-
-        model_class = self.all_generative_model_classes[0]
-        input_ids = {
-            "decoder_input_ids": tf.keras.Input(batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"),
-            "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
-        }
-
-        # Prepare our model
-        model = model_class(config)
-        model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
-        # Let's load it from the disk to be sure we can use pretrained weights
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname)
-            model = model_class.from_pretrained(tmpdirname)
-
-        outputs_dict = model(input_ids)
-        hidden_states = outputs_dict[0]
-
-        # Add a dense layer on top to test integration with other keras modules
-        outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
-
-        # Compile extended model
-        extended_model = tf.keras.Model(inputs=[input_ids], outputs=[outputs])
-        extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
-
-    def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in self.all_generative_model_classes:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert isinstance(name, dict)
-                for k, v in name.items():
-                    assert isinstance(v, tf.Variable)
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
-
-    def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
-        pass
-
-    def test_resize_token_embeddings(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        def _get_word_embedding_weight(model, embedding_layer):
-            if hasattr(embedding_layer, "weight"):
-                return embedding_layer.weight
-            else:
-                # Here we build the word embeddings weights if not exists.
-                # And then we retry to get the attribute once built.
-                model(model.dummy_inputs)
-                if hasattr(embedding_layer, "weight"):
-                    return embedding_layer.weight
-                else:
-                    return None
-
-        for model_class in self.all_model_classes:
-            for size in [config.vocab_size - 10, config.vocab_size + 10, None]:
-                # build the embeddings
-                model = model_class(config=config)
-                old_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
-                old_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
-                old_final_logits_bias = model.get_bias()
-
-                # reshape the embeddings
-                model.resize_token_embeddings(size)
-                new_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
-                new_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
-                new_final_logits_bias = model.get_bias()
-
-                # check that the resized embeddings size matches the desired size.
-                assert_size = size if size is not None else config.vocab_size
-
-                self.assertEqual(new_input_embeddings.shape[0], assert_size)
-
-                # check that weights remain the same after resizing
-                models_equal = True
-                for p1, p2 in zip(old_input_embeddings.value(), new_input_embeddings.value()):
-                    if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                        models_equal = False
-                self.assertTrue(models_equal)
-
-                if old_output_embeddings is not None and new_output_embeddings is not None:
-                    self.assertEqual(new_output_embeddings.shape[0], assert_size)
-
-                    models_equal = True
-                    for p1, p2 in zip(old_output_embeddings.value(), new_output_embeddings.value()):
-                        if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                            models_equal = False
-                    self.assertTrue(models_equal)
-
-                if old_final_logits_bias is not None and new_final_logits_bias is not None:
-                    old_final_logits_bias = old_final_logits_bias["final_logits_bias"]
-                    new_final_logits_bias = new_final_logits_bias["final_logits_bias"]
-                    self.assertEqual(new_final_logits_bias.shape[0], 1)
-                    self.assertEqual(new_final_logits_bias.shape[1], assert_size)
-
-                    models_equal = True
-                    for old, new in zip(old_final_logits_bias.value(), new_final_logits_bias.value()):
-                        for p1, p2 in zip(old, new):
-                            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                                models_equal = False
-                    self.assertTrue(models_equal)
-
-
-def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
-    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
-    if a is None and b is None:
-        return True
-    try:
-        if tf.debugging.assert_near(a, b, atol=atol):
-            return True
-        raise
-    except Exception:
-        if len(prefix) > 0:
-            prefix = f"{prefix}: "
-        raise AssertionError(f"{prefix}{a} != {b}")
-
-
-def _long_tensor(tok_lst):
-    return tf.constant(tok_lst, dtype=tf.int32)
 
 
 @require_sentencepiece

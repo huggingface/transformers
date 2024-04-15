@@ -23,6 +23,7 @@ from enum import Enum
 from typing import List, Optional, Union
 
 from filelock import FileLock
+
 from transformers import PreTrainedTokenizer, is_tf_available, is_torch_available
 
 
@@ -112,7 +113,7 @@ class TokenClassificationTask:
             for word, label in zip(example.words, example.labels):
                 word_tokens = tokenizer.tokenize(word)
 
-                # bert-base-multilingual-cased sometimes output "nothing ([]) when calling tokenize with just a space.
+                # google-bert/bert-base-multilingual-cased sometimes output "nothing ([]) when calling tokenize with just a space.
                 if len(word_tokens) > 0:
                     tokens.extend(word_tokens)
                     # Use the real label id for the first token of the word, and padding ids for the remaining tokens
@@ -140,7 +141,7 @@ class TokenClassificationTask:
             # it easier for the model to learn the concept of sequences.
             #
             # For classification tasks, the first vector (corresponding to [CLS]) is
-            # used as as the "sentence vector". Note that this only makes sense because
+            # used as the "sentence vector". Note that this only makes sense because
             # the entire model is fine-tuned.
             tokens += [sep_token]
             label_ids += [pad_token_label_id]
@@ -240,7 +241,6 @@ if is_torch_available():
             # and the others will use the cache.
             lock_path = cached_features_file + ".lock"
             with FileLock(lock_path):
-
                 if os.path.exists(cached_features_file) and not overwrite_cache:
                     logger.info(f"Loading features from cached file {cached_features_file}")
                     self.features = torch.load(cached_features_file)

@@ -1,8 +1,8 @@
-from datasets import load_from_disk
-
 import jax
 import jax.numpy as jnp
 from bigbird_flax import FlaxBigBirdForNaturalQuestions
+from datasets import load_from_disk
+
 from transformers import BigBirdTokenizerFast
 
 
@@ -106,7 +106,7 @@ def main():
         return start_logits, end_logits, jnp.argmax(pooled_logits, axis=-1)
 
     def evaluate(example):
-        # encode question and context so that they are seperated by a tokenizer.sep_token and cut at max_length
+        # encode question and context so that they are separated by a tokenizer.sep_token and cut at max_length
         inputs = tokenizer(
             example["question"],
             example["context"],
@@ -144,9 +144,9 @@ def main():
         predictions = expand_to_aliases(example["output"])
 
         # some preprocessing to both prediction and answer
-        answers = set(["".join(a.split()) for a in answers])
-        predictions = set(["".join(p.split()) for p in predictions])
-        predictions = set([s for s in predictions if s not in ["``", "''", "`", "'"]])
+        answers = {"".join(a.split()) for a in answers}
+        predictions = {"".join(p.split()) for p in predictions}
+        predictions = {s for s in predictions if s not in ["``", "''", "`", "'"]}
 
         # if there is a common element, it's a exact match
         example["match"] = len(list(answers & predictions)) > 0

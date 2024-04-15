@@ -32,14 +32,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"ctrl": "https://raw.githubusercontent.com/salesforce/ctrl/master/ctrl-vocab.json"},
-    "merges_file": {"ctrl": "https://raw.githubusercontent.com/salesforce/ctrl/master/ctrl-merges.txt"},
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "ctrl": 256,
-}
 
 CONTROL_CODES = {
     "Pregnancy": 168629,
@@ -134,13 +126,9 @@ class CTRLTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     control_codes = CONTROL_CODES
 
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
-        super().__init__(unk_token=unk_token, **kwargs)
-
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -149,6 +137,7 @@ class CTRLTokenizer(PreTrainedTokenizer):
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
+        super().__init__(unk_token=unk_token, **kwargs)
 
     @property
     def vocab_size(self):
@@ -208,7 +197,7 @@ class CTRLTokenizer(PreTrainedTokenizer):
         words = re.findall(r"\S+\n?", text)
 
         for token in words:
-            split_tokens.extend([t for t in self.bpe(token).split(" ")])
+            split_tokens.extend(list(self.bpe(token).split(" ")))
         return split_tokens
 
     def _convert_token_to_id(self, token):
@@ -236,7 +225,7 @@ class CTRLTokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, ensure_ascii=False))
+            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         index = 0
         with open(merge_file, "w", encoding="utf-8") as writer:

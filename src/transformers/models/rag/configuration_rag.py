@@ -14,7 +14,6 @@
 # limitations under the License.
 """ RAG model configuration"""
 
-import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings
@@ -28,7 +27,7 @@ RAG_CONFIG_DOC = r"""
         title_sep (`str`, *optional*, defaults to  `" / "`):
             Separator inserted between the title and the text of the retrieved document when calling [`RagRetriever`].
         doc_sep (`str`, *optional*, defaults to  `" // "`):
-            Separator inserted between the the text of the retrieved document and the original input when calling
+            Separator inserted between the text of the retrieved document and the original input when calling
             [`RagRetriever`].
         n_docs (`int`, *optional*, defaults to 5):
             Number of documents to retrieve.
@@ -49,7 +48,7 @@ RAG_CONFIG_DOC = r"""
             `"compressed"`.
         index_path (`str`, *optional*)
             The path to the serialized faiss index on disk.
-        passages_path: (`str`, *optional*):
+        passages_path (`str`, *optional*):
             A path to text passages compatible with the faiss index. Required if using
             [`~models.rag.retrieval_rag.LegacyIndex`]
         use_dummy_dataset (`bool`, *optional*, defaults to `False`)
@@ -112,7 +111,8 @@ class RagConfig(PretrainedConfig):
         output_retrieved=False,
         use_cache=True,
         forced_eos_token_id=None,
-        **kwargs
+        dataset_revision=None,
+        **kwargs,
     ):
         super().__init__(
             bos_token_id=bos_token_id,
@@ -157,6 +157,7 @@ class RagConfig(PretrainedConfig):
         self.passages_path = passages_path
         self.index_path = index_path
         self.use_dummy_dataset = use_dummy_dataset
+        self.dataset_revision = dataset_revision
 
         self.output_retrieved = output_retrieved
 
@@ -179,16 +180,3 @@ class RagConfig(PretrainedConfig):
             [`EncoderDecoderConfig`]: An instance of a configuration object
         """
         return cls(question_encoder=question_encoder_config.to_dict(), generator=generator_config.to_dict(), **kwargs)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["question_encoder"] = self.question_encoder.to_dict()
-        output["generator"] = self.generator.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

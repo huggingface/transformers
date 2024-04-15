@@ -25,11 +25,6 @@ from ...utils import TensorType, is_torch_available, logging
 
 logger = logging.get_logger(__name__)
 
-MBART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/mbart-large-cc25": "https://huggingface.co/facebook/mbart-large-cc25/resolve/main/config.json",
-    # See all MBART models at https://huggingface.co/models?filter=mbart
-}
-
 
 class MBartConfig(PretrainedConfig):
     r"""
@@ -76,10 +71,10 @@ class MBartConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         scale_embedding (`bool`, *optional*, defaults to `False`):
@@ -93,17 +88,18 @@ class MBartConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import MBartModel, MBartConfig
+    >>> from transformers import MBartConfig, MBartModel
 
     >>> # Initializing a MBART facebook/mbart-large-cc25 style configuration
     >>> configuration = MBartConfig()
 
-    >>> # Initializing a model from the facebook/mbart-large-cc25 style configuration
+    >>> # Initializing a model (with random weights) from the facebook/mbart-large-cc25 style configuration
     >>> model = MBartModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "mbart"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
@@ -134,7 +130,7 @@ class MBartConfig(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         forced_eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

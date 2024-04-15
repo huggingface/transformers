@@ -23,10 +23,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "xlnet-base-cased": "https://huggingface.co/xlnet-base-cased/resolve/main/config.json",
-    "xlnet-large-cased": "https://huggingface.co/xlnet-large-cased/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class XLNetConfig(PretrainedConfig):
@@ -34,7 +32,7 @@ class XLNetConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`XLNetModel`] or a [`TFXLNetModel`]. It is used to
     instantiate a XLNet model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
-    [xlnet-large-cased](https://huggingface.co/xlnet-large-cased) architecture.
+    [xlnet/xlnet-large-cased](https://huggingface.co/xlnet/xlnet-large-cased) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -131,7 +129,7 @@ class XLNetConfig(PretrainedConfig):
     >>> # Initializing a XLNet configuration
     >>> configuration = XLNetConfig()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = XLNetModel(configuration)
 
     >>> # Accessing the model configuration
@@ -176,7 +174,7 @@ class XLNetConfig(PretrainedConfig):
         pad_token_id=5,
         bos_token_id=1,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         """Constructs XLNetConfig."""
         self.vocab_size = vocab_size

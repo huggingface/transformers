@@ -20,24 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "uclanlp/visualbert-vqa": "https://huggingface.co/uclanlp/visualbert-vqa/resolve/main/config.json",
-    "uclanlp/visualbert-vqa-pre": "https://huggingface.co/uclanlp/visualbert-vqa-pre/resolve/main/config.json",
-    "uclanlp/visualbert-vqa-coco-pre": (
-        "https://huggingface.co/uclanlp/visualbert-vqa-coco-pre/resolve/main/config.json"
-    ),
-    "uclanlp/visualbert-vcr": "https://huggingface.co/uclanlp/visualbert-vcr/resolve/main/config.json",
-    "uclanlp/visualbert-vcr-pre": "https://huggingface.co/uclanlp/visualbert-vcr-pre/resolve/main/config.json",
-    "uclanlp/visualbert-vcr-coco-pre": (
-        "https://huggingface.co/uclanlp/visualbert-vcr-coco-pre/resolve/main/config.json"
-    ),
-    "uclanlp/visualbert-nlvr2": "https://huggingface.co/uclanlp/visualbert-nlvr2/resolve/main/config.json",
-    "uclanlp/visualbert-nlvr2-pre": "https://huggingface.co/uclanlp/visualbert-nlvr2-pre/resolve/main/config.json",
-    "uclanlp/visualbert-nlvr2-coco-pre": (
-        "https://huggingface.co/uclanlp/visualbert-nlvr2-coco-pre/resolve/main/config.json"
-    )
-    # See all VisualBERT models at https://huggingface.co/models?filter=visual_bert
-}
+
+from ..deprecated._archive_maps import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class VisualBertConfig(PretrainedConfig):
@@ -71,7 +55,7 @@ class VisualBertConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):
@@ -96,12 +80,12 @@ class VisualBertConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import VisualBertModel, VisualBertConfig
+    >>> from transformers import VisualBertConfig, VisualBertModel
 
     >>> # Initializing a VisualBERT visualbert-vqa-coco-pre style configuration
-    >>> configuration = VisualBertConfig.from_pretrained("visualbert-vqa-coco-pre")
+    >>> configuration = VisualBertConfig.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
 
-    >>> # Initializing a model from the visualbert-vqa-coco-pre style configuration
+    >>> # Initializing a model (with random weights) from the visualbert-vqa-coco-pre style configuration
     >>> model = VisualBertModel(configuration)
 
     >>> # Accessing the model configuration
@@ -130,7 +114,7 @@ class VisualBertConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

@@ -16,25 +16,23 @@ from typing import Callable, List, Optional, Set, Tuple, Union
 
 import torch
 from packaging import version
-from torch import _softmax_backward_data, nn
+from safetensors.torch import storage_ptr, storage_size
+from torch import nn
 
-from .utils import logging
+from .utils import is_torch_xla_available, logging
 
+
+ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
 
 logger = logging.get_logger(__name__)
 
-is_torch_less_than_1_8 = version.parse(version.parse(torch.__version__).base_version) < version.parse("1.8.0")
-is_torch_less_than_1_11 = version.parse(version.parse(torch.__version__).base_version) < version.parse("1.11")
+parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
 
-
-def torch_int_div(tensor1, tensor2):
-    """
-    A function that performs integer division across different versions of PyTorch.
-    """
-    if is_torch_less_than_1_8:
-        return tensor1 // tensor2
-    else:
-        return torch.div(tensor1, tensor2, rounding_mode="floor")
+is_torch_greater_or_equal_than_2_2 = parsed_torch_version_base >= version.parse("2.2")
+is_torch_greater_or_equal_than_2_1 = parsed_torch_version_base >= version.parse("2.1")
+is_torch_greater_or_equal_than_2_0 = parsed_torch_version_base >= version.parse("2.0")
+is_torch_greater_or_equal_than_1_13 = parsed_torch_version_base >= version.parse("1.13")
+is_torch_greater_or_equal_than_1_12 = parsed_torch_version_base >= version.parse("1.12")
 
 
 def softmax_backward_data(parent, grad_output, output, dim, self):
@@ -43,10 +41,9 @@ def softmax_backward_data(parent, grad_output, output, dim, self):
     to the torch version detected.
     """
 
-    if is_torch_less_than_1_11:
-        return _softmax_backward_data(grad_output, output, parent.dim, self)
-    else:
-        return _softmax_backward_data(grad_output, output, parent.dim, self.dtype)
+    from torch import _softmax_backward_data
+
+    return _softmax_backward_data(grad_output, output, parent.dim, self.dtype)
 
 
 def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) -> nn.Linear:
@@ -97,10 +94,9 @@ class Conv1D(nn.Module):
     def __init__(self, nf, nx):
         super().__init__()
         self.nf = nf
-        w = torch.empty(nx, nf)
-        nn.init.normal_(w, std=0.02)
-        self.weight = nn.Parameter(w)
+        self.weight = nn.Parameter(torch.empty(nx, nf))
         self.bias = nn.Parameter(torch.zeros(nf))
+        nn.init.normal_(self.weight, std=0.02)
 
     def forward(self, x):
         size_out = x.size()[:-1] + (self.nf,)
@@ -254,7 +250,8 @@ def find_pruneable_heads_and_indices(
         already_pruned_heads (`Set[int]`): A set of already pruned heads.
 
     Returns:
-        `Tuple[Set[int], torch.LongTensor]`: A tuple with the remaining heads and their corresponding indices.
+        `Tuple[Set[int], torch.LongTensor]`: A tuple with the indices of heads to prune taking `already_pruned_heads`
+        into account and the indices of rows/columns to keep in the layer weight.
     """
     mask = torch.ones(n_heads, head_size)
     heads = set(heads) - already_pruned_heads  # Convert to set and remove already pruned heads
@@ -265,3 +262,35 @@ def find_pruneable_heads_and_indices(
     mask = mask.view(-1).contiguous().eq(1)
     index: torch.LongTensor = torch.arange(len(mask))[mask].long()
     return heads, index
+
+
+def meshgrid(
+    *tensors: Union[torch.Tensor, List[torch.Tensor]], indexing: Optional[str] = None
+) -> Tuple[torch.Tensor, ...]:
+    """
+    Wrapper around torch.meshgrid to avoid warning messages about the introduced `indexing` argument.
+
+    Reference: https://pytorch.org/docs/1.13/generated/torch.meshgrid.html
+    """
+    return torch.meshgrid(*tensors, indexing=indexing)
+
+
+def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
+    """
+    Unique identifier to a tensor storage. Multiple different tensors can share the same underlying storage. For
+    example, "meta" tensors all share the same storage, and thus their identifier will all be equal. This identifier is
+    guaranteed to be unique and constant for this tensor's storage during its lifetime. Two tensor storages with
+    non-overlapping lifetimes may have the same id.
+    """
+    if tensor.device.type == "xla" and is_torch_xla_available():
+        # NOTE: xla tensors dont have storage
+        # use some other unique id to distinguish.
+        # this is a XLA tensor, it must be created using torch_xla's
+        # device. So the following import is safe:
+        import torch_xla
+
+        unique_id = torch_xla._XLAC._xla_get_tensor_id(tensor)
+    else:
+        unique_id = storage_ptr(tensor)
+
+    return tensor.device, unique_id, storage_size(tensor)

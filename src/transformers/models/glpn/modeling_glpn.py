@@ -41,34 +41,33 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "GLPNConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "GLPNFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "vinvino02/glpn-kitti"
 _EXPECTED_OUTPUT_SHAPE = [1, 512, 15, 20]
 
-GLPN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "vinvino02/glpn-kitti",
-    # See all GLPN models at https://huggingface.co/models?filter=glpn
-]
+
+from ..deprecated._archive_maps import GLPN_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
-# Copied from transformers.models.segformer.modeling_segformer.drop_path
-def drop_path(x, drop_prob: float = 0.0, training: bool = False):
+# Copied from transformers.models.beit.modeling_beit.drop_path
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is the same as the
-    DropConnect impl I created for EfficientNet, etc networks, however, the original name is misleading as 'Drop
-    Connect' is a different form of dropout in a separate paper... See discussion:
-    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
-    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
     """
     if drop_prob == 0.0 or not training:
-        return x
+        return input
     keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
     random_tensor.floor_()  # binarize
-    output = x.div(keep_prob) * random_tensor
+    output = input.div(keep_prob) * random_tensor
     return output
 
 
@@ -76,12 +75,15 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
 class GLPNDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob=None):
+    def __init__(self, drop_prob: Optional[float] = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return drop_path(x, self.drop_prob, self.training)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return "p={}".format(self.drop_prob)
 
 
 # Copied from transformers.models.segformer.modeling_segformer.SegformerOverlapPatchEmbeddings
@@ -144,7 +146,7 @@ class GLPNEfficientSelfAttention(nn.Module):
 
     def transpose_for_scores(self, hidden_states):
         new_shape = hidden_states.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        hidden_states = hidden_states.view(*new_shape)
+        hidden_states = hidden_states.view(new_shape)
         return hidden_states.permute(0, 2, 1, 3)
 
     def forward(
@@ -185,7 +187,7 @@ class GLPNEfficientSelfAttention(nn.Module):
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
+        context_layer = context_layer.view(new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
@@ -459,7 +461,7 @@ GLPN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`GLPNFeatureExtractor`]. See [`GLPNFeatureExtractor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`GLPNImageProcessor.__call__`] for details.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -498,7 +500,6 @@ class GLPNModel(GLPNPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GLPN_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -629,7 +630,7 @@ class GLPNDecoder(nn.Module):
 
 
 class SiLogLoss(nn.Module):
-    """
+    r"""
     Implements the Scale-invariant log scale loss [Eigen et al., 2014](https://arxiv.org/abs/1406.2283).
 
     $$L=\frac{1}{n} \sum_{i} d_{i}^{2}-\frac{1}{2 n^{2}}\left(\sum_{i} d_{i}^{2}\right)$$ where $d_{i}=\log y_{i}-\log
@@ -693,12 +694,12 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
     @replace_return_docstrings(output_type=DepthEstimatorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        pixel_values: torch.FloatTensor,
+        labels: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], DepthEstimatorOutput]:
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth depth estimation maps for computing the loss.
@@ -708,7 +709,7 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import GLPNFeatureExtractor, GLPNForDepthEstimation
+        >>> from transformers import AutoImageProcessor, GLPNForDepthEstimation
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
@@ -717,11 +718,11 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = GLPNFeatureExtractor.from_pretrained("vinvino02/glpn-kitti")
+        >>> image_processor = AutoImageProcessor.from_pretrained("vinvino02/glpn-kitti")
         >>> model = GLPNForDepthEstimation.from_pretrained("vinvino02/glpn-kitti")
 
         >>> # prepare image for the model
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)

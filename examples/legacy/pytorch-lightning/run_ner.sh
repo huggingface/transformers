@@ -5,7 +5,7 @@ pip install -r ../requirements.txt
 
 ## The relevant files are currently on a shared Google
 ## drive at https://drive.google.com/drive/folders/1kC0I2UGl2ltrluI9NqDjaQJGw5iliw_J
-## Monitor for changes and eventually migrate to nlp dataset
+## Monitor for changes and eventually migrate to use the `datasets` library
 curl -L 'https://drive.google.com/uc?export=download&id=1Jjhbal535VVz2ap4v4r_rN1UEHTdLK5P' \
 | grep -v "^#" | cut -f 2,3 | tr '\t' ' ' > train.txt.tmp
 curl -L 'https://drive.google.com/uc?export=download&id=1ZfRcQThdtAR5PPRjIDtrVP7BtXSCUBbm' \

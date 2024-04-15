@@ -20,11 +20,9 @@ from ...utils import is_detectron2_available, logging
 
 logger = logging.get_logger(__name__)
 
-LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "layoutlmv2-base-uncased": "https://huggingface.co/microsoft/layoutlmv2-base-uncased/resolve/main/config.json",
-    "layoutlmv2-large-uncased": "https://huggingface.co/microsoft/layoutlmv2-large-uncased/resolve/main/config.json",
-    # See all LayoutLMv2 models at https://huggingface.co/models?filter=layoutlmv2
-}
+
+from ..deprecated._archive_maps import LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
+
 
 # soft dependency
 if is_detectron2_available():
@@ -57,7 +55,7 @@ class LayoutLMv2Config(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):
@@ -103,17 +101,18 @@ class LayoutLMv2Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import LayoutLMv2Model, LayoutLMv2Config
+    >>> from transformers import LayoutLMv2Config, LayoutLMv2Model
 
     >>> # Initializing a LayoutLMv2 microsoft/layoutlmv2-base-uncased style configuration
     >>> configuration = LayoutLMv2Config()
 
-    >>> # Initializing a model from the microsoft/layoutlmv2-base-uncased style configuration
+    >>> # Initializing a model (with random weights) from the microsoft/layoutlmv2-base-uncased style configuration
     >>> model = LayoutLMv2Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "layoutlmv2"
 
     def __init__(
@@ -145,7 +144,7 @@ class LayoutLMv2Config(PretrainedConfig):
         has_spatial_attention_bias=True,
         has_visual_segment_embedding=False,
         detectron2_config_args=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_size=vocab_size,

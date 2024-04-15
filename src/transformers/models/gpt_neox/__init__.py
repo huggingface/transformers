@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,6 +36,9 @@ else:
     _import_structure["modeling_gpt_neox"] = [
         "GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GPTNeoXForCausalLM",
+        "GPTNeoXForQuestionAnswering",
+        "GPTNeoXForSequenceClassification",
+        "GPTNeoXForTokenClassification",
         "GPTNeoXLayer",
         "GPTNeoXModel",
         "GPTNeoXPreTrainedModel",
@@ -66,6 +65,9 @@ if TYPE_CHECKING:
         from .modeling_gpt_neox import (
             GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoXForCausalLM,
+            GPTNeoXForQuestionAnswering,
+            GPTNeoXForSequenceClassification,
+            GPTNeoXForTokenClassification,
             GPTNeoXLayer,
             GPTNeoXModel,
             GPTNeoXPreTrainedModel,

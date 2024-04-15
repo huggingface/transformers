@@ -13,25 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ XLM configuration"""
+from collections import OrderedDict
+from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-XLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "xlm-mlm-en-2048": "https://huggingface.co/xlm-mlm-en-2048/resolve/main/config.json",
-    "xlm-mlm-ende-1024": "https://huggingface.co/xlm-mlm-ende-1024/resolve/main/config.json",
-    "xlm-mlm-enfr-1024": "https://huggingface.co/xlm-mlm-enfr-1024/resolve/main/config.json",
-    "xlm-mlm-enro-1024": "https://huggingface.co/xlm-mlm-enro-1024/resolve/main/config.json",
-    "xlm-mlm-tlm-xnli15-1024": "https://huggingface.co/xlm-mlm-tlm-xnli15-1024/resolve/main/config.json",
-    "xlm-mlm-xnli15-1024": "https://huggingface.co/xlm-mlm-xnli15-1024/resolve/main/config.json",
-    "xlm-clm-enfr-1024": "https://huggingface.co/xlm-clm-enfr-1024/resolve/main/config.json",
-    "xlm-clm-ende-1024": "https://huggingface.co/xlm-clm-ende-1024/resolve/main/config.json",
-    "xlm-mlm-17-1280": "https://huggingface.co/xlm-mlm-17-1280/resolve/main/config.json",
-    "xlm-mlm-100-1280": "https://huggingface.co/xlm-mlm-100-1280/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class XLMConfig(PretrainedConfig):
@@ -39,7 +32,7 @@ class XLMConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`XLMModel`] or a [`TFXLMModel`]. It is used to
     instantiate a XLM model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
-    [xlm-mlm-en-2048](https://huggingface.co/xlm-mlm-en-2048) architecture.
+    [FacebookAI/xlm-mlm-en-2048](https://huggingface.co/FacebookAI/xlm-mlm-en-2048) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -139,7 +132,7 @@ class XLMConfig(PretrainedConfig):
     >>> # Initializing a XLM configuration
     >>> configuration = XLMConfig()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = XLMModel(configuration)
 
     >>> # Accessing the model configuration
@@ -189,7 +182,7 @@ class XLMConfig(PretrainedConfig):
         lang_id=0,
         pad_token_id=2,
         bos_token_id=0,
-        **kwargs
+        **kwargs,
     ):
         """Constructs XLMConfig."""
         self.vocab_size = vocab_size
@@ -228,3 +221,20 @@ class XLMConfig(PretrainedConfig):
             self.n_words = kwargs["n_words"]
 
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, **kwargs)
+
+
+# Copied from transformers.models.bert.configuration_bert.BertOnnxConfig
+class XLMOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.task == "multiple-choice":
+            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
+        else:
+            dynamic_axis = {0: "batch", 1: "sequence"}
+        return OrderedDict(
+            [
+                ("input_ids", dynamic_axis),
+                ("attention_mask", dynamic_axis),
+                ("token_type_ids", dynamic_axis),
+            ]
+        )

@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -63,6 +59,7 @@ else:
         "CamembertForSequenceClassification",
         "CamembertForTokenClassification",
         "CamembertModel",
+        "CamembertPreTrainedModel",
     ]
 
 try:
@@ -80,6 +77,7 @@ else:
         "TFCamembertForSequenceClassification",
         "TFCamembertForTokenClassification",
         "TFCamembertModel",
+        "TFCamembertPreTrainedModel",
     ]
 
 
@@ -117,6 +115,7 @@ if TYPE_CHECKING:
             CamembertForSequenceClassification,
             CamembertForTokenClassification,
             CamembertModel,
+            CamembertPreTrainedModel,
         )
 
     try:
@@ -134,6 +133,7 @@ if TYPE_CHECKING:
             TFCamembertForSequenceClassification,
             TFCamembertForTokenClassification,
             TFCamembertModel,
+            TFCamembertPreTrainedModel,
         )
 
 else:

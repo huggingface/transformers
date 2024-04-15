@@ -22,6 +22,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -35,7 +36,6 @@ if is_torch_available():
         YosoForTokenClassification,
         YosoModel,
     )
-    from transformers.models.yoso.modeling_yoso import YOSO_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class YosoModelTester:
@@ -50,7 +50,7 @@ class YosoModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -125,6 +125,11 @@ class YosoModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
         )
+
+    def get_pipeline_config(self):
+        config = self.get_config()
+        config.vocab_size = 300
+        return config
 
     def prepare_config_and_inputs_for_decoder(self):
         (
@@ -275,8 +280,7 @@ class YosoModelTester:
 
 
 @require_torch
-class YosoModelTest(ModelTesterMixin, unittest.TestCase):
-
+class YosoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             YosoModel,
@@ -294,6 +298,18 @@ class YosoModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
 
     all_generative_model_classes = ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": YosoModel,
+            "fill-mask": YosoForMaskedLM,
+            "question-answering": YosoForQuestionAnswering,
+            "text-classification": YosoForSequenceClassification,
+            "token-classification": YosoForTokenClassification,
+            "zero-shot": YosoForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = YosoModelTester(self)
@@ -334,9 +350,9 @@ class YosoModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in YOSO_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = YosoModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "uw-madison/yoso-4096"
+        model = YosoModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         return

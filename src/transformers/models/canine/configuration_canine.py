@@ -20,10 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/canine-s": "https://huggingface.co/google/canine-s/resolve/main/config.json",
-    # See all CANINE models at https://huggingface.co/models?filter=canine
-}
+
+from ..deprecated._archive_maps import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class CanineConfig(PretrainedConfig):
@@ -50,7 +48,7 @@ class CanineConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoders, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoders, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 16384):
@@ -61,6 +59,12 @@ class CanineConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 57344):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 57345):
+            End of stream token id.
         downsampling_rate (`int`, *optional*, defaults to 4):
             The rate at which to downsample the original character sequence length before applying the deep Transformer
             encoder.
@@ -78,17 +82,18 @@ class CanineConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CanineModel, CanineConfig
+    >>> from transformers import CanineConfig, CanineModel
 
     >>> # Initializing a CANINE google/canine-s style configuration
     >>> configuration = CanineConfig()
 
-    >>> # Initializing a model from the google/canine-s style configuration
+    >>> # Initializing a model (with random weights) from the google/canine-s style configuration
     >>> model = CanineModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "canine"
 
     def __init__(
@@ -104,8 +109,6 @@ class CanineConfig(PretrainedConfig):
         type_vocab_size=16,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        use_cache=True,
-        is_encoder_decoder=False,
         pad_token_id=0,
         bos_token_id=0xE000,
         eos_token_id=0xE001,
@@ -114,7 +117,7 @@ class CanineConfig(PretrainedConfig):
         num_hash_functions=8,
         num_hash_buckets=16384,
         local_transformer_stride=128,  # Good TPU/XLA memory alignment.
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
@@ -129,7 +132,6 @@ class CanineConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
 
         # Character config:
         self.downsampling_rate = downsampling_rate

@@ -23,9 +23,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/mobilebert-uncased": "https://huggingface.co/google/mobilebert-uncased/resolve/main/config.json"
-}
+
+from ..deprecated._archive_maps import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class MobileBertConfig(PretrainedConfig):
@@ -93,22 +92,19 @@ class MobileBertConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import MobileBertModel, MobileBertConfig
+    >>> from transformers import MobileBertConfig, MobileBertModel
 
     >>> # Initializing a MobileBERT configuration
     >>> configuration = MobileBertConfig()
 
-    >>> # Initializing a model from the configuration above
+    >>> # Initializing a model (with random weights) from the configuration above
     >>> model = MobileBertModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
-
-    Attributes: pretrained_config_archive_map (Dict[str, str]): A dictionary containing all the available pre-trained
-    checkpoints.
     """
-    pretrained_config_archive_map = MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
+
     model_type = "mobilebert"
 
     def __init__(
@@ -136,7 +132,7 @@ class MobileBertConfig(PretrainedConfig):
         normalization_type="no_norm",
         classifier_activation=True,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 

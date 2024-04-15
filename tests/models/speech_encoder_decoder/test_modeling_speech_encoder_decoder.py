@@ -62,7 +62,7 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         input_values=None,
         input_features=None,
-        **kwargs
+        **kwargs,
     ):
         encoder_decoder_config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
         self.assertTrue(encoder_decoder_config.decoder.is_decoder)
@@ -95,7 +95,7 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         input_values=None,
         input_features=None,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -135,7 +135,7 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         input_values=None,
         input_features=None,
-        **kwargs
+        **kwargs,
     ):
         inputs = input_values if input_features is None else input_features
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
@@ -173,7 +173,7 @@ class EncoderDecoderMixin:
         return_dict,
         input_values=None,
         input_features=None,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
@@ -202,7 +202,7 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         input_values=None,
         input_features=None,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -245,7 +245,7 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         input_values=None,
         input_features=None,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -292,7 +292,7 @@ class EncoderDecoderMixin:
         labels=None,
         input_values=None,
         input_features=None,
-        **kwargs
+        **kwargs,
     ):
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
@@ -351,6 +351,8 @@ class EncoderDecoderMixin:
             enc_dec_model.config.eos_token_id = None
         if hasattr(enc_dec_model.config, "decoder") and hasattr(enc_dec_model.config.decoder, "eos_token_id"):
             enc_dec_model.config.decoder.eos_token_id = None
+        if hasattr(enc_dec_model.generation_config, "eos_token_id"):
+            enc_dec_model.generation_config.eos_token_id = None
 
         inputs = input_values if input_features is None else input_features
 
@@ -396,6 +398,29 @@ class EncoderDecoderMixin:
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_generate(**input_ids_dict)
 
+    def test_training_gradient_checkpointing(self):
+        inputs_dict = self.prepare_config_and_inputs()
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            inputs_dict["config"], inputs_dict["decoder_config"]
+        )
+
+        model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        model.to(torch_device)
+        model.train()
+        model.gradient_checkpointing_enable()
+        model.config.decoder_start_token_id = 0
+        model.config.pad_token_id = 0
+
+        model_inputs = {
+            "attention_mask": inputs_dict["attention_mask"],
+            "labels": inputs_dict["labels"],
+            "decoder_input_ids": inputs_dict["decoder_input_ids"],
+        }
+        inputs = inputs_dict["input_features"] if "input_features" in inputs_dict else inputs_dict["input_values"]
+
+        loss = model(inputs, **model_inputs).loss
+        loss.backward()
+
     @slow
     def test_real_model_save_load_from_pretrained(self):
         model_2, inputs = self.get_pretrained_model_and_inputs()
@@ -422,7 +447,7 @@ class EncoderDecoderMixin:
 class Wav2Vec2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model_and_inputs(self):
         model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "facebook/wav2vec2-base-960h", "bert-base-cased"
+            "facebook/wav2vec2-base-960h", "google-bert/bert-base-cased"
         )
         batch_size = 13
         input_values = floats_tensor([batch_size, 512], scale=1.0)
@@ -486,7 +511,7 @@ class Wav2Vec2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
 class Speech2TextBertModelTest(EncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model_and_inputs(self):
         model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "facebook/s2t-small-librispeech-asr", "bert-base-cased"
+            "facebook/s2t-small-librispeech-asr", "google-bert/bert-base-cased"
         )
         batch_size = 13
         input_features = floats_tensor([batch_size, 7, 80], scale=1.0)
@@ -590,6 +615,7 @@ class Wav2Vec2Speech2Text2(EncoderDecoderMixin, unittest.TestCase):
             "decoder_config": decoder_config,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
+            "labels": decoder_input_ids,
         }
 
     # there are no published pretrained Speech2Text2ForCausalLM for now

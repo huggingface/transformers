@@ -20,12 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/s2t-wav2vec2-large-en-de": (
-        "https://huggingface.co/facebook/s2t-wav2vec2-large-en-de/resolve/main/config.json"
-    ),
-    # See all Speech2Text models at https://huggingface.co/models?filter=speech2text2
-}
+
+from ..deprecated._archive_maps import SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class Speech2Text2Config(PretrainedConfig):
@@ -60,35 +56,33 @@ class Speech2Text2Config(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        classifier_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for classifier.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-            https://arxiv.org/abs/1909.11556>`__ for more details. decoder_layerdrop: (`float`, *optional*, defaults to
-            0.0): The LayerDrop probability for the decoder. See the [LayerDrop paper](see
-            https://arxiv.org/abs/1909.11556) for more details.
+            https://arxiv.org/abs/1909.11556>`__ for more details.
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        max_source_positions (`int`, *optional*, defaults to 6000):
-            The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-        max_target_positions: (`int`, *optional*, defaults to 1024):
+        max_target_positions (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
 
     Example:
 
     ```python
-    >>> from transformers import Speech2Text2ForCausalLM, Speech2Text2Config
+    >>> from transformers import Speech2Text2Config, Speech2Text2ForCausalLM
 
     >>> # Initializing a Speech2Text2 s2t_transformer_s style configuration
     >>> configuration = Speech2Text2Config()
 
-    >>> # Initializing a model from the s2t_transformer_s style configuration
+    >>> # Initializing a model (with random weights) from the s2t_transformer_s style configuration
     >>> model = Speech2Text2ForCausalLM(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "speech_to_text_2"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "decoder_attention_heads", "hidden_size": "d_model"}
@@ -108,14 +102,12 @@ class Speech2Text2Config(PretrainedConfig):
         activation_dropout=0.0,
         init_std=0.02,
         decoder_start_token_id=2,
-        classifier_dropout=0.0,
         scale_embedding=True,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        max_source_positions=6000,
         max_target_positions=1024,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.d_model = d_model
@@ -128,11 +120,9 @@ class Speech2Text2Config(PretrainedConfig):
         self.activation_function = activation_function
         self.init_std = init_std
         self.decoder_layerdrop = decoder_layerdrop
-        self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.num_hidden_layers = decoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
 
         super().__init__(

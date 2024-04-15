@@ -25,6 +25,7 @@ from transformers import (
 from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
+    require_pytesseract,
     require_tf,
     require_timm,
     require_torch,
@@ -32,7 +33,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -45,15 +46,15 @@ else:
             pass
 
 
+@is_pipeline_test
 @require_vision
 @require_timm
 @require_torch
-@is_pipeline_test
-class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class ObjectDetectionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        object_detector = ObjectDetectionPipeline(model=model, feature_extractor=feature_extractor)
+    def get_test_pipeline(self, model, tokenizer, processor):
+        object_detector = ObjectDetectionPipeline(model=model, image_processor=processor)
         return object_detector, ["./tests/fixtures/tests_samples/COCO/000000039769.png"]
 
     def run_pipeline_test(self, object_detector, examples):
@@ -72,17 +73,19 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
 
         import datasets
 
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
 
         batch = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
             "http://images.cocodataset.org/val2017/000000039769.jpg",
             # RGBA
-            dataset[0]["file"],
+            dataset[0]["image"],
             # LA
-            dataset[1]["file"],
+            dataset[1]["image"],
             # L
-            dataset[2]["file"],
+            dataset[2]["image"],
         ]
         batch_outputs = object_detector(batch, threshold=0.0)
 
@@ -106,7 +109,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
 
     @require_torch
     def test_small_model_pt(self):
-        model_id = "mishig/tiny-detr-mobilenetsv3"
+        model_id = "hf-internal-testing/tiny-detr-mobilenetsv3"
 
         model = AutoModelForObjectDetection.from_pretrained(model_id)
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
@@ -117,8 +120,8 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.3432, "label": "LABEL_0", "box": {"xmin": 160, "ymin": 120, "xmax": 480, "ymax": 359}},
-                {"score": 0.3432, "label": "LABEL_0", "box": {"xmin": 160, "ymin": 120, "xmax": 480, "ymax": 359}},
+                {"score": 0.3376, "label": "LABEL_0", "box": {"xmin": 159, "ymin": 120, "xmax": 480, "ymax": 359}},
+                {"score": 0.3376, "label": "LABEL_0", "box": {"xmin": 159, "ymin": 120, "xmax": 480, "ymax": 359}},
             ],
         )
 
@@ -134,12 +137,12 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
             nested_simplify(outputs, decimals=4),
             [
                 [
-                    {"score": 0.3432, "label": "LABEL_0", "box": {"xmin": 160, "ymin": 120, "xmax": 480, "ymax": 359}},
-                    {"score": 0.3432, "label": "LABEL_0", "box": {"xmin": 160, "ymin": 120, "xmax": 480, "ymax": 359}},
+                    {"score": 0.3376, "label": "LABEL_0", "box": {"xmin": 159, "ymin": 120, "xmax": 480, "ymax": 359}},
+                    {"score": 0.3376, "label": "LABEL_0", "box": {"xmin": 159, "ymin": 120, "xmax": 480, "ymax": 359}},
                 ],
                 [
-                    {"score": 0.3432, "label": "LABEL_0", "box": {"xmin": 160, "ymin": 120, "xmax": 480, "ymax": 359}},
-                    {"score": 0.3432, "label": "LABEL_0", "box": {"xmin": 160, "ymin": 120, "xmax": 480, "ymax": 359}},
+                    {"score": 0.3376, "label": "LABEL_0", "box": {"xmin": 159, "ymin": 120, "xmax": 480, "ymax": 359}},
+                    {"score": 0.3376, "label": "LABEL_0", "box": {"xmin": 159, "ymin": 120, "xmax": 480, "ymax": 359}},
                 ],
             ],
         )
@@ -250,5 +253,25 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
             [
                 {"score": 0.9988, "label": "cat", "box": {"xmin": 13, "ymin": 52, "xmax": 314, "ymax": 470}},
                 {"score": 0.9987, "label": "cat", "box": {"xmin": 345, "ymin": 23, "xmax": 640, "ymax": 368}},
+            ],
+        )
+
+    @require_torch
+    @require_pytesseract
+    @slow
+    def test_layoutlm(self):
+        model_id = "Narsil/layoutlmv3-finetuned-funsd"
+        threshold = 0.9993
+
+        object_detector = pipeline("object-detection", model=model_id, threshold=threshold)
+
+        outputs = object_detector(
+            "https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png"
+        )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"score": 0.9993, "label": "I-ANSWER", "box": {"xmin": 294, "ymin": 254, "xmax": 343, "ymax": 264}},
+                {"score": 0.9993, "label": "I-ANSWER", "box": {"xmin": 294, "ymin": 254, "xmax": 343, "ymax": 264}},
             ],
         )

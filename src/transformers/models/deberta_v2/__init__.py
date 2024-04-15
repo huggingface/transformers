@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
+    "configuration_deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config", "DebertaV2OnnxConfig"],
     "tokenization_deberta_v2": ["DebertaV2Tokenizer"],
 }
 
@@ -50,6 +46,7 @@ else:
         "TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFDebertaV2ForMaskedLM",
         "TFDebertaV2ForQuestionAnswering",
+        "TFDebertaV2ForMultipleChoice",
         "TFDebertaV2ForSequenceClassification",
         "TFDebertaV2ForTokenClassification",
         "TFDebertaV2Model",
@@ -75,7 +72,11 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
+    from .configuration_deberta_v2 import (
+        DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DebertaV2Config,
+        DebertaV2OnnxConfig,
+    )
     from .tokenization_deberta_v2 import DebertaV2Tokenizer
 
     try:
@@ -95,6 +96,7 @@ if TYPE_CHECKING:
         from .modeling_tf_deberta_v2 import (
             TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDebertaV2ForMaskedLM,
+            TFDebertaV2ForMultipleChoice,
             TFDebertaV2ForQuestionAnswering,
             TFDebertaV2ForSequenceClassification,
             TFDebertaV2ForTokenClassification,

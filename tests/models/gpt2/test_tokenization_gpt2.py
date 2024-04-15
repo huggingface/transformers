@@ -18,16 +18,16 @@ import json
 import os
 import unittest
 
-from transformers import GPT2Tokenizer, GPT2TokenizerFast
+from transformers import AutoTokenizer, GPT2Tokenizer, GPT2TokenizerFast
 from transformers.models.gpt2.tokenization_gpt2 import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_tokenizers
+from transformers.testing_utils import require_jinja, require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
 class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "openai-community/gpt2"
     tokenizer_class = GPT2Tokenizer
     rust_tokenizer_class = GPT2TokenizerFast
     test_rust_tokenizer = True
@@ -244,9 +244,110 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         decode_s = tokenizer.decode(out_s.input_ids)
         decode_s2 = tokenizer.batch_decode(out_s2.input_ids)
 
-        self.assertEqual(decode_s.split()[0], bos_token)
-        self.assertTrue(all(d.split()[0] == bos_token for d in decode_s2))
+        self.assertTrue(decode_s.startswith(bos_token))
+        self.assertTrue(all(d.startswith(bos_token) for d in decode_s2))
 
     # tokenizer has no padding token
     def test_padding_different_model_input_name(self):
         pass
+
+    def test_special_tokens_mask_input_pairs_and_bos_token(self):
+        # TODO: change to self.get_tokenizers() when the fast version is implemented
+        tokenizers = [self.get_tokenizer(do_lower_case=False, add_bos_token=True)]
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                sequence_0 = "Encode this."
+                sequence_1 = "This one too please."
+                encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False)
+                encoded_sequence += tokenizer.encode(sequence_1, add_special_tokens=False)
+                encoded_sequence_dict = tokenizer.encode_plus(
+                    sequence_0,
+                    sequence_1,
+                    add_special_tokens=True,
+                    return_special_tokens_mask=True,
+                )
+                encoded_sequence_w_special = encoded_sequence_dict["input_ids"]
+                special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]
+                self.assertEqual(len(special_tokens_mask), len(encoded_sequence_w_special))
+
+                filtered_sequence = [
+                    (x if not special_tokens_mask[i] else None) for i, x in enumerate(encoded_sequence_w_special)
+                ]
+                filtered_sequence = [x for x in filtered_sequence if x is not None]
+                self.assertEqual(encoded_sequence, filtered_sequence)
+
+    @require_jinja
+    def test_tokenization_for_chat(self):
+        tokenizer = GPT2Tokenizer.from_pretrained(self.tmpdirname)
+        test_chats = [
+            [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
+            [
+                {"role": "system", "content": "You are a helpful chatbot."},
+                {"role": "user", "content": "Hello!"},
+                {"role": "assistant", "content": "Nice to meet you."},
+            ],
+            [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
+        ]
+        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
+        # fmt: off
+        expected_tokens = [[20, 1, 20, 10, 20, 4, 3, 10, 20, 10, 20, 3, 0, 20, 20, 20, 0, 10, 20, 20, 20, 6, 20, 1, 6, 20, 20, 20, 3, 0, 0, 1, 20, 20],
+                          [20, 1, 20, 10, 20, 4, 3, 10, 20, 10, 20, 3, 0, 20, 20, 20, 0, 10, 20, 20, 20, 6, 20, 1, 6, 20, 20, 20, 3, 0, 0, 1, 20, 20, 20, 7, 20, 3, 10, 6, 1, 10, 20, 3, 3, 6, 10, 20, 1, 20, 20, 20],
+                          [20, 7, 20, 3, 10, 6, 1, 10, 20, 3, 3, 6, 10, 20, 1, 20, 20, 20, 20, 3, 0, 0, 1, 20, 20]]
+        # fmt: on
+        for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
+            self.assertListEqual(tokenized_chat, expected_tokens)
+
+
+@require_tokenizers
+class OPTTokenizationTest(unittest.TestCase):
+    def test_serialize_deserialize_fast_opt(self):
+        # More context:
+        # https://huggingface.co/wjmcat/opt-350m-paddle/discussions/1
+        # https://huggingface.slack.com/archives/C01N44FJDHT/p1653511495183519
+        # https://github.com/huggingface/transformers/pull/17088#discussion_r871246439
+
+        tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m", from_slow=True)
+        text = "A photo of a cat"
+
+        tokens_ids = tokenizer.encode(
+            text,
+        )
+        self.assertEqual(tokens_ids, [2, 250, 1345, 9, 10, 4758])
+        tokenizer.save_pretrained("test_opt")
+
+        tokenizer = AutoTokenizer.from_pretrained("./test_opt")
+        tokens_ids = tokenizer.encode(
+            text,
+        )
+        self.assertEqual(tokens_ids, [2, 250, 1345, 9, 10, 4758])
+
+    def test_fast_slow_equivalence(self):
+        tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m", use_slow=True)
+        text = "A photo of a cat"
+
+        tokens_ids = tokenizer.encode(
+            text,
+        )
+        # Same as above
+        self.assertEqual(tokens_ids, [2, 250, 1345, 9, 10, 4758])
+
+    @unittest.skip("This test is failing because of a bug in the fast tokenizer")
+    def test_users_can_modify_bos(self):
+        tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m", from_slow=True)
+
+        tokenizer.bos_token = "bos"
+        tokenizer.bos_token_id = tokenizer.get_vocab()["bos"]
+
+        text = "A photo of a cat"
+        tokens_ids = tokenizer.encode(
+            text,
+        )
+        # We changed the bos token
+        self.assertEqual(tokens_ids, [31957, 250, 1345, 9, 10, 4758])
+        tokenizer.save_pretrained("./tok")
+        tokenizer = AutoTokenizer.from_pretrained("./tok")
+        self.assertTrue(tokenizer.is_fast)
+        tokens_ids = tokenizer.encode(
+            text,
+        )
+        self.assertEqual(tokens_ids, [31957, 250, 1345, 9, 10, 4758])

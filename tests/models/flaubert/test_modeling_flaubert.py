@@ -16,11 +16,12 @@ import os
 import tempfile
 import unittest
 
-from transformers import FlaubertConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers import FlaubertConfig, is_sacremoses_available, is_torch_available
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -35,42 +36,69 @@ if is_torch_available():
         FlaubertModel,
         FlaubertWithLMHeadModel,
     )
-    from transformers.models.flaubert.modeling_flaubert import FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.flaubert.modeling_flaubert import create_sinusoidal_embeddings
 
 
 class FlaubertModelTester(object):
     def __init__(
         self,
         parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_lengths=True,
+        use_token_type_ids=True,
+        use_labels=True,
+        gelu_activation=True,
+        sinusoidal_embeddings=False,
+        causal=False,
+        asm=False,
+        n_langs=2,
+        vocab_size=99,
+        n_special=0,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=12,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        summary_type="last",
+        use_proj=None,
+        scope=None,
     ):
         self.parent = parent
-        self.batch_size = 13
-        self.seq_length = 7
-        self.is_training = True
-        self.use_input_lengths = True
-        self.use_token_type_ids = True
-        self.use_labels = True
-        self.gelu_activation = True
-        self.sinusoidal_embeddings = False
-        self.causal = False
-        self.asm = False
-        self.n_langs = 2
-        self.vocab_size = 99
-        self.n_special = 0
-        self.hidden_size = 32
-        self.num_hidden_layers = 5
-        self.num_attention_heads = 4
-        self.hidden_dropout_prob = 0.1
-        self.attention_probs_dropout_prob = 0.1
-        self.max_position_embeddings = 512
-        self.type_vocab_size = 12
-        self.type_sequence_label_size = 2
-        self.initializer_range = 0.02
-        self.num_labels = 3
-        self.num_choices = 4
-        self.summary_type = "last"
-        self.use_proj = None
-        self.scope = None
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_input_lengths = use_input_lengths
+        self.use_token_type_ids = use_token_type_ids
+        self.use_labels = use_labels
+        self.gelu_activation = gelu_activation
+        self.sinusoidal_embeddings = sinusoidal_embeddings
+        self.causal = causal
+        self.asm = asm
+        self.n_langs = n_langs
+        self.vocab_size = vocab_size
+        self.n_special = n_special
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
+        self.type_sequence_label_size = type_sequence_label_size
+        self.initializer_range = initializer_range
+        self.num_labels = num_labels
+        self.num_choices = num_choices
+        self.summary_type = summary_type
+        self.use_proj = use_proj
+        self.scope = scope
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -335,8 +363,7 @@ class FlaubertModelTester(object):
 
 
 @require_torch
-class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
-
+class FlaubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             FlaubertModel,
@@ -350,6 +377,34 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": FlaubertModel,
+            "fill-mask": FlaubertWithLMHeadModel,
+            "question-answering": FlaubertForQuestionAnsweringSimple,
+            "text-classification": FlaubertForSequenceClassification,
+            "token-classification": FlaubertForTokenClassification,
+            "zero-shot": FlaubertForSequenceClassification,
+        }
+        if is_torch_available() and is_sacremoses_available()
+        else {}
+    )
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if (
+            pipeline_test_casse_name == "QAPipelineTests"
+            and tokenizer_name is not None
+            and not tokenizer_name.endswith("Fast")
+        ):
+            # `QAPipelineTests` fails for a few models when the slower tokenizer are used.
+            # (The slower tokenizers were never used for pipeline tests before the pipeline testing rework)
+            # TODO: check (and possibly fix) the `QAPipelineTests` with slower tokenizer
+            return True
+
+        return False
 
     # Flaubert has 2 QA models -> need to manually set the correct labels for one of them here
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -377,6 +432,14 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_flaubert_model(*config_and_inputs)
 
+    # Copied from tests/models/distilbert/test_modeling_distilbert.py with Distilbert->Flaubert
+    def test_flaubert_model_with_sinusoidal_encodings(self):
+        config = FlaubertConfig(sinusoidal_embeddings=True)
+        model = FlaubertModel(config=config)
+        sinusoidal_pos_embds = torch.empty((config.max_position_embeddings, config.emb_dim), dtype=torch.float32)
+        create_sinusoidal_embeddings(config.max_position_embeddings, config.emb_dim, sinusoidal_pos_embds)
+        self.model_tester.parent.assertTrue(torch.equal(model.position_embeddings.weight, sinusoidal_pos_embds))
+
     def test_flaubert_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_flaubert_lm_head(*config_and_inputs)
@@ -403,16 +466,15 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlaubertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "flaubert/flaubert_small_cased"
+        model = FlaubertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_torchscript_device_change(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-
             # FlauBertForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == FlaubertForMultipleChoice:
                 return
@@ -437,7 +499,8 @@ class FlaubertModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head_absolute_embedding(self):
         model = FlaubertModel.from_pretrained("flaubert/flaubert_base_cased")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
-        output = model(input_ids)[0]
+        with torch.no_grad():
+            output = model(input_ids)[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(

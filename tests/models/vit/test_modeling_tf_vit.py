@@ -15,6 +15,8 @@
 """ Testing suite for the TensorFlow ViT model. """
 
 
+from __future__ import annotations
+
 import inspect
 import unittest
 
@@ -24,18 +26,20 @@ from transformers.utils import cached_property, is_tf_available, is_vision_avail
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFViTForImageClassification, TFViTModel
+    from transformers.modeling_tf_utils import keras
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import ViTImageProcessor
 
 
 class TFViTModelTester:
@@ -49,7 +53,7 @@ class TFViTModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -133,6 +137,13 @@ class TFViTModelTester:
         result = model(pixel_values, interpolate_pos_encoding=True, training=False)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
+        # test greyscale images
+        config.num_channels = 1
+        model = TFViTForImageClassification(config)
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        result = model(pixel_values)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels = config_and_inputs
@@ -141,13 +152,18 @@ class TFViTModelTester:
 
 
 @require_tf
-class TFViTModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFViTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_tf_common.py, as ViT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (TFViTModel, TFViTForImageClassification) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": TFViTModel, "image-classification": TFViTForImageClassification}
+        if is_tf_available()
+        else {}
+    )
 
     test_resize_embeddings = False
     test_head_masking = False
@@ -173,9 +189,9 @@ class TFViTModelTest(TFModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (tf.keras.layers.Layer))
+            self.assertIsInstance(model.get_input_embeddings(), (keras.layers.Layer))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Layer))
+            self.assertTrue(x is None or isinstance(x, keras.layers.Layer))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -199,7 +215,6 @@ class TFViTModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-
         model = TFViTModel.from_pretrained("google/vit-base-patch16-224")
         self.assertIsNotNone(model)
 
@@ -214,16 +229,16 @@ def prepare_img():
 @require_vision
 class TFViTModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
+    def default_image_processor(self):
+        return ViTImageProcessor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
         model = TFViTForImageClassification.from_pretrained("google/vit-base-patch16-224")
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="tf")
+        inputs = image_processor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(**inputs)

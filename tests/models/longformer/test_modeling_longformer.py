@@ -21,6 +21,7 @@ from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -41,30 +42,52 @@ class LongformerModelTester:
     def __init__(
         self,
         parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_token_type_ids=True,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        scope=None,
+        attention_window=4,
     ):
         self.parent = parent
-        self.batch_size = 13
-        self.seq_length = 7
-        self.is_training = True
-        self.use_input_mask = True
-        self.use_token_type_ids = True
-        self.use_labels = True
-        self.vocab_size = 99
-        self.hidden_size = 32
-        self.num_hidden_layers = 5
-        self.num_attention_heads = 4
-        self.intermediate_size = 37
-        self.hidden_act = "gelu"
-        self.hidden_dropout_prob = 0.1
-        self.attention_probs_dropout_prob = 0.1
-        self.max_position_embeddings = 512
-        self.type_vocab_size = 16
-        self.type_sequence_label_size = 2
-        self.initializer_range = 0.02
-        self.num_labels = 3
-        self.num_choices = 4
-        self.scope = None
-        self.attention_window = 4
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_input_mask = use_input_mask
+        self.use_token_type_ids = use_token_type_ids
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
+        self.type_sequence_label_size = type_sequence_label_size
+        self.initializer_range = initializer_range
+        self.num_labels = num_labels
+        self.num_choices = num_choices
+        self.scope = scope
+        self.attention_window = attention_window
 
         # `ModelTesterMixin.test_attention_outputs` is expecting attention tensors to be of size
         # [num_attention_heads, encoder_seq_length, encoder_key_length], but LongformerSelfAttention
@@ -112,6 +135,11 @@ class LongformerModelTester:
             initializer_range=self.initializer_range,
             attention_window=self.attention_window,
         )
+
+    def get_pipeline_config(self):
+        config = self.get_config()
+        config.vocab_size = 300
+        return config
 
     def create_and_check_attention_mask_determinism(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -269,7 +297,7 @@ class LongformerModelTester:
 
 
 @require_torch
-class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
+class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False  # pruning is not supported
     test_torchscript = False
 
@@ -285,6 +313,37 @@ class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": LongformerModel,
+            "fill-mask": LongformerForMaskedLM,
+            "question-answering": LongformerForQuestionAnswering,
+            "text-classification": LongformerForSequenceClassification,
+            "token-classification": LongformerForTokenClassification,
+            "zero-shot": LongformerForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
+
+    # Need to use `0.6` instead of `0.5` for `test_disk_offload`
+    model_split_percents = [0.6, 0.7, 0.9]
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if (
+            pipeline_test_casse_name == "QAPipelineTests"
+            and tokenizer_name is not None
+            and not tokenizer_name.endswith("Fast")
+        ):
+            # `QAPipelineTests` fails for a few models when the slower tokenizer are used.
+            # (The slower tokenizers were never used for pipeline tests before the pipeline testing rework)
+            # TODO: check (and possibly fix) the `QAPipelineTests` with slower tokenizer
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = LongformerModelTester(self)
@@ -327,6 +386,10 @@ class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_retain_grad_hidden_states_attentions(self):
         # longformer cannot keep gradients in attentions or hidden states
+        return
+
+    @unittest.skip("LongFormer calculates global attn only when attn_mask has non-zero elements")
+    def test_batching_equivalence(self):
         return
 
 

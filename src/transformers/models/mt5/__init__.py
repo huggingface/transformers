@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,7 +39,7 @@ else:
 
 MT5TokenizerFast = T5TokenizerFast
 
-_import_structure = {"configuration_mt5": ["MT5Config"]}
+_import_structure = {"configuration_mt5": ["MT5Config", "MT5OnnxConfig"]}
 
 try:
     if not is_torch_available():
@@ -51,7 +47,16 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_mt5"] = ["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model"]
+    _import_structure["modeling_mt5"] = [
+        "MT5EncoderModel",
+        "MT5ForConditionalGeneration",
+        "MT5ForQuestionAnswering",
+        "MT5ForSequenceClassification",
+        "MT5ForTokenClassification",
+        "MT5Model",
+        "MT5PreTrainedModel",
+        "MT5Stack",
+    ]
 
 try:
     if not is_tf_available():
@@ -67,11 +72,11 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_flax_mt5"] = ["FlaxMT5ForConditionalGeneration", "FlaxMT5Model"]
+    _import_structure["modeling_flax_mt5"] = ["FlaxMT5EncoderModel", "FlaxMT5ForConditionalGeneration", "FlaxMT5Model"]
 
 
 if TYPE_CHECKING:
-    from .configuration_mt5 import MT5Config
+    from .configuration_mt5 import MT5Config, MT5OnnxConfig
 
     try:
         if not is_torch_available():
@@ -79,7 +84,16 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
+        from .modeling_mt5 import (
+            MT5EncoderModel,
+            MT5ForConditionalGeneration,
+            MT5ForQuestionAnswering,
+            MT5ForSequenceClassification,
+            MT5ForTokenClassification,
+            MT5Model,
+            MT5PreTrainedModel,
+            MT5Stack,
+        )
 
     try:
         if not is_tf_available():
@@ -95,7 +109,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_flax_mt5 import FlaxMT5ForConditionalGeneration, FlaxMT5Model
+        from .modeling_flax_mt5 import FlaxMT5EncoderModel, FlaxMT5ForConditionalGeneration, FlaxMT5Model
 
 else:
     import sys

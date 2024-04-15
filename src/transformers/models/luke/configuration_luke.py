@@ -20,10 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "studio-ousia/luke-base": "https://huggingface.co/studio-ousia/luke-base/resolve/main/config.json",
-    "studio-ousia/luke-large": "https://huggingface.co/studio-ousia/luke-large/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class LukeConfig(PretrainedConfig):
@@ -38,7 +36,7 @@ class LukeConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
+        vocab_size (`int`, *optional*, defaults to 50267):
             Vocabulary size of the LUKE model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`LukeModel`].
         entity_vocab_size (`int`, *optional*, defaults to 500000):
@@ -70,10 +68,18 @@ class LukeConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        use_entity_aware_attention (`bool`, defaults to `True`):
+        use_entity_aware_attention (`bool`, *optional*, defaults to `True`):
             Whether or not the model should use the entity-aware self-attention mechanism proposed in [LUKE: Deep
             Contextualized Entity Representations with Entity-aware Self-attention (Yamada et
             al.)](https://arxiv.org/abs/2010.01057).
+        classifier_dropout (`float`, *optional*):
+            The dropout ratio for the classification head.
+        pad_token_id (`int`, *optional*, defaults to 1):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 0):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            End of stream token id.
 
     Examples:
 
@@ -89,6 +95,7 @@ class LukeConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "luke"
 
     def __init__(
@@ -108,10 +115,11 @@ class LukeConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         use_entity_aware_attention=True,
+        classifier_dropout=None,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         """Constructs LukeConfig."""
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -131,3 +139,4 @@ class LukeConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_entity_aware_attention = use_entity_aware_attention
+        self.classifier_dropout = classifier_dropout

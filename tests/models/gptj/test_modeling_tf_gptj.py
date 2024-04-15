@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datetime
+from __future__ import annotations
+
 import unittest
 
 from transformers import AutoTokenizer, GPTJConfig, is_tf_available
@@ -21,6 +22,7 @@ from transformers.testing_utils import require_tf, slow, tooslow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 
 
@@ -48,7 +50,8 @@ class TFGPTJModelTester:
         self.use_mc_token_ids = True
         self.vocab_size = 99
         self.hidden_size = 32
-        self.num_hidden_layers = 5
+        self.rotary_dim = 4
+        self.num_hidden_layers = 2
         self.num_attention_heads = 4
         self.intermediate_size = 37
         self.hidden_act = "gelu"
@@ -103,6 +106,7 @@ class TFGPTJModelTester:
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
+            rotary_dim=self.rotary_dim,
             return_dict=True,
         )
 
@@ -147,7 +151,7 @@ class TFGPTJModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        output, past = outputs.to_tuple()
+        output, past_key_values = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -158,7 +162,9 @@ class TFGPTJModelTester:
         next_token_type_ids = tf.concat([token_type_ids, next_token_types], axis=-1)
 
         output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, token_type_ids=next_token_types, past=past)["last_hidden_state"]
+        output_from_past = model(next_tokens, token_type_ids=next_token_types, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = int(ids_tensor((1,), shape_list(output_from_past)[-1]))
@@ -180,7 +186,7 @@ class TFGPTJModelTester:
         attn_mask = tf.concat([attn_mask_begin, attn_mask_end], axis=1)
 
         # first forward pass
-        output, past = model(input_ids, attention_mask=attn_mask).to_tuple()
+        output, past_key_values = model(input_ids, attention_mask=attn_mask).to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -200,7 +206,9 @@ class TFGPTJModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past=past, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = int(ids_tensor((1,), shape_list(output_from_past)[-1]))
@@ -223,7 +231,7 @@ class TFGPTJModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, use_cache=True)
 
-        output, past = outputs.to_tuple()
+        output, past_key_values = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -239,7 +247,10 @@ class TFGPTJModelTester:
             next_input_ids, token_type_ids=next_token_type_ids, attention_mask=next_attention_mask
         )["last_hidden_state"]
         output_from_past = model(
-            next_tokens, token_type_ids=next_token_types, attention_mask=next_attention_mask, past=past
+            next_tokens,
+            token_type_ids=next_token_types,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
         )["last_hidden_state"]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
@@ -285,8 +296,7 @@ class TFGPTJModelTester:
 
 
 @require_tf
-class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
-
+class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TFGPTJForCausalLM, TFGPTJForSequenceClassification, TFGPTJForQuestionAnswering, TFGPTJModel)
         if is_tf_available()
@@ -294,10 +304,37 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
     )
 
     all_generative_model_classes = (TFGPTJForCausalLM,) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFGPTJModel,
+            "question-answering": TFGPTJForQuestionAnswering,
+            "text-classification": TFGPTJForSequenceClassification,
+            "text-generation": TFGPTJForCausalLM,
+            "zero-shot": TFGPTJForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_onnx = False
     test_pruning = False
     test_missing_keys = False
     test_head_masking = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if (
+            pipeline_test_casse_name == "QAPipelineTests"
+            and tokenizer_name is not None
+            and not tokenizer_name.endswith("Fast")
+        ):
+            # `QAPipelineTests` fails for a few models when the slower tokenizer are used.
+            # (The slower tokenizers were never used for pipeline tests before the pipeline testing rework)
+            # TODO: check (and possibly fix) the `QAPipelineTests` with slower tokenizer
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = TFGPTJModelTester(self)
@@ -326,24 +363,6 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gptj_lm_head_model(*config_and_inputs)
 
-    def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in self.all_generative_model_classes:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert name is None
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
-
     @slow
     @unittest.skipIf(
         not is_tf_available() or len(tf.config.list_physical_devices("GPU")) > 0,
@@ -359,87 +378,31 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
 
 
 @require_tf
+@tooslow
+# Marked as @tooslow due to GPU OOM -- but still useful to run locally. Requires ~39GB of RAM.
 class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
-    @tooslow
     def test_lm_generate_gptj(self):
-        # Marked as @tooslow due to GPU OOM
         model = TFGPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", from_pt=True)
         input_ids = tf.convert_to_tensor([[464, 3290]], dtype=tf.int32)  # The dog
-        # fmt: off
         # The dog is a man's best friend. It is a loyal companion, and it is a friend
-        expected_output_ids = [464, 3290, 318, 257, 582, 338, 1266, 1545, 13, 632, 318, 257, 9112, 15185, 11, 290, 340, 318, 257, 1545]
-        # fmt: on
+        expected_output_ids = [464, 3290, 318, 257, 582, 338, 1266, 1545, 13, 632, 318, 257, 9112, 15185, 11, 290, 340, 318, 257, 1545]  # fmt: skip
         output_ids = model.generate(input_ids, do_sample=False)
         self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
 
-    @tooslow
     def test_gptj_sample(self):
-        # Marked as @tooslow due to GPU OOM (issue #13676)
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
         model = TFGPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", from_pt=True)
 
-        tf.random.set_seed(0)
-        tokenized = tokenizer("Today is a nice day and", return_tensors="tf", return_token_type_ids=True)
-        input_ids, token_type_ids = tokenized.input_ids, tokenized.token_type_ids
-        output_ids = model.generate(input_ids, do_sample=True)
+        tokenized = tokenizer("Today is a nice day and", return_tensors="tf")
+        # forces the generation to happen on CPU, to avoid GPU-related quirks
+        with tf.device(":/CPU:0"):
+            output_ids = model.generate(**tokenized, do_sample=True, seed=[42, 0])
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
-        output_seq = model.generate(input_ids=input_ids, do_sample=True, num_return_sequences=5)
-        output_seq_tt = model.generate(
-            input_ids=input_ids, token_type_ids=token_type_ids, do_sample=True, num_return_sequences=5
-        )
-        output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
-        output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
-
-        EXPECTED_OUTPUT_STR = "Today is a nice day and I am taking an hour to sit in the hammock and just enjoy"
-
+        EXPECTED_OUTPUT_STR = "Today is a nice day and I’m going to go for a walk. I’"
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
-        self.assertTrue(
-            all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
-        )  # token_type_ids should change output
 
-    @slow
-    @unittest.skip(reason="TF generate currently has no time-based stopping criteria")
-    def test_gptj_sample_max_time(self):
-        tokenizer = AutoTokenizer.from_pretrained("anton-l/gpt-j-tiny-random")
-        model = TFGPTJForCausalLM.from_pretrained("anton-l/gpt-j-tiny-random", from_pt=True)
-
-        input_ids = tokenizer("Today is a nice day and", return_tensors="tf", return_token_type_ids=True).input_ids
-
-        MAX_TIME = 0.5
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, num_beams=2, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, num_beams=2, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-    @tooslow
-    def test_batch_generation(self):
-        # Marked as @tooslow due to GPU OOM
+    def _get_beam_search_test_objects(self):
         model = TFGPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", from_pt=True)
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
 
@@ -454,42 +417,46 @@ class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
             "Hello, my dog is a little",
             "Today, I",
         ]
+        expected_output_sentences = [
+            "Hello, my dog is a little over a year old and has been diagnosed with hip dysplasia",
+            "Today, I’m going to be talking about a topic that’",
+        ]
+        return model, tokenizer, sentences, expected_output_sentences
+
+    def test_batch_beam_search(self):
+        # Confirms that we get the expected results with left-padded beam search
+        model, tokenizer, sentences, expected_output_sentences = self._get_beam_search_test_objects()
 
         inputs = tokenizer(sentences, return_tensors="tf", padding=True)
-        input_ids = inputs["input_ids"]
-        token_type_ids = tf.concat(
-            [
-                tf.zeros((input_ids.shape[0], input_ids.shape[1] - 1), dtype=tf.int64),
-                500 * tf.ones((input_ids.shape[0], 1), dtype=tf.int64),
-            ],
-            axis=-1,
-        )
-
-        outputs = model.generate(input_ids=input_ids, attention_mask=inputs["attention_mask"])
-        outputs_tt = model.generate(
-            input_ids=input_ids,
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=token_type_ids,
-        )
-
-        inputs_non_padded = tokenizer(sentences[0], return_tensors="tf").input_ids
-        output_non_padded = model.generate(input_ids=inputs_non_padded)
-
-        num_paddings = (
-            shape_list(inputs_non_padded)[-1] - tf.reduce_sum(tf.cast(inputs["attention_mask"][-1], tf.int64)).numpy()
-        )
-        inputs_padded = tokenizer(sentences[1], return_tensors="tf").input_ids
-        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
-
+        outputs = model.generate(**inputs, do_sample=False, num_beams=2)
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)
+        self.assertListEqual(expected_output_sentences, batch_out_sentence)
+
+    def test_batch_left_padding(self):
+        # Confirms that left-padding is working properly
+        model, tokenizer, sentences, expected_output_sentences = self._get_beam_search_test_objects()
+
+        inputs = tokenizer(sentences, return_tensors="tf", padding=True)
+        inputs_non_padded = tokenizer(sentences[0], return_tensors="tf")
+        output_non_padded = model.generate(**inputs_non_padded, do_sample=False, num_beams=2)
+        num_paddings = (
+            shape_list(inputs_non_padded["input_ids"])[-1]
+            - tf.reduce_sum(tf.cast(inputs["attention_mask"][-1], tf.int64)).numpy()
+        )
+        inputs_padded = tokenizer(sentences[1], return_tensors="tf")
+        output_padded = model.generate(
+            **inputs_padded, do_sample=False, num_beams=2, max_length=model.config.max_length - num_paddings
+        )
         non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
+        self.assertListEqual(expected_output_sentences, [non_padded_sentence, padded_sentence])
 
-        expected_output_sentence = [
-            "Hello, my dog is a little over a year old and has been diagnosed with a heart murmur",
-            "Today, I’m going to share with you a few of my favorite",
-        ]
-        self.assertListEqual(expected_output_sentence, batch_out_sentence)
-        self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
-        self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
+    def test_xla_beam_search(self):
+        # Confirms that XLA is working properly
+        model, tokenizer, sentences, expected_output_sentences = self._get_beam_search_test_objects()
+
+        inputs = tokenizer(sentences, return_tensors="tf", padding=True)
+        xla_generate = tf.function(model.generate, jit_compile=True)
+        outputs_xla = xla_generate(**inputs, do_sample=False, num_beams=2)
+        xla_sentence = tokenizer.batch_decode(outputs_xla, skip_special_tokens=True)
+        self.assertListEqual(expected_output_sentences, xla_sentence)

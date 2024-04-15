@@ -18,12 +18,18 @@ import tempfile
 import unittest
 
 from transformers import BlenderbotSmallConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -84,7 +90,7 @@ class BlenderbotSmallModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        max_position_embeddings=50,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
@@ -106,6 +112,12 @@ class BlenderbotSmallModelTester:
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
+
+        # forcing a certain token to be generated, sets all other tokens to -inf
+        # if however the token to be generated is already at -inf then it can lead token
+        # `nan` values and thus break generation
+        self.forced_bos_token_id = None
+        self.forced_eos_token_id = None
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
@@ -135,6 +147,8 @@ class BlenderbotSmallModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
+            forced_bos_token_id=self.forced_bos_token_id,
+            forced_eos_token_id=self.forced_eos_token_id,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -209,12 +223,31 @@ class BlenderbotSmallModelTester:
 
 
 @require_torch
-class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BlenderbotSmallModel, BlenderbotSmallForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (BlenderbotSmallForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": BlenderbotSmallForConditionalGeneration,
+            "feature-extraction": BlenderbotSmallModel,
+            "summarization": BlenderbotSmallForConditionalGeneration,
+            "text-generation": BlenderbotSmallForCausalLM,
+            "text2text-generation": BlenderbotSmallForConditionalGeneration,
+            "translation": BlenderbotSmallForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
+    fx_compatible = True
     test_pruning = False
     test_missing_keys = False
+
+    # TODO: Fix the failed tests when this model gets more usage
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return pipeline_test_casse_name in ("TextGenerationPipelineTests", "ConversationalPipelineTests")
 
     def setUp(self):
         self.model_tester = BlenderbotSmallModelTester(self)
@@ -241,13 +274,13 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         model = BlenderbotSmallForConditionalGeneration(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
@@ -288,7 +321,6 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
 
     @slow
     def test_90_generation_from_long_input(self):
-
         src_text = [
             "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel"
             " like       i'm going to throw up.\nand why is that?"
@@ -335,7 +367,7 @@ class BlenderbotSmallStandaloneDecoderModelTester:
         use_labels=True,
         decoder_start_token_id=2,
         decoder_ffn_dim=32,
-        decoder_layers=4,
+        decoder_layers=2,
         encoder_attention_heads=4,
         decoder_attention_heads=4,
         max_position_embeddings=30,

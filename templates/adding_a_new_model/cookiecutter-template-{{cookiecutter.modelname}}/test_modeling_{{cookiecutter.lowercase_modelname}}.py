@@ -40,8 +40,7 @@ if is_torch_available():
         {{cookiecutter.camelcase_modelname}}Model,
     )
     from transformers.models.{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_modelname}} import (
-        {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
+        {{cookiecutter.uppercase_modelname}}    )
 
 
 class {{cookiecutter.camelcase_modelname}}ModelTester:
@@ -453,9 +452,9 @@ class {{cookiecutter.camelcase_modelname}}ModelTest(ModelTesterMixin, unittest.T
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = {{cookiecutter.camelcase_modelname}}Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "{{coockiecutter.checkpoint_identifier}}"
+        model = {{cookiecutter.camelcase_modelname}}Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
@@ -490,7 +489,7 @@ from transformers.utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 

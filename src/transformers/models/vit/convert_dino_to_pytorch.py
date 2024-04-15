@@ -19,12 +19,12 @@ import argparse
 import json
 from pathlib import Path
 
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import hf_hub_download
-from transformers import ViTConfig, ViTFeatureExtractor, ViTForImageClassification, ViTModel
+from transformers import ViTConfig, ViTForImageClassification, ViTImageProcessor, ViTModel
 from transformers.utils import logging
 
 
@@ -142,9 +142,9 @@ def convert_vit_checkpoint(model_name, pytorch_dump_folder_path, base_model=True
     # set labels if required
     if not base_model:
         config.num_labels = 1000
-        repo_id = "datasets/huggingface/label-files"
+        repo_id = "huggingface/label-files"
         filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -175,9 +175,9 @@ def convert_vit_checkpoint(model_name, pytorch_dump_folder_path, base_model=True
         model = ViTForImageClassification(config).eval()
     model.load_state_dict(state_dict)
 
-    # Check outputs on an image, prepared by ViTFeatureExtractor
-    feature_extractor = ViTFeatureExtractor()
-    encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
+    # Check outputs on an image, prepared by ViTImageProcessor
+    image_processor = ViTImageProcessor()
+    encoding = image_processor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values)
 
@@ -192,8 +192,8 @@ def convert_vit_checkpoint(model_name, pytorch_dump_folder_path, base_model=True
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import RobertaConfig, is_tf_available
@@ -21,6 +23,7 @@ from transformers.testing_utils import require_sentencepiece, require_tf, requir
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -28,7 +31,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.models.roberta.modeling_tf_roberta import (
-        TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFRobertaForCausalLM,
         TFRobertaForMaskedLM,
         TFRobertaForMultipleChoice,
@@ -53,7 +55,7 @@ class TFRobertaModelTester:
         self.use_labels = True
         self.vocab_size = 99
         self.hidden_size = 32
-        self.num_hidden_layers = 5
+        self.num_hidden_layers = 2
         self.num_attention_heads = 4
         self.intermediate_size = 37
         self.hidden_act = "gelu"
@@ -547,8 +549,7 @@ class TFRobertaModelTester:
 
 
 @require_tf
-class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
-
+class TFRobertaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFRobertaModel,
@@ -560,6 +561,19 @@ class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFRobertaModel,
+            "fill-mask": TFRobertaForMaskedLM,
+            "question-answering": TFRobertaForQuestionAnswering,
+            "text-classification": TFRobertaForSequenceClassification,
+            "text-generation": TFRobertaForCausalLM,
+            "token-classification": TFRobertaForTokenClassification,
+            "zero-shot": TFRobertaForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
     )
     test_head_masking = False
     test_onnx = False
@@ -640,9 +654,9 @@ class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFRobertaModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "FacebookAI/roberta-base"
+        model = TFRobertaModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_tf
@@ -651,7 +665,7 @@ class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
 class TFRobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = TFRobertaForMaskedLM.from_pretrained("roberta-base")
+        model = TFRobertaForMaskedLM.from_pretrained("FacebookAI/roberta-base")
 
         input_ids = tf.constant([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]
@@ -665,7 +679,7 @@ class TFRobertaModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        model = TFRobertaModel.from_pretrained("roberta-base")
+        model = TFRobertaModel.from_pretrained("FacebookAI/roberta-base")
 
         input_ids = tf.constant([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]
@@ -677,7 +691,7 @@ class TFRobertaModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_classification_head(self):
-        model = TFRobertaForSequenceClassification.from_pretrained("roberta-large-mnli")
+        model = TFRobertaForSequenceClassification.from_pretrained("FacebookAI/roberta-large-mnli")
 
         input_ids = tf.constant([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]

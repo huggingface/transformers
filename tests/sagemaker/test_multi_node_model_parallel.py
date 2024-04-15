@@ -5,7 +5,6 @@ import unittest
 from ast import literal_eval
 
 import pytest
-
 from parameterized import parameterized, parameterized_class
 
 from . import is_sagemaker_available
@@ -26,14 +25,14 @@ if is_sagemaker_available():
         {
             "framework": "pytorch",
             "script": "run_glue_model_parallelism.py",
-            "model_name_or_path": "roberta-large",
+            "model_name_or_path": "FacebookAI/roberta-large",
             "instance_type": "ml.p3dn.24xlarge",
             "results": {"train_runtime": 1600, "eval_accuracy": 0.3, "eval_loss": 1.2},
         },
         {
             "framework": "pytorch",
             "script": "run_glue.py",
-            "model_name_or_path": "roberta-large",
+            "model_name_or_path": "FacebookAI/roberta-large",
             "instance_type": "ml.p3dn.24xlarge",
             "results": {"train_runtime": 1600, "eval_accuracy": 0.3, "eval_loss": 1.2},
         },
@@ -50,7 +49,6 @@ class MultiNodeTest(unittest.TestCase):
         assert hasattr(self, "env")
 
     def create_estimator(self, instance_count):
-
         # configuration for running training on smdistributed Model Parallel
         mpi_options = {
             "enabled": True,

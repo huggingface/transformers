@@ -32,7 +32,7 @@ class DeeBertEncoder(nn.Module):
         self.early_exit_entropy = [-1 for _ in range(config.num_hidden_layers)]
 
     def set_early_exit_entropy(self, x):
-        if (type(x) is float) or (type(x) is int):
+        if isinstance(x, (float, int)):
             for i in range(len(self.early_exit_entropy)):
                 self.early_exit_entropy[i] = x
         else:
@@ -229,9 +229,10 @@ class DeeBertModel(BertPreTrainedModel):
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
 
-        outputs = (sequence_output, pooled_output,) + encoder_outputs[
-            1:
-        ]  # add hidden_states and attentions if they are here
+        outputs = (
+            sequence_output,
+            pooled_output,
+        ) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
         return outputs  # sequence_output, pooled_output, (hidden_states), (attentions), highway exits
 
 

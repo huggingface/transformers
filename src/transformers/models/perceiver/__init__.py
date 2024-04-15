@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +23,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig"],
+    "configuration_perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverOnnxConfig"],
     "tokenization_perceiver": ["PerceiverTokenizer"],
 }
 
@@ -38,6 +34,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_perceiver"] = ["PerceiverFeatureExtractor"]
+    _import_structure["image_processing_perceiver"] = ["PerceiverImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -61,7 +58,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig
+    from .configuration_perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverOnnxConfig
     from .tokenization_perceiver import PerceiverTokenizer
 
     try:
@@ -71,6 +68,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_perceiver import PerceiverFeatureExtractor
+        from .image_processing_perceiver import PerceiverImageProcessor
 
     try:
         if not is_torch_available():

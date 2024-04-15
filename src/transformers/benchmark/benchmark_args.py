@@ -17,14 +17,21 @@
 from dataclasses import dataclass, field
 from typing import Tuple
 
-from ..utils import cached_property, is_torch_available, is_torch_tpu_available, logging, torch_required
+from ..utils import (
+    cached_property,
+    is_torch_available,
+    is_torch_xla_available,
+    is_torch_xpu_available,
+    logging,
+    requires_backends,
+)
 from .benchmark_args_utils import BenchmarkArguments
 
 
 if is_torch_available():
     import torch
 
-if is_torch_tpu_available():
+if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 
@@ -33,7 +40,6 @@ logger = logging.get_logger(__name__)
 
 @dataclass
 class PyTorchBenchmarkArguments(BenchmarkArguments):
-
     deprecated_args = [
         "no_inference",
         "no_cuda",
@@ -76,15 +82,18 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
     )
 
     @cached_property
-    @torch_required
     def _setup_devices(self) -> Tuple["torch.device", int]:
+        requires_backends(self, ["torch"])
         logger.info("PyTorch: setting up devices")
         if not self.cuda:
             device = torch.device("cpu")
             n_gpu = 0
-        elif is_torch_tpu_available():
+        elif is_torch_xla_available():
             device = xm.xla_device()
             n_gpu = 0
+        elif is_torch_xpu_available():
+            device = torch.device("xpu")
+            n_gpu = torch.xpu.device_count()
         else:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             n_gpu = torch.cuda.device_count()
@@ -92,22 +101,22 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
 
     @property
     def is_tpu(self):
-        return is_torch_tpu_available() and self.tpu
+        return is_torch_xla_available() and self.tpu
 
     @property
-    @torch_required
     def device_idx(self) -> int:
+        requires_backends(self, ["torch"])
         # TODO(PVP): currently only single GPU is supported
         return torch.cuda.current_device()
 
     @property
-    @torch_required
     def device(self) -> "torch.device":
+        requires_backends(self, ["torch"])
         return self._setup_devices[0]
 
     @property
-    @torch_required
     def n_gpu(self):
+        requires_backends(self, ["torch"])
         return self._setup_devices[1]
 
     @property

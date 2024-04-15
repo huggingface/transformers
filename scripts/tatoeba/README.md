@@ -23,7 +23,7 @@ pip install pandas GitPython wget
 ```
 
 Get required metadata
-```
+```bash
 curl https://cdn-datasets.huggingface.co/language_codes/language-codes-3b2.csv  > language-codes-3b2.csv
 curl https://cdn-datasets.huggingface.co/language_codes/iso-639-3.csv > iso-639-3.csv
 ```
@@ -54,10 +54,10 @@ To upload all converted models,
 
 1. Install [git-lfs](https://git-lfs.github.com/).
 
-2. Login to `transformers-cli`
+2. Login to `huggingface-cli`
 
 ```bash
-transformers-cli login
+huggingface-cli login
 ```
 
 3. Run the `upload_models` script

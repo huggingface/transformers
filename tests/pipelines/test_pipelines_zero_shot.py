@@ -23,15 +23,26 @@ from transformers import (
 )
 from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch, slow
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
+
+
+# These 2 model types require different inputs than those of the usual text models.
+_TO_SKIP = {"LayoutLMv2Config", "LayoutLMv3Config"}
 
 
 @is_pipeline_test
-class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class ZeroShotClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    if model_mapping is not None:
+        model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
+    if tf_model_mapping is not None:
+        tf_model_mapping = {
+            config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
+        }
+
+    def get_test_pipeline(self, model, tokenizer, processor):
         classifier = ZeroShotClassificationPipeline(
             model=model, tokenizer=tokenizer, candidate_labels=["polics", "health"]
         )
@@ -188,7 +199,9 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
     @slow
     @require_torch
     def test_large_model_pt(self):
-        zero_shot_classifier = pipeline("zero-shot-classification", model="roberta-large-mnli", framework="pt")
+        zero_shot_classifier = pipeline(
+            "zero-shot-classification", model="FacebookAI/roberta-large-mnli", framework="pt"
+        )
         outputs = zero_shot_classifier(
             "Who are you voting for in 2020?", candidate_labels=["politics", "public health", "science"]
         )
@@ -243,7 +256,9 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
     @slow
     @require_tf
     def test_large_model_tf(self):
-        zero_shot_classifier = pipeline("zero-shot-classification", model="roberta-large-mnli", framework="tf")
+        zero_shot_classifier = pipeline(
+            "zero-shot-classification", model="FacebookAI/roberta-large-mnli", framework="tf"
+        )
         outputs = zero_shot_classifier(
             "Who are you voting for in 2020?", candidate_labels=["politics", "public health", "science"]
         )

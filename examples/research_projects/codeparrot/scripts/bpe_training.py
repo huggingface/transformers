@@ -1,7 +1,7 @@
+from arguments import TokenizerTrainingArguments
 from datasets import load_dataset
 from tqdm import tqdm
 
-from arguments import TokenizerTrainingArguments
 from transformers import AutoTokenizer, HfArgumentParser
 from transformers.models.gpt2.tokenization_gpt2 import bytes_to_unicode
 

@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -73,6 +69,7 @@ else:
 if is_tf_available():
     _import_structure["modeling_tf_data2vec_vision"] = [
         "TFData2VecVisionForImageClassification",
+        "TFData2VecVisionForSemanticSegmentation",
         "TFData2VecVisionModel",
         "TFData2VecVisionPreTrainedModel",
     ]
@@ -127,6 +124,7 @@ if TYPE_CHECKING:
     if is_tf_available():
         from .modeling_tf_data2vec_vision import (
             TFData2VecVisionForImageClassification,
+            TFData2VecVisionForSemanticSegmentation,
             TFData2VecVisionModel,
             TFData2VecVisionPreTrainedModel,
         )

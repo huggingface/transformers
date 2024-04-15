@@ -14,12 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
+from typing import TYPE_CHECKING, Any, Mapping, Optional, OrderedDict
+
+from packaging import version
 
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
+
+if TYPE_CHECKING:
+    from ... import PreTrainedTokenizerBase, TensorType
 
 logger = logging.get_logger(__name__)
 
@@ -53,7 +59,7 @@ class VisionEncoderDecoderConfig(PretrainedConfig):
 
     >>> config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
 
-    >>> # Initializing a ViTBert model from a ViT & bert-base-uncased style configurations
+    >>> # Initializing a ViTBert model (with random weights) from a ViT & google-bert/bert-base-uncased style configurations
     >>> model = VisionEncoderDecoderModel(config=config)
 
     >>> # Accessing the model configuration
@@ -70,6 +76,7 @@ class VisionEncoderDecoderConfig(PretrainedConfig):
     >>> encoder_decoder_config = VisionEncoderDecoderConfig.from_pretrained("my-model")
     >>> model = VisionEncoderDecoderModel.from_pretrained("my-model", config=encoder_decoder_config)
     ```"""
+
     model_type = "vision-encoder-decoder"
     is_composition = True
 
@@ -107,15 +114,96 @@ class VisionEncoderDecoderConfig(PretrainedConfig):
 
         return cls(encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict(), **kwargs)
 
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default *to_dict()* from *PretrainedConfig*.
+
+class VisionEncoderDecoderEncoderOnnxConfig(OnnxConfig):
+    torch_onnx_minimum_version = version.parse("1.11")
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4
+
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict({"last_hidden_state": {0: "batch", 1: "encoder_sequence"}})
+
+
+class VisionEncoderDecoderDecoderOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        common_inputs = OrderedDict()
+        common_inputs["input_ids"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
+        common_inputs["attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
+        common_inputs["encoder_hidden_states"] = {0: "batch", 1: "encoder_sequence"}
+
+        return common_inputs
+
+    def generate_dummy_inputs(
+        self,
+        tokenizer: "PreTrainedTokenizerBase",
+        batch_size: int = -1,
+        seq_length: int = -1,
+        is_pair: bool = False,
+        framework: Optional["TensorType"] = None,
+    ) -> Mapping[str, Any]:
+        import torch
+
+        common_inputs = OrderedDict()
+
+        dummy_input = super().generate_dummy_inputs(
+            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+        )
+
+        batch, encoder_sequence = dummy_input["input_ids"].shape
+        encoder_hidden_states_shape = (batch, encoder_sequence, self._config.encoder_hidden_size)
+        common_inputs["input_ids"] = dummy_input.pop("input_ids")
+        common_inputs["attention_mask"] = dummy_input.pop("attention_mask")
+        common_inputs["encoder_hidden_states"] = torch.zeros(encoder_hidden_states_shape)
+
+        return common_inputs
+
+
+class VisionEncoderDecoderOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> None:
+        pass
+
+    def get_encoder_config(self, encoder_config: PretrainedConfig) -> OnnxConfig:
+        r"""
+        Returns ONNX encoder config for `VisionEncoderDecoder` model.
+
+        Args:
+            encoder_config (`PretrainedConfig`):
+                The encoder model's configuration to use when exporting to ONNX.
 
         Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+            [`VisionEncoderDecoderEncoderOnnxConfig`]: An instance of the ONNX configuration object
         """
-        output = copy.deepcopy(self.__dict__)
-        output["encoder"] = self.encoder.to_dict()
-        output["decoder"] = self.decoder.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
+        return VisionEncoderDecoderEncoderOnnxConfig(encoder_config)
+
+    def get_decoder_config(
+        self, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig, feature: str = "default"
+    ) -> OnnxConfig:
+        r"""
+        Returns ONNX decoder config for `VisionEncoderDecoder` model.
+
+        Args:
+            encoder_config (`PretrainedConfig`):
+                The encoder model's configuration to use when exporting to ONNX.
+            decoder_config (`PretrainedConfig`):
+                The decoder model's configuration to use when exporting to ONNX
+            feature (`str`, *optional*):
+                The type of feature to export the model with.
+
+        Returns:
+            [`VisionEncoderDecoderDecoderOnnxConfig`]: An instance of the ONNX configuration object.
+        """
+        decoder_config.encoder_hidden_size = encoder_config.hidden_size
+        return VisionEncoderDecoderDecoderOnnxConfig(decoder_config, feature)

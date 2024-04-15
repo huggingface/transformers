@@ -122,6 +122,11 @@ def _prepare_output_docstrings(output_type, config_class, min_indent=None):
     if i < len(lines):
         params_docstring = "\n".join(lines[(i + 1) :])
         params_docstring = _convert_output_args_doc(params_docstring)
+    else:
+        raise ValueError(
+            f"No `Args` or `Parameters` section is found in the docstring of `{output_type.__name__}`. Make sure it has "
+            "docstring and contain either `Args` or `Parameters`."
+        )
 
     # Add the return introduction
     full_output_type = f"{output_type.__module__}.{output_type.__name__}"
@@ -146,14 +151,25 @@ def _prepare_output_docstrings(output_type, config_class, min_indent=None):
     return result
 
 
+FAKE_MODEL_DISCLAIMER = """
+    <Tip warning={true}>
+
+    This example uses a random model as the real ones are all very big. To get proper results, you should use
+    {real_checkpoint} instead of {fake_checkpoint}. If you get out-of-memory when loading that checkpoint, you can try
+    adding `device_map="auto"` in the `from_pretrained` call.
+
+    </Tip>
+"""
+
+
 PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
     >>> import torch
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer(
@@ -171,9 +187,7 @@ PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
     >>> predicted_tokens_classes = [model.config.id2label[t.item()] for t in predicted_token_class_ids[0]]
     >>> predicted_tokens_classes
     {expected_output}
-    ```
 
-    ```python
     >>> labels = predicted_token_class_ids
     >>> loss = model(**inputs, labels=labels).loss
     >>> round(loss.item(), 2)
@@ -185,10 +199,10 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
     >>> import torch
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
@@ -201,11 +215,9 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
     >>> answer_end_index = outputs.end_logits.argmax()
 
     >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
-    >>> tokenizer.decode(predict_answer_tokens)
+    >>> tokenizer.decode(predict_answer_tokens, skip_special_tokens=True)
     {expected_output}
-    ```
 
-    ```python
     >>> # target is "nice puppet"
     >>> target_start_index = torch.tensor([{qa_target_start_index}])
     >>> target_end_index = torch.tensor([{qa_target_end_index}])
@@ -222,9 +234,9 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
 
     ```python
     >>> import torch
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -235,14 +247,12 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> predicted_class_id = logits.argmax().item()
     >>> model.config.id2label[predicted_class_id]
     {expected_output}
-    ```
 
-    ```python
     >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
     >>> num_labels = len(model.config.id2label)
     >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=num_labels)
 
-    >>> labels = torch.tensor(1)
+    >>> labels = torch.tensor([1])
     >>> loss = model(**inputs, labels=labels).loss
     >>> round(loss.item(), 2)
     {expected_loss}
@@ -252,9 +262,9 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
 
     ```python
     >>> import torch
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}", problem_type="multi_label_classification")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -262,23 +272,18 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> with torch.no_grad():
     ...     logits = model(**inputs).logits
 
-    >>> predicted_class_id = logits.argmax().item()
-    >>> model.config.id2label[predicted_class_id]
-    {expected_output}
-    ```
+    >>> predicted_class_ids = torch.arange(0, logits.shape[-1])[torch.sigmoid(logits).squeeze(dim=0) > 0.5]
 
-    ```python
     >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
     >>> num_labels = len(model.config.id2label)
     >>> model = {model_class}.from_pretrained(
     ...     "{checkpoint}", num_labels=num_labels, problem_type="multi_label_classification"
     ... )
 
-    >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
-    ...     torch.float
-    ... )
+    >>> labels = torch.sum(
+    ...     torch.nn.functional.one_hot(predicted_class_ids[None, :].clone(), num_classes=num_labels), dim=1
+    ... ).to(torch.float)
     >>> loss = model(**inputs, labels=labels).loss
-    >>> loss.backward()  # doctest: +IGNORE_RESULT
     ```
 """
 
@@ -286,10 +291,10 @@ PT_MASKED_LM_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
     >>> import torch
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="pt")
@@ -303,9 +308,7 @@ PT_MASKED_LM_SAMPLE = r"""
     >>> predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
     >>> tokenizer.decode(predicted_token_id)
     {expected_output}
-    ```
 
-    ```python
     >>> labels = tokenizer("The capital of France is Paris.", return_tensors="pt")["input_ids"]
     >>> # mask labels of non-{mask} tokens
     >>> labels = torch.where(inputs.input_ids == tokenizer.mask_token_id, labels, -100)
@@ -320,10 +323,10 @@ PT_BASE_MODEL_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
     >>> import torch
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -337,10 +340,10 @@ PT_MULTIPLE_CHOICE_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
     >>> import torch
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
@@ -362,9 +365,9 @@ PT_CAUSAL_LM_SAMPLE = r"""
 
     ```python
     >>> import torch
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -378,7 +381,7 @@ PT_SPEECH_BASE_MODEL_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoProcessor, {model_class}
     >>> import torch
     >>> from datasets import load_dataset
 
@@ -386,7 +389,7 @@ PT_SPEECH_BASE_MODEL_SAMPLE = r"""
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
-    >>> processor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> processor = AutoProcessor.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> # audio file is decoded on the fly
@@ -404,7 +407,7 @@ PT_SPEECH_CTC_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoProcessor, {model_class}
     >>> from datasets import load_dataset
     >>> import torch
 
@@ -412,7 +415,7 @@ PT_SPEECH_CTC_SAMPLE = r"""
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
-    >>> processor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> processor = AutoProcessor.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> # audio file is decoded on the fly
@@ -425,11 +428,8 @@ PT_SPEECH_CTC_SAMPLE = r"""
     >>> transcription = processor.batch_decode(predicted_ids)
     >>> transcription[0]
     {expected_output}
-    ```
 
-    ```python
-    >>> with processor.as_target_processor():
-    ...     inputs["labels"] = processor(dataset[0]["text"], return_tensors="pt").input_ids
+    >>> inputs["labels"] = processor(text=dataset[0]["text"], return_tensors="pt").input_ids
 
     >>> # compute loss
     >>> loss = model(**inputs).loss
@@ -442,7 +442,7 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoFeatureExtractor, {model_class}
     >>> from datasets import load_dataset
     >>> import torch
 
@@ -450,7 +450,7 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
-    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> feature_extractor = AutoFeatureExtractor.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> # audio file is decoded on the fly
@@ -463,9 +463,7 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
     >>> predicted_label = model.config.id2label[predicted_class_ids]
     >>> predicted_label
     {expected_output}
-    ```
 
-    ```python
     >>> # compute loss - target_label is e.g. "down"
     >>> target_label = model.config.id2label[0]
     >>> inputs["labels"] = torch.tensor([model.config.label2id[target_label]])
@@ -480,7 +478,7 @@ PT_SPEECH_FRAME_CLASS_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoFeatureExtractor, {model_class}
     >>> from datasets import load_dataset
     >>> import torch
 
@@ -488,7 +486,7 @@ PT_SPEECH_FRAME_CLASS_SAMPLE = r"""
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
-    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> feature_extractor = AutoFeatureExtractor.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> # audio file is decoded on the fly
@@ -509,7 +507,7 @@ PT_SPEECH_XVECTOR_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoFeatureExtractor, {model_class}
     >>> from datasets import load_dataset
     >>> import torch
 
@@ -517,7 +515,7 @@ PT_SPEECH_XVECTOR_SAMPLE = r"""
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
-    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> feature_extractor = AutoFeatureExtractor.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> # audio file is decoded on the fly
@@ -544,17 +542,17 @@ PT_VISION_BASE_MODEL_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoImageProcessor, {model_class}
     >>> import torch
     >>> from datasets import load_dataset
 
     >>> dataset = load_dataset("huggingface/cats-image")
     >>> image = dataset["test"]["image"][0]
 
-    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> image_processor = AutoImageProcessor.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-    >>> inputs = feature_extractor(image, return_tensors="pt")
+    >>> inputs = image_processor(image, return_tensors="pt")
 
     >>> with torch.no_grad():
     ...     outputs = model(**inputs)
@@ -569,17 +567,17 @@ PT_VISION_SEQ_CLASS_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoImageProcessor, {model_class}
     >>> import torch
     >>> from datasets import load_dataset
 
     >>> dataset = load_dataset("huggingface/cats-image")
     >>> image = dataset["test"]["image"][0]
 
-    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> image_processor = AutoImageProcessor.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-    >>> inputs = feature_extractor(image, return_tensors="pt")
+    >>> inputs = image_processor(image, return_tensors="pt")
 
     >>> with torch.no_grad():
     ...     logits = model(**inputs).logits
@@ -614,10 +612,10 @@ TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
     >>> import tensorflow as tf
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer(
@@ -647,10 +645,10 @@ TF_QUESTION_ANSWERING_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
     >>> import tensorflow as tf
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
@@ -682,10 +680,10 @@ TF_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
     >>> import tensorflow as tf
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
@@ -713,10 +711,10 @@ TF_MASKED_LM_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
     >>> import tensorflow as tf
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="tf")
@@ -746,10 +744,10 @@ TF_BASE_MODEL_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
     >>> import tensorflow as tf
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
@@ -763,10 +761,10 @@ TF_MULTIPLE_CHOICE_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
     >>> import tensorflow as tf
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
@@ -786,10 +784,10 @@ TF_CAUSAL_LM_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
     >>> import tensorflow as tf
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
@@ -802,14 +800,14 @@ TF_SPEECH_BASE_MODEL_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoProcessor, {model_class}
     >>> from datasets import load_dataset
 
     >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
-    >>> processor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> processor = AutoProcessor.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> # audio file is decoded on the fly
@@ -826,7 +824,7 @@ TF_SPEECH_CTC_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoProcessor, {model_class}
     >>> from datasets import load_dataset
     >>> import tensorflow as tf
 
@@ -834,7 +832,7 @@ TF_SPEECH_CTC_SAMPLE = r"""
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
-    >>> processor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> processor = AutoProcessor.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> # audio file is decoded on the fly
@@ -849,8 +847,7 @@ TF_SPEECH_CTC_SAMPLE = r"""
     ```
 
     ```python
-    >>> with processor.as_target_processor():
-    ...     inputs["labels"] = processor(dataset[0]["text"], return_tensors="tf").input_ids
+    >>> inputs["labels"] = processor(text=dataset[0]["text"], return_tensors="tf").input_ids
 
     >>> # compute loss
     >>> loss = model(**inputs).loss
@@ -863,16 +860,16 @@ TF_VISION_BASE_MODEL_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoImageProcessor, {model_class}
     >>> from datasets import load_dataset
 
     >>> dataset = load_dataset("huggingface/cats-image")
     >>> image = dataset["test"]["image"][0]
 
-    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> image_processor = AutoImageProcessor.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-    >>> inputs = feature_extractor(image, return_tensors="tf")
+    >>> inputs = image_processor(image, return_tensors="tf")
     >>> outputs = model(**inputs)
 
     >>> last_hidden_states = outputs.last_hidden_state
@@ -885,17 +882,17 @@ TF_VISION_SEQ_CLASS_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoImageProcessor, {model_class}
     >>> import tensorflow as tf
     >>> from datasets import load_dataset
 
     >>> dataset = load_dataset("huggingface/cats-image")
     >>> image = dataset["test"]["image"][0]
 
-    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> image_processor = AutoImageProcessor.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-    >>> inputs = feature_extractor(image, return_tensors="tf")
+    >>> inputs = image_processor(image, return_tensors="tf")
     >>> logits = model(**inputs).logits
 
     >>> # model predicts one of the 1000 ImageNet classes
@@ -924,9 +921,9 @@ FLAX_TOKEN_CLASSIFICATION_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
@@ -940,9 +937,9 @@ FLAX_QUESTION_ANSWERING_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
@@ -958,9 +955,9 @@ FLAX_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
@@ -974,9 +971,9 @@ FLAX_MASKED_LM_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="jax")
@@ -990,9 +987,9 @@ FLAX_BASE_MODEL_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
@@ -1006,9 +1003,9 @@ FLAX_MULTIPLE_CHOICE_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
@@ -1026,9 +1023,9 @@ FLAX_CAUSAL_LM_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
+    >>> from transformers import AutoTokenizer, {model_class}
 
-    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
@@ -1050,6 +1047,20 @@ FLAX_SAMPLE_DOCSTRINGS = {
 }
 
 
+def filter_outputs_from_example(docstring, **kwargs):
+    """
+    Removes the lines testing an output with the doctest syntax in a code sample when it's set to `None`.
+    """
+    for key, value in kwargs.items():
+        if value is not None:
+            continue
+
+        doc_key = "{" + key + "}"
+        docstring = re.sub(rf"\n([^\n]+)\n\s+{doc_key}\n", "\n", docstring)
+
+    return docstring
+
+
 def add_code_sample_docstrings(
     *docstr,
     processor_class=None,
@@ -1061,8 +1072,10 @@ def add_code_sample_docstrings(
     qa_target_end_index=15,
     model_cls=None,
     modality=None,
-    expected_output="",
-    expected_loss="",
+    expected_output=None,
+    expected_loss=None,
+    real_checkpoint=None,
+    revision=None,
 ):
     def docstring_decorator(fn):
         # model_class defaults to function's class if not specified otherwise
@@ -1078,18 +1091,21 @@ def add_code_sample_docstrings(
         # putting all kwargs for docstrings in a dict to be used
         # with the `.format(**doc_kwargs)`. Note that string might
         # be formatted with non-existing keys, which is fine.
-        doc_kwargs = dict(
-            model_class=model_class,
-            processor_class=processor_class,
-            checkpoint=checkpoint,
-            mask=mask,
-            qa_target_start_index=qa_target_start_index,
-            qa_target_end_index=qa_target_end_index,
-            expected_output=expected_output,
-            expected_loss=expected_loss,
-        )
+        doc_kwargs = {
+            "model_class": model_class,
+            "processor_class": processor_class,
+            "checkpoint": checkpoint,
+            "mask": mask,
+            "qa_target_start_index": qa_target_start_index,
+            "qa_target_end_index": qa_target_end_index,
+            "expected_output": expected_output,
+            "expected_loss": expected_loss,
+            "real_checkpoint": real_checkpoint,
+            "fake_checkpoint": checkpoint,
+            "true": "{true}",  # For <Tip warning={true}> syntax that conflicts with formatting.
+        }
 
-        if "SequenceClassification" in model_class and modality == "audio":
+        if ("SequenceClassification" in model_class or "AudioClassification" in model_class) and modality == "audio":
             code_sample = sample_docstrings["AudioClassification"]
         elif "SequenceClassification" in model_class:
             code_sample = sample_docstrings["SequenceClassification"]
@@ -1120,9 +1136,23 @@ def add_code_sample_docstrings(
         else:
             raise ValueError(f"Docstring can't be built for model {model_class}")
 
+        code_sample = filter_outputs_from_example(
+            code_sample, expected_output=expected_output, expected_loss=expected_loss
+        )
+        if real_checkpoint is not None:
+            code_sample = FAKE_MODEL_DISCLAIMER + code_sample
         func_doc = (fn.__doc__ or "") + "".join(docstr)
         output_doc = "" if output_type is None else _prepare_output_docstrings(output_type, config_class)
         built_doc = code_sample.format(**doc_kwargs)
+        if revision is not None:
+            if re.match(r"^refs/pr/\\d+", revision):
+                raise ValueError(
+                    f"The provided revision '{revision}' is incorrect. It should point to"
+                    " a pull request reference on the hub like 'refs/pr/6'"
+                )
+            built_doc = built_doc.replace(
+                f'from_pretrained("{checkpoint}")', f'from_pretrained("{checkpoint}", revision="{revision}")'
+            )
         fn.__doc__ = func_doc + output_doc + built_doc
         return fn
 

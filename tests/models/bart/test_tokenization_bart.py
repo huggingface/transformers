@@ -25,6 +25,7 @@ from ...test_tokenization_common import TokenizerTesterMixin, filter_roberta_det
 
 @require_tokenizers
 class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/bart-base"
     tokenizer_class = BartTokenizer
     rust_tokenizer_class = BartTokenizerFast
     test_rust_tokenizer = True
@@ -112,14 +113,13 @@ class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
             self.assertNotIn("decoder_attention_mask", batch)
 
     @require_torch
-    def test_as_target_tokenizer_target_length(self):
+    def test_tokenizer_as_target_length(self):
         tgt_text = [
             "Summary of the text.",
             "Another summary.",
         ]
         for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
-            with tokenizer.as_target_tokenizer():
-                targets = tokenizer(tgt_text, max_length=32, padding="max_length", return_tensors="pt")
+            targets = tokenizer(text_target=tgt_text, max_length=32, padding="max_length", return_tensors="pt")
             self.assertEqual(32, targets["input_ids"].shape[1])
 
     @require_torch
@@ -133,15 +133,13 @@ class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_special_tokens(self):
-
         src_text = ["A long paragraph for summarization."]
         tgt_text = [
             "Summary of the text.",
         ]
         for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
             inputs = tokenizer(src_text, return_tensors="pt")
-            with tokenizer.as_target_tokenizer():
-                targets = tokenizer(tgt_text, return_tensors="pt")
+            targets = tokenizer(text_target=tgt_text, return_tensors="pt")
             input_ids = inputs["input_ids"]
             labels = targets["input_ids"]
             self.assertTrue((input_ids[:, 0] == tokenizer.bos_token_id).all().item())
@@ -173,7 +171,6 @@ class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
                 tokens_r_str = tokenizer_r.convert_ids_to_tokens(tokens_r["input_ids"])
                 tokens_p_str = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
 
-                # Rust correctly handles the space before the mask while python doesnt
                 self.assertSequenceEqual(tokens_p["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
                 self.assertSequenceEqual(tokens_r["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
 

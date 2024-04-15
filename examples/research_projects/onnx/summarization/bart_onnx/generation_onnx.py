@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 
 from transformers import BartConfig
-from transformers.generation_utils import GenerationMixin
+from transformers.generation import GenerationMixin
 
 
 def _convert_past_list_to_tuple(past_key_values):
@@ -264,7 +264,6 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
 
         past: List[torch.Tensor] = []
         while cur_len < max_length:
-
             logits, past = self._decoder_forward(input_ids, encoder_output, attention_mask, past)
             next_token_logits = logits[:, -1, :]
 
@@ -303,7 +302,6 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
         decoder_start_token_id,
         bos_token_id: Optional[int] = None,
     ) -> torch.LongTensor:
-
         decoder_input_ids = (
             torch.ones((input_ids.shape[0], 1), dtype=input_ids.dtype, device=input_ids.device)
             * decoder_start_token_id
@@ -633,7 +631,6 @@ class BARTBeamSearchGenerator(BARTGenerator):
     def beam_search(
         self, input_ids, encoder_output, attention_mask, num_beams, max_length, pad_token_id: int, eos_token_id: int
     ):
-
         batch_size = self.beam_scorer.batch_size
 
         num_beams = self.beam_scorer.num_beams

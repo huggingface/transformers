@@ -23,6 +23,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, global_rng, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -35,7 +36,6 @@ if is_torch_available():
         CanineForTokenClassification,
         CanineModel,
     )
-    from transformers.models.canine.modeling_canine import CANINE_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class CanineModelTester:
@@ -48,8 +48,11 @@ class CanineModelTester:
         use_input_mask=True,
         use_token_type_ids=True,
         use_labels=True,
+        # let's use a vocab size that's way bigger than BERT's one
+        # NOTE: this is not a model parameter, just an input
+        vocab_size=100000,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -61,6 +64,7 @@ class CanineModelTester:
         initializer_range=0.02,
         num_labels=3,
         num_choices=4,
+        num_hash_buckets=16,
         scope=None,
     ):
         self.parent = parent
@@ -70,6 +74,7 @@ class CanineModelTester:
         self.use_input_mask = use_input_mask
         self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
+        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -83,11 +88,11 @@ class CanineModelTester:
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.num_choices = num_choices
+        self.num_hash_buckets = num_hash_buckets
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        # let's use a vocab size that's way bigger than BERT's one
-        input_ids = ids_tensor([self.batch_size, self.seq_length], 100000)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         input_mask = None
         if self.use_input_mask:
@@ -122,6 +127,7 @@ class CanineModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            num_hash_buckets=self.num_hash_buckets,
         )
 
     def create_and_check_model(
@@ -205,8 +211,7 @@ class CanineModelTester:
 
 
 @require_torch
-class CanineModelTest(ModelTesterMixin, unittest.TestCase):
-
+class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             CanineModel,
@@ -217,6 +222,17 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": CanineModel,
+            "question-answering": CanineForQuestionAnswering,
+            "text-classification": CanineForSequenceClassification,
+            "token-classification": CanineForTokenClassification,
+            "zero-shot": CanineForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
 
     test_mismatched_shapes = False
@@ -490,11 +506,29 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CANINE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CanineModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/canine-s"
+        model = CanineModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

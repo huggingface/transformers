@@ -14,6 +14,8 @@
 # limitations under the License.
 """ Testing suite for the TensorFlow Data2VecVision model. """
 
+from __future__ import annotations
+
 import collections.abc
 import inspect
 import unittest
@@ -26,20 +28,23 @@ from transformers.testing_utils import require_tf, require_vision, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFData2VecVisionForImageClassification, TFData2VecVisionModel
-    from transformers.models.data2vec.modeling_tf_data2vec_vision import (
-        TF_DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
+    from transformers import (
+        TFData2VecVisionForImageClassification,
+        TFData2VecVisionForSemanticSegmentation,
+        TFData2VecVisionModel,
     )
+    from transformers.modeling_tf_utils import keras
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import BeitFeatureExtractor
+    from transformers import BeitImageProcessor
 
 
 class TFData2VecVisionModelTester:
@@ -54,7 +59,7 @@ class TFData2VecVisionModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -142,6 +147,18 @@ class TFData2VecVisionModelTester:
         result = model(pixel_values, labels=labels, training=False)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
+    def create_and_check_for_image_segmentation(self, config, pixel_values, labels, pixel_labels):
+        config.num_labels = self.num_labels
+        model = TFData2VecVisionForSemanticSegmentation(config)
+        result = model(pixel_values, training=False)
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_labels, self.image_size * 2, self.image_size * 2)
+        )
+        result = model(pixel_values, labels=pixel_labels)
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_labels, self.image_size * 2, self.image_size * 2)
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels, pixel_labels = config_and_inputs
@@ -156,13 +173,22 @@ class TFData2VecVisionModelTester:
 
 
 @require_tf
-class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as Data2VecVision does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (TFData2VecVisionModel, TFData2VecVisionForImageClassification) if is_tf_available() else ()
+    all_model_classes = (
+        (TFData2VecVisionModel, TFData2VecVisionForImageClassification, TFData2VecVisionForSemanticSegmentation)
+        if is_tf_available()
+        else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": TFData2VecVisionModel, "image-classification": TFData2VecVisionForImageClassification}
+        if is_tf_available()
+        else {}
+    )
 
     test_pruning = False
     test_onnx = False
@@ -188,9 +214,9 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (tf.keras.layers.Layer))
+            self.assertIsInstance(model.get_input_embeddings(), (keras.layers.Layer))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Layer))
+            self.assertTrue(x is None or isinstance(x, keras.layers.Layer))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -207,6 +233,10 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_for_image_segmentation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_image_segmentation(*config_and_inputs)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -315,6 +345,7 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
             check_hidden_states_output(inputs_dict, config, model_class)
 
     # Overriding this method since the base method won't be compatible with Data2VecVision.
+    @slow
     def test_keras_fit(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
@@ -332,7 +363,7 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
                         key: val for key, val in prepared_for_class.items() if key not in label_names
                     }
                     self.assertGreater(len(inputs_minus_labels), 0)
-                    model.compile(optimizer=tf.keras.optimizers.SGD(0.0), run_eagerly=True)
+                    model.compile(optimizer=keras.optimizers.SGD(0.0), run_eagerly=True)
 
                     # Make sure the model fits without crashing regardless of where we pass the labels
                     history1 = model.fit(
@@ -354,6 +385,10 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
                     val_loss2 = history2.history["val_loss"][0]
                     self.assertTrue(np.allclose(val_loss1, val_loss2, atol=1e-2, rtol=1e-3))
 
+    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=2e-4, name="outputs", attributes=None):
+        # We override with a slightly higher tol value, as semseg models tend to diverge a bit more
+        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
+
     # Overriding this method since the base method won't be compatible with Data2VecVision.
     def test_loss_computation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -366,7 +401,7 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
                     # The number of elements in the loss should be the same as the number of elements in the label
                     _, prepared_for_class = self.model_tester.prepare_config_and_inputs_for_keras_fit()
                     added_label = prepared_for_class[
-                        sorted(list(prepared_for_class.keys() - inputs_dict.keys()), reverse=True)[0]
+                        sorted(prepared_for_class.keys() - inputs_dict.keys(), reverse=True)[0]
                     ]
                     loss_size = tf.size(added_label)
 
@@ -417,9 +452,9 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFData2VecVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/data2vec-vision-base-ft1k"
+        model = TFData2VecVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -432,20 +467,18 @@ def prepare_img():
 @require_vision
 class TFData2VecVisionModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
-            BeitFeatureExtractor.from_pretrained("facebook/data2vec-vision-base-ft1k")
-            if is_vision_available()
-            else None
+            BeitImageProcessor.from_pretrained("facebook/data2vec-vision-base-ft1k") if is_vision_available() else None
         )
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
         model = TFData2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base-ft1k")
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="tf")
+        inputs = image_processor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(**inputs)

@@ -22,7 +22,6 @@ from .configuration_mt5 import MT5Config
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
-_TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 
 class TFMT5Model(TFT5Model):
@@ -33,19 +32,19 @@ class TFMT5Model(TFT5Model):
     Examples:
 
     ```python
-    >>> from transformers import TFMT5Model, T5Tokenizer
+    >>> from transformers import TFMT5Model, AutoTokenizer
 
     >>> model = TFMT5Model.from_pretrained("google/mt5-small")
-    >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
     >>> summary = "Weiter Verhandlung in Syrien."
     >>> inputs = tokenizer(article, return_tensors="tf")
-    >>> with tokenizer.as_target_tokenizer():
-    ...     labels = tokenizer(summary, return_tensors="tf")
+    >>> labels = tokenizer(text_target=summary, return_tensors="tf")
 
     >>> outputs = model(input_ids=inputs["input_ids"], decoder_input_ids=labels["input_ids"])
     >>> hidden_states = outputs.last_hidden_state
     ```"""
+
     model_type = "mt5"
     config_class = MT5Config
 
@@ -58,17 +57,15 @@ class TFMT5ForConditionalGeneration(TFT5ForConditionalGeneration):
     Examples:
 
     ```python
-    >>> from transformers import TFMT5ForConditionalGeneration, T5Tokenizer
+    >>> from transformers import TFMT5ForConditionalGeneration, AutoTokenizer
 
     >>> model = TFMT5ForConditionalGeneration.from_pretrained("google/mt5-small")
-    >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
     >>> summary = "Weiter Verhandlung in Syrien."
-    >>> inputs = tokenizer(article, return_tensors="tf")
-    >>> with tokenizer.as_target_tokenizer():
-    ...     labels = tokenizer(summary, return_tensors="tf")
+    >>> inputs = tokenizer(article, text_target=summary, return_tensors="tf")
 
-    >>> outputs = model(**inputs, labels=labels["input_ids"])
+    >>> outputs = model(**inputs)
     >>> loss = outputs.loss
     ```"""
 
@@ -84,10 +81,10 @@ class TFMT5EncoderModel(TFT5EncoderModel):
     Examples:
 
     ```python
-    >>> from transformers import TFMT5EncoderModel, T5Tokenizer
+    >>> from transformers import TFMT5EncoderModel, AutoTokenizer
 
     >>> model = TFMT5EncoderModel.from_pretrained("google/mt5-small")
-    >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
     >>> input_ids = tokenizer(article, return_tensors="tf").input_ids
     >>> outputs = model(input_ids)

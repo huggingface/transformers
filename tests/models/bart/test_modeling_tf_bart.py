@@ -13,6 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
+import copy
+import tempfile
 import unittest
 
 import numpy as np
@@ -23,13 +27,14 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 
 
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFBartForConditionalGeneration, TFBartModel
+    from transformers import TFBartForConditionalGeneration, TFBartForSequenceClassification, TFBartModel
 
 
 @require_tf
@@ -47,7 +52,7 @@ class TFBartModelTester:
         use_labels=False,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_dropout_prob=0.1,
@@ -76,7 +81,13 @@ class TFBartModelTester:
         self.bos_token_id = bos_token_id
 
     def prepare_config_and_inputs_for_common(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
+        # Ids are clipped to avoid "beginng of sequence", "end of sequence", and "pad" tokens
+        input_ids = tf.clip_by_value(
+            ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size),
+            clip_value_min=self.eos_token_id + 1,
+            clip_value_max=self.vocab_size + 1,
+        )
+        # Explicity add "end of sequence" to the inputs
         eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size), 1)
         input_ids = tf.concat([input_ids, eos_tensor], axis=1)
 
@@ -125,8 +136,11 @@ class TFBartModelTester:
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
         next_attention_mask = tf.concat([attention_mask, next_attn_mask], axis=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[0]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[0]
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)
+        output_from_no_past = output_from_no_past[0]
+
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)
+        output_from_past = output_from_past[0]
 
         self.parent.assertEqual(next_tokens.shape[1], output_from_past.shape[1])
 
@@ -177,9 +191,24 @@ def prepare_bart_inputs_dict(
 
 
 @require_tf
-class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TFBartForConditionalGeneration, TFBartModel) if is_tf_available() else ()
+class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (
+        (TFBartForConditionalGeneration, TFBartForSequenceClassification, TFBartModel) if is_tf_available() else ()
+    )
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": TFBartForConditionalGeneration,
+            "feature-extraction": TFBartModel,
+            "summarization": TFBartForConditionalGeneration,
+            "text-classification": TFBartForSequenceClassification,
+            "text2text-generation": TFBartForConditionalGeneration,
+            "translation": TFBartForConditionalGeneration,
+            "zero-shot": TFBartForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_onnx = True
@@ -196,106 +225,127 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in self.all_generative_model_classes:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert isinstance(name, dict)
-                for k, v in name.items():
-                    assert isinstance(v, tf.Variable)
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
-
-    def test_resize_token_embeddings(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        def _get_word_embedding_weight(model, embedding_layer):
-            if hasattr(embedding_layer, "weight"):
-                return embedding_layer.weight
-            else:
-                # Here we build the word embeddings weights if not exists.
-                # And then we retry to get the attribute once built.
-                model(model.dummy_inputs)
-                if hasattr(embedding_layer, "weight"):
-                    return embedding_layer.weight
-                else:
-                    return None
-
-        for model_class in self.all_model_classes:
-            for size in [config.vocab_size - 10, config.vocab_size + 10, None]:
-                # build the embeddings
-                model = model_class(config=config)
-                old_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
-                old_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
-                old_final_logits_bias = model.get_bias()
-
-                # reshape the embeddings
-                model.resize_token_embeddings(size)
-                new_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
-                new_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
-                new_final_logits_bias = model.get_bias()
-
-                # check that the resized embeddings size matches the desired size.
-                assert_size = size if size is not None else config.vocab_size
-
-                self.assertEqual(new_input_embeddings.shape[0], assert_size)
-
-                # check that weights remain the same after resizing
-                models_equal = True
-                for p1, p2 in zip(old_input_embeddings.value(), new_input_embeddings.value()):
-                    if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                        models_equal = False
-                self.assertTrue(models_equal)
-
-                if old_output_embeddings is not None and new_output_embeddings is not None:
-                    self.assertEqual(new_output_embeddings.shape[0], assert_size)
-
-                    models_equal = True
-                    for p1, p2 in zip(old_output_embeddings.value(), new_output_embeddings.value()):
-                        if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                            models_equal = False
-                    self.assertTrue(models_equal)
-
-                if old_final_logits_bias is not None and new_final_logits_bias is not None:
-                    old_final_logits_bias = old_final_logits_bias["final_logits_bias"]
-                    new_final_logits_bias = new_final_logits_bias["final_logits_bias"]
-                    self.assertEqual(new_final_logits_bias.shape[0], 1)
-                    self.assertEqual(new_final_logits_bias.shape[1], assert_size)
-
-                    models_equal = True
-                    for old, new in zip(old_final_logits_bias.value(), new_final_logits_bias.value()):
-                        for p1, p2 in zip(old, new):
-                            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                                models_equal = False
-                    self.assertTrue(models_equal)
-
-    def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
+    # TODO (Joao): fix me
+    @unittest.skip("Onnx compliancy broke with TF 2.10")
+    def test_onnx_compliancy(self):
         pass
 
+    # TFBartForSequenceClassification does not support inputs_embeds
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
-    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
-    if a is None and b is None:
-        return True
-    try:
-        if tf.debugging.assert_near(a, b, atol=atol):
-            return True
-        raise
-    except Exception:
-        if len(prefix) > 0:
-            prefix = f"{prefix}: "
-        raise AssertionError(f"{prefix}{a} != {b}")
+        for model_class in (TFBartForConditionalGeneration, TFBartModel):
+            model = model_class(config)
+
+            inputs = copy.deepcopy(inputs_dict)
+
+            if not self.is_encoder_decoder:
+                input_ids = inputs["input_ids"]
+                del inputs["input_ids"]
+            else:
+                encoder_input_ids = inputs["input_ids"]
+                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+                del inputs["input_ids"]
+                inputs.pop("decoder_input_ids", None)
+
+            if not self.is_encoder_decoder:
+                inputs["inputs_embeds"] = model.get_input_embeddings()(input_ids)
+            else:
+                inputs["inputs_embeds"] = model.get_input_embeddings()(encoder_input_ids)
+                inputs["decoder_inputs_embeds"] = model.get_input_embeddings()(decoder_input_ids)
+
+            inputs = self._prepare_for_class(inputs, model_class)
+
+            model(inputs)
+
+    # TFBartForSequenceClassification does not support inputs_embeds
+    @slow
+    def test_graph_mode_with_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in (TFBartForConditionalGeneration, TFBartModel):
+            model = model_class(config)
+
+            inputs = copy.deepcopy(inputs_dict)
+
+            if not self.is_encoder_decoder:
+                input_ids = inputs["input_ids"]
+                del inputs["input_ids"]
+            else:
+                encoder_input_ids = inputs["input_ids"]
+                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+                del inputs["input_ids"]
+                inputs.pop("decoder_input_ids", None)
+
+            if not self.is_encoder_decoder:
+                inputs["inputs_embeds"] = model.get_input_embeddings()(input_ids)
+            else:
+                inputs["inputs_embeds"] = model.get_input_embeddings()(encoder_input_ids)
+                inputs["decoder_inputs_embeds"] = model.get_input_embeddings()(decoder_input_ids)
+
+            inputs = self._prepare_for_class(inputs, model_class)
+
+            @tf.function
+            def run_in_graph_mode():
+                return model(inputs)
+
+            outputs = run_in_graph_mode()
+            self.assertIsNotNone(outputs)
+
+    @slow
+    def test_save_load_after_resize_token_embeddings(self):
+        # Custom version of this test to ensure "end of sequence" tokens are present throughout
+        if not self.test_resize_embeddings:
+            return
+        config, original_inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            # create a model with resized (expended) embeddings
+            new_tokens_size = 10
+            old_total_size = config.vocab_size
+            new_total_size = old_total_size + new_tokens_size
+            model = model_class(config=copy.deepcopy(config))  # `resize_token_embeddings` mutates `config`
+            model.build_in_name_scope()
+            model.resize_token_embeddings(new_total_size)
+
+            # fetch the output for an input exclusively made of new members of the vocabulary
+            inputs_dict = copy.deepcopy(original_inputs_dict)
+            ids_feat_name = None
+            if "input_ids" in inputs_dict:
+                ids_feat_name = "input_ids"
+            elif "decoder_input_ids" in inputs_dict:
+                ids_feat_name = "decoder_input_ids"
+            else:
+                assert False, "No input ids feature found in the inputs dict"
+
+            new_vocab_input_ids = ids_tensor(inputs_dict[ids_feat_name].shape, new_tokens_size)
+            new_vocab_input_ids += old_total_size
+
+            # Replace last id with EOS token
+            new_vocab_input_ids = new_vocab_input_ids[:, :-1]
+            new_vocab_input_ids = tf.concat(
+                [new_vocab_input_ids, tf.ones((tf.shape(new_vocab_input_ids)[0], 1), dtype=tf.int32) * 2], axis=1
+            )
+
+            inputs_dict[ids_feat_name] = new_vocab_input_ids
+            if "input_ids" in inputs_dict:
+                inputs_dict["input_ids"] = new_vocab_input_ids
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"] = new_vocab_input_ids
+            prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
+            outputs = model(**prepared_inputs)
+
+            # save and load the model
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, saved_model=False)
+                model = model_class.from_pretrained(tmpdirname)
+                restored_model_outputs = model(**prepared_inputs)
+
+                # check that the output for the restored model is the same
+                self.assert_outputs_same(restored_model_outputs, outputs)
+
+    @unittest.skip("Does not support conversations.")
+    def test_pipeline_conversational(self):
+        pass
 
 
 def _long_tensor(tok_lst):
@@ -353,6 +403,19 @@ class TFBartHeadTests(unittest.TestCase):
         outputs = lm_model(input_ids=context, decoder_input_ids=summary, use_cache=False)
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(outputs.logits.shape, expected_shape)
+
+
+@require_tf
+class TFBartForSequenceClassificationTest(unittest.TestCase):
+    def test_model_fails_for_uneven_eos_tokens(self):
+        config = BartConfig(eos_token_id=2)
+        model = TFBartForSequenceClassification(config)
+        inputs = {
+            "input_ids": tf.constant([[1, 2, 2, 2], [1, 3, 2, 2], [2, 2, 3, 3]]),
+            "attention_mask": tf.constant([[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]]),
+        }
+        with self.assertRaises(tf.errors.InvalidArgumentError):
+            model(inputs)
 
 
 @slow
@@ -619,6 +682,100 @@ class TFBartModelIntegrationTest(unittest.TestCase):
     def tok(self):
         return BartTokenizer.from_pretrained("facebook/bart-large")
 
+    @slow
+    def test_contrastive_search_bart(self):
+        article = (
+            " New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York. A"
+            " year later, she got married again in Westchester County, but to a different man and without divorcing"
+            " her first husband.  Only 18 days after that marriage, she got hitched yet again. Then, Barrientos"
+            ' declared "I do" five more times, sometimes only within two weeks of each other. In 2010, she married'
+            " once more, this time in the Bronx. In an application for a marriage license, she stated it was her"
+            ' "first and only" marriage. Barrientos, now 39, is facing two criminal counts of "offering a false'
+            ' instrument for filing in the first degree," referring to her false statements on the 2010 marriage'
+            " license application, according to court documents. Prosecutors said the marriages were part of an"
+            " immigration scam. On Friday, she pleaded not guilty at State Supreme Court in the Bronx, according to"
+            " her attorney, Christopher Wright, who declined to comment further. After leaving court, Barrientos was"
+            " arrested and charged with theft of service and criminal trespass for allegedly sneaking into the New"
+            " York subway through an emergency exit, said Detective Annette Markowski, a police spokeswoman. In total,"
+            " Barrientos has been married 10 times, with nine of her marriages occurring between 1999 and 2002.  All"
+            " occurred either in Westchester County, Long Island, New Jersey or the Bronx. She is believed to still be"
+            " married to four men, and at one time, she was married to eight men at once, prosecutors say. Prosecutors"
+            " said the immigration scam involved some of her husbands, who filed for permanent residence status"
+            " shortly after the marriages.  Any divorces happened only after such filings were approved. It was"
+            " unclear whether any of the men will be prosecuted. The case was referred to the Bronx District"
+            " Attorney's Office by Immigration and Customs Enforcement and the Department of Homeland Security's"
+            ' Investigation Division. Seven of the men are from so-called "red-flagged" countries, including Egypt,'
+            " Turkey, Georgia, Pakistan and Mali. Her eighth husband, Rashid Rajput, was deported in 2006 to his"
+            " native Pakistan after an investigation by the Joint Terrorism Task Force. If convicted, Barrientos faces"
+            " up to four years in prison.  Her next court appearance is scheduled for May 18."
+        )
+        bart_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        bart_model = TFBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
+        input_ids = bart_tokenizer(
+            article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="tf"
+        ).input_ids
+
+        outputs = bart_model.generate(input_ids, penalty_alpha=0.5, top_k=5, max_length=64)
+        generated_text = bart_tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                "Liana Barrientos, 39, pleaded not guilty to charges related to false marriage statements. "
+                "Prosecutors say she married at least 10 times, sometimes within two weeks of each other. She is "
+                "accused of being part of an immigration scam to get permanent residency. If convicted, she faces up "
+                "to four years in"
+            ],
+        )
+
+    @slow
+    def test_contrastive_search_bart_xla(self):
+        article = (
+            " New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York. A"
+            " year later, she got married again in Westchester County, but to a different man and without divorcing"
+            " her first husband.  Only 18 days after that marriage, she got hitched yet again. Then, Barrientos"
+            ' declared "I do" five more times, sometimes only within two weeks of each other. In 2010, she married'
+            " once more, this time in the Bronx. In an application for a marriage license, she stated it was her"
+            ' "first and only" marriage. Barrientos, now 39, is facing two criminal counts of "offering a false'
+            ' instrument for filing in the first degree," referring to her false statements on the 2010 marriage'
+            " license application, according to court documents. Prosecutors said the marriages were part of an"
+            " immigration scam. On Friday, she pleaded not guilty at State Supreme Court in the Bronx, according to"
+            " her attorney, Christopher Wright, who declined to comment further. After leaving court, Barrientos was"
+            " arrested and charged with theft of service and criminal trespass for allegedly sneaking into the New"
+            " York subway through an emergency exit, said Detective Annette Markowski, a police spokeswoman. In total,"
+            " Barrientos has been married 10 times, with nine of her marriages occurring between 1999 and 2002.  All"
+            " occurred either in Westchester County, Long Island, New Jersey or the Bronx. She is believed to still be"
+            " married to four men, and at one time, she was married to eight men at once, prosecutors say. Prosecutors"
+            " said the immigration scam involved some of her husbands, who filed for permanent residence status"
+            " shortly after the marriages.  Any divorces happened only after such filings were approved. It was"
+            " unclear whether any of the men will be prosecuted. The case was referred to the Bronx District"
+            " Attorney's Office by Immigration and Customs Enforcement and the Department of Homeland Security's"
+            ' Investigation Division. Seven of the men are from so-called "red-flagged" countries, including Egypt,'
+            " Turkey, Georgia, Pakistan and Mali. Her eighth husband, Rashid Rajput, was deported in 2006 to his"
+            " native Pakistan after an investigation by the Joint Terrorism Task Force. If convicted, Barrientos faces"
+            " up to four years in prison.  Her next court appearance is scheduled for May 18."
+        )
+        bart_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        bart_model = TFBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
+        input_ids = bart_tokenizer(
+            article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="tf"
+        ).input_ids
+
+        xla_generate = tf.function(bart_model.generate, jit_compile=True)
+        # no_repeat_ngram_size set to 0 because it isn't compatible with XLA, but doesn't change the original output
+        outputs = xla_generate(input_ids, penalty_alpha=0.5, top_k=5, max_length=64, no_repeat_ngram_size=0)
+        generated_text = bart_tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                "Liana Barrientos, 39, pleaded not guilty to charges related to false marriage statements. "
+                "Prosecutors say she married at least 10 times, sometimes within two weeks of each other. She is "
+                "accused of being part of an immigration scam to get permanent residency. If convicted, she faces up "
+                "to four years in"
+            ],
+        )
+
 
 @slow
 @require_tf
@@ -635,7 +792,7 @@ class FasterTFBartModelIntegrationTests(unittest.TestCase):
 
     def test_xsum_1_1_generation(self):
         model = self.xsum_1_1_model
-        assert model.model.decoder.embed_tokens._layer == model.model.shared
+        assert model.model.decoder.embed_tokens == model.model.shared
         ARTICLE = (
             "The Palestinian Authority officially became the 123rd member of the International Criminal Court on"
             " Wednesday, a step that gives the court jurisdiction over alleged crimes in Palestinian territories. The"
@@ -679,6 +836,62 @@ class FasterTFBartModelIntegrationTests(unittest.TestCase):
         )
         dct = self.tok(ARTICLE, return_tensors="tf")
         generated_ids = model.generate(**dct, num_beams=4)
+        result = self.tok.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        assert result == EXPECTED
+
+    def test_xsum_1_1_xla_generation(self):
+        # same test as above, but with `no_repeat_ngram_size=0` (not compatible with XLA) and XLA comparison enabled
+        model = self.xsum_1_1_model
+        assert model.model.decoder.embed_tokens == model.model.shared
+        ARTICLE = (
+            "The Palestinian Authority officially became the 123rd member of the International Criminal Court on"
+            " Wednesday, a step that gives the court jurisdiction over alleged crimes in Palestinian territories. The"
+            " formal accession was marked with a ceremony at The Hague, in the Netherlands, where the court is based."
+            " The Palestinians signed the ICC's founding Rome Statute in January, when they also accepted its"
+            ' jurisdiction over alleged crimes committed "in the occupied Palestinian territory, including East'
+            ' Jerusalem, since June 13, 2014." Later that month, the ICC opened a preliminary examination into the'
+            " situation in Palestinian territories, paving the way for possible war crimes investigations against"
+            " Israelis. As members of the court, Palestinians may be subject to counter-charges as well. Israel and"
+            " the United States, neither of which is an ICC member, opposed the Palestinians' efforts to join the"
+            " body. But Palestinian Foreign Minister Riad al-Malki, speaking at Wednesday's ceremony, said it was a"
+            ' move toward greater justice. "As Palestine formally becomes a State Party to the Rome Statute today, the'
+            ' world is also a step closer to ending a long era of impunity and injustice," he said, according to an'
+            ' ICC news release. "Indeed, today brings us closer to our shared goals of justice and peace." Judge'
+            " Kuniko Ozaki, a vice president of the ICC, said acceding to the treaty was just the first step for the"
+            ' Palestinians. "As the Rome Statute today enters into force for the State of Palestine, Palestine'
+            " acquires all the rights as well as responsibilities that come with being a State Party to the Statute."
+            ' These are substantive commitments, which cannot be taken lightly," she said. Rights group Human Rights'
+            ' Watch welcomed the development. "Governments seeking to penalize Palestine for joining the ICC should'
+            " immediately end their pressure, and countries that support universal acceptance of the court's treaty"
+            ' should speak out to welcome its membership," said Balkees Jarrah, international justice counsel for the'
+            " group. \"What's objectionable is the attempts to undermine international justice, not Palestine's"
+            ' decision to join a treaty to which over 100 countries around the world are members." In January, when'
+            " the preliminary ICC examination was opened, Israeli Prime Minister Benjamin Netanyahu described it as an"
+            ' outrage, saying the court was overstepping its boundaries. The United States also said it "strongly"'
+            " disagreed with the court's decision. \"As we have said repeatedly, we do not believe that Palestine is a"
+            ' state and therefore we do not believe that it is eligible to join the ICC," the State Department said in'
+            ' a statement. It urged the warring sides to resolve their differences through direct negotiations. "We'
+            ' will continue to oppose actions against Israel at the ICC as counterproductive to the cause of peace,"'
+            " it said. But the ICC begs to differ with the definition of a state for its purposes and refers to the"
+            ' territories as "Palestine." While a preliminary examination is not a formal investigation, it allows the'
+            " court to review evidence and determine whether to investigate suspects on both sides. Prosecutor Fatou"
+            ' Bensouda said her office would "conduct its analysis in full independence and impartiality." The war'
+            " between Israel and Hamas militants in Gaza last summer left more than 2,000 people dead. The inquiry"
+            " will include alleged war crimes committed since June. The International Criminal Court was set up in"
+            " 2002 to prosecute genocide, crimes against humanity and war crimes."
+        )
+        EXPECTED = (
+            " The International Criminal Court (ICC) has announced that it is to be investigated by the International"
+            " Criminal Court (ICC) over allegations of war crimes."
+        )
+
+        dct = self.tok(ARTICLE, return_tensors="tf")
+        generated_ids = model.generate(**dct, num_beams=4, no_repeat_ngram_size=0)
+        result = self.tok.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        assert result == EXPECTED
+
+        xla_generate = tf.function(model.generate, jit_compile=True)
+        generated_ids = xla_generate(**dct, num_beams=4, no_repeat_ngram_size=0)
         result = self.tok.batch_decode(generated_ids, skip_special_tokens=True)[0]
         assert result == EXPECTED
 

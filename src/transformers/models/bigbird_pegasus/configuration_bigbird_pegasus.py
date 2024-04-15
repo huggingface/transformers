@@ -26,18 +26,8 @@ from ...utils import TensorType, is_torch_available, logging
 
 logger = logging.get_logger(__name__)
 
-BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/bigbird-pegasus-large-arxiv": (
-        "https://huggingface.co/google/bigbird-pegasus-large-arxiv/resolve/main/config.json"
-    ),
-    "google/bigbird-pegasus-large-pubmed": (
-        "https://huggingface.co/google/bigbird-pegasus-large-pubmed/resolve/main/config.json"
-    ),
-    "google/bigbird-pegasus-large-bigpatent": (
-        "https://huggingface.co/google/bigbird-pegasus-large-bigpatent/resolve/main/config.json"
-    ),
-    # See all BigBirdPegasus models at https://huggingface.co/models?filter=bigbird_pegasus
-}
+
+from ..deprecated._archive_maps import BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class BigBirdPegasusConfig(PretrainedConfig):
@@ -85,10 +75,10 @@ class BigBirdPegasusConfig(PretrainedConfig):
             just in case (e.g., 1024 or 2048 or 4096).
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -109,19 +99,18 @@ class BigBirdPegasusConfig(PretrainedConfig):
     Example:
 
     ```python
+    >>> from transformers import BigBirdPegasusConfig, BigBirdPegasusModel
 
-    ```
+    >>> # Initializing a BigBirdPegasus bigbird-pegasus-base style configuration
+    >>> configuration = BigBirdPegasusConfig()
 
-        >>> from transformers import BigBirdPegasusModel, BigBirdPegasusConfig
+    >>> # Initializing a model (with random weights) from the bigbird-pegasus-base style configuration
+    >>> model = BigBirdPegasusModel(configuration)
 
-        >>> # Initializing a BigBirdPegasus bigbird-pegasus-base style configuration >>> configuration =
-        BigBirdPegasusConfig()
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
-        >>> # Initializing a model from the bigbird-pegasus-base style configuration >>> model =
-        BigBirdPegasusModel(configuration)
-
-        >>> # Accessing the model configuration >>> configuration = model.config
-    """
     model_type = "bigbird_pegasus"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
@@ -160,7 +149,7 @@ class BigBirdPegasusConfig(PretrainedConfig):
         block_size=64,
         num_random_blocks=3,
         use_bias=False,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

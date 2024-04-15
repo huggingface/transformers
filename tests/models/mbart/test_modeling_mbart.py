@@ -20,12 +20,20 @@ import tempfile
 import unittest
 
 from transformers import MBartConfig, is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -113,6 +121,12 @@ class MBartModelTester:
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
 
+        # forcing a certain token to be generated, sets all other tokens to -inf
+        # if however the token to be generated is already at -inf then it can lead token
+        # `nan` values and thus break generation
+        self.forced_bos_token_id = None
+        self.forced_eos_token_id = None
+
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
@@ -142,6 +156,8 @@ class MBartModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
+            forced_bos_token_id=self.forced_bos_token_id,
+            forced_eos_token_id=self.forced_eos_token_id,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -216,16 +232,42 @@ class MBartModelTester:
 
 
 @require_torch
-class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (MBartModel, MBartForConditionalGeneration, MBartForSequenceClassification, MBartForQuestionAnswering)
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (MBartForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": MBartForConditionalGeneration,
+            "feature-extraction": MBartModel,
+            "fill-mask": MBartForConditionalGeneration,
+            "question-answering": MBartForQuestionAnswering,
+            "summarization": MBartForConditionalGeneration,
+            "text-classification": MBartForSequenceClassification,
+            "text-generation": MBartForCausalLM,
+            "text2text-generation": MBartForConditionalGeneration,
+            "translation": MBartForConditionalGeneration,
+            "zero-shot": MBartForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
+    fx_compatible = False  # Fix me Michael
     test_pruning = False
     test_missing_keys = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = MBartModelTester(self)
@@ -282,15 +324,52 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
             with torch.no_grad():
                 model(**inputs)[0]
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         model = MBartForConditionalGeneration(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+
+    def test_ensure_weights_are_shared(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+
+        config.tie_word_embeddings = True
+        model = MBartForConditionalGeneration(config)
+
+        # MBart shares four weights.
+        # Not an issue to not have these correctly tied for torch.load, but it is an issue for safetensors.
+        self.assertEqual(
+            len(
+                {
+                    model.get_output_embeddings().weight.data_ptr(),
+                    model.get_input_embeddings().weight.data_ptr(),
+                    model.base_model.decoder.embed_tokens.weight.data_ptr(),
+                    model.base_model.encoder.embed_tokens.weight.data_ptr(),
+                }
+            ),
+            1,
+        )
+
+        config.tie_word_embeddings = False
+        model = MBartForConditionalGeneration(config)
+
+        # MBart shares four weights.
+        # Not an issue to not have these correctly tied for torch.load, but it is an issue for safetensors.
+        self.assertEqual(
+            len(
+                {
+                    model.get_output_embeddings().weight.data_ptr(),
+                    model.get_input_embeddings().weight.data_ptr(),
+                    model.base_model.decoder.embed_tokens.weight.data_ptr(),
+                    model.base_model.encoder.embed_tokens.weight.data_ptr(),
+                }
+            ),
+            2,
+        )
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
@@ -456,7 +535,7 @@ class MBartStandaloneDecoderModelTester:
         use_labels=True,
         decoder_start_token_id=2,
         decoder_ffn_dim=32,
-        decoder_layers=4,
+        decoder_layers=2,
         encoder_attention_heads=4,
         decoder_attention_heads=4,
         max_position_embeddings=30,

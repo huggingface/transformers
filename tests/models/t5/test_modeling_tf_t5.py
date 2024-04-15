@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import T5Config, is_tf_available
@@ -21,6 +23,7 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -43,7 +46,7 @@ class TFT5ModelTester:
         self.vocab_size = 99
         self.n_positions = 14
         self.hidden_size = 32
-        self.num_hidden_layers = 5
+        self.num_hidden_layers = 2
         self.num_attention_heads = 4
         self.d_ff = 37
         self.relative_attention_num_buckets = 8
@@ -227,23 +230,6 @@ class TFT5ModelTester:
         # test that outputs are equal for slice
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
-    def create_and_check_t5_xla_generate_fast(self, config, input_ids, *args):
-        config.eos_token_id = None
-        config.max_length = 10
-        config.do_sample = False
-        config.num_beams = 1
-        model = TFT5ForConditionalGeneration(config=config)
-
-        # make sure there are no pad tokens in prompt
-        input_ids = tf.where(input_ids != config.pad_token_id, input_ids, config.pad_token_id + 5)
-
-        generated = model.generate(input_ids)
-
-        generate_xla = tf.function(model.generate, jit_compile=True)
-        generated_xla = generate_xla(input_ids)
-
-        self.parent.assertListEqual(generated.numpy().tolist(), generated_xla.numpy().tolist())
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (config, input_ids, input_mask, token_labels) = config_and_inputs
@@ -256,11 +242,21 @@ class TFT5ModelTester:
 
 
 @require_tf
-class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
-
+class TFT5ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     all_model_classes = (TFT5Model, TFT5ForConditionalGeneration) if is_tf_available() else ()
     all_generative_model_classes = (TFT5ForConditionalGeneration,) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": TFT5ForConditionalGeneration,
+            "feature-extraction": TFT5Model,
+            "summarization": TFT5ForConditionalGeneration,
+            "text2text-generation": TFT5ForConditionalGeneration,
+            "translation": TFT5ForConditionalGeneration,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_onnx = False
 
     def setUp(self):
@@ -304,58 +300,22 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
 
         self.model_tester.create_and_check_t5_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_t5_model_xla_generate_fast(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_t5_xla_generate_fast(*config_and_inputs)
-
-    def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in self.all_generative_model_classes:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert name is None
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
-
-    def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
-        pass
-
     @slow
     def test_model_from_pretrained(self):
-        model = TFT5Model.from_pretrained("t5-small")
+        model = TFT5Model.from_pretrained("google-t5/t5-small")
         self.assertIsNotNone(model)
 
     def test_generate_with_headmasking(self):
         # TODO: Fix head-masking according to PyTorch T5 model
         pass
 
-    @slow
-    def test_resize_embeddings(self):
-        model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
-        original_vocab_size = model.get_input_embeddings().weight.shape[0]
-        # the vocab size is defined in the model config
-        self.assertEqual(original_vocab_size, model.config.vocab_size)
-
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
-        tokenizer.add_special_tokens({"bos_token": "", "eos_token": ""})
-        model._resize_token_embeddings(len(tokenizer))
-        # the vocab size is now resized to the length of the tokenizer, which is different from the original size
-        self.assertEqual(model.get_input_embeddings().weight.shape[0], len(tokenizer))
-        self.assertNotEqual(model.get_input_embeddings().weight.shape[0], original_vocab_size)
-
     # This test is run in `TFT5EncoderOnlyModelTest`, where the main layer has the same inputs as the model
     @unittest.skip(reason="The inputs of the Main Layer are different.")
     def test_keras_save_load(self):
+        pass
+
+    @unittest.skip("Does not support conversations.")
+    def test_pipeline_conversational(self):
         pass
 
 
@@ -369,7 +329,7 @@ class TFT5EncoderOnlyModelTester:
         # For common tests
         use_attention_mask=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         d_ff=37,
         relative_attention_num_buckets=8,
@@ -381,7 +341,6 @@ class TFT5EncoderOnlyModelTester:
         pad_token_id=0,
         scope=None,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -489,8 +448,8 @@ class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
 class TFT5GenerationIntegrationTests(unittest.TestCase):
     @slow
     def test_greedy_xla_generate_simple(self):
-        model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        model = TFT5ForConditionalGeneration.from_pretrained("google-t5/t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
         # two examples with different lengths to confirm that attention masks are operational in XLA
         sentences = [
@@ -517,8 +476,8 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
 
     @slow
     def test_greedy_generate(self):
-        model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        model = TFT5ForConditionalGeneration.from_pretrained("google-t5/t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
         sentences = ["Yesterday, my name was", "Today is a beautiful day and"]
         input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
@@ -546,8 +505,8 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
 
         # forces the generation to happen on CPU, to avoid GPU-related quirks
         with tf.device(":/CPU:0"):
-            model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
-            tokenizer = T5Tokenizer.from_pretrained("t5-small")
+            model = TFT5ForConditionalGeneration.from_pretrained("google-t5/t5-small")
+            tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
             sentence = "Translate English to German: I have two bananas"
             input_ids = tokenizer(sentence, return_tensors="tf", padding=True).input_ids
@@ -567,8 +526,8 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
 
     @slow
     def test_sample_generate(self):
-        model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        model = TFT5ForConditionalGeneration.from_pretrained("google-t5/t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
         sentences = ["I really love my", "Translate English to German: the transformers are truly amazing"]
         input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
@@ -594,10 +553,45 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(expected_output_string, output_strings)
 
+    # TODO (ydshieh): undo skip once a fix is done on TF side.
+    @unittest.skip("Skip for now as TF 2.13 breaks it on GPU")
+    @slow
+    def test_beam_search_xla_generate_simple(self):
+        model = TFT5ForConditionalGeneration.from_pretrained("google-t5/t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
+
+        # tests XLA with task specific arguments
+        task_specific_config = getattr(model.config, "task_specific_params", {})
+        translation_config = task_specific_config.get("translation_en_to_fr", {})
+        model.config.update(translation_config)
+
+        # two examples with different lengths to confirm that attention masks are operational in XLA
+        sentences = [
+            model.config.prefix + "Today is a beautiful day.",
+            model.config.prefix + "I have four cats, three dogs, two birds, and a horse.",
+        ]
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
+
+        xla_generate = tf.function(model.generate, jit_compile=True)
+
+        output_ids = model.generate(input_ids, num_beams=2)
+        output_ids_xla = xla_generate(input_ids, num_beams=2)
+
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        output_strings_xla = tokenizer.batch_decode(output_ids_xla, skip_special_tokens=True)
+
+        expected_output_string = [
+            "Aujourd'hui est une belle journée.",
+            "J'ai quatre chats, trois chiens, deux oiseaux et un cheval.",
+        ]
+
+        self.assertListEqual(expected_output_string, output_strings)
+        self.assertListEqual(expected_output_string, output_strings_xla)
+
     @slow
     def test_beam_search_generate(self):
-        model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        model = TFT5ForConditionalGeneration.from_pretrained("google-t5/t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
         sentences = ["I really love my", "Translate English to German: the transformers are truly amazing"]
         input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
@@ -617,6 +611,10 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
         expected_output_string = ["Ich liebe es so sehr!", "die Transformatoren sind wirklich erstaunlich"]
         self.assertListEqual(expected_output_string, output_strings)
 
+    @unittest.skip("Does not support conversations.")
+    def test_pipeline_conversational(self):
+        pass
+
 
 @require_tf
 @require_sentencepiece
@@ -624,7 +622,7 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
 class TFT5ModelIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
-        return TFT5ForConditionalGeneration.from_pretrained("t5-base")
+        return TFT5ForConditionalGeneration.from_pretrained("google-t5/t5-base")
 
     @slow
     def test_small_integration_test(self):
@@ -640,16 +638,16 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        model = TFT5ForConditionalGeneration.from_pretrained("google-t5/t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
         input_ids = tokenizer("Hello there", return_tensors="tf").input_ids
         labels = tokenizer("Hi I am", return_tensors="tf").input_ids
 
         loss = model(input_ids, labels=labels).loss
-        mtf_score = -tf.math.reduce_sum(loss).numpy()
+        mtf_score = -tf.math.reduce_mean(loss).numpy()
 
-        EXPECTED_SCORE = -19.0845
+        EXPECTED_SCORE = -4.771147
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
@@ -673,9 +671,9 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         labels = tokenizer("Hi I am", return_tensors="tf").input_ids
 
         loss = model(input_ids, labels=labels).loss
-        mtf_score = -tf.math.reduce_sum(loss).numpy()
+        mtf_score = -tf.math.reduce_mean(loss).numpy()
 
-        EXPECTED_SCORE = -59.0293
+        EXPECTED_SCORE = -14.757326
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
@@ -697,15 +695,15 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         labels = tokenizer("Hi I am", return_tensors="tf").input_ids
 
         loss = model(input_ids, labels=labels).loss
-        mtf_score = -tf.math.reduce_sum(loss).numpy()
+        mtf_score = -tf.math.reduce_mean(loss).numpy()
 
-        EXPECTED_SCORE = -60.7397
+        EXPECTED_SCORE = -7.592465
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
     def test_summarization(self):
         model = self.model
-        tok = T5Tokenizer.from_pretrained("t5-base")
+        tok = T5Tokenizer.from_pretrained("google-t5/t5-base")
 
         FRANCE_ARTICLE = (  # @noqa
             "Marseille, France (CNN)The French prosecutor leading an investigation into the crash of Germanwings"
@@ -950,7 +948,7 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_translation_en_to_de(self):
-        tok = T5Tokenizer.from_pretrained("t5-base")
+        tok = T5Tokenizer.from_pretrained("google-t5/t5-base")
         model = self.model
 
         task_specific_config = getattr(model.config, "task_specific_params", {})
@@ -980,7 +978,7 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
     @slow
     def test_translation_en_to_fr(self):
         model = self.model
-        tok = T5Tokenizer.from_pretrained("t5-base")
+        tok = T5Tokenizer.from_pretrained("google-t5/t5-base")
 
         task_specific_config = getattr(model.config, "task_specific_params", {})
         translation_config = task_specific_config.get("translation_en_to_fr", {})
@@ -1017,7 +1015,7 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
     @slow
     def test_translation_en_to_ro(self):
         model = self.model
-        tok = T5Tokenizer.from_pretrained("t5-base")
+        tok = T5Tokenizer.from_pretrained("google-t5/t5-base")
 
         task_specific_config = getattr(model.config, "task_specific_params", {})
         translation_config = task_specific_config.get("translation_en_to_ro", {})

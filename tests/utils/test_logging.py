@@ -14,10 +14,11 @@
 
 import os
 import unittest
-from unittest.mock import patch
+
+from huggingface_hub.utils import are_progress_bars_disabled
 
 import transformers.models.bart.tokenization_bart
-from transformers import AutoConfig, logging
+from transformers import logging
 from transformers.testing_utils import CaptureLogger, mockenv, mockenv_context
 from transformers.utils.logging import disable_progress_bar, enable_progress_bar
 
@@ -108,6 +109,7 @@ class HfArgumentParserTest(unittest.TestCase):
 
     def test_advisory_warnings(self):
         # testing `logger.warning_advice()`
+        transformers.utils.logging._reset_library_root_logger()
 
         logger = logging.get_logger("transformers.models.bart.tokenization_bart")
         msg = "Testing 1, 2, 3"
@@ -126,14 +128,8 @@ class HfArgumentParserTest(unittest.TestCase):
 
 
 def test_set_progress_bar_enabled():
-    TINY_MODEL = "hf-internal-testing/tiny-random-distilbert"
-    with patch("tqdm.auto.tqdm") as mock_tqdm:
-        disable_progress_bar()
-        _ = AutoConfig.from_pretrained(TINY_MODEL, force_download=True)
-        mock_tqdm.assert_not_called()
+    disable_progress_bar()
+    assert are_progress_bars_disabled()
 
-        mock_tqdm.reset_mock()
-
-        enable_progress_bar()
-        _ = AutoConfig.from_pretrained(TINY_MODEL, force_download=True)
-        mock_tqdm.assert_called()
+    enable_progress_bar()
+    assert not are_progress_bars_disabled()

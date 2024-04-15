@@ -14,16 +14,21 @@
 # limitations under the License.
 """ Perceiver model configuration"""
 
+from collections import OrderedDict
+from typing import Any, Mapping, Optional, Union
+
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from ...feature_extraction_utils import FeatureExtractionMixin
+from ...onnx import OnnxConfig
+from ...onnx.utils import compute_effective_axis_dimension
+from ...tokenization_utils_base import PreTrainedTokenizerBase
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
 
-PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "deepmind/language-perceiver": "https://huggingface.co/deepmind/language-perceiver/resolve/main/config.json",
-    # See all Perceiver models at https://huggingface.co/models?filter=perceiver
-}
+
+from ..deprecated._archive_maps import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class PerceiverConfig(PretrainedConfig):
@@ -58,7 +63,7 @@ class PerceiverConfig(PretrainedConfig):
         v_channels (`int`, *optional*):
             Dimension to project the values before applying attention in the cross-attention and self-attention layers
             of the encoder. Will default to preserving the dimension of the queries if not specified.
-        cross_attention_shape_for_attention (`str`, *optional*, defaults to `'kv'`):
+        cross_attention_shape_for_attention (`str`, *optional*, defaults to `"kv"`):
             Dimension to use when downsampling the queries and keys in the cross-attention layer of the encoder.
         self_attention_widening_factor (`int`, *optional*, defaults to 1):
             Dimension of the feed-forward layer in the cross-attention layer of the Transformer encoder.
@@ -82,7 +87,7 @@ class PerceiverConfig(PretrainedConfig):
             this to something large just in case (e.g., 512 or 1024 or 2048).
         image_size (`int`, *optional*, defaults to 56):
             Size of the images after preprocessing, for [`PerceiverForImageClassificationLearned`].
-        train_size (`List[int]`, *optional*, defaults to [368, 496]):
+        train_size (`List[int]`, *optional*, defaults to `[368, 496]`):
             Training size of the images for the optical flow model.
         num_frames (`int`, *optional*, defaults to 16):
             Number of video frames used for the multimodal autoencoding model.
@@ -93,6 +98,8 @@ class PerceiverConfig(PretrainedConfig):
         output_shape (`List[int]`, *optional*, defaults to `[1, 16, 224, 224]`):
             Shape of the output (batch_size, num_frames, height, width) for the video decoder queries of the multimodal
             autoencoding model. This excludes the channel dimension.
+        output_num_channels (`int`, *optional*, defaults to 512):
+            Number of output channels for each modalitiy decoder.
 
     Example:
 
@@ -108,6 +115,7 @@ class PerceiverConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "perceiver"
 
     def __init__(
@@ -126,10 +134,8 @@ class PerceiverConfig(PretrainedConfig):
         cross_attention_widening_factor=1,
         hidden_act="gelu",
         attention_probs_dropout_prob=0.1,
-        position_embedding_init_scale=0.02,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
         use_query_residual=True,
         vocab_size=262,
         max_position_embeddings=2048,
@@ -139,7 +145,9 @@ class PerceiverConfig(PretrainedConfig):
         audio_samples_per_frame=1920,
         samples_per_patch=16,
         output_shape=[1, 16, 224, 224],
-        **kwargs
+        output_num_channels=512,
+        _label_trainable_num_channels=1024,
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -172,3 +180,65 @@ class PerceiverConfig(PretrainedConfig):
         self.audio_samples_per_frame = audio_samples_per_frame
         self.samples_per_patch = samples_per_patch
         self.output_shape = output_shape
+        self.output_num_channels = output_num_channels
+        self._label_trainable_num_channels = _label_trainable_num_channels
+
+
+class PerceiverOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.task == "multiple-choice":
+            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
+        else:
+            dynamic_axis = {0: "batch", 1: "sequence"}
+        return OrderedDict(
+            [
+                ("inputs", dynamic_axis),
+                ("attention_mask", dynamic_axis),
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4
+
+    def generate_dummy_inputs(
+        self,
+        preprocessor: Union["PreTrainedTokenizerBase", "FeatureExtractionMixin"],
+        batch_size: int = -1,
+        seq_length: int = -1,
+        num_choices: int = -1,
+        is_pair: bool = False,
+        framework: Optional[TensorType] = None,
+        num_channels: int = 3,
+        image_width: int = 40,
+        image_height: int = 40,
+    ) -> Mapping[str, Any]:
+        # copied from `transformers.onnx.config.OnnxConfig` and slightly altered/simplified
+
+        if isinstance(preprocessor, PreTrainedTokenizerBase):
+            # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
+            batch_size = compute_effective_axis_dimension(
+                batch_size, fixed_dimension=OnnxConfig.default_fixed_batch, num_token_to_add=0
+            )
+            # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
+            token_to_add = preprocessor.num_special_tokens_to_add(is_pair)
+            seq_length = compute_effective_axis_dimension(
+                seq_length, fixed_dimension=OnnxConfig.default_fixed_sequence, num_token_to_add=token_to_add
+            )
+            # Generate dummy inputs according to compute batch and sequence
+            dummy_input = [" ".join(["a"]) * seq_length] * batch_size
+            inputs = dict(preprocessor(dummy_input, return_tensors=framework))
+            inputs["inputs"] = inputs.pop("input_ids")
+            return inputs
+        elif isinstance(preprocessor, FeatureExtractionMixin) and preprocessor.model_input_names[0] == "pixel_values":
+            # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
+            batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
+            dummy_input = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
+            inputs = dict(preprocessor(images=dummy_input, return_tensors=framework))
+            inputs["inputs"] = inputs.pop("pixel_values")
+            return inputs
+        else:
+            raise ValueError(
+                "Unable to generate dummy inputs for the model. Please provide a tokenizer or a preprocessor."
+            )

@@ -19,19 +19,20 @@ import argparse
 import json
 from pathlib import Path
 
+import requests
 import torch
 from datasets import load_dataset
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import hf_hub_download
 from transformers import (
     BeitConfig,
-    BeitFeatureExtractor,
     BeitForImageClassification,
     BeitForMaskedImageModeling,
     BeitForSemanticSegmentation,
+    BeitImageProcessor,
 )
+from transformers.image_utils import PILImageResampling
 from transformers.utils import logging
 
 
@@ -176,7 +177,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     config = BeitConfig()
     has_lm_head = False
     is_semantic = False
-    repo_id = "datasets/huggingface/label-files"
+    repo_id = "huggingface/label-files"
     # set config parameters based on URL
     if checkpoint_url[-9:-4] == "pt22k":
         # masked image modeling
@@ -188,7 +189,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.use_relative_position_bias = True
         config.num_labels = 21841
         filename = "imagenet-22k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         # this dataset contains 21843 labels but the model only has 21841
         # we delete the classes as mentioned in https://github.com/google-research/big_transfer/issues/18
@@ -201,7 +202,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.use_relative_position_bias = True
         config.num_labels = 1000
         filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -214,7 +215,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.use_relative_position_bias = True
         config.num_labels = 150
         filename = "ade20k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -265,14 +266,16 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # Check outputs on an image
     if is_semantic:
-        feature_extractor = BeitFeatureExtractor(size=config.image_size, do_center_crop=False)
+        image_processor = BeitImageProcessor(size=config.image_size, do_center_crop=False)
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
         image = Image.open(ds[0]["file"])
     else:
-        feature_extractor = BeitFeatureExtractor(size=config.image_size, resample=Image.BILINEAR, do_center_crop=False)
+        image_processor = BeitImageProcessor(
+            size=config.image_size, resample=PILImageResampling.BILINEAR, do_center_crop=False
+        )
         image = prepare_img()
 
-    encoding = feature_extractor(images=image, return_tensors="pt")
+    encoding = image_processor(images=image, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
     outputs = model(pixel_values)
@@ -334,24 +337,25 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     else:
         raise ValueError("Can't verify logits as model is not supported")
 
-    assert logits.shape == expected_shape, "Shape of logits not as expected"
+    if logits.shape != expected_shape:
+        raise ValueError(f"Shape of logits not as expected. {logits.shape=}, {expected_shape=}")
     if not has_lm_head:
         if is_semantic:
-            assert torch.allclose(
-                logits[0, :3, :3, :3], expected_logits, atol=1e-3
-            ), "First elements of logits not as expected"
+            if not torch.allclose(logits[0, :3, :3, :3], expected_logits, atol=1e-3):
+                raise ValueError("First elements of logits not as expected")
         else:
             print("Predicted class idx:", logits.argmax(-1).item())
-            assert torch.allclose(
-                logits[0, :3], expected_logits, atol=1e-3
-            ), "First elements of logits not as expected"
-            assert logits.argmax(-1).item() == expected_class_idx, "Predicted class index not as expected"
+
+            if not torch.allclose(logits[0, :3], expected_logits, atol=1e-3):
+                raise ValueError("First elements of logits not as expected")
+            if logits.argmax(-1).item() != expected_class_idx:
+                raise ValueError("Predicted class index not as expected")
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

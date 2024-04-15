@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +17,7 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_tf_available,
     is_tokenizers_available,
     is_torch_available,
     is_vision_available,
@@ -28,7 +25,11 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_layoutlmv3": ["LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMv3Config"],
+    "configuration_layoutlmv3": [
+        "LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "LayoutLMv3Config",
+        "LayoutLMv3OnnxConfig",
+    ],
     "processing_layoutlmv3": ["LayoutLMv3Processor"],
     "tokenization_layoutlmv3": ["LayoutLMv3Tokenizer"],
 }
@@ -57,16 +58,36 @@ else:
     ]
 
 try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_layoutlmv3"] = [
+        "TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFLayoutLMv3ForQuestionAnswering",
+        "TFLayoutLMv3ForSequenceClassification",
+        "TFLayoutLMv3ForTokenClassification",
+        "TFLayoutLMv3Model",
+        "TFLayoutLMv3PreTrainedModel",
+    ]
+
+try:
     if not is_vision_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_layoutlmv3"] = ["LayoutLMv3FeatureExtractor"]
+    _import_structure["image_processing_layoutlmv3"] = ["LayoutLMv3ImageProcessor"]
 
 
 if TYPE_CHECKING:
-    from .configuration_layoutlmv3 import LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMv3Config
+    from .configuration_layoutlmv3 import (
+        LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LayoutLMv3Config,
+        LayoutLMv3OnnxConfig,
+    )
     from .processing_layoutlmv3 import LayoutLMv3Processor
     from .tokenization_layoutlmv3 import LayoutLMv3Tokenizer
 
@@ -94,12 +115,28 @@ if TYPE_CHECKING:
         )
 
     try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_layoutlmv3 import (
+            TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFLayoutLMv3ForQuestionAnswering,
+            TFLayoutLMv3ForSequenceClassification,
+            TFLayoutLMv3ForTokenClassification,
+            TFLayoutLMv3Model,
+            TFLayoutLMv3PreTrainedModel,
+        )
+
+    try:
         if not is_vision_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
     else:
         from .feature_extraction_layoutlmv3 import LayoutLMv3FeatureExtractor
+        from .image_processing_layoutlmv3 import LayoutLMv3ImageProcessor
 
 else:
     import sys

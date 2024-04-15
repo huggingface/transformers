@@ -23,10 +23,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "asapp/sew-d-tiny-100k": "https://huggingface.co/asapp/sew-d-tiny-100k/resolve/main/config.json",
-    # See all SEW-D models at https://huggingface.co/models?filter=sew-d
-}
+
+from ..deprecated._archive_maps import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class SEWDConfig(PretrainedConfig):
@@ -63,8 +61,6 @@ class SEWDConfig(PretrainedConfig):
             Whether to share attention key with c2p and p2c.
         relative_attention (`bool`, *optional*, defaults to `True`):
             Whether to use relative position encoding.
-        position_biased_input (`bool`, *optional*, defaults to `False`):
-            Whether to add absolute position embedding to content embedding.
         pos_att_type (`Tuple[str]`, *optional*, defaults to `("p2c", "c2p")`):
             The type of relative position attention, it can be a combination of `("p2c", "c2p")`, e.g. `("p2c")`,
             `("p2c", "c2p")`, `("p2c", "c2p")`.
@@ -74,6 +70,8 @@ class SEWDConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"`, `"gelu_python"` and `"gelu_new"` are supported.
         hidden_dropout (`float`, *optional*, defaults to 0.1):
+            Deprecated. Not used by the model and will be removed in a future version.
+        activation_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
@@ -99,10 +97,10 @@ class SEWDConfig(PretrainedConfig):
             feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
         conv_stride (`Tuple[int]` or `List[int]`, *optional*, defaults to `(5, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1)`):
             A tuple of integers defining the stride of each 1D convolutional layer in the feature encoder. The length
-            of *conv_stride* defines the number of convolutional layers and has to match the the length of *conv_dim*.
+            of *conv_stride* defines the number of convolutional layers and has to match the length of *conv_dim*.
         conv_kernel (`Tuple[int]` or `List[int]`, *optional*, defaults to `(10, 3, 1, 3, 1, 3, 1, 3, 1, 2, 1, 2, 1)`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the feature encoder. The
-            length of *conv_kernel* defines the number of convolutional layers and has to match the the length of
+            length of *conv_kernel* defines the number of convolutional layers and has to match the length of
             *conv_dim*.
         conv_bias (`bool`, *optional*, defaults to `False`):
             Whether the 1D convolutional layers have a bias.
@@ -158,17 +156,18 @@ class SEWDConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import SEWDModel, SEWDConfig
+    >>> from transformers import SEWDConfig, SEWDModel
 
     >>> # Initializing a SEW-D asapp/sew-d-tiny-100k style configuration
     >>> configuration = SEWDConfig()
 
-    >>> # Initializing a model from the asapp/sew-d-tiny-100k style configuration
+    >>> # Initializing a model (with random weights) from the asapp/sew-d-tiny-100k style configuration
     >>> model = SEWDModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "sew-d"
 
     def __init__(
@@ -183,7 +182,6 @@ class SEWDConfig(PretrainedConfig):
         position_buckets=256,
         share_att_key=True,
         relative_attention=True,
-        position_biased_input=False,
         pos_att_type=("p2c", "c2p"),
         norm_rel_ebd="layer_norm",
         hidden_act="gelu_python",
@@ -192,7 +190,6 @@ class SEWDConfig(PretrainedConfig):
         attention_dropout=0.1,
         feat_proj_dropout=0.0,
         final_dropout=0.1,
-        layerdrop=0.1,
         initializer_range=0.02,
         layer_norm_eps=1e-7,
         feature_layer_norm_eps=1e-5,
@@ -218,7 +215,7 @@ class SEWDConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
         self.hidden_size = hidden_size
@@ -239,16 +236,14 @@ class SEWDConfig(PretrainedConfig):
         self.share_att_key = share_att_key
         self.relative_attention = relative_attention
         self.norm_rel_ebd = norm_rel_ebd
-        self.position_biased_input = position_biased_input
         self.pos_att_type = list(pos_att_type)
         self.hidden_act = hidden_act
         self.num_attention_heads = num_attention_heads
-        self.hidden_dropout = hidden_dropout
+        self._hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.feat_proj_dropout = feat_proj_dropout
         self.final_dropout = final_dropout
-        self.layerdrop = layerdrop
         self.layer_norm_eps = layer_norm_eps
         self.feature_layer_norm_eps = feature_layer_norm_eps
         self.initializer_range = initializer_range
@@ -260,9 +255,9 @@ class SEWDConfig(PretrainedConfig):
             or (len(self.conv_dim) != self.num_feat_extract_layers)
         ):
             raise ValueError(
-                "Configuration for convolutional layers is incorrect."
-                "It is required that `len(config.conv_dim)` == `len(config.conv_stride)` == `len(config.conv_kernel)`,"
-                f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride)"
+                "Configuration for convolutional layers is incorrect. "
+                "It is required that `len(config.conv_dim)` == `len(config.conv_stride)` == `len(config.conv_kernel)`, "
+                f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride) "
                 f"= {len(self.conv_stride)}`, `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
 
@@ -286,3 +281,16 @@ class SEWDConfig(PretrainedConfig):
     @property
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
+
+    @property
+    def hidden_dropout(self):
+        logger.warning_once("hidden_dropout is not used by the model and will be removed as config attribute in v4.35")
+        return self._hidden_dropout
+
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary.
+        """
+        output = super().to_dict()
+        output["hidden_dropout"] = output.pop("_hidden_dropout")
+        return output

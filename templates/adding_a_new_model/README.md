@@ -34,6 +34,14 @@ cd transformers
 pip install -e ".[dev]"
 ```
 
+Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
+failure with this command. If that's the case make sure to install the Deep Learning framework you are working with
+(PyTorch, TensorFlow and/or Flax) then do:
+
+```bash
+pip install -e ".[quality]"
+```
+
 Once the installation is done, you can use the CLI command `add-new-model` to generate your models:
 
 ```shell script
@@ -84,7 +92,7 @@ Choose from 1, 2 [1]:
 
 Once the command has finished, you should have a total of 7 new files spread across the repository:
 ```
-docs/source/model_doc/<model_name>.mdx
+docs/source/model_doc/<model_name>.md
 src/transformers/models/<model_name>/configuration_<model_name>.py
 src/transformers/models/<model_name>/modeling_<model_name>.py
 src/transformers/models/<model_name>/modeling_tf_<model_name>.py
@@ -95,7 +103,7 @@ tests/test_modeling_tf_<model_name>.py
 
 You can run the tests to ensure that they all pass:
 
-```
+```bash
 python -m pytest ./tests/test_*<model_name>*.py
 ```
 
@@ -131,6 +139,14 @@ first clone the repository and install it in our environment:
 git clone https://github.com/huggingface/transformers
 cd transformers
 pip install -e ".[dev]"
+```
+
+Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
+failure with this command. If that's the case make sure to install the Deep Learning framework you are working with
+(PyTorch, TensorFlow and/or Flax) then do:
+
+```bash
+pip install -e ".[quality]"
 ```
 
 Once the installation is done, you can use the CLI command `add-new-model-like` to generate your models:
@@ -186,14 +202,14 @@ wish, as it will appear on the Model Hub. Do not forget to include the organisat
 Then you will have to say whether your model re-uses the same processing classes as the model you're cloning:
 
 ```
-Will your new model use the same processing class as Xxx (XxxTokenizer/XxxFeatureExtractor)
+Will your new model use the same processing class as Xxx (XxxTokenizer/XxxFeatureExtractor/XxxImageProcessor)
 ```
 
 Answer yes if you have no intentions to make any change to the class used for preprocessing. It can use different
 files (for instance you can reuse the `BertTokenizer` with a new vocab file).
 
 If you answer no, you will have to give the name of the classes
-for the new tokenizer/feature extractor/processor (depending on the model you're cloning).
+for the new tokenizer/image processor/feature extractor/processor (depending on the model you're cloning).
 
 Next the questionnaire will ask
 
@@ -201,7 +217,7 @@ Next the questionnaire will ask
 Should we add # Copied from statements when creating the new modeling file?
 ```
 
-This is the intenal mechanism used in the library to make sure code copied from various modeling files stay consistent.
+This is the internal mechanism used in the library to make sure code copied from various modeling files stay consistent.
 If you plan to completely rewrite the modeling file, you should answer no, whereas if you just want to tweak one part
 of the model, you should answer yes.
 
@@ -220,18 +236,18 @@ depending on your choices).
 
 You will also see a doc file and tests for your new models. First you should run
 
-```
+```bash
 make style
-maxke fix-copies
+make fix-copies
 ```
 
 and then you can start tweaking your model. You should:
-- fill the doc file at `docs/source/model_doc/model_name.mdx`
+- fill the doc file at `docs/source/model_doc/model_name.md`
 - tweak the configuration and modeling files to your need
 
 Once you're done, you can run the tests to ensure that they all pass:
 
-```
+```bash
 python -m pytest ./tests/test_*<model_name>*.py
 ```
 

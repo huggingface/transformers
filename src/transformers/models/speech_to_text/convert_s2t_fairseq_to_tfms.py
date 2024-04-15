@@ -95,12 +95,10 @@ def convert_fairseq_s2t_checkpoint_to_tfms(checkpoint_path, pytorch_dump_folder_
 
     model = Speech2TextForConditionalGeneration(config)
     missing, unexpected = model.model.load_state_dict(state_dict, strict=False)
-    if len(missing) > 0 and not set(missing) <= set(
-        [
-            "encoder.embed_positions.weights",
-            "decoder.embed_positions.weights",
-        ]
-    ):
+    if len(missing) > 0 and not set(missing) <= {
+        "encoder.embed_positions.weights",
+        "decoder.embed_positions.weights",
+    }:
         raise ValueError(
             "Only `encoder.embed_positions.weights` and `decoder.embed_positions.weights`  are allowed to be missing,"
             f" but all the following weights are missing {missing}"

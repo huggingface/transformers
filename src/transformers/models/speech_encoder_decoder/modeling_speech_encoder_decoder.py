@@ -15,7 +15,7 @@
 """ Classes to support Speech-Encoder-Text-Decoder architectures"""
 
 
-from typing import Optional
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -70,11 +70,11 @@ SPEECH_ENCODER_DECODER_START_DOCSTRING = r"""
 SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
         inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, feature_dim)`, *optional*):
-            Float values of input raw speech waveform or speech features. Values can be obtained by loading a *.flac*
-            or *.wav* audio file into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile
-            library (*pip install soundfile*). To prepare the array into *inputs*, either the [`Wav2Vec2Processor`] or
+            Float values of input raw speech waveform or speech features. Values can be obtained by loading a `.flac`
+            or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile
+            library (`pip install soundfile`). To prepare the array into `inputs`, either the [`Wav2Vec2Processor`] or
             [`Speech2TextProcessor`] should be used for padding and conversion into a tensor of type
-            *torch.FloatTensor*.
+            `torch.FloatTensor`.
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -135,7 +135,7 @@ SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
             soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
             and conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
-        input_features (`torch.LongTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
+        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
             Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
             by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.*
             via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
@@ -143,7 +143,7 @@ SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             into a tensor of type `torch.FloatTensor`. See [`~Speech2TextFeatureExtractor.__call__`]
         return_dict (`bool`, *optional*):
             If set to `True`, the model will return a [`~utils.Seq2SeqLMOutput`] instead of a plain tuple.
-        kwargs: (*optional*) Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
+        kwargs (*optional*): Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
 
             - Without a prefix which will be input as `**encoder_kwargs` for the encoder forward function.
             - With a *decoder_* prefix which will be input as `**decoder_kwargs` for the decoder forward function.
@@ -177,6 +177,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
     :meth*~transformers.AutoModel.from_pretrained* class method for the encoder and
     :meth*~transformers.AutoModelForCausalLM.from_pretrained* class method for the decoder.
     """
+
     config_class = SpeechEncoderDecoderConfig
     base_model_prefix = "speech_encoder_decoder"
     main_input_name = "inputs"
@@ -249,11 +250,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
                 f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
             )
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        # call both encoder and decoder function on gradient checkpointing
-        self.encoder._set_gradient_checkpointing(module, value=value)
-        self.decoder._set_gradient_checkpointing(module, value=value)
-
     def get_encoder(self):
         return self.encoder
 
@@ -290,7 +286,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         encoder_pretrained_model_name_or_path: str = None,
         decoder_pretrained_model_name_or_path: str = None,
         *model_args,
-        **kwargs
+        **kwargs,
     ) -> PreTrainedModel:
         r"""
         Instantiate an encoder and a decoder from one or two base classes of the library from pretrained model
@@ -305,8 +301,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
                 Information necessary to initiate the encoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
@@ -318,8 +312,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
                 Information necessary to initiate the decoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
@@ -347,7 +339,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
         >>> # initialize a wav2vec2bert from a pretrained Wav2Vec2 and a pretrained BERT model. Note that the cross-attention layers will be randomly initialized
         >>> model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
-        ...     "facebook/wav2vec2-base-960h", "bert-base-uncased"
+        ...     "facebook/wav2vec2-base-960h", "google-bert/bert-base-uncased"
         ... )
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./wav2vec2bert")
@@ -443,33 +435,33 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        inputs=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        input_values=None,
-        input_features=None,
-        return_dict=None,
+        inputs: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        input_values: Optional[torch.FloatTensor] = None,
+        input_features: Optional[torch.FloatTensor] = None,
+        return_dict: Optional[bool] = None,
         **kwargs,
-    ):
+    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         Returns:
 
         Examples:
 
         ```python
-        >>> from transformers import SpeechEncoderDecoderModel, Wav2Vec2Processor
+        >>> from transformers import SpeechEncoderDecoderModel, AutoProcessor
         >>> from datasets import load_dataset
         >>> import torch
 
-        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-xls-r-300m-en-to-15")
+        >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-xls-r-300m-en-to-15")
         >>> model = SpeechEncoderDecoderModel.from_pretrained("facebook/wav2vec2-xls-r-300m-en-to-15")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -482,8 +474,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         'Mr. Quilter ist der Apostel der Mittelschicht und wir freuen uns, sein Evangelium willkommen heißen zu können.'
 
         >>> # Training: Train model on English transcription
-        >>> with processor.as_target_processor():
-        ...     labels = processor(ds[0]["text"], return_tensors="pt").input_ids
+        >>> labels = processor(text=ds[0]["text"], return_tensors="pt").input_ids
 
         >>> loss = model(input_values, labels=labels).loss
         >>> loss.backward()
@@ -584,9 +575,9 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     def prepare_inputs_for_generation(
-        self, input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
     ):
-        decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, past=past)
+        decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, past_key_values=past_key_values)
         decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
         input_dict = {
             "attention_mask": attention_mask,
@@ -604,6 +595,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
             " respective methods of the wrapped decoder object (model.decoder.resize_token_embeddings(...))"
         )
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         # apply decoder cache reordering here
-        return self.decoder._reorder_cache(past, beam_idx)
+        return self.decoder._reorder_cache(past_key_values, beam_idx)

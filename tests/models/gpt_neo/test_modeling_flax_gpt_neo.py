@@ -22,13 +22,14 @@ import transformers
 from transformers import GPT2Tokenizer, GPTNeoConfig, is_flax_available, is_torch_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
-from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
+from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_flax_available():
     import jax
     import jax.numpy as jnp
+
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
@@ -51,9 +52,9 @@ class FlaxGPTNeoModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=4,
-        attention_types=[[["global", "local"], 2]],
+        attention_types=[[["global", "local"], 1]],
         intermediate_size=37,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -181,7 +182,6 @@ class FlaxGPTNeoModelTester:
 
 @require_flax
 class FlaxGPTNeoModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlaxGPTNeoModel, FlaxGPTNeoForCausalLM) if is_flax_available() else ()
     all_generative_model_classes = (FlaxGPTNeoForCausalLM,) if is_flax_available() else ()
 
@@ -202,7 +202,9 @@ class FlaxGPTNeoModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitt
 
     @slow
     def test_batch_generation(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2", pad_token="<|endoftext|>", padding_side="left")
+        tokenizer = GPT2Tokenizer.from_pretrained(
+            "openai-community/gpt2", pad_token="<|endoftext|>", padding_side="left"
+        )
         inputs = tokenizer(["Hello this is a long string", "Hey"], return_tensors="np", padding=True, truncation=True)
 
         model = FlaxGPTNeoForCausalLM.from_pretrained("EleutherAI/gpt-neo-125M")

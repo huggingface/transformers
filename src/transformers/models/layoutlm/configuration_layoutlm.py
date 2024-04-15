@@ -16,27 +16,18 @@
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
-from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType
-
-from ... import is_torch_available
+from ... import PretrainedConfig, PreTrainedTokenizer
 from ...onnx import OnnxConfig, PatchingSpec
-from ...utils import logging
-from ..bert.configuration_bert import BertConfig
+from ...utils import TensorType, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
 
-LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/layoutlm-base-uncased": (
-        "https://huggingface.co/microsoft/layoutlm-base-uncased/resolve/main/config.json"
-    ),
-    "microsoft/layoutlm-large-uncased": (
-        "https://huggingface.co/microsoft/layoutlm-large-uncased/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
-class LayoutLMConfig(BertConfig):
+class LayoutLMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LayoutLMModel`]. It is used to instantiate a
     LayoutLM model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -75,6 +66,17 @@ class LayoutLMConfig(BertConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            The value used to pad input_ids.
+        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
+            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
+            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
+            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
         max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum value that the 2D position embedding might ever used. Typically set this to something large
             just in case (e.g., 1024).
@@ -82,17 +84,18 @@ class LayoutLMConfig(BertConfig):
     Examples:
 
     ```python
-    >>> from transformers import LayoutLMModel, LayoutLMConfig
+    >>> from transformers import LayoutLMConfig, LayoutLMModel
 
     >>> # Initializing a LayoutLM configuration
     >>> configuration = LayoutLMConfig()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = LayoutLMModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "layoutlm"
 
     def __init__(
@@ -110,25 +113,26 @@ class LayoutLMConfig(BertConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        position_embedding_type="absolute",
+        use_cache=True,
         max_2d_position_embeddings=1024,
-        **kwargs
+        **kwargs,
     ):
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            intermediate_size=intermediate_size,
-            hidden_act=hidden_act,
-            hidden_dropout_prob=hidden_dropout_prob,
-            attention_probs_dropout_prob=attention_probs_dropout_prob,
-            max_position_embeddings=max_position_embeddings,
-            type_vocab_size=type_vocab_size,
-            initializer_range=initializer_range,
-            layer_norm_eps=layer_norm_eps,
-            pad_token_id=pad_token_id,
-            **kwargs,
-        )
+        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.hidden_act = hidden_act
+        self.intermediate_size = intermediate_size
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.position_embedding_type = position_embedding_type
+        self.use_cache = use_cache
         self.max_2d_position_embeddings = max_2d_position_embeddings
 
 

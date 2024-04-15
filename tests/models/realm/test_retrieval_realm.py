@@ -100,7 +100,7 @@ class RealmRetrieverTest(TestCase):
                 b"This is the fifth record",
                 b"This is a longer longer longer record",
             ],
-            dtype=np.object,
+            dtype=object,
         )
         return block_records
 
@@ -116,7 +116,7 @@ class RealmRetrieverTest(TestCase):
         retriever = self.get_dummy_retriever()
         tokenizer = retriever.tokenizer
 
-        retrieved_block_ids = np.array([0, 3], dtype=np.long)
+        retrieved_block_ids = np.array([0, 3], dtype="long")
         question_input_ids = tokenizer(["Test question"]).input_ids
         answer_ids = tokenizer(
             ["the fourth"],
@@ -151,7 +151,7 @@ class RealmRetrieverTest(TestCase):
         retriever = self.get_dummy_retriever()
         tokenizer = retriever.tokenizer
 
-        retrieved_block_ids = np.array([0, 3, 5], dtype=np.long)
+        retrieved_block_ids = np.array([0, 3, 5], dtype="long")
         question_input_ids = tokenizer(["Test question"]).input_ids
         answer_ids = tokenizer(
             ["the fourth", "longer longer"],

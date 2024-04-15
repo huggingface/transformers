@@ -25,10 +25,8 @@ from ...utils import TensorType, is_torch_available, logging
 
 logger = logging.get_logger(__name__)
 
-M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/m2m100_418M": "https://huggingface.co/facebook/m2m100_418M/resolve/main/config.json",
-    # See all M2M100 models at https://huggingface.co/models?filter=m2m_100
-}
+
+from ..deprecated._archive_maps import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class M2M100Config(PretrainedConfig):
@@ -76,10 +74,10 @@ class M2M100Config(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -88,17 +86,18 @@ class M2M100Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import M2M100Model, M2M100Config
+    >>> from transformers import M2M100Config, M2M100Model
 
     >>> # Initializing a M2M100 facebook/m2m100_418M style configuration
     >>> configuration = M2M100Config()
 
-    >>> # Initializing a model from the facebook/m2m100_418M style configuration
+    >>> # Initializing a model (with random weights) from the facebook/m2m100_418M style configuration
     >>> model = M2M100Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "m2m_100"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
@@ -128,7 +127,7 @@ class M2M100Config(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

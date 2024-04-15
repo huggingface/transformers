@@ -15,9 +15,12 @@
 # limitations under the License.
 """ TF 2.0 MobileBERT model."""
 
+
+from __future__ import annotations
+
 import warnings
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -43,12 +46,12 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list, stable_softmax
+from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
-    MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -63,7 +66,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/mobilebert-uncased"
 _CONFIG_FOR_DOC = "MobileBertConfig"
-_TOKENIZER_FOR_DOC = "MobileBertTokenizer"
 
 # TokenClassification docstring
 _CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "vumichien/mobilebert-finetuned-ner"
@@ -82,22 +84,50 @@ _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "vumichien/emo-mobilebert"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'others'"
 _SEQ_CLASS_EXPECTED_LOSS = "4.72"
 
-TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/mobilebert-uncased",
-    # See all MobileBERT models at https://huggingface.co/models?filter=mobilebert
-]
+
+from ..deprecated._archive_maps import TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
-class TFMobileBertIntermediate(tf.keras.layers.Layer):
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPreTrainingLoss
+class TFMobileBertPreTrainingLoss:
+    """
+    Loss function suitable for BERT-like pretraining, that is, the task of pretraining a language model by combining
+    NSP + MLM. .. note:: Any label of -100 will be ignored (along with the corresponding logits) in the loss
+    computation.
+    """
+
+    def hf_compute_loss(self, labels: tf.Tensor, logits: tf.Tensor) -> tf.Tensor:
+        loss_fn = keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=keras.losses.Reduction.NONE)
+
+        # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+        unmasked_lm_losses = loss_fn(y_true=tf.nn.relu(labels["labels"]), y_pred=logits[0])
+        # make sure only labels that are not equal to -100
+        # are taken into account for the loss computation
+        lm_loss_mask = tf.cast(labels["labels"] != -100, dtype=unmasked_lm_losses.dtype)
+        masked_lm_losses = unmasked_lm_losses * lm_loss_mask
+        reduced_masked_lm_loss = tf.reduce_sum(masked_lm_losses) / tf.reduce_sum(lm_loss_mask)
+
+        # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+        unmasked_ns_loss = loss_fn(y_true=tf.nn.relu(labels["next_sentence_label"]), y_pred=logits[1])
+        ns_loss_mask = tf.cast(labels["next_sentence_label"] != -100, dtype=unmasked_ns_loss.dtype)
+        masked_ns_loss = unmasked_ns_loss * ns_loss_mask
+
+        reduced_masked_ns_loss = tf.reduce_sum(masked_ns_loss) / tf.reduce_sum(ns_loss_mask)
+
+        return tf.reshape(reduced_masked_lm_loss + reduced_masked_ns_loss, (1,))
+
+
+class TFMobileBertIntermediate(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(config.intermediate_size, name="dense")
+        self.dense = keras.layers.Dense(config.intermediate_size, name="dense")
 
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
+        self.config = config
 
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -105,13 +135,25 @@ class TFMobileBertIntermediate(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.true_hidden_size])
 
-class TFLayerNorm(tf.keras.layers.LayerNormalization):
+
+class TFLayerNorm(keras.layers.LayerNormalization):
     def __init__(self, feat_size, *args, **kwargs):
+        self.feat_size = feat_size
         super().__init__(*args, **kwargs)
 
+    def build(self, input_shape=None):
+        super().build([None, None, self.feat_size])
 
-class TFNoNorm(tf.keras.layers.Layer):
+
+class TFNoNorm(keras.layers.Layer):
     def __init__(self, feat_size, epsilon=None, **kwargs):
         super().__init__(**kwargs)
         self.feat_size = feat_size
@@ -119,6 +161,7 @@ class TFNoNorm(tf.keras.layers.Layer):
     def build(self, input_shape):
         self.bias = self.add_weight("bias", shape=[self.feat_size], initializer="zeros")
         self.weight = self.add_weight("weight", shape=[self.feat_size], initializer="ones")
+        super().build(input_shape)
 
     def call(self, inputs: tf.Tensor):
         return inputs * self.weight + self.bias
@@ -127,7 +170,7 @@ class TFNoNorm(tf.keras.layers.Layer):
 NORM2FN = {"layer_norm": TFLayerNorm, "no_norm": TFNoNorm}
 
 
-class TFMobileBertEmbeddings(tf.keras.layers.Layer):
+class TFMobileBertEmbeddings(keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config, **kwargs):
@@ -135,32 +178,32 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
 
         self.trigram_input = config.trigram_input
         self.embedding_size = config.embedding_size
-        self.vocab_size = config.vocab_size
+        self.config = config
         self.hidden_size = config.hidden_size
-        self.type_vocab_size = config.type_vocab_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.embedding_transformation = tf.keras.layers.Dense(config.hidden_size, name="embedding_transformation")
+        self.embedding_transformation = keras.layers.Dense(config.hidden_size, name="embedding_transformation")
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
         self.LayerNorm = NORM2FN[config.normalization_type](
             config.hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.embedded_input_size = self.embedding_size * (3 if self.trigram_input else 1)
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
-                shape=[self.vocab_size, self.embedding_size],
+                shape=[self.config.vocab_size, self.embedding_size],
                 initializer=get_initializer(initializer_range=self.initializer_range),
             )
 
         with tf.name_scope("token_type_embeddings"):
             self.token_type_embeddings = self.add_weight(
                 name="embeddings",
-                shape=[self.type_vocab_size, self.hidden_size],
+                shape=[self.config.type_vocab_size, self.hidden_size],
                 initializer=get_initializer(initializer_range=self.initializer_range),
             )
 
@@ -171,7 +214,15 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
                 initializer=get_initializer(initializer_range=self.initializer_range),
             )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embedding_transformation", None) is not None:
+            with tf.name_scope(self.embedding_transformation.name):
+                self.embedding_transformation.build([None, None, self.embedded_input_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build(None)
 
     def call(self, input_ids=None, position_ids=None, token_type_ids=None, inputs_embeds=None, training=False):
         """
@@ -183,6 +234,7 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
         assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
+            check_embeddings_within_bounds(input_ids, self.config.vocab_size)
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
         input_shape = shape_list(inputs_embeds)[:-1]
@@ -222,7 +274,7 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
         return final_embeddings
 
 
-class TFMobileBertSelfAttention(tf.keras.layers.Layer):
+class TFMobileBertSelfAttention(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         if config.hidden_size % config.num_attention_heads != 0:
@@ -237,17 +289,18 @@ class TFMobileBertSelfAttention(tf.keras.layers.Layer):
         self.attention_head_size = int(config.true_hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = tf.keras.layers.Dense(
+        self.query = keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = tf.keras.layers.Dense(
+        self.key = keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
-        self.value = tf.keras.layers.Dense(
+        self.value = keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
 
-        self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.dropout = keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.config = config
 
     def transpose_for_scores(self, x, batch_size):
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
@@ -299,19 +352,42 @@ class TFMobileBertSelfAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "query", None) is not None:
+            with tf.name_scope(self.query.name):
+                self.query.build([None, None, self.config.true_hidden_size])
+        if getattr(self, "key", None) is not None:
+            with tf.name_scope(self.key.name):
+                self.key.build([None, None, self.config.true_hidden_size])
+        if getattr(self, "value", None) is not None:
+            with tf.name_scope(self.value.name):
+                self.value.build(
+                    [
+                        None,
+                        None,
+                        self.config.true_hidden_size
+                        if self.config.use_bottleneck_attention
+                        else self.config.hidden_size,
+                    ]
+                )
 
-class TFMobileBertSelfOutput(tf.keras.layers.Layer):
+
+class TFMobileBertSelfOutput(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.use_bottleneck = config.use_bottleneck
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.true_hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.LayerNorm = NORM2FN[config.normalization_type](
             config.true_hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm"
         )
         if not self.use_bottleneck:
-            self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+            self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states, residual_tensor, training=False):
         hidden_states = self.dense(hidden_states)
@@ -320,8 +396,19 @@ class TFMobileBertSelfOutput(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(hidden_states + residual_tensor)
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.true_hidden_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build(None)
 
-class TFMobileBertAttention(tf.keras.layers.Layer):
+
+class TFMobileBertAttention(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.self = TFMobileBertSelfAttention(config, name="self")
@@ -349,15 +436,27 @@ class TFMobileBertAttention(tf.keras.layers.Layer):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self", None) is not None:
+            with tf.name_scope(self.self.name):
+                self.self.build(None)
+        if getattr(self, "mobilebert_output", None) is not None:
+            with tf.name_scope(self.mobilebert_output.name):
+                self.mobilebert_output.build(None)
 
-class TFOutputBottleneck(tf.keras.layers.Layer):
+
+class TFOutputBottleneck(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(config.hidden_size, name="dense")
+        self.dense = keras.layers.Dense(config.hidden_size, name="dense")
         self.LayerNorm = NORM2FN[config.normalization_type](
             config.hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm"
         )
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states, residual_tensor, training=False):
         layer_outputs = self.dense(hidden_states)
@@ -365,21 +464,33 @@ class TFOutputBottleneck(tf.keras.layers.Layer):
         layer_outputs = self.LayerNorm(layer_outputs + residual_tensor)
         return layer_outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.true_hidden_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build(None)
 
-class TFMobileBertOutput(tf.keras.layers.Layer):
+
+class TFMobileBertOutput(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.use_bottleneck = config.use_bottleneck
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.true_hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.LayerNorm = NORM2FN[config.normalization_type](
             config.true_hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm"
         )
         if not self.use_bottleneck:
-            self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+            self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
         else:
             self.bottleneck = TFOutputBottleneck(config, name="bottleneck")
+        self.config = config
 
     def call(self, hidden_states, residual_tensor_1, residual_tensor_2, training=False):
         hidden_states = self.dense(hidden_states)
@@ -391,22 +502,48 @@ class TFMobileBertOutput(tf.keras.layers.Layer):
             hidden_states = self.bottleneck(hidden_states, residual_tensor_2)
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.intermediate_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build(None)
+        if getattr(self, "bottleneck", None) is not None:
+            with tf.name_scope(self.bottleneck.name):
+                self.bottleneck.build(None)
 
-class TFBottleneckLayer(tf.keras.layers.Layer):
+
+class TFBottleneckLayer(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(config.intra_bottleneck_size, name="dense")
+        self.dense = keras.layers.Dense(config.intra_bottleneck_size, name="dense")
         self.LayerNorm = NORM2FN[config.normalization_type](
             config.intra_bottleneck_size, epsilon=config.layer_norm_eps, name="LayerNorm"
         )
+        self.config = config
 
     def call(self, inputs):
         hidden_states = self.dense(inputs)
         hidden_states = self.LayerNorm(hidden_states)
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build(None)
 
-class TFBottleneck(tf.keras.layers.Layer):
+
+class TFBottleneck(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.key_query_shared_bottleneck = config.key_query_shared_bottleneck
@@ -441,22 +578,45 @@ class TFBottleneck(tf.keras.layers.Layer):
         else:
             return (hidden_states, hidden_states, hidden_states, bottlenecked_hidden_states)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "bottleneck_input", None) is not None:
+            with tf.name_scope(self.bottleneck_input.name):
+                self.bottleneck_input.build(None)
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
 
-class TFFFNOutput(tf.keras.layers.Layer):
+
+class TFFFNOutput(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(config.true_hidden_size, name="dense")
+        self.dense = keras.layers.Dense(config.true_hidden_size, name="dense")
         self.LayerNorm = NORM2FN[config.normalization_type](
             config.true_hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm"
         )
+        self.config = config
 
     def call(self, hidden_states, residual_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + residual_tensor)
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.intermediate_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build(None)
 
-class TFFFNLayer(tf.keras.layers.Layer):
+
+class TFFFNLayer(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.intermediate = TFMobileBertIntermediate(config, name="intermediate")
@@ -467,8 +627,19 @@ class TFFFNLayer(tf.keras.layers.Layer):
         layer_outputs = self.mobilebert_output(intermediate_output, hidden_states)
         return layer_outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "intermediate", None) is not None:
+            with tf.name_scope(self.intermediate.name):
+                self.intermediate.build(None)
+        if getattr(self, "mobilebert_output", None) is not None:
+            with tf.name_scope(self.mobilebert_output.name):
+                self.mobilebert_output.build(None)
 
-class TFMobileBertLayer(tf.keras.layers.Layer):
+
+class TFMobileBertLayer(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.use_bottleneck = config.use_bottleneck
@@ -527,8 +698,29 @@ class TFMobileBertLayer(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "intermediate", None) is not None:
+            with tf.name_scope(self.intermediate.name):
+                self.intermediate.build(None)
+        if getattr(self, "mobilebert_output", None) is not None:
+            with tf.name_scope(self.mobilebert_output.name):
+                self.mobilebert_output.build(None)
+        if getattr(self, "bottleneck", None) is not None:
+            with tf.name_scope(self.bottleneck.name):
+                self.bottleneck.build(None)
+        if getattr(self, "ffn", None) is not None:
+            for layer in self.ffn:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
-class TFMobileBertEncoder(tf.keras.layers.Layer):
+
+class TFMobileBertEncoder(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
@@ -570,18 +762,28 @@ class TFMobileBertEncoder(tf.keras.layers.Layer):
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layer", None) is not None:
+            for layer in self.layer:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
-class TFMobileBertPooler(tf.keras.layers.Layer):
+
+class TFMobileBertPooler(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.do_activate = config.classifier_activation
         if self.do_activate:
-            self.dense = tf.keras.layers.Dense(
+            self.dense = keras.layers.Dense(
                 config.hidden_size,
                 kernel_initializer=get_initializer(config.initializer_range),
                 activation="tanh",
                 name="dense",
             )
+        self.config = config
 
     def call(self, hidden_states):
         # We "pool" the model by simply taking the hidden state corresponding
@@ -593,11 +795,19 @@ class TFMobileBertPooler(tf.keras.layers.Layer):
             pooled_output = self.dense(first_token_tensor)
             return pooled_output
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
 
-class TFMobileBertPredictionHeadTransform(tf.keras.layers.Layer):
+
+class TFMobileBertPredictionHeadTransform(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         if isinstance(config.hidden_act, str):
@@ -605,6 +815,7 @@ class TFMobileBertPredictionHeadTransform(tf.keras.layers.Layer):
         else:
             self.transform_act_fn = config.hidden_act
         self.LayerNorm = NORM2FN["layer_norm"](config.hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.config = config
 
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -612,18 +823,28 @@ class TFMobileBertPredictionHeadTransform(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(hidden_states)
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build(None)
 
-class TFMobileBertLMPredictionHead(tf.keras.layers.Layer):
+
+class TFMobileBertLMPredictionHead(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.transform = TFMobileBertPredictionHeadTransform(config, name="transform")
-        self.vocab_size = config.vocab_size
         self.config = config
 
-    def build(self, input_shape):
-        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+    def build(self, input_shape=None):
+        self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
         self.dense = self.add_weight(
-            shape=(self.config.hidden_size - self.config.embedding_size, self.vocab_size),
+            shape=(self.config.hidden_size - self.config.embedding_size, self.config.vocab_size),
             initializer="zeros",
             trainable=True,
             name="dense/weight",
@@ -634,21 +855,27 @@ class TFMobileBertLMPredictionHead(tf.keras.layers.Layer):
             trainable=True,
             name="decoder/weight",
         )
-        super().build(input_shape)
+
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transform", None) is not None:
+            with tf.name_scope(self.transform.name):
+                self.transform.build(None)
 
     def get_output_embeddings(self):
         return self
 
     def set_output_embeddings(self, value):
         self.decoder = value
-        self.vocab_size = shape_list(value)[0]
+        self.config.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
         return {"bias": self.bias}
 
     def set_bias(self, value):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.config.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -657,7 +884,7 @@ class TFMobileBertLMPredictionHead(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFMobileBertMLMHead(tf.keras.layers.Layer):
+class TFMobileBertMLMHead(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.predictions = TFMobileBertLMPredictionHead(config, name="predictions")
@@ -666,9 +893,17 @@ class TFMobileBertMLMHead(tf.keras.layers.Layer):
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "predictions", None) is not None:
+            with tf.name_scope(self.predictions.name):
+                self.predictions.build(None)
+
 
 @keras_serializable
-class TFMobileBertMainLayer(tf.keras.layers.Layer):
+class TFMobileBertMainLayer(keras.layers.Layer):
     config_class = MobileBertConfig
 
     def __init__(self, config, add_pooling_layer=True, **kwargs):
@@ -782,6 +1017,20 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
             attentions=encoder_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "pooler", None) is not None:
+            with tf.name_scope(self.pooler.name):
+                self.pooler.build(None)
+
 
 class TFMobileBertPreTrainedModel(TFPreTrainedModel):
     """
@@ -817,11 +1066,11 @@ class TFMobileBertForPreTrainingOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[tf.Tensor] = None
+    loss: tf.Tensor | None = None
     prediction_logits: tf.Tensor = None
     seq_relationship_logits: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 MOBILEBERT_START_DOCSTRING = r"""
@@ -830,28 +1079,33 @@ MOBILEBERT_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
     <Tip>
 
-    TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
     - having all inputs as keyword arguments (like PyTorch models), or
-    - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
-    tensors in the first argument of the model call function: `model(inputs)`.
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
-    first positional argument :
-
-    - a single Tensor with `input_ids` only and nothing else: `model(inputs_ids)`
+    - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
     `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
     `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
 
@@ -866,7 +1120,7 @@ MOBILEBERT_INPUTS_DOCSTRING = r"""
         input_ids (`Numpy array` or `tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MobileBertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -929,19 +1183,18 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -962,16 +1215,13 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
 
         return outputs
 
-    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutputWithPooling(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            hidden_states=hs,
-            attentions=attns,
-        )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "mobilebert", None) is not None:
+            with tf.name_scope(self.mobilebert.name):
+                self.mobilebert.build(None)
 
 
 @add_start_docstrings(
@@ -981,12 +1231,12 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
     """,
     MOBILEBERT_START_DOCSTRING,
 )
-class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
+class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel, TFMobileBertPreTrainingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
         self.predictions = TFMobileBertMLMHead(config, name="predictions___cls")
-        self.seq_relationship = TFMobileBertOnlyNSPHead(2, name="seq_relationship___cls")
+        self.seq_relationship = TFMobileBertOnlyNSPHead(config, name="seq_relationship___cls")
 
     def get_lm_head(self):
         return self.predictions.predictions
@@ -1000,15 +1250,17 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
     @replace_return_docstrings(output_type=TFMobileBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
+        next_sentence_label: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFMobileBertForPreTrainingOutput]:
         r"""
@@ -1018,9 +1270,9 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import MobileBertTokenizer, TFMobileBertForPreTraining
+        >>> from transformers import AutoTokenizer, TFMobileBertForPreTraining
 
-        >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/mobilebert-uncased")
         >>> model = TFMobileBertForPreTraining.from_pretrained("google/mobilebert-uncased")
         >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         >>> outputs = model(input_ids)
@@ -1043,26 +1295,43 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
         prediction_scores = self.predictions(sequence_output)
         seq_relationship_score = self.seq_relationship(pooled_output)
 
+        total_loss = None
+        if labels is not None and next_sentence_label is not None:
+            d_labels = {"labels": labels}
+            d_labels["next_sentence_label"] = next_sentence_label
+            total_loss = self.hf_compute_loss(labels=d_labels, logits=(prediction_scores, seq_relationship_score))
+
         if not return_dict:
-            return (prediction_scores, seq_relationship_score) + outputs[2:]
+            output = (prediction_scores, seq_relationship_score) + outputs[2:]
+            return ((total_loss,) + output) if total_loss is not None else output
 
         return TFMobileBertForPreTrainingOutput(
+            loss=total_loss,
             prediction_logits=prediction_scores,
             seq_relationship_logits=seq_relationship_score,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "mobilebert", None) is not None:
+            with tf.name_scope(self.mobilebert.name):
+                self.mobilebert.build(None)
+        if getattr(self, "predictions", None) is not None:
+            with tf.name_scope(self.predictions.name):
+                self.predictions.build(None)
+        if getattr(self, "seq_relationship", None) is not None:
+            with tf.name_scope(self.seq_relationship.name):
+                self.seq_relationship.build(None)
 
-        return TFMobileBertForPreTrainingOutput(
-            prediction_logits=output.prediction_logits,
-            seq_relationship_logits=output.seq_relationship_logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+    def tf_to_pt_weight_rename(self, tf_weight):
+        if tf_weight == "cls.predictions.decoder.weight":
+            return tf_weight, "mobilebert.embeddings.word_embeddings.weight"
+        else:
+            return (tf_weight,)
 
 
 @add_start_docstrings("""MobileBert Model with a `language modeling` head on top.""", MOBILEBERT_START_DOCSTRING)
@@ -1090,7 +1359,6 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1099,16 +1367,16 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFMaskedLMOutput]:
         r"""
@@ -1145,22 +1413,41 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
-    def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "mobilebert", None) is not None:
+            with tf.name_scope(self.mobilebert.name):
+                self.mobilebert.build(None)
+        if getattr(self, "predictions", None) is not None:
+            with tf.name_scope(self.predictions.name):
+                self.predictions.build(None)
 
-        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+    def tf_to_pt_weight_rename(self, tf_weight):
+        if tf_weight == "cls.predictions.decoder.weight":
+            return tf_weight, "mobilebert.embeddings.word_embeddings.weight"
+        else:
+            return (tf_weight,)
 
 
-class TFMobileBertOnlyNSPHead(tf.keras.layers.Layer):
+class TFMobileBertOnlyNSPHead(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.seq_relationship = tf.keras.layers.Dense(2, name="seq_relationship")
+        self.seq_relationship = keras.layers.Dense(2, name="seq_relationship")
+        self.config = config
 
     def call(self, pooled_output):
         seq_relationship_score = self.seq_relationship(pooled_output)
         return seq_relationship_score
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "seq_relationship", None) is not None:
+            with tf.name_scope(self.seq_relationship.name):
+                self.seq_relationship.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1182,16 +1469,16 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
     @replace_return_docstrings(output_type=TFNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        next_sentence_label: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        next_sentence_label: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFNextSentencePredictorOutput]:
         r"""
@@ -1201,9 +1488,9 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import MobileBertTokenizer, TFMobileBertForNextSentencePrediction
+        >>> from transformers import AutoTokenizer, TFMobileBertForNextSentencePrediction
 
-        >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/mobilebert-uncased")
         >>> model = TFMobileBertForNextSentencePrediction.from_pretrained("google/mobilebert-uncased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
@@ -1244,12 +1531,16 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForNextSentencePrediction.serving_output
-    def serving_output(self, output: TFNextSentencePredictorOutput) -> TFNextSentencePredictorOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFNextSentencePredictorOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "mobilebert", None) is not None:
+            with tf.name_scope(self.mobilebert.name):
+                self.mobilebert.build(None)
+        if getattr(self, "cls", None) is not None:
+            with tf.name_scope(self.cls.name):
+                self.cls.build(None)
 
 
 @add_start_docstrings(
@@ -1277,15 +1568,15 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
-        self.dropout = tf.keras.layers.Dropout(classifier_dropout)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(classifier_dropout)
+        self.classifier = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1294,16 +1585,16 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFSequenceClassifierOutput]:
         r"""
@@ -1342,12 +1633,16 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
-    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "mobilebert", None) is not None:
+            with tf.name_scope(self.mobilebert.name):
+                self.mobilebert.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1372,14 +1667,14 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
         self.num_labels = config.num_labels
 
         self.mobilebert = TFMobileBertMainLayer(config, add_pooling_layer=False, name="mobilebert")
-        self.qa_outputs = tf.keras.layers.Dense(
+        self.qa_outputs = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_QA,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1390,17 +1685,17 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        start_positions: np.ndarray | tf.Tensor | None = None,
+        end_positions: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFQuestionAnsweringModelOutput]:
         r"""
@@ -1449,14 +1744,16 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
-    def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFQuestionAnsweringModelOutput(
-            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
-        )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "mobilebert", None) is not None:
+            with tf.name_scope(self.mobilebert.name):
+                self.mobilebert.build(None)
+        if getattr(self, "qa_outputs", None) is not None:
+            with tf.name_scope(self.qa_outputs.name):
+                self.qa_outputs.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1480,43 +1777,33 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
         super().__init__(config, *inputs, **kwargs)
 
         self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
+        self.classifier = keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
-
-    @property
-    def dummy_inputs(self):
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            tf.Tensor with dummy inputs
-        """
-        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(
         MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFMultipleChoiceModelOutput]:
         r"""
@@ -1570,27 +1857,16 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
             attentions=outputs.attentions,
         )
 
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
-            }
-        ]
-    )
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving
-    def serving(self, inputs: Dict[str, tf.Tensor]):
-        output = self.call(input_ids=inputs)
-
-        return self.serving_output(output)
-
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
-    def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "mobilebert", None) is not None:
+            with tf.name_scope(self.mobilebert.name):
+                self.mobilebert.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1619,15 +1895,15 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
-        self.dropout = tf.keras.layers.Dropout(classifier_dropout)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(classifier_dropout)
+        self.classifier = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_TOKEN_CLASSIFICATION,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1636,16 +1912,16 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFTokenClassifierOutput]:
         r"""
@@ -1682,9 +1958,13 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
-    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "mobilebert", None) is not None:
+            with tf.name_scope(self.mobilebert.name):
+                self.mobilebert.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])

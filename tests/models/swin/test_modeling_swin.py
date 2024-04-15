@@ -14,43 +14,30 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Swin model. """
 
-import copy
-import inspect
-import os
-import pickle
-import tempfile
+import collections
 import unittest
 
 from transformers import SwinConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_torch_fx_available, is_vision_available
+from transformers.utils import cached_property, is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import SwinForImageClassification, SwinForMaskedImageModeling, SwinModel
-    from transformers.models.swin.modeling_swin import SWIN_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
+    from transformers import SwinBackbone, SwinForImageClassification, SwinForMaskedImageModeling, SwinModel
+
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
-
-if is_torch_fx_available():
-    from transformers.utils.fx import symbolic_trace
-
-
-def _config_zero_init(config):
-    configs_no_init = copy.deepcopy(config)
-    for key in configs_no_init.__dict__.keys():
-        if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
-            setattr(configs_no_init, key, 1e-10)
-    return configs_no_init
+    from transformers import AutoImageProcessor
 
 
 class SwinModelTester:
@@ -80,6 +67,8 @@ class SwinModelTester:
         use_labels=True,
         type_sequence_label_size=10,
         encoder_stride=8,
+        out_features=["stage1", "stage2"],
+        out_indices=[1, 2],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -105,6 +94,8 @@ class SwinModelTester:
         self.use_labels = use_labels
         self.type_sequence_label_size = type_sequence_label_size
         self.encoder_stride = encoder_stride
+        self.out_features = out_features
+        self.out_indices = out_indices
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -137,6 +128,8 @@ class SwinModelTester:
             layer_norm_eps=self.layer_norm_eps,
             initializer_range=self.initializer_range,
             encoder_stride=self.encoder_stride,
+            out_features=self.out_features,
+            out_indices=self.out_indices,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -150,12 +143,68 @@ class SwinModelTester:
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, expected_dim))
 
+    def create_and_check_backbone(self, config, pixel_values, labels):
+        model = SwinBackbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify hidden states
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], 16, 16])
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), len(config.out_features))
+
+        # verify backbone works with out_features=None
+        config.out_features = None
+        model = SwinBackbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify feature maps
+        self.parent.assertEqual(len(result.feature_maps), 1)
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, model.channels[-1], 4, 4])
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), 1)
+
+    def create_and_check_for_masked_image_modeling(self, config, pixel_values, labels):
+        model = SwinForMaskedImageModeling(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
+        )
+
+        # test greyscale images
+        config.num_channels = 1
+        model = SwinForMaskedImageModeling(config)
+        model.to(torch_device)
+        model.eval()
+
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        result = model(pixel_values)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.image_size, self.image_size))
+
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
         model = SwinForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+
+        # test greyscale images
+        config.num_channels = 1
+        model = SwinForImageClassification(config)
+        model.to(torch_device)
+        model.eval()
+
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
     def prepare_config_and_inputs_for_common(self):
@@ -170,16 +219,21 @@ class SwinModelTester:
 
 
 @require_torch
-class SwinModelTest(ModelTesterMixin, unittest.TestCase):
-
+class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             SwinModel,
+            SwinBackbone,
             SwinForImageClassification,
             SwinForMaskedImageModeling,
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"image-feature-extraction": SwinModel, "image-classification": SwinForImageClassification}
+        if is_torch_available()
+        else {}
     )
     fx_compatible = True
 
@@ -207,8 +261,32 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    # TODO: check if this works again for PyTorch 2.x.y
+    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
+    def test_training_gradient_checkpointing(self):
+        super().test_training_gradient_checkpointing()
+
+    def test_backbone(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_backbone(*config_and_inputs)
+
+    def test_for_masked_image_modeling(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
+
+    def test_for_image_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+
+    @unittest.skip(reason="Swin does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # Swin does not use inputs_embeds
+        pass
+
+    @unittest.skip(reason="Swin Transformer does not use feedforward chunking")
+    def test_feed_forward_chunking(self):
         pass
 
     def test_model_common_attributes(self):
@@ -219,18 +297,6 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -276,11 +342,8 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if hasattr(self.model_tester, "num_hidden_states_types"):
-                added_hidden_states = self.model_tester.num_hidden_states_types
-            else:
-                # also another +1 for reshaped_hidden_states
-                added_hidden_states = 2
+            # also another +1 for reshaped_hidden_states
+            added_hidden_states = 1 if model_class.__name__ == "SwinBackbone" else 2
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
             self_attentions = outputs.attentions
@@ -308,7 +371,11 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(len(hidden_states), expected_num_layers)
 
         # Swin has a different seq_length
-        patch_size = to_2tuple(config.patch_size)
+        patch_size = (
+            config.patch_size
+            if isinstance(config.patch_size, collections.abc.Iterable)
+            else (config.patch_size, config.patch_size)
+        )
 
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
@@ -317,22 +384,27 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             [num_patches, self.model_tester.embed_dim],
         )
 
-        reshaped_hidden_states = outputs.reshaped_hidden_states
-        self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
+        if not model_class.__name__ == "SwinBackbone":
+            reshaped_hidden_states = outputs.reshaped_hidden_states
+            self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
 
-        batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
-        reshaped_hidden_states = (
-            reshaped_hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
-        )
-        self.assertListEqual(
-            list(reshaped_hidden_states.shape[-2:]),
-            [num_patches, self.model_tester.embed_dim],
-        )
+            batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
+            reshaped_hidden_states = (
+                reshaped_hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
+            )
+            self.assertListEqual(
+                list(reshaped_hidden_states.shape[-2:]),
+                [num_patches, self.model_tester.embed_dim],
+            )
 
     def test_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        image_size = to_2tuple(self.model_tester.image_size)
+        image_size = (
+            self.model_tester.image_size
+            if isinstance(self.model_tester.image_size, collections.abc.Iterable)
+            else (self.model_tester.image_size, self.model_tester.image_size)
+        )
 
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True
@@ -348,8 +420,16 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.patch_size = 3
 
-        image_size = to_2tuple(self.model_tester.image_size)
-        patch_size = to_2tuple(config.patch_size)
+        image_size = (
+            self.model_tester.image_size
+            if isinstance(self.model_tester.image_size, collections.abc.Iterable)
+            else (self.model_tester.image_size, self.model_tester.image_size)
+        )
+        patch_size = (
+            config.patch_size
+            if isinstance(config.patch_size, collections.abc.Iterable)
+            else (config.patch_size, config.patch_size)
+        )
 
         padded_height = image_size[0] + patch_size[0] - (image_size[0] % patch_size[0])
         padded_width = image_size[1] + patch_size[1] - (image_size[1] % patch_size[1])
@@ -363,15 +443,11 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
             self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
 
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SWIN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SwinModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/swin-tiny-patch4-window7-224"
+        model = SwinModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -387,105 +463,14 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
-    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
-        if not is_torch_fx_available() or not self.fx_compatible:
-            return
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.return_dict = False
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=output_loss)
-
-            try:
-                if model.config.is_encoder_decoder:
-                    model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
-                    labels = inputs.get("labels", None)
-                    input_names = ["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask"]
-                    if labels is not None:
-                        input_names.append("labels")
-                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
-
-                    model_output = model(**filtered_inputs)
-
-                    traced_model = symbolic_trace(model, input_names)
-                    traced_output = traced_model(**filtered_inputs)
-                else:
-                    input_names = ["input_ids", "attention_mask", "token_type_ids", "pixel_values"]
-
-                    labels = inputs.get("labels", None)
-                    start_positions = inputs.get("start_positions", None)
-                    end_positions = inputs.get("end_positions", None)
-                    if labels is not None:
-                        input_names.append("labels")
-                    if start_positions is not None:
-                        input_names.append("start_positions")
-                    if end_positions is not None:
-                        input_names.append("end_positions")
-
-                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
-                    input_names = filtered_inputs.keys()
-
-                    model_output = model(**filtered_inputs)
-
-                    traced_model = symbolic_trace(model, input_names)
-                    traced_output = traced_model(**filtered_inputs)
-
-            except RuntimeError as e:
-                self.fail(f"Couldn't trace module: {e}")
-
-            def flatten_output(output):
-                flatten = []
-                for x in output:
-                    if isinstance(x, (tuple, list)):
-                        flatten += flatten_output(x)
-                    elif not isinstance(x, torch.Tensor):
-                        continue
-                    else:
-                        flatten.append(x)
-                return flatten
-
-            model_output = flatten_output(model_output)
-            traced_output = flatten_output(traced_output)
-            num_outputs = len(model_output)
-
-            for i in range(num_outputs):
-                self.assertTrue(
-                    torch.allclose(model_output[i], traced_output[i]),
-                    f"traced {i}th output doesn't match model {i}th output for {model_class}",
-                )
-
-            # Test that the model can be serialized and restored properly
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pkl_file_name = os.path.join(tmp_dir_name, "model.pkl")
-                try:
-                    with open(pkl_file_name, "wb") as f:
-                        pickle.dump(traced_model, f)
-                    with open(pkl_file_name, "rb") as f:
-                        loaded = pickle.load(f)
-                except Exception as e:
-                    self.fail(f"Couldn't serialize / deserialize the traced model: {e}")
-
-                loaded_output = loaded(**filtered_inputs)
-                loaded_output = flatten_output(loaded_output)
-
-                for i in range(num_outputs):
-                    self.assertTrue(
-                        torch.allclose(model_output[i], loaded_output[i]),
-                        f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
-                    )
-
 
 @require_vision
 @require_torch
 class SwinModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
-            AutoFeatureExtractor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
+            AutoImageProcessor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
             if is_vision_available()
             else None
         )
@@ -493,10 +478,10 @@ class SwinModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification_head(self):
         model = SwinForImageClassification.from_pretrained("microsoft/swin-tiny-patch4-window7-224").to(torch_device)
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -507,3 +492,12 @@ class SwinModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
         expected_slice = torch.tensor([-0.0948, -0.6454, -0.0921]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+
+@require_torch
+class SwinBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (SwinBackbone,) if is_torch_available() else ()
+    config_class = SwinConfig
+
+    def setUp(self):
+        self.model_tester = SwinModelTester(self)

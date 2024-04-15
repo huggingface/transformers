@@ -28,29 +28,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "tau/splinter-base": "https://huggingface.co/tau/splinter-base/resolve/main/vocab.txt",
-        "tau/splinter-base-qass": "https://huggingface.co/tau/splinter-base-qass/resolve/main/vocab.txt",
-        "tau/splinter-large": "https://huggingface.co/tau/splinter-large/resolve/main/vocab.txt",
-        "tau/splinter-large-qass": "https://huggingface.co/tau/splinter-large-qass/resolve/main/vocab.txt",
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "tau/splinter-base": 512,
-    "tau/splinter-base-qass": 512,
-    "tau/splinter-large": 512,
-    "tau/splinter-large-qass": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "tau/splinter-base": {"do_lower_case": False},
-    "tau/splinter-base-qass": {"do_lower_case": False},
-    "tau/splinter-large": {"do_lower_case": False},
-    "tau/splinter-large-qass": {"do_lower_case": False},
-}
-
 
 class SplinterTokenizerFast(PreTrainedTokenizerFast):
     r"""
@@ -87,17 +64,14 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see [this
             issue](https://github.com/huggingface/transformers/issues/328)).
-        strip_accents: (`bool`, *optional*):
+        strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
-        wordpieces_prefix: (`str`, *optional*, defaults to `"##"`):
+        wordpieces_prefix (`str`, *optional*, defaults to `"##"`):
             The prefix for subwords.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = SplinterTokenizer
 
     def __init__(
@@ -113,7 +87,7 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
         question_token="[QUESTION]",
         tokenize_chinese_chars=True,
         strip_accents=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,

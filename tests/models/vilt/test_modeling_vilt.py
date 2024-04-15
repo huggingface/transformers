@@ -20,26 +20,26 @@ from datasets import load_dataset
 from packaging import version
 
 from transformers import ViltConfig, is_torch_available, is_vision_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_MAPPING,
         ViltForImageAndTextRetrieval,
         ViltForImagesAndTextClassification,
         ViltForMaskedLM,
         ViltForQuestionAnswering,
+        ViltForTokenClassification,
         ViltModel,
     )
-    from transformers.models.vilt.modeling_vilt import VILT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 
 if is_vision_available():
     import PIL
@@ -63,7 +63,7 @@ class ViltModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -173,6 +173,23 @@ class ViltModelTester:
             result.last_hidden_state.shape, (self.batch_size, self.expected_seq_len, self.hidden_size)
         )
 
+    def create_and_check_for_token_classification(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        pixel_values,
+        token_labels,
+    ):
+        model = ViltForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, pixel_values=pixel_values)
+        result = model(input_ids, token_type_ids=token_type_ids, pixel_values=pixel_values)
+        result = model(input_ids, pixel_values=pixel_values)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -196,35 +213,38 @@ class ViltModelTester:
 
 
 @require_torch
-class ViltModelTest(ModelTesterMixin, unittest.TestCase):
-
+class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ViltModel,
             ViltForQuestionAnswering,
             ViltForImageAndTextRetrieval,
             ViltForMaskedLM,
+            ViltForTokenClassification,
         )
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {"image-feature-extraction": ViltModel, "visual-question-answering": ViltForQuestionAnswering}
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
+    model_split_percents = [0.5, 0.8, 0.9]
 
     # ViltForMaskedLM, ViltForQuestionAnswering and ViltForImagesAndTextClassification require special treatment
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-
-        # if model_class.__name__ == "ViltForNaturalLanguageVisualReasonining":
-        #     inputs_dict["pixel_values"] = floats_tensor([self.model_tester.batch_size, self.model_tester.num_images, self.model_tester.num_channels, self.model_tester.image_size, self.model_tester.image_size])
 
         if return_labels:
             if model_class.__name__ == "ViltForQuestionAnswering":
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, self.model_tester.num_labels, device=torch_device
                 )
-            elif model_class.__name__ == "ViltForMaskedLM":
+            elif model_class.__name__ in ["ViltForMaskedLM", "ViltForTokenClassification"]:
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )
@@ -246,6 +266,10 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
+
     def test_training(self):
         if not self.model_tester.is_training:
             return
@@ -258,7 +282,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
                 config.modality_type_vocab_size = 3
 
             # ViltForImageAndTextRetrieval doesn't support training for now
-            if model_class in [*get_values(MODEL_MAPPING), ViltForImageAndTextRetrieval]:
+            if model_class.__name__ in [*MODEL_MAPPING_NAMES.values(), "ViltForImageAndTextRetrieval"]:
                 continue
 
             model = model_class(config)
@@ -281,7 +305,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
 
             # ViltForImageAndTextRetrieval doesn't support training for now
             if (
-                model_class in [*get_values(MODEL_MAPPING), ViltForImageAndTextRetrieval]
+                model_class.__name__ in [*MODEL_MAPPING_NAMES.values(), "ViltForImageAndTextRetrieval"]
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
@@ -295,6 +319,18 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             loss.backward()
 
     @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(
         reason="""VilT samples image tokens from a multinomial distribution, resulting in not deterministic
                             hidden states"""
     )
@@ -306,6 +342,12 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
                             hidden states"""
     )
     def test_determinism(self):
+        pass
+
+    @unittest.skip(
+        "VilT samples image tokens from a multinomial distribution, resulting in not deterministic hidden states"
+    )
+    def test_batching_equivalence(self):
         pass
 
     @unittest.skip(
@@ -485,14 +527,13 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VILT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ViltModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "dandelin/vilt-b32-mlm"
+        model = ViltModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
 class ViltForImagesAndTextClassificationModelTest(ViltModelTest, unittest.TestCase):
-
     all_model_classes = (ViltForImagesAndTextClassification,) if is_torch_available() else ()
 
     def setUp(self):
@@ -501,6 +542,10 @@ class ViltForImagesAndTextClassificationModelTest(ViltModelTest, unittest.TestCa
 
     @unittest.skip("We only test the model that takes in multiple images")
     def test_model(self):
+        pass
+
+    @unittest.skip("We only test the model that takes in multiple images")
+    def test_for_token_classification(self):
         pass
 
 

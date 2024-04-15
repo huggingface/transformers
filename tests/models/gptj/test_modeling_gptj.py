@@ -17,25 +17,38 @@
 import datetime
 import unittest
 
-from transformers import GPTJConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, tooslow, torch_device
+import pytest
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from transformers import BitsAndBytesConfig, GPTJConfig, is_torch_available
+from transformers.testing_utils import (
+    require_bitsandbytes,
+    require_flash_attn,
+    require_torch,
+    require_torch_gpu,
+    slow,
+    tooslow,
+    torch_device,
+)
+
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
         AutoTokenizer,
         GPTJForCausalLM,
         GPTJForQuestionAnswering,
         GPTJForSequenceClassification,
         GPTJModel,
     )
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_12
+else:
+    is_torch_greater_or_equal_than_1_12 = False
 
 
 class GPTJModelTester:
@@ -52,7 +65,7 @@ class GPTJModelTester:
         vocab_size=99,
         hidden_size=32,
         rotary_dim=4,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -154,6 +167,11 @@ class GPTJModelTester:
             pad_token_id=self.pad_token_id,
             rotary_dim=self.rotary_dim,
         )
+
+    def get_pipeline_config(self):
+        config = self.get_config()
+        config.vocab_size = 300
+        return config
 
     def prepare_config_and_inputs_for_decoder(self):
         (
@@ -355,19 +373,57 @@ class GPTJModelTester:
 
 
 @require_torch
-class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (GPTJModel, GPTJForCausalLM, GPTJForSequenceClassification, GPTJForQuestionAnswering)
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (GPTJForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": GPTJModel,
+            "question-answering": GPTJForQuestionAnswering,
+            "text-classification": GPTJForSequenceClassification,
+            "text-generation": GPTJForCausalLM,
+            "zero-shot": GPTJForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = True
     test_pruning = False
     test_missing_keys = False
     test_model_parallel = False
     test_head_masking = False
+
+    @unittest.skipIf(
+        not is_torch_greater_or_equal_than_1_12, reason="PR #22069 made changes that require torch v1.12+."
+    )
+    def test_torch_fx(self):
+        super().test_torch_fx()
+
+    @unittest.skipIf(
+        not is_torch_greater_or_equal_than_1_12, reason="PR #22069 made changes that require torch v1.12+."
+    )
+    def test_torch_fx_output_loss(self):
+        super().test_torch_fx_output_loss()
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if (
+            pipeline_test_casse_name == "QAPipelineTests"
+            and tokenizer_name is not None
+            and not tokenizer_name.endswith("Fast")
+        ):
+            # `QAPipelineTests` fails for a few models when the slower tokenizer are used.
+            # (The slower tokenizers were never used for pipeline tests before the pipeline testing rework)
+            # TODO: check (and possibly fix) the `QAPipelineTests` with slower tokenizer
+            return True
+
+        return False
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -467,9 +523,47 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GPTJModel.from_pretrained(model_name, revision="float16", torch_dtype=torch.float16)
-            self.assertIsNotNone(model)
+        model_name = "EleutherAI/gpt-j-6B"
+        model = GPTJModel.from_pretrained(model_name, revision="float16", torch_dtype=torch.float16)
+        self.assertIsNotNone(model)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @require_bitsandbytes
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_generate_padding_right(self):
+        """
+        Overwritting the common test as the test is flaky on tiny models
+        """
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6b")
+
+        texts = ["hi", "Hello this is a very long sentence"]
+        expected_outputs = [
+            "hi<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>Q: I have a question about the new version of the game. I have a question about the",
+            "Hello this is a very long sentence.\n\nA:\n\nI think the best way to understand this is to think of it",
+        ]
+
+        tokenizer.padding_side = "right"
+        tokenizer.pad_token = tokenizer.eos_token
+
+        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(0)
+
+        quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+
+        model = GPTJForCausalLM.from_pretrained(
+            "EleutherAI/gpt-j-6b",
+            device_map={"": 0},
+            attn_implementation="flash_attention_2",
+            revision="float16",
+            torch_dtype=torch.float16,
+            quantization_config=quantization_config,
+        )
+
+        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_fa_2 = tokenizer.batch_decode(output_fa_2)
+
+        self.assertListEqual(expected_outputs, output_fa_2)
 
 
 @require_torch
@@ -487,10 +581,8 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
                 model.gradient_checkpointing_disable()
             model.to(torch_device)
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
-            # fmt: off
             # The dog is a man's best friend. It is a loyal companion, and it is a friend
-            expected_output_ids = [464, 3290, 318, 257, 582, 338, 1266, 1545, 13, 632, 318, 257, 9112, 15185, 11, 290, 340, 318, 257, 1545]
-            # fmt: on
+            expected_output_ids = [464, 3290, 318, 257, 582, 338, 1266, 1545, 13, 632, 318, 257, 9112, 15185, 11, 290, 340, 318, 257, 1545]  # fmt: skip
             output_ids = model.generate(input_ids, do_sample=False)
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
@@ -515,7 +607,8 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
-        if torch_device == "cuda":
+        if torch_device != "cpu":
+            # currently this expect value is only for `cuda`
             EXPECTED_OUTPUT_STR = (
                 "Today is a nice day and I've already been enjoying it. I walked to work with my wife"
             )
@@ -524,7 +617,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
 
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
         self.assertTrue(
-            all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
+            all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output
 
     @slow
@@ -567,3 +660,38 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
         duration = datetime.datetime.now() - start
         self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+    @tooslow
+    def test_contrastive_search_gptj(self):
+        article = (
+            "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and "
+            "research laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
+        model = GPTJForCausalLM.from_pretrained(
+            "EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16
+        ).to(torch_device)
+        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        outputs = model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
+        generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
+                "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, "
+                "United Kingdom with offices in Mountain View, San Francisco, New York City, Paris, Tokyo, Seoul, "
+                "Beijing, Singapore, Tel Aviv, Dublin, Sydney, and Melbourne.[1]\n\nContents\n\nIn 2010, Google's "
+                "parent company, Alphabet, announced a $500 million investment in DeepMind, with the aim of creating "
+                "a company that would apply deep learning to problems in healthcare, energy, transportation, and "
+                "other areas.[2]\n\nOn April 23, 2014, Google announced that it had acquired DeepMind for $400 "
+                "million in cash and stock.[3] The acquisition was seen as a way for Google to enter the "
+                "fast-growing field of artificial intelligence (AI), which it had so far avoided due to concerns "
+                'about ethical and social implications.[4] Google co-founder Sergey Brin said that he was "thrilled" '
+                'to have acquired DeepMind, and that it would "help us push the boundaries of AI even further."'
+                "[5]\n\nDeepMind's founders, Demis Hassabis and Mustafa Suleyman, were joined by a number of Google "
+                "employees"
+            ],
+        )

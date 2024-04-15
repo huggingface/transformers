@@ -162,11 +162,11 @@ class GenerativeQAModule(BaseTransformer):
         self.step_count = 0
         self.metrics = defaultdict(list)
 
-        self.dataset_kwargs: dict = dict(
-            data_dir=self.hparams.data_dir,
-            max_source_length=self.hparams.max_source_length,
-            prefix=prefix or "",
-        )
+        self.dataset_kwargs: dict = {
+            "data_dir": self.hparams.data_dir,
+            "max_source_length": self.hparams.max_source_length,
+            "prefix": prefix or "",
+        }
         n_observations_per_split = {
             "train": self.hparams.n_train,
             "val": self.hparams.n_val,
@@ -321,7 +321,7 @@ class GenerativeQAModule(BaseTransformer):
         preds: List[str] = self.ids_to_clean_text(generated_ids)
         target: List[str] = self.ids_to_clean_text(batch["decoder_input_ids"])
         loss_tensors = self._step(batch)
-        base_metrics = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
+        base_metrics = dict(zip(self.loss_names, loss_tensors))
         gen_metrics: Dict = self.calc_generative_metrics(preds, target)
 
         summ_len = np.mean(lmap(len, generated_ids))
@@ -525,7 +525,7 @@ class GenerativeQAModule(BaseTransformer):
             type=int,
             default=1,
             help=(
-                "The number of retrieval actors to use when Ray is selected"
+                "The number of retrieval actors to use when Ray is selected "
                 "for the distributed retriever. Has no effect when "
                 "distributed_retriever is set to pytorch."
             ),
@@ -552,7 +552,7 @@ def main(args=None, model=None) -> GenerativeQAModule:
             ray.init(address=args.ray_address, namespace="rag")
         except (ConnectionError, ValueError):
             logger.warning(
-                "Connection to Ray cluster failed. Make sure a Ray"
+                "Connection to Ray cluster failed. Make sure a Ray "
                 "cluster is running by either using Ray's cluster "
                 "launcher (`ray up`) or by manually starting Ray on "
                 "each node via `ray start --head` for the head node "

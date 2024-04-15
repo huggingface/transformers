@@ -1,13 +1,13 @@
 import argparse
 import json
 
-import torch
-from PIL import Image
-
 import requests
 import timm
+import torch
 from huggingface_hub import hf_hub_download
-from transformers import AutoFeatureExtractor, SwinConfig, SwinForImageClassification
+from PIL import Image
+
+from transformers import AutoImageProcessor, SwinConfig, SwinForImageClassification
 
 
 def get_swin_config(swin_name):
@@ -39,9 +39,9 @@ def get_swin_config(swin_name):
         num_classes = 21841
     else:
         num_classes = 1000
-        repo_id = "datasets/huggingface/label-files"
+        repo_id = "huggingface/label-files"
         filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -140,9 +140,9 @@ def convert_swin_checkpoint(swin_name, pytorch_dump_folder_path):
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/{}".format(swin_name.replace("_", "-")))
+    image_processor = AutoImageProcessor.from_pretrained("microsoft/{}".format(swin_name.replace("_", "-")))
     image = Image.open(requests.get(url, stream=True).raw)
-    inputs = feature_extractor(images=image, return_tensors="pt")
+    inputs = image_processor(images=image, return_tensors="pt")
 
     timm_outs = timm_model(inputs["pixel_values"])
     hf_outs = model(**inputs).logits
@@ -152,8 +152,8 @@ def convert_swin_checkpoint(swin_name, pytorch_dump_folder_path):
     print(f"Saving model {swin_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
 
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

@@ -17,13 +17,15 @@ from dataclasses import dataclass, field
 from typing import Optional, Tuple
 
 from .training_args import TrainingArguments
-from .utils import cached_property, is_tf_available, logging, tf_required
+from .utils import cached_property, is_tf_available, logging, requires_backends
 
 
 logger = logging.get_logger(__name__)
 
 if is_tf_available():
     import tensorflow as tf
+
+    from .modeling_tf_utils import keras
 
 
 @dataclass
@@ -66,7 +68,7 @@ class TFTrainingArguments(TrainingArguments):
             The batch size per GPU/TPU core/CPU for training.
         per_device_eval_batch_size (`int`, *optional*, defaults to 8):
             The batch size per GPU/TPU core/CPU for evaluation.
-        gradient_accumulation_steps: (`int`, *optional*, defaults to 1):
+        gradient_accumulation_steps (`int`, *optional*, defaults to 1):
             Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
             <Tip warning={true}>
@@ -92,6 +94,8 @@ class TFTrainingArguments(TrainingArguments):
             Total number of training epochs to perform.
         max_steps (`int`, *optional*, defaults to -1):
             If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
+            For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
+            `max_steps` is reached.
         warmup_ratio (`float`, *optional*, defaults to 0.0):
             Ratio of total training steps used for a linear warmup from 0 to `learning_rate`.
         warmup_steps (`int`, *optional*, defaults to 0):
@@ -161,6 +165,7 @@ class TFTrainingArguments(TrainingArguments):
             Whether to activate the XLA compilation or not.
     """
 
+    framework = "tf"
     tpu_name: Optional[str] = field(
         default=None,
         metadata={"help": "Name of TPU"},
@@ -184,18 +189,15 @@ class TFTrainingArguments(TrainingArguments):
     xla: bool = field(default=False, metadata={"help": "Whether to activate the XLA compilation or not"})
 
     @cached_property
-    @tf_required
     def _setup_strategy(self) -> Tuple["tf.distribute.Strategy", int]:
+        requires_backends(self, ["tf"])
         logger.info("Tensorflow: setting up strategy")
-
-        if self.xla:
-            tf.config.optimizer.set_jit(True)
 
         gpus = tf.config.list_physical_devices("GPU")
 
         # Set to float16 at first
         if self.fp16:
-            tf.keras.mixed_precision.set_global_policy("mixed_float16")
+            keras.mixed_precision.set_global_policy("mixed_float16")
 
         if self.no_cuda:
             strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
@@ -216,7 +218,7 @@ class TFTrainingArguments(TrainingArguments):
             if tpu:
                 # Set to bfloat16 in case of TPU
                 if self.fp16:
-                    tf.keras.mixed_precision.set_global_policy("mixed_bfloat16")
+                    keras.mixed_precision.set_global_policy("mixed_bfloat16")
 
                 tf.config.experimental_connect_to_cluster(tpu)
                 tf.tpu.experimental.initialize_tpu_system(tpu)
@@ -236,20 +238,27 @@ class TFTrainingArguments(TrainingArguments):
         return strategy
 
     @property
-    @tf_required
     def strategy(self) -> "tf.distribute.Strategy":
         """
         The strategy used for distributed training.
         """
+        requires_backends(self, ["tf"])
         return self._setup_strategy
 
     @property
-    @tf_required
     def n_replicas(self) -> int:
         """
         The number of replicas (CPUs, GPUs or TPU cores) used in this training.
         """
+        requires_backends(self, ["tf"])
         return self._setup_strategy.num_replicas_in_sync
+
+    @property
+    def should_log(self):
+        """
+        Whether or not the current process should produce log.
+        """
+        return False  # TF Logging is handled by Keras not the Trainer
 
     @property
     def train_batch_size(self) -> int:
@@ -278,11 +287,11 @@ class TFTrainingArguments(TrainingArguments):
         return per_device_batch_size * self.n_replicas
 
     @property
-    @tf_required
     def n_gpu(self) -> int:
         """
         The number of replicas (CPUs, GPUs or TPU cores) used in this training.
         """
+        requires_backends(self, ["tf"])
         warnings.warn(
             "The n_gpu argument is deprecated and will be removed in a future version, use n_replicas instead.",
             FutureWarning,

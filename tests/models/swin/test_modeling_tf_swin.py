@@ -15,35 +15,37 @@
 """ Testing suite for the TF 2.0 Swin model. """
 
 
+from __future__ import annotations
+
 import inspect
 import unittest
 
 import numpy as np
 
 from transformers import SwinConfig
-from transformers.testing_utils import require_tf, require_vision, slow
+from transformers.testing_utils import require_tf, require_vision, slow, to_2tuple
 from transformers.utils import cached_property, is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
     import tensorflow as tf
 
+    from transformers.modeling_tf_utils import keras
     from transformers.models.swin.modeling_tf_swin import (
-        TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFSwinForImageClassification,
         TFSwinForMaskedImageModeling,
         TFSwinModel,
-        to_2tuple,
     )
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
+    from transformers import AutoImageProcessor
 
 
 class TFSwinModelTester:
@@ -141,10 +143,32 @@ class TFSwinModelTester:
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, expected_dim))
 
+    def create_and_check_for_masked_image_modeling(self, config, pixel_values, labels):
+        model = TFSwinForMaskedImageModeling(config=config)
+        result = model(pixel_values)
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
+        )
+
+        # test greyscale images
+        config.num_channels = 1
+        model = TFSwinForMaskedImageModeling(config)
+
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        result = model(pixel_values)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.image_size, self.image_size))
+
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
         model = TFSwinForImageClassification(config)
         result = model(pixel_values, labels=labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+
+        # test greyscale images
+        config.num_channels = 1
+        model = TFSwinForImageClassification(config)
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
     def prepare_config_and_inputs_for_common(self):
@@ -155,8 +179,7 @@ class TFSwinModelTester:
 
 
 @require_tf
-class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
-
+class TFSwinModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFSwinModel,
@@ -165,6 +188,11 @@ class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": TFSwinModel, "image-classification": TFSwinForImageClassification}
+        if is_tf_available()
+        else {}
     )
 
     test_pruning = False
@@ -192,6 +220,14 @@ class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_for_masked_image_modeling(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
+
+    def test_for_image_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+
     @unittest.skip(reason="Swin does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -201,9 +237,9 @@ class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+            self.assertIsInstance(model.get_input_embeddings(), keras.layers.Layer)
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Dense))
+            self.assertTrue(x is None or isinstance(x, keras.layers.Dense))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -302,7 +338,6 @@ class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
         )
 
     def test_hidden_states_output(self):
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         image_size = to_2tuple(self.model_tester.image_size)
@@ -336,24 +371,20 @@ class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
             self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
 
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFSwinModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/swin-tiny-patch4-window7-224"
+        model = TFSwinModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_vision
 @require_tf
 class TFSwinModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
-            AutoFeatureExtractor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
+            AutoImageProcessor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
             if is_vision_available()
             else None
         )
@@ -361,10 +392,10 @@ class TFSwinModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification_head(self):
         model = TFSwinForImageClassification.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        inputs = feature_extractor(images=image, return_tensors="tf")
+        inputs = image_processor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(inputs)

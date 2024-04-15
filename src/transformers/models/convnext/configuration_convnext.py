@@ -14,19 +14,24 @@
 # limitations under the License.
 """ ConvNeXT model configuration"""
 
+from collections import OrderedDict
+from typing import Mapping
+
+from packaging import version
+
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
 
-CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/convnext-tiny-224": "https://huggingface.co/facebook/convnext-tiny-224/resolve/main/config.json",
-    # See all ConvNeXT models at https://huggingface.co/models?filter=convnext
-}
+
+from ..deprecated._archive_maps import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
-class ConvNextConfig(PretrainedConfig):
+class ConvNextConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ConvNextModel`]. It is used to instantiate an
     ConvNeXT model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -58,18 +63,31 @@ class ConvNextConfig(PretrainedConfig):
             The initial value for the layer scale.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop rate for stochastic depth.
+        out_features (`List[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        out_indices (`List[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
 
     Example:
     ```python
-    >>> from transformers import ConvNextModel, ConvNextConfig
+    >>> from transformers import ConvNextConfig, ConvNextModel
 
     >>> # Initializing a ConvNext convnext-tiny-224 style configuration
     >>> configuration = ConvNextConfig()
-    >>> # Initializing a model from the convnext-tiny-224 style configuration
+
+    >>> # Initializing a model (with random weights) from the convnext-tiny-224 style configuration
     >>> model = ConvNextModel(configuration)
+
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "convnext"
 
     def __init__(
@@ -82,11 +100,12 @@ class ConvNextConfig(PretrainedConfig):
         hidden_act="gelu",
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
         layer_scale_init_value=1e-6,
         drop_path_rate=0.0,
         image_size=224,
-        **kwargs
+        out_features=None,
+        out_indices=None,
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -101,3 +120,23 @@ class ConvNextConfig(PretrainedConfig):
         self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
         self.image_size = image_size
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.depths) + 1)]
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )
+
+
+class ConvNextOnnxConfig(OnnxConfig):
+    torch_onnx_minimum_version = version.parse("1.11")
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-5

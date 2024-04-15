@@ -20,6 +20,7 @@ from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_flax, s
 
 if is_flax_available():
     import jax
+
     from transformers.models.auto.modeling_flax_auto import FlaxAutoModel
     from transformers.models.bert.modeling_flax_bert import FlaxBertModel
     from transformers.models.roberta.modeling_flax_roberta import FlaxRobertaModel
@@ -29,7 +30,7 @@ if is_flax_available():
 class FlaxAutoModelTest(unittest.TestCase):
     @slow
     def test_bert_from_pretrained(self):
-        for model_name in ["bert-base-cased", "bert-large-uncased"]:
+        for model_name in ["google-bert/bert-base-cased", "google-bert/bert-large-uncased"]:
             with self.subTest(model_name):
                 config = AutoConfig.from_pretrained(model_name)
                 self.assertIsNotNone(config)
@@ -41,7 +42,7 @@ class FlaxAutoModelTest(unittest.TestCase):
 
     @slow
     def test_roberta_from_pretrained(self):
-        for model_name in ["roberta-base", "roberta-large"]:
+        for model_name in ["FacebookAI/roberta-base", "FacebookAI/roberta-large"]:
             with self.subTest(model_name):
                 config = AutoConfig.from_pretrained(model_name)
                 self.assertIsNotNone(config)
@@ -53,7 +54,7 @@ class FlaxAutoModelTest(unittest.TestCase):
 
     @slow
     def test_bert_jax_jit(self):
-        for model_name in ["bert-base-cased", "bert-large-uncased"]:
+        for model_name in ["google-bert/bert-base-cased", "google-bert/bert-large-uncased"]:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             model = FlaxBertModel.from_pretrained(model_name)
             tokens = tokenizer("Do you support jax jitted function?", return_tensors=TensorType.JAX)
@@ -66,7 +67,7 @@ class FlaxAutoModelTest(unittest.TestCase):
 
     @slow
     def test_roberta_jax_jit(self):
-        for model_name in ["roberta-base", "roberta-large"]:
+        for model_name in ["FacebookAI/roberta-base", "FacebookAI/roberta-large"]:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             model = FlaxRobertaModel.from_pretrained(model_name)
             tokens = tokenizer("Do you support jax jitted function?", return_tensors=TensorType.JAX)

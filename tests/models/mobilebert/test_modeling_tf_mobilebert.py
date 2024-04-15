@@ -14,19 +14,24 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import MobileBertConfig, is_tf_available
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
     import tensorflow as tf
 
     from transformers import (
+        TF_MODEL_FOR_PRETRAINING_MAPPING,
         TFMobileBertForMaskedLM,
         TFMobileBertForMultipleChoice,
         TFMobileBertForNextSentencePrediction,
@@ -39,8 +44,7 @@ if is_tf_available():
 
 
 @require_tf
-class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
-
+class TFMobileBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFMobileBertModel,
@@ -55,8 +59,30 @@ class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFMobileBertModel,
+            "fill-mask": TFMobileBertForMaskedLM,
+            "question-answering": TFMobileBertForQuestionAnswering,
+            "text-classification": TFMobileBertForSequenceClassification,
+            "token-classification": TFMobileBertForTokenClassification,
+            "zero-shot": TFMobileBertForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_head_masking = False
     test_onnx = False
+
+    # special case for ForPreTraining model, same as BERT tests
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class in get_values(TF_MODEL_FOR_PRETRAINING_MAPPING):
+                inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+
+        return inputs_dict
 
     class TFMobileBertModelTester(object):
         def __init__(
@@ -71,7 +97,7 @@ class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
             vocab_size=99,
             hidden_size=32,
             embedding_size=32,
-            num_hidden_layers=5,
+            num_hidden_layers=2,
             num_attention_heads=4,
             intermediate_size=37,
             hidden_act="gelu",
@@ -285,34 +311,9 @@ class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mobilebert_for_token_classification(*config_and_inputs)
 
-    def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        list_lm_models = [TFMobileBertForMaskedLM, TFMobileBertForPreTraining]
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in list_lm_models:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert isinstance(name, dict)
-                for k, v in name.items():
-                    assert isinstance(v, tf.Variable)
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
-
-    def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
-        pass
-
     @slow
     def test_model_from_pretrained(self):
-        # for model_name in TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        #     model_name = 'google/mobilebert-uncased'
         for model_name in ["google/mobilebert-uncased"]:
             model = TFMobileBertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)

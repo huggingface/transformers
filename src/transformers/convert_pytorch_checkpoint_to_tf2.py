@@ -19,29 +19,6 @@ import argparse
 import os
 
 from . import (
-    ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    BART_PRETRAINED_MODEL_ARCHIVE_LIST,
-    BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-    DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-    DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
-    ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-    LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    WEIGHTS_NAME,
-    XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
     AlbertConfig,
     BartConfig,
     BertConfig,
@@ -59,6 +36,7 @@ from . import (
     T5Config,
     TFAlbertForPreTraining,
     TFBartForConditionalGeneration,
+    TFBartForSequenceClassification,
     TFBertForPreTraining,
     TFBertForQuestionAnswering,
     TFBertForSequenceClassification,
@@ -91,11 +69,10 @@ from . import (
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
-    cached_path,
     is_torch_available,
     load_pytorch_checkpoint_in_tf2_model,
 )
-from .utils import hf_bucket_url, logging
+from .utils import CONFIG_NAME, WEIGHTS_NAME, cached_file, logging
 
 
 if is_torch_available():
@@ -130,6 +107,7 @@ if is_torch_available():
         XLMWithLMHeadModel,
         XLNetLMHeadModel,
     )
+    from .pytorch_utils import is_torch_greater_or_equal_than_1_13
 
 
 logging.set_verbosity_info()
@@ -138,32 +116,28 @@ MODEL_CLASSES = {
     "bart": (
         BartConfig,
         TFBartForConditionalGeneration,
+        TFBartForSequenceClassification,
         BartForConditionalGeneration,
-        BART_PRETRAINED_MODEL_ARCHIVE_LIST,
     ),
     "bert": (
         BertConfig,
         TFBertForPreTraining,
         BertForPreTraining,
-        BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "bert-large-uncased-whole-word-masking-finetuned-squad": (
+    "google-bert/bert-large-uncased-whole-word-masking-finetuned-squad": (
         BertConfig,
         TFBertForQuestionAnswering,
         BertForQuestionAnswering,
-        BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "bert-large-cased-whole-word-masking-finetuned-squad": (
+    "google-bert/bert-large-cased-whole-word-masking-finetuned-squad": (
         BertConfig,
         TFBertForQuestionAnswering,
         BertForQuestionAnswering,
-        BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "bert-base-cased-finetuned-mrpc": (
+    "google-bert/bert-base-cased-finetuned-mrpc": (
         BertConfig,
         TFBertForSequenceClassification,
         BertForSequenceClassification,
-        BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "dpr": (
         DPRConfig,
@@ -173,130 +147,107 @@ MODEL_CLASSES = {
         DPRQuestionEncoder,
         DPRContextEncoder,
         DPRReader,
-        DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
     ),
-    "gpt2": (
+    "openai-community/gpt2": (
         GPT2Config,
         TFGPT2LMHeadModel,
         GPT2LMHeadModel,
-        GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "xlnet": (
         XLNetConfig,
         TFXLNetLMHeadModel,
         XLNetLMHeadModel,
-        XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "xlm": (
         XLMConfig,
         TFXLMWithLMHeadModel,
         XLMWithLMHeadModel,
-        XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "xlm-roberta": (
         XLMRobertaConfig,
         TFXLMRobertaForMaskedLM,
         XLMRobertaForMaskedLM,
-        XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "transfo-xl": (
         TransfoXLConfig,
         TFTransfoXLLMHeadModel,
         TransfoXLLMHeadModel,
-        TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "openai-gpt": (
+    "openai-community/openai-gpt": (
         OpenAIGPTConfig,
         TFOpenAIGPTLMHeadModel,
         OpenAIGPTLMHeadModel,
-        OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "roberta": (
         RobertaConfig,
         TFRobertaForCausalLM,
         TFRobertaForMaskedLM,
         RobertaForMaskedLM,
-        ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "layoutlm": (
         LayoutLMConfig,
         TFLayoutLMForMaskedLM,
         LayoutLMForMaskedLM,
-        LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     ),
-    "roberta-large-mnli": (
+    "FacebookAI/roberta-large-mnli": (
         RobertaConfig,
         TFRobertaForSequenceClassification,
         RobertaForSequenceClassification,
-        ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "camembert": (
         CamembertConfig,
         TFCamembertForMaskedLM,
         CamembertForMaskedLM,
-        CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "flaubert": (
         FlaubertConfig,
         TFFlaubertWithLMHeadModel,
         FlaubertWithLMHeadModel,
-        FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "distilbert": (
         DistilBertConfig,
         TFDistilBertForMaskedLM,
         DistilBertForMaskedLM,
-        DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "distilbert-base-distilled-squad": (
         DistilBertConfig,
         TFDistilBertForQuestionAnswering,
         DistilBertForQuestionAnswering,
-        DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "lxmert": (
         LxmertConfig,
         TFLxmertForPreTraining,
         LxmertForPreTraining,
-        LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "lxmert-visual-feature-encoder": (
         LxmertConfig,
         TFLxmertVisualFeatureEncoder,
         LxmertVisualFeatureEncoder,
-        LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "ctrl": (
+    "Salesforce/ctrl": (
         CTRLConfig,
         TFCTRLLMHeadModel,
         CTRLLMHeadModel,
-        CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "albert": (
         AlbertConfig,
         TFAlbertForPreTraining,
         AlbertForPreTraining,
-        ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "t5": (
         T5Config,
         TFT5ForConditionalGeneration,
         T5ForConditionalGeneration,
-        T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "electra": (
         ElectraConfig,
         TFElectraForPreTraining,
         ElectraForPreTraining,
-        ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "wav2vec2": (
         Wav2Vec2Config,
         TFWav2Vec2Model,
         Wav2Vec2Model,
-        WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
 }
 
@@ -311,7 +262,7 @@ def convert_pt_checkpoint_to_tf(
 
     # Initialise TF model
     if config_file in aws_config_map:
-        config_file = cached_path(aws_config_map[config_file], force_download=not use_cached_models)
+        config_file = cached_file(config_file, CONFIG_NAME, force_download=not use_cached_models)
     config = config_class.from_json_file(config_file)
     config.output_hidden_states = True
     config.output_attentions = True
@@ -320,15 +271,21 @@ def convert_pt_checkpoint_to_tf(
 
     # Load weights from tf checkpoint
     if pytorch_checkpoint_path in aws_config_map.keys():
-        pytorch_checkpoint_url = hf_bucket_url(pytorch_checkpoint_path, filename=WEIGHTS_NAME)
-        pytorch_checkpoint_path = cached_path(pytorch_checkpoint_url, force_download=not use_cached_models)
+        pytorch_checkpoint_path = cached_file(
+            pytorch_checkpoint_path, WEIGHTS_NAME, force_download=not use_cached_models
+        )
     # Load PyTorch checkpoint in tf2 model:
     tf_model = load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path)
 
     if compare_with_pt_model:
         tfo = tf_model(tf_model.dummy_inputs, training=False)  # build the network
 
-        state_dict = torch.load(pytorch_checkpoint_path, map_location="cpu")
+        weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+        state_dict = torch.load(
+            pytorch_checkpoint_path,
+            map_location="cpu",
+            **weights_only_kwarg,
+        )
         pt_model = pt_model_class.from_pretrained(
             pretrained_model_name_or_path=None, config=config, state_dict=state_dict
         )
@@ -357,7 +314,6 @@ def convert_all_pt_checkpoints_to_tf(
     remove_cached_files=False,
     only_convert_finetuned_models=False,
 ):
-
     if args_model_type is None:
         model_types = list(MODEL_CLASSES.keys())
     else:
@@ -395,14 +351,14 @@ def convert_all_pt_checkpoints_to_tf(
             print("-" * 100)
 
             if config_shortcut_name in aws_config_map:
-                config_file = cached_path(aws_config_map[config_shortcut_name], force_download=not use_cached_models)
+                config_file = cached_file(config_shortcut_name, CONFIG_NAME, force_download=not use_cached_models)
             else:
-                config_file = cached_path(config_shortcut_name, force_download=not use_cached_models)
+                config_file = config_shortcut_name
 
             if model_shortcut_name in aws_model_maps:
-                model_file = cached_path(aws_model_maps[model_shortcut_name], force_download=not use_cached_models)
+                model_file = cached_file(model_shortcut_name, WEIGHTS_NAME, force_download=not use_cached_models)
             else:
-                model_file = cached_path(model_shortcut_name, force_download=not use_cached_models)
+                model_file = model_shortcut_name
 
             if os.path.isfile(model_shortcut_name):
                 model_shortcut_name = "converted_model"

@@ -43,7 +43,7 @@ A good metric to observe during training is the gradient norm which should ideal
 
 When training a model on large datasets it is recommended to run the data preprocessing 
 in a first run in a **non-distributed** mode via `--preprocessing_only` so that 
-when running the  model in **distributed** mode in a second step the preprocessed data
+when running the model in **distributed** mode in a second step the preprocessed data
 can easily be loaded on each distributed device.
 
 ---
@@ -79,6 +79,8 @@ accelerate launch run_wav2vec2_pretraining_no_trainer.py \
 	--adam_beta2="0.98" \
 	--adam_epsilon="1e-06" \
 	--gradient_checkpointing \
+	--mask_time_prob="0.65" \
+	--mask_time_length="10"
 ```
 
 The results of this run can be seen [here](https://wandb.ai/patrickvonplaten/wav2vec2-pretrained-demo/reports/Wav2Vec2-PreTraining-Demo-Run--VmlldzoxMDk3MjAw?accessToken=oa05s1y57lizo2ocxy3k01g6db1u4pt8m6ur2n8nl4cb0ug02ms2cw313kb8ruch).
@@ -110,6 +112,8 @@ accelerate launch run_wav2vec2_pretraining_no_trainer.py \
 	--adam_beta2="0.98" \
 	--adam_epsilon="1e-06" \
 	--gradient_checkpointing \
+	--mask_time_prob="0.65" \
+	--mask_time_length="10"
 ```
 
 The experiment was run on 8 GPU V100 (16 GB RAM each) for 4 days. 
@@ -146,6 +150,8 @@ accelerate launch run_wav2vec2_pretraining_no_trainer.py \
 	--adam_beta2=0.98 \
 	--adam_epsilon=1e-06 \
 	--gradient_checkpointing \
+	--mask_time_prob=0.65 \
+	--mask_time_length=10
 ```
 
 The experiment was run on 8 GPU V100 (16 GB RAM each) for 7 days. 

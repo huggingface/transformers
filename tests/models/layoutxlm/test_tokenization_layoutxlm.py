@@ -19,13 +19,19 @@ import tempfile
 import unittest
 from typing import List
 
-from transformers import AddedToken, LayoutXLMTokenizerFast, SpecialTokensMixin, is_tf_available, is_torch_available
+from transformers import (
+    AddedToken,
+    LayoutXLMTokenizerFast,
+    SpecialTokensMixin,
+    is_tf_available,
+    is_torch_available,
+    logging,
+)
 from transformers.models.layoutxlm.tokenization_layoutxlm import LayoutXLMTokenizer
 from transformers.testing_utils import (
     get_tests_dir,
     is_pt_tf_cross_test,
     require_pandas,
-    require_scatter,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -40,6 +46,7 @@ from ...test_tokenization_common import (
 )
 
 
+logger = logging.get_logger(__name__)
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
@@ -47,6 +54,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_tokenizers
 @require_pandas
 class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "FacebookAI/xlm-roberta-base"
     tokenizer_class = LayoutXLMTokenizer
     rust_tokenizer_class = LayoutXLMTokenizerFast
     test_rust_tokenizer = True
@@ -99,6 +107,10 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         output_text = "unwanted, running"
         return input_text, output_text
 
+    @unittest.skip("Chat template tests don't play well with table/layout models.")
+    def test_chat_template_batched(self):
+        pass
+
     # override test in `test_tokenization_common.py` because of the required input format of the `__call__`` method of
     # this tokenizer
     def test_save_sentencepiece_tokenizer(self) -> None:
@@ -136,6 +148,19 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertEqual(encoding_tokenizer_slow_1, encoding_tokenizer_slow_2)
         self.assertEqual(encoding_tokenizer_slow_1, encoding_tokenizer_slow_3)
+
+    def test_split_special_tokens(self):
+        tokenizer = self.tokenizer_class.from_pretrained("microsoft/layoutxlm-base")
+        _, _, boxes = self.get_question_words_and_boxes()
+        special_token = "[SPECIAL_TOKEN]"
+        tokenizer.add_special_tokens({"additional_special_tokens": [special_token]})
+        encoded_special_token = tokenizer.tokenize(special_token, boxes=boxes, add_special_tokens=False)
+        self.assertEqual(len(encoded_special_token), 1)
+
+        encoded_split_special_token = tokenizer.tokenize(
+            special_token, add_special_tokens=False, split_special_tokens=True, boxes=boxes
+        )
+        self.assertTrue(len(encoded_split_special_token) > 1)
 
     @slow
     def test_sequence_builders(self):
@@ -187,7 +212,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers: List[LayoutXLMTokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 special_token = "[SPECIAL_TOKEN]"
                 special_token_box = [1000, 1000, 1000, 1000]
 
@@ -418,7 +442,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 # test 1: single sequence
                 words, boxes = self.get_words_and_boxes()
 
@@ -696,6 +719,49 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 input_p = tokenizer_r.pad(input_p, max_length=max_length, padding="max_length")
 
                 self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
+
+    def test_padding_warning_message_fast_tokenizer(self):
+        if not self.test_rust_tokenizer:
+            return
+
+        words, boxes = self.get_words_and_boxes_batch()
+
+        tokenizer_fast = self.get_rust_tokenizer()
+
+        encoding_fast = tokenizer_fast(
+            words,
+            boxes=boxes,
+        )
+
+        with self.assertLogs("transformers", level="WARNING") as cm:
+            tokenizer_fast.pad(encoding_fast)
+        self.assertEqual(len(cm.records), 1)
+        self.assertIn(
+            "Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to"
+            " encode the text followed by a call to the `pad` method to get a padded encoding.",
+            cm.records[0].message,
+        )
+
+        if not self.test_slow_tokenizer:
+            return
+
+        tokenizer_slow = self.get_tokenizer()
+
+        encoding_slow = tokenizer_slow(
+            words,
+            boxes=boxes,
+        )
+
+        with self.assertLogs(level="WARNING") as cm:
+            # We want to assert there are no warnings, but the 'assertLogs' method does not support that.
+            # Therefore, we are adding a dummy warning, and then we will assert it is the only warning.
+            logger.warning("Dummy warning")
+            tokenizer_slow.pad(encoding_slow)
+        self.assertEqual(len(cm.records), 1)
+        self.assertIn(
+            "Dummy warning",
+            cm.records[0].message,
+        )
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
@@ -1048,7 +1114,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 # test 1: single sequence
                 words, boxes = self.get_words_and_boxes()
 
@@ -1125,7 +1190,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @require_torch
     @slow
-    @require_scatter
     def test_torch_encode_plus_sent_to_model(self):
         import torch
 
@@ -1136,7 +1200,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
                     return
 
@@ -1399,7 +1462,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-
                 added_tokens = [AddedToken("<special>", lstrip=True)]
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(
@@ -1635,7 +1697,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name}, {tokenizer.__class__.__name__})"):
-
                 if is_torch_available():
                     returned_tensor = "pt"
                 elif is_tf_available():
@@ -1804,7 +1865,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_layoutxlm_integration_test(self):
-
         tokenizer_p = LayoutXLMTokenizer.from_pretrained("microsoft/layoutxlm-base")
         tokenizer_r = LayoutXLMTokenizerFast.from_pretrained("microsoft/layoutxlm-base")
 
@@ -1821,9 +1881,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # CASE 1: not batched
         words, boxes = self.get_words_and_boxes()
 
-        # fmt: off
-        expected_results = {'input_ids': [0, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 'bbox': [[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 'attention_mask': [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}  # noqa: E231
-        # fmt: on
+        expected_results = {'input_ids': [0, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 'bbox': [[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 'attention_mask': [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}  # fmt: skip
 
         encoding_p = tokenizer_p(words, boxes=boxes, padding="max_length", max_length=20)
         encoding_r = tokenizer_r(words, boxes=boxes, padding="max_length", max_length=20)
@@ -1833,9 +1891,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # CASE 1: batched
         words, boxes = self.get_words_and_boxes_batch()
 
-        # fmt: off
-        expected_results = {'input_ids': [[0, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [0, 33600, 31, 759, 9351, 83, 21895, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 'bbox': [[[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [961, 885, 992, 912], [961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E231
-        # fmt: on
+        expected_results = {'input_ids': [[0, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [0, 33600, 31, 759, 9351, 83, 21895, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 'bbox': [[[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [961, 885, 992, 912], [961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # fmt: skip
 
         encoding_p = tokenizer_p(words, boxes=boxes, padding="max_length", max_length=20)
         encoding_r = tokenizer_r(words, boxes=boxes, padding="max_length", max_length=20)
@@ -1846,9 +1902,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         words, boxes = self.get_words_and_boxes()
         word_labels = [1, 2, 3]
 
-        # fmt: off
-        expected_results = {'input_ids': [0, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 'bbox': [[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 'labels': [-100, 1, 2, -100, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100], 'attention_mask': [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}  # noqa: E231
-        # fmt: on
+        expected_results = {'input_ids': [0, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 'bbox': [[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 'labels': [-100, 1, 2, -100, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100], 'attention_mask': [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}  # fmt: skip
 
         encoding_p = tokenizer_p(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
         encoding_r = tokenizer_r(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
@@ -1859,9 +1913,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         words, boxes = self.get_words_and_boxes_batch()
         word_labels = [[1, 2, 3], [2, 46, 17, 22, 3]]
 
-        # fmt: off
-        expected_results = {'input_ids': [[0, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [0, 33600, 31, 759, 9351, 83, 21895, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 'bbox': [[[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [961, 885, 992, 912], [961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]], 'labels': [[-100, 1, 2, -100, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100], [-100, 2, -100, 46, 17, 22, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E231
-        # fmt: on
+        expected_results = {'input_ids': [[0, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [0, 33600, 31, 759, 9351, 83, 21895, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 'bbox': [[[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [961, 885, 992, 912], [961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]], 'labels': [[-100, 1, 2, -100, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100], [-100, 2, -100, 46, 17, 22, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # fmt: skip
 
         encoding_p = tokenizer_p(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
         encoding_r = tokenizer_r(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
@@ -1871,9 +1923,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # CASE 3: not batched
         question, words, boxes = self.get_question_words_and_boxes()
 
-        # fmt: off
-        expected_results = {'input_ids': [0, 2367, 25, 7, 1919, 9351, 32, 2, 2, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0], 'bbox': [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [1000, 1000, 1000, 1000], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]}  # noqa: E231
-        # fmt: on
+        expected_results = {'input_ids': [0, 2367, 25, 7, 1919, 9351, 32, 2, 2, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0], 'bbox': [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [1000, 1000, 1000, 1000], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]}  # fmt: skip
 
         encoding_p = tokenizer_p(question, words, boxes, padding="max_length", max_length=20)
         encoding_r = tokenizer_r(question, words, boxes, padding="max_length", max_length=20)
@@ -1883,10 +1933,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # CASE 3: batched
         questions, words, boxes = self.get_question_words_and_boxes_batch()
 
-        # fmt: off
-        expected_results = {'input_ids': [[0, 2367, 25, 7, 1919, 9351, 32, 2, 2, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1], [0, 3642, 83, 764, 35839, 32, 2, 2, 2367, 10, 21, 3190, 53496, 19, 2, 1, 1, 1, 1, 1]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0]], 'bbox': [[[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [1000, 1000, 1000, 1000], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [1000, 1000, 1000, 1000], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [336, 42, 353, 57], [34, 42, 66, 69], [34, 42, 66, 69], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]]}  # noqa: E231
-        # fmt: on
-
+        expected_results = {'input_ids': [[0, 2367, 25, 7, 1919, 9351, 32, 2, 2, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1], [0, 3642, 83, 764, 35839, 32, 2, 2, 2367, 10, 21, 3190, 53496, 19, 2, 1, 1, 1, 1, 1]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0]], 'bbox': [[[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [1000, 1000, 1000, 1000], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [1000, 1000, 1000, 1000], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [336, 42, 353, 57], [34, 42, 66, 69], [34, 42, 66, 69], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]]}  # fmt: skip
         encoding_p = tokenizer_p(questions, words, boxes, padding="max_length", max_length=20)
         encoding_r = tokenizer_r(questions, words, boxes, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
@@ -1894,4 +1941,16 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @unittest.skip("Doesn't support another framework than PyTorch")
     def test_np_encode_plus_sent_to_model(self):
+        pass
+
+    @unittest.skip("Doesn't use SentencePiece")
+    def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
+        pass
+
+    @unittest.skip("Doesn't use SentencePiece")
+    def test_sentencepiece_tokenize_and_decode(self):
+        pass
+
+    @unittest.skip("Chat is not supported")
+    def test_chat_template(self):
         pass

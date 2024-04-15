@@ -22,12 +22,12 @@ the JAX/Flax backend and the [`pjit`](https://jax.readthedocs.io/en/latest/jax.e
 > Note: The example is experimental and might have bugs. Also currently it only supports single V3-8.
 
 The `partition.py` file defines the `PyTree` of `ParitionSpec` for the GPTNeo model which describes how the model will be sharded.
-The actual sharding is auto-matically handled by `pjit`. The weights are sharded accross all local devices.
+The actual sharding is auto-matically handled by `pjit`. The weights are sharded across all local devices.
 To adapt the script for other models, we need to also change the `ParitionSpec` accordingly.
 
 TODO: Add more explantion.
 
-Before training, let's prepare our model first. To be able to shard the model, the sharded dimention needs to be a multiple of devices it'll be sharded on. But GPTNeo's vocab size is 50257, so we need to resize the embeddings accordingly. 
+Before training, let's prepare our model first. To be able to shard the model, the sharded dimension needs to be a multiple of devices it'll be sharded on. But GPTNeo's vocab size is 50257, so we need to resize the embeddings accordingly. 
 
 ```python
 from transformers import FlaxGPTNeoForCausalLM, GPTNeoConfig 
@@ -54,7 +54,7 @@ model.save_pretrained("gpt-neo-1.3B")
 ```bash
 python run_clm_mp.py \
     --model_name_or_path gpt-neo-1.3B  \
-    --tokenizer_name gpt2 \
+    --tokenizer_name openai-community/gpt2 \
     --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
     --do_train  --do_eval \
     --block_size 1024 \

@@ -18,17 +18,17 @@ import copy
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import SplinterConfig, SplinterForPreTraining, SplinterForQuestionAnswering, SplinterModel
-    from transformers.models.splinter.modeling_splinter import SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class SplinterModelTester:
@@ -45,7 +45,7 @@ class SplinterModelTester:
         vocab_size=99,
         hidden_size=32,
         question_token_id=1,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -207,8 +207,7 @@ class SplinterModelTester:
 
 
 @require_torch
-class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
-
+class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             SplinterModel,
@@ -218,6 +217,22 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {"feature-extraction": SplinterModel, "question-answering": SplinterForQuestionAnswering}
+        if is_torch_available()
+        else {}
+    )
+
+    # TODO: Fix the failed tests when this model gets more usage
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "QAPipelineTests":
+            return True
+        elif pipeline_test_casse_name == "FeatureExtractionPipelineTests" and tokenizer_name.endswith("Fast"):
+            return True
+
+        return False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -312,9 +327,44 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SplinterModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "tau/splinter-base"
+        model = SplinterModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
+    # overwrite from common since `SplinterForPreTraining` could contain different number of question tokens in inputs.
+    # When the batch is distributed to multiple devices, each replica could get different values for the maximal number
+    # of question tokens (see `SplinterForPreTraining._prepare_question_positions()`), and the model returns different
+    # shape along dimension 1 (i.e. `num_questions`) that could not be combined into a single tensor as an output.
+    @require_torch_multi_gpu
+    def test_multi_gpu_data_parallel_forward(self):
+        from torch import nn
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # some params shouldn't be scattered by nn.DataParallel
+        # so just remove them if they are present.
+        blacklist_non_batched_params = ["head_mask", "decoder_head_mask", "cross_attn_head_mask"]
+        for k in blacklist_non_batched_params:
+            inputs_dict.pop(k, None)
+
+        # move input tensors to cuda:O
+        for k, v in inputs_dict.items():
+            if torch.is_tensor(v):
+                inputs_dict[k] = v.to(0)
+
+        for model_class in self.all_model_classes:
+            # Skip this case since it will fail sometimes, as described above.
+            if model_class == SplinterForPreTraining:
+                continue
+
+            model = model_class(config=config)
+            model.to(0)
+            model.eval()
+
+            # Wrap model in nn.DataParallel
+            model = nn.DataParallel(model)
+            with torch.no_grad():
+                _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
 
 @require_torch

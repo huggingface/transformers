@@ -79,7 +79,6 @@ def separate_process_wrapper_fn(func: Callable[[], None], do_multi_processing: b
     measurements it is important that the function is executed in a separate process
 
     Args:
-
         - `func`: (`callable`): function() -> ... generic function which will be executed in its own separate process
         - `do_multi_processing`: (`bool`) Whether to run function on separate process or not
     """
@@ -210,7 +209,6 @@ def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5, device_i
     https://github.com/pythonprofilers/memory_profiler/blob/895c4ac7a08020d66ae001e24067da6dcea42451/memory_profiler.py#L239
 
     Args:
-
         - `function`: (`callable`): function() -> ... function without any arguments to measure for which to measure
           the peak memory
 
@@ -228,7 +226,6 @@ def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5, device_i
         measures current cpu memory usage of a given `process_id`
 
         Args:
-
             - `process_id`: (`int`) process_id for which to measure memory
 
         Returns
@@ -336,7 +333,6 @@ def start_memory_tracing(
     https://psutil.readthedocs.io/en/latest/#psutil.Process.memory_info
 
     Args:
-
         - `modules_to_trace`: (None, string, list/tuple of string) if None, all events are recorded if string or list
           of strings: only events from the listed module/sub-module will be recorded (e.g. 'fairseq' or
           'transformers.models.gpt2.modeling_gpt2')
@@ -483,7 +479,6 @@ def stop_memory_tracing(
     Stop memory tracing cleanly and return a summary of the memory trace if a trace is given.
 
     Args:
-
         `memory_trace` (optional output of start_memory_tracing, default: None):
             memory trace to convert in summary
         `ignore_released_memory` (boolean, default: None):
@@ -562,9 +557,9 @@ def stop_memory_tracing(
             cumulative_memory_dict[frame][2] += cpu_gpu_mem_inc
 
         cumulative_memory = sorted(
-            list(cumulative_memory_dict.items()), key=lambda x: x[1][2], reverse=True
+            cumulative_memory_dict.items(), key=lambda x: x[1][2], reverse=True
         )  # order by the total CPU + GPU memory increase
-        cumulative_memory = list(
+        cumulative_memory = [
             MemoryState(
                 frame=frame,
                 cpu=Memory(cpu_mem_inc),
@@ -572,7 +567,7 @@ def stop_memory_tracing(
                 cpu_gpu=Memory(cpu_gpu_mem_inc),
             )
             for frame, (cpu_mem_inc, gpu_mem_inc, cpu_gpu_mem_inc) in cumulative_memory
-        )
+        ]
 
         memory_curr_trace = sorted(memory_curr_trace, key=lambda x: x.cpu_gpu.bytes, reverse=True)
 
@@ -615,7 +610,7 @@ class Benchmark(ABC):
                 model_name: AutoConfig.from_pretrained(model_name) for model_name in self.args.model_names
             }
         else:
-            self.config_dict = {model_name: config for model_name, config in zip(self.args.model_names, configs)}
+            self.config_dict = dict(zip(self.args.model_names, configs))
 
         warnings.warn(
             f"The class {self.__class__} is deprecated. Hugging Face Benchmarking utils"
@@ -895,8 +890,8 @@ class Benchmark(ABC):
             return
         self.print_fn("Saving results to csv.")
         with open(filename, mode="w") as csv_file:
-
-            assert len(self.args.model_names) > 0, f"At least 1 model should be defined, but got {self.model_names}"
+            if len(self.args.model_names) <= 0:
+                raise ValueError(f"At least 1 model should be defined, but got {self.model_names}")
 
             fieldnames = ["model", "batch_size", "sequence_length"]
             writer = csv.DictWriter(csv_file, fieldnames=fieldnames + ["result"])

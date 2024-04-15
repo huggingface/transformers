@@ -22,11 +22,12 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from torch import nn
+from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
+    BackboneOutput,
     BaseModelOutput,
     BaseModelOutputWithPooling,
     ImageClassifierOutput,
@@ -34,7 +35,7 @@ from ...modeling_outputs import (
     SemanticSegmenterOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -42,6 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.backbone_utils import BackboneMixin
 from .configuration_beit import BeitConfig
 
 
@@ -49,7 +51,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "BeitConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "BeitFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/beit-base-patch16-224-pt22k"
@@ -59,10 +60,8 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 _IMAGE_CLASS_CHECKPOINT = "microsoft/beit-base-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-BEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/beit-base-patch16-224",
-    # See all BEiT models at https://huggingface.co/models?filter=beit
-]
+
+from ..deprecated._archive_maps import BEIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -91,17 +90,7 @@ class BeitModelOutputWithPooling(BaseModelOutputWithPooling):
     """
 
 
-# Inspired by
-# https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
-# From PyTorch internals
-def to_2tuple(x):
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
-
-
-# Based on https://github.com/rwightman/pytorch-image-models/blob/a2727c1bf78ba0d7b5727f5f95e37fb7f8866b1f/timm/models/layers/drop.py
-def drop_path(x: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -112,24 +101,24 @@ def drop_path(x: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -
     argument.
     """
     if drop_prob == 0.0 or not training:
-        return x
+        return input
     keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
     random_tensor.floor_()  # binarize
-    output = x.div(keep_prob) * random_tensor
+    output = input.div(keep_prob) * random_tensor
     return output
 
 
-class DropPath(nn.Module):
+class BeitDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return drop_path(x, self.drop_prob, self.training)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
@@ -151,12 +140,7 @@ class BeitEmbeddings(nn.Module):
             self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         else:
             self.mask_token = None
-        self.patch_embeddings = PatchEmbeddings(
-            image_size=config.image_size,
-            patch_size=config.patch_size,
-            num_channels=config.num_channels,
-            embed_dim=config.hidden_size,
-        )
+        self.patch_embeddings = BeitPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         if config.use_absolute_position_embeddings:
             self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
@@ -165,57 +149,75 @@ class BeitEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.BoolTensor] = None) -> torch.Tensor:
-
-        embeddings = self.patch_embeddings(pixel_values)
+        embeddings, (patch_height, patch_width) = self.patch_embeddings(
+            pixel_values, self.position_embeddings[:, 1:, :] if self.position_embeddings is not None else None
+        )
         batch_size, seq_len, _ = embeddings.size()
 
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         if bool_masked_pos is not None:
             mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
             # replace the masked visual tokens by mask_tokens
             w = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
             embeddings = embeddings * (1 - w) + mask_tokens * w
 
-        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         if self.position_embeddings is not None:
-            embeddings = embeddings + self.position_embeddings
+            cls_tokens = cls_tokens + self.position_embeddings[:, :1, :]
+
+        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+
         embeddings = self.dropout(embeddings)
 
-        return embeddings
+        return embeddings, (patch_height, patch_width)
 
 
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-class PatchEmbeddings(nn.Module):
+class BeitPatchEmbeddings(nn.Module):
     """
-    Image to Patch Embedding.
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
     """
 
-    def __init__(
-        self, image_size: int = 224, patch_size: int = 16, num_channels: int = 3, embed_dim: int = 768
-    ) -> None:
+    def __init__(self, config):
         super().__init__()
-        image_size = to_2tuple(image_size)
-        patch_size = to_2tuple(patch_size)
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         patch_shape = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
         self.image_size = image_size
         self.patch_size = patch_size
+        self.num_channels = num_channels
         self.num_patches = num_patches
         self.patch_shape = patch_shape
 
-        self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, position_embedding: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
-        # FIXME look at relaxing size constraints
-        if height != self.image_size[0] or width != self.image_size[1]:
+        if num_channels != self.num_channels:
             raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        x = self.projection(pixel_values).flatten(2).transpose(1, 2)
 
-        return x
+        embeddings = self.projection(pixel_values)
+        patch_height, patch_width = embeddings.shape[2], embeddings.shape[3]
+
+        if position_embedding is not None:
+            # interpolate the position embedding to the corresponding size
+            position_embedding = position_embedding.view(1, self.patch_shape[0], self.patch_shape[1], -1).permute(
+                0, 3, 1, 2
+            )
+            position_embedding = nn.functional.interpolate(
+                position_embedding, size=(patch_height, patch_width), mode="bicubic"
+            )
+            embeddings = embeddings + position_embedding
+
+        embeddings = embeddings.flatten(2).transpose(1, 2)
+
+        return embeddings, (patch_height, patch_width)
 
 
 class BeitSelfAttention(nn.Module):
@@ -393,7 +395,7 @@ class BeitLayer(nn.Module):
         self.intermediate = BeitIntermediate(config)
         self.output = BeitOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = BeitDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         init_values = config.layer_scale_init_value
@@ -456,7 +458,7 @@ class BeitRelativePositionBias(nn.Module):
         # get pair-wise relative position index for each token inside the window
         coords_h = torch.arange(window_size[0])
         coords_w = torch.arange(window_size[1])
-        coords = torch.stack(torch.meshgrid([coords_h, coords_w]))  # 2, Wh, Ww
+        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))  # 2, Wh, Ww
         coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
         relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
         relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
@@ -471,7 +473,7 @@ class BeitRelativePositionBias(nn.Module):
         relative_position_index[0:, 0] = self.num_relative_distance - 2
         relative_position_index[0, 0] = self.num_relative_distance - 1
 
-        self.register_buffer("relative_position_index", relative_position_index)
+        self.register_buffer("relative_position_index", relative_position_index, persistent=False)
 
     def forward(self) -> torch.Tensor:
         relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
@@ -522,17 +524,11 @@ class BeitEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     layer_head_mask,
+                    output_attentions,
                 )
             else:
                 relative_position_bias = (
@@ -584,10 +580,6 @@ class BeitPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, BeitEncoder):
-            module.gradient_checkpointing = value
-
 
 BEIT_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
@@ -603,8 +595,8 @@ BEIT_START_DOCSTRING = r"""
 BEIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`BeitFeatureExtractor`]. See
-            [`BeitFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`BeitImageProcessor.__call__`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -656,7 +648,6 @@ class BeitModel(BeitPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BeitModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -672,6 +663,10 @@ class BeitModel(BeitPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BeitModelOutputWithPooling]:
+        r"""
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -688,7 +683,7 @@ class BeitModel(BeitPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output = self.embeddings(pixel_values, bool_masked_pos)
+        embedding_output, (patch_height, patch_width) = self.embeddings(pixel_values, bool_masked_pos)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -779,7 +774,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import BeitFeatureExtractor, BeitForMaskedImageModeling
+        >>> from transformers import AutoImageProcessor, BeitForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -787,11 +782,11 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
+        >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
         >>> model = BeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
-        >>> pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+        >>> pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
         >>> # create random boolean mask of shape (batch_size, num_patches)
         >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
 
@@ -854,7 +849,6 @@ class BeitForImageClassification(BeitPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -959,7 +953,24 @@ class BeitConvModule(nn.Module):
         return output
 
 
-class BeitPyramidPoolingModule(nn.ModuleList):
+class BeitPyramidPoolingBlock(nn.Module):
+    def __init__(self, pool_scale: int, in_channels: int, channels: int) -> None:
+        super().__init__()
+        self.layers = [
+            nn.AdaptiveAvgPool2d(pool_scale),
+            BeitConvModule(in_channels, channels, kernel_size=1),
+        ]
+        for i, layer in enumerate(self.layers):
+            self.add_module(str(i), layer)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        hidden_state = input
+        for layer in self.layers:
+            hidden_state = layer(hidden_state)
+        return hidden_state
+
+
+class BeitPyramidPoolingModule(nn.Module):
     """
     Pyramid Pooling Module (PPM) used in PSPNet.
 
@@ -979,17 +990,15 @@ class BeitPyramidPoolingModule(nn.ModuleList):
         self.align_corners = align_corners
         self.in_channels = in_channels
         self.channels = channels
-        for pool_scale in pool_scales:
-            self.append(
-                nn.Sequential(
-                    nn.AdaptiveAvgPool2d(pool_scale),
-                    BeitConvModule(self.in_channels, self.channels, kernel_size=1),
-                )
-            )
+        self.blocks = []
+        for i, pool_scale in enumerate(pool_scales):
+            block = BeitPyramidPoolingBlock(pool_scale=pool_scale, in_channels=in_channels, channels=channels)
+            self.blocks.append(block)
+            self.add_module(str(i), block)
 
     def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
         ppm_outs = []
-        for ppm in self:
+        for ppm in self.blocks:
             ppm_out = ppm(x)
             upsampled_ppm_out = nn.functional.interpolate(
                 ppm_out, size=x.size()[2:], mode="bilinear", align_corners=self.align_corners
@@ -1156,6 +1165,12 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         self.beit = BeitModel(config, add_pooling_layer=False)
 
         # FPNs
+        if len(self.config.out_indices) != 4:
+            raise ValueError(
+                "BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers, "
+                "specifying which features to use from the backbone. One can use [3, 5, 7, 11] in case of "
+                "a base-sized architecture."
+            )
         self.fpn1 = nn.Sequential(
             nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),
             nn.BatchNorm2d(config.hidden_size),
@@ -1187,8 +1202,10 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         # compute weighted loss
         loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
         main_loss = loss_fct(upsampled_logits, labels)
-        auxiliary_loss = loss_fct(upsampled_auxiliary_logits, labels)
-        loss = main_loss + self.config.auxiliary_loss_weight * auxiliary_loss
+        loss = main_loss
+        if auxiliary_logits is not None:
+            auxiliary_loss = loss_fct(upsampled_auxiliary_logits, labels)
+            loss += self.config.auxiliary_loss_weight * auxiliary_loss
 
         return loss
 
@@ -1213,17 +1230,17 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, BeitForSemanticSegmentation
+        >>> from transformers import AutoImageProcessor, BeitForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+        >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
         >>> model = BeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
@@ -1280,6 +1297,129 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         return SemanticSegmenterOutput(
             loss=loss,
             logits=logits,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    BEiT backbone, to be used with frameworks like DETR and MaskFormer.
+    """,
+    BEIT_START_DOCSTRING,
+)
+class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
+    def __init__(self, config):
+        super().__init__(config)
+        super()._init_backbone(config)
+
+        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
+        self.embeddings = BeitEmbeddings(config)
+        self.encoder = BeitEncoder(config, window_size=self.embeddings.patch_embeddings.patch_shape)
+
+        if config.add_fpn:
+            if len(self.config.out_indices) != 4:
+                raise ValueError(
+                    "BeitBackbone requires config.out_indices to be a list of 4 integers, "
+                    "specifying which features to use from the backbone. One can use [3, 5, 7, 11] in case of "
+                    "a base-sized architecture."
+                )
+            hidden_size = config.hidden_size
+            self.fpn1 = nn.Sequential(
+                nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2),
+                nn.BatchNorm2d(hidden_size, eps=config.batch_norm_eps),
+                nn.GELU(),
+                nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2),
+            )
+
+            self.fpn2 = nn.Sequential(nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2))
+            self.fpn3 = nn.Identity()
+            self.fpn4 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        # initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embeddings.patch_embeddings
+
+    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values: Tensor,
+        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> BackboneOutput:
+        """
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoBackbone
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> processor = AutoImageProcessor.from_pretrained("microsoft/beit-base-patch16-224")
+        >>> model = AutoBackbone.from_pretrained(
+        ...     "microsoft/beit-base-patch16-224", out_features=["stage1", "stage2", "stage3", "stage4"]
+        ... )
+
+        >>> inputs = processor(image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> feature_maps = outputs.feature_maps
+        >>> list(feature_maps[-1].shape)
+        [1, 768, 14, 14]
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
+        batch_size = pixel_values.shape[0]
+        embedding_output, (patch_height, patch_width) = self.embeddings(pixel_values)
+
+        outputs = self.encoder(
+            embedding_output, output_hidden_states=True, output_attentions=output_attentions, return_dict=return_dict
+        )
+
+        hidden_states = outputs.hidden_states if return_dict else outputs[1]
+
+        feature_maps = ()
+        for stage, hidden_state in zip(self.stage_names, hidden_states):
+            if stage in self.out_features:
+                if self.config.reshape_hidden_states:
+                    hidden_state = hidden_state[:, 1:, :]
+                    hidden_state = hidden_state.permute(0, 2, 1)
+                    hidden_state = hidden_state.reshape(batch_size, -1, patch_height, patch_width)
+
+                feature_maps += (hidden_state,)
+
+        if self.config.add_fpn:
+            feature_maps = [
+                self.fpn1(feature_maps[0]),
+                self.fpn2(feature_maps[1]),
+                self.fpn3(feature_maps[2]),
+                self.fpn4(feature_maps[3]),
+            ]
+            feature_maps = tuple(feature_maps)
+
+        if not return_dict:
+            if output_hidden_states:
+                output = (feature_maps,) + outputs[1:]
+            else:
+                output = (feature_maps,) + outputs[2:]
+            return output
+
+        return BackboneOutput(
+            feature_maps=feature_maps,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )

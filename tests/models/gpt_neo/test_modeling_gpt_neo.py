@@ -21,19 +21,21 @@ from transformers import GPTNeoConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import cached_property
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2Tokenizer,
         GPTNeoForCausalLM,
+        GPTNeoForQuestionAnswering,
         GPTNeoForSequenceClassification,
+        GPTNeoForTokenClassification,
         GPTNeoModel,
     )
 
@@ -51,8 +53,8 @@ class GPTNeoModelTester:
         use_mc_token_ids=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=4,
-        attention_types=[[["global", "local"], 2]],
+        num_hidden_layers=2,
+        attention_types=[[["global", "local"], 1]],
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -150,6 +152,11 @@ class GPTNeoModelTester:
             window_size=self.window_size,
             attention_types=self.attention_types,
         )
+
+    def get_pipeline_config(self):
+        config = self.get_config()
+        config.vocab_size = 300
+        return config
 
     def prepare_config_and_inputs_for_decoder(self):
         (
@@ -318,6 +325,17 @@ class GPTNeoModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    def create_and_check_gpt_neo_for_question_answering(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+    ):
+        config.num_labels = self.num_labels
+        model = GPTNeoForQuestionAnswering(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+
     def create_and_check_gpt_neo_for_sequence_classification(
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
@@ -327,6 +345,16 @@ class GPTNeoModelTester:
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
+    def create_and_check_gpt_neo_for_token_classification(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+    ):
+        config.num_labels = self.num_labels
+        model = GPTNeoForTokenClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args, gradient_checkpointing=False
@@ -366,12 +394,31 @@ class GPTNeoModelTester:
 
 
 @require_torch
-class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (GPTNeoModel, GPTNeoForCausalLM, GPTNeoForSequenceClassification) if is_torch_available() else ()
+        (
+            GPTNeoModel,
+            GPTNeoForCausalLM,
+            GPTNeoForQuestionAnswering,
+            GPTNeoForSequenceClassification,
+            GPTNeoForTokenClassification,
+        )
+        if is_torch_available()
+        else ()
     )
     all_generative_model_classes = (GPTNeoForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": GPTNeoModel,
+            "question-answering": GPTNeoForQuestionAnswering,
+            "text-classification": GPTNeoForSequenceClassification,
+            "text-generation": GPTNeoForCausalLM,
+            "token-classification": GPTNeoForTokenClassification,
+            "zero-shot": GPTNeoForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = True
     test_missing_keys = False
     test_pruning = False
@@ -409,9 +456,17 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
 
+    def test_gpt_neo_question_answering_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt_neo_for_question_answering(*config_and_inputs)
+
     def test_gpt_neo_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt_neo_for_sequence_classification(*config_and_inputs)
+
+    def test_gpt_neo_token_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt_neo_for_token_classification(*config_and_inputs)
 
     def test_gpt_neo_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -481,10 +536,8 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
             else:
                 model.gradient_checkpointing_disable()
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
-            # fmt: off
             # The dog-eared copy of the book, which is a collection of essays by the late author,
-            expected_output_ids = [464, 3290, 12, 3380, 4866, 286, 262, 1492, 11, 543, 318, 257, 4947, 286, 27126, 416, 262, 2739, 1772, 11]
-            # fmt: on
+            expected_output_ids = [464, 3290, 12, 3380, 4866, 286, 262, 1492, 11, 543, 318, 257, 4947, 286, 27126, 416, 262, 2739, 1772, 11]  # fmt: skip
             output_ids = model.generate(input_ids, do_sample=False)
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
@@ -547,6 +600,6 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GPTNeoModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "EleutherAI/gpt-neo-1.3B"
+        model = GPTNeoModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)

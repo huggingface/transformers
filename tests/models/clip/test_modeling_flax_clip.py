@@ -14,11 +14,17 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, id
 if is_flax_available():
     import jax
     import jax.numpy as jnp
+
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
     )
-    from transformers.models.clip.modeling_flax_clip import FlaxCLIPModel, FlaxCLIPTextModel, FlaxCLIPVisionModel
+    from transformers.models.clip.modeling_flax_clip import (
+        FlaxCLIPModel,
+        FlaxCLIPTextModel,
+        FlaxCLIPTextModelWithProjection,
+        FlaxCLIPVisionModel,
+    )
 
 if is_torch_available():
     import torch
@@ -34,7 +40,7 @@ class FlaxCLIPVisionModelTester:
         num_channels=3,
         is_training=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -251,7 +257,7 @@ class FlaxCLIPTextModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -314,7 +320,7 @@ class FlaxCLIPTextModelTester:
 
 @require_flax
 class FlaxCLIPTextModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxCLIPTextModel,) if is_flax_available() else ()
+    all_model_classes = (FlaxCLIPTextModel, FlaxCLIPTextModelWithProjection) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxCLIPTextModelTester(self)

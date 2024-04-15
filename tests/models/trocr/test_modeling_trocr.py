@@ -19,9 +19,10 @@ import unittest
 from transformers import TrOCRConfig
 from transformers.testing_utils import is_torch_available, require_torch, torch_device
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -46,7 +47,7 @@ class TrOCRStandaloneDecoderModelTester:
         use_labels=True,
         decoder_start_token_id=2,
         decoder_ffn_dim=32,
-        decoder_layers=4,
+        decoder_layers=2,
         decoder_attention_heads=4,
         max_position_embeddings=30,
         pad_token_id=0,
@@ -158,9 +159,11 @@ class TrOCRStandaloneDecoderModelTester:
 
 
 @require_torch
-class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TrOCRDecoder, TrOCRForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (TrOCRForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = {"text-generation": TrOCRForCausalLM} if is_torch_available() else {}
+    fx_compatible = True
     test_pruning = False
 
     def setUp(self):
@@ -189,3 +192,7 @@ class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, u
     # decoder cannot keep gradients
     def test_retain_grad_hidden_states_attentions(self):
         return
+
+    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
+    def test_left_padding_compatibility(self):
+        pass

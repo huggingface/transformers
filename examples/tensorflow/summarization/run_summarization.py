@@ -18,39 +18,43 @@ Fine-tuning the library models for summarization.
 """
 # You can also adapt this script on your own sequence to sequence task. Pointers for this are left as comments.
 
+import json
 import logging
 import os
 import sys
+import warnings
 from dataclasses import dataclass, field
-from functools import partial
 from typing import Optional
 
 import datasets
+import evaluate
 import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
 import tensorflow as tf
-from datasets import load_dataset, load_metric
-from tqdm import tqdm
+from datasets import load_dataset
+from filelock import FileLock
 
 import transformers
-from filelock import FileLock
 from transformers import (
     AutoConfig,
     AutoTokenizer,
+    DataCollatorForSeq2Seq,
     HfArgumentParser,
+    KerasMetricCallback,
+    PushToHubCallback,
     TFAutoModelForSeq2SeqLM,
     TFTrainingArguments,
     create_optimizer,
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, is_offline_mode
+from transformers.utils import check_min_version, is_offline_mode, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
 # region Checking dependencies
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.20.0.dev0")
+check_min_version("4.40.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
 
@@ -96,12 +100,28 @@ class ModelArguments:
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
     use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
+        },
+    )
+    trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-                "with private models)."
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+                "execute code present on the Hub on your local machine."
             )
         },
     )
@@ -174,7 +194,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "The maximum total sequence length for validation target text after tokenization. Sequences longer "
-                "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
+                "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`. "
                 "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
                 "during ``evaluate`` and ``predict``."
             )
@@ -218,7 +238,7 @@ class DataTrainingArguments:
         },
     )
     num_beams: Optional[int] = field(
-        default=None,
+        default=1,
         metadata={
             "help": (
                 "Number of beams to use for evaluation. This argument will be passed to ``model.generate``, "
@@ -252,7 +272,6 @@ class DataTrainingArguments:
 
 # endregion
 
-
 # region Dataset name mappings
 summarization_name_mapping = {
     "amazon_reviews_multi": ("review_body", "review_title"),
@@ -266,72 +285,8 @@ summarization_name_mapping = {
     "xglue": ("news_body", "news_title"),
     "xsum": ("document", "summary"),
     "wiki_summary": ("article", "highlights"),
+    "multi_news": ("document", "summary"),
 }
-# endregion
-
-
-# region Data generator
-def sample_generator(dataset, model, tokenizer, shuffle, pad_to_multiple_of=None):
-    if shuffle:
-        sample_ordering = np.random.permutation(len(dataset))
-    else:
-        sample_ordering = np.arange(len(dataset))
-    for sample_idx in sample_ordering:
-        example = dataset[int(sample_idx)]
-        # Handle dicts with proper padding and conversion to tensor.
-        example = tokenizer.pad(example, return_tensors="np", pad_to_multiple_of=pad_to_multiple_of)
-        example = {key: tf.convert_to_tensor(arr, dtype_hint=tf.int32) for key, arr in example.items()}
-        if model is not None and hasattr(model, "prepare_decoder_input_ids_from_labels"):
-            decoder_input_ids = model.prepare_decoder_input_ids_from_labels(
-                labels=tf.expand_dims(example["labels"], 0)
-            )
-            example["decoder_input_ids"] = tf.squeeze(decoder_input_ids, 0)
-        yield example, example["labels"]  # TF needs some kind of labels, even if we don't use them
-    return
-
-
-# endregion
-
-
-# region Helper functions
-def dataset_to_tf(dataset, model, tokenizer, total_batch_size, num_epochs, shuffle):
-    if dataset is None:
-        return None
-    train_generator = partial(sample_generator, dataset, model, tokenizer, shuffle=shuffle)
-    train_signature = {
-        feature: tf.TensorSpec(shape=(None,), dtype=tf.int32)
-        for feature in dataset.features
-        if feature != "special_tokens_mask"
-    }
-    if (
-        model is not None
-        and "decoder_input_ids" not in train_signature
-        and hasattr(model, "prepare_decoder_input_ids_from_labels")
-    ):
-        train_signature["decoder_input_ids"] = train_signature["labels"]
-    # This may need to be changed depending on your particular model or tokenizer!
-    padding_values = {
-        key: tf.convert_to_tensor(tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0, dtype=tf.int32)
-        for key in train_signature.keys()
-    }
-    padding_values["labels"] = tf.convert_to_tensor(-100, dtype=tf.int32)
-    train_signature["labels"] = train_signature["input_ids"]
-    train_signature = (train_signature, train_signature["labels"])
-    options = tf.data.Options()
-    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
-    tf_dataset = (
-        tf.data.Dataset.from_generator(train_generator, output_signature=train_signature)
-        .with_options(options)
-        .padded_batch(
-            batch_size=total_batch_size,
-            drop_remainder=True,
-            padding_values=(padding_values, np.array(-100, dtype=np.int32)),
-        )
-        .repeat(int(num_epochs))
-    )
-    return tf_dataset
-
-
 # endregion
 
 
@@ -348,6 +303,19 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    if model_args.use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
+            FutureWarning,
+        )
+        if model_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        model_args.token = model_args.use_auth_token
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_summarization", model_args, data_args, framework="tensorflow")
     # endregion
 
     # region Logging
@@ -366,11 +334,11 @@ def main():
 
     # region T5 special-casing
     if data_args.source_prefix is None and model_args.model_name_or_path in [
-        "t5-small",
-        "t5-base",
-        "t5-large",
-        "t5-3b",
-        "t5-11b",
+        "google-t5/t5-small",
+        "google-t5/t5-base",
+        "google-t5/t5-large",
+        "google-t5/t5-3b",
+        "google-t5/t5-11b",
     ]:
         logger.warning(
             "You're running a t5 model but didn't provide a source prefix, which is the expected, e.g. with "
@@ -413,7 +381,7 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     else:
         data_files = {}
@@ -430,10 +398,10 @@ def main():
             extension,
             data_files=data_files,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
     # endregion
 
     # region Load model config and tokenizer
@@ -446,14 +414,16 @@ def main():
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
 
     prefix = data_args.source_prefix if data_args.source_prefix is not None else ""
@@ -498,9 +468,8 @@ def main():
         inputs = [prefix + inp for inp in inputs]
         model_inputs = tokenizer(inputs, max_length=data_args.max_source_length, padding=padding, truncation=True)
 
-        # Setup the tokenizer for targets
-        with tokenizer.as_target_tokenizer():
-            labels = tokenizer(targets, max_length=max_target_length, padding=padding, truncation=True)
+        # Tokenize targets with the `text_target` keyword argument
+        labels = tokenizer(text_target=targets, max_length=max_target_length, padding=padding, truncation=True)
 
         # If we are padding here, replace all tokenizer.pad_token_id in the labels by -100 when we want to ignore
         # padding in the loss.
@@ -519,15 +488,14 @@ def main():
         if data_args.max_train_samples is not None:
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
             train_dataset = train_dataset.select(range(max_train_samples))
-        with training_args.main_process_first(desc="train dataset map pre-processing"):
-            train_dataset = train_dataset.map(
-                preprocess_function,
-                batched=True,
-                num_proc=data_args.preprocessing_num_workers,
-                remove_columns=column_names,
-                load_from_cache_file=not data_args.overwrite_cache,
-                desc="Running tokenizer on train dataset",
-            )
+        train_dataset = train_dataset.map(
+            preprocess_function,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not data_args.overwrite_cache,
+            desc="Running tokenizer on train dataset",
+        )
     else:
         train_dataset = None
 
@@ -539,15 +507,14 @@ def main():
         if data_args.max_eval_samples is not None:
             max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
             eval_dataset = eval_dataset.select(range(max_eval_samples))
-        with training_args.main_process_first(desc="validation dataset map pre-processing"):
-            eval_dataset = eval_dataset.map(
-                preprocess_function,
-                batched=True,
-                num_proc=data_args.preprocessing_num_workers,
-                remove_columns=column_names,
-                load_from_cache_file=not data_args.overwrite_cache,
-                desc="Running tokenizer on validation dataset",
-            )
+        eval_dataset = eval_dataset.map(
+            preprocess_function,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not data_args.overwrite_cache,
+            desc="Running tokenizer on validation dataset",
+        )
     else:
         eval_dataset = None
     # endregion
@@ -572,69 +539,172 @@ def main():
             config=config,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
 
-        model.resize_token_embeddings(len(tokenizer))
+        # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
+        # on a small vocab and want a smaller embedding size, remove this test.
+        embeddings = model.get_input_embeddings()
+
+        # Matt: This is a temporary workaround as we transition our models to exclusively using Keras embeddings.
+        #       As soon as the transition is complete, all embeddings should be keras.Embeddings layers, and
+        #       the weights will always be in embeddings.embeddings.
+        if hasattr(embeddings, "embeddings"):
+            embedding_size = embeddings.embeddings.shape[0]
+        else:
+            embedding_size = embeddings.weight.shape[0]
+        if len(tokenizer) > embedding_size:
+            model.resize_token_embeddings(len(tokenizer))
         # endregion
 
         # region Prepare TF Dataset objects
         if model.config.decoder_start_token_id is None:
             raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
 
+        label_pad_token_id = -100 if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id
+        data_collator = DataCollatorForSeq2Seq(
+            tokenizer,
+            model=model,
+            label_pad_token_id=label_pad_token_id,
+            pad_to_multiple_of=128,  # Reduce the number of unique shapes for XLA, especially for generation
+            return_tensors="np",
+        )
+
+        dataset_options = tf.data.Options()
+        dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+
         num_replicas = training_args.strategy.num_replicas_in_sync
         total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
         total_eval_batch_size = training_args.per_device_eval_batch_size * num_replicas
-        tf_train_dataset = dataset_to_tf(
+
+        # model.prepare_tf_dataset() wraps a Hugging Face dataset in a tf.data.Dataset which is ready to use in
+        # training. This is the recommended way to use a Hugging Face dataset when training with Keras. You can also
+        # use the lower-level dataset.to_tf_dataset() method, but you will have to specify things like column names
+        # yourself if you use this method, whereas they are automatically inferred from the model input names when
+        # using model.prepare_tf_dataset()
+        # For more info see the docs:
+        # https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.TFPreTrainedModel.prepare_tf_dataset
+        # https://huggingface.co/docs/datasets/main/en/package_reference/main_classes#datasets.Dataset.to_tf_dataset
+
+        tf_train_dataset = model.prepare_tf_dataset(
             train_dataset,
-            model,
-            tokenizer,
-            total_batch_size=total_train_batch_size,
-            num_epochs=training_args.num_train_epochs,
+            collate_fn=data_collator,
+            batch_size=total_train_batch_size,
             shuffle=True,
-        )
-        tf_eval_dataset = dataset_to_tf(
+        ).with_options(dataset_options)
+        tf_eval_dataset = model.prepare_tf_dataset(
             eval_dataset,
-            model,
-            tokenizer,
-            total_eval_batch_size,
-            num_epochs=1,
+            collate_fn=data_collator,
+            batch_size=total_eval_batch_size,
             shuffle=False,
-        )
+        ).with_options(dataset_options)
         # endregion
 
         # region Optimizer, loss and LR scheduling
-        # Scheduler and math around the number of training steps.
-        num_update_steps_per_epoch = len(train_dataset) // total_train_batch_size
-        num_train_steps = training_args.num_train_epochs * num_update_steps_per_epoch
-        optimizer, lr_schedule = create_optimizer(
-            init_lr=training_args.learning_rate, num_train_steps=num_train_steps, num_warmup_steps=0
-        )
-
-        def masked_sparse_categorical_crossentropy(y_true, y_pred):
-            # We clip the negative labels to 0 to avoid NaNs appearing in the output and
-            # fouling up everything that comes afterwards. The loss values corresponding to clipped values
-            # will be masked later anyway, but even masked NaNs seem to cause overflows for some reason.
-            # 1e6 is chosen as a reasonable upper bound for the number of token indices - in the unlikely
-            # event that you have more than 1 million tokens in your vocabulary, consider increasing this value.
-            # More pragmatically, consider redesigning your tokenizer.
-            losses = tf.keras.losses.sparse_categorical_crossentropy(
-                tf.clip_by_value(y_true, 0, int(1e6)), y_pred, from_logits=True
+        num_train_steps = int(len(tf_train_dataset) * training_args.num_train_epochs)
+        if training_args.warmup_steps > 0:
+            num_warmup_steps = training_args.warmup_steps
+        elif training_args.warmup_ratio > 0:
+            num_warmup_steps = int(num_train_steps * training_args.warmup_ratio)
+        else:
+            num_warmup_steps = 0
+        if training_args.do_train:
+            optimizer, lr_schedule = create_optimizer(
+                init_lr=training_args.learning_rate,
+                num_train_steps=num_train_steps,
+                num_warmup_steps=num_warmup_steps,
+                adam_beta1=training_args.adam_beta1,
+                adam_beta2=training_args.adam_beta2,
+                adam_epsilon=training_args.adam_epsilon,
+                weight_decay_rate=training_args.weight_decay,
+                adam_global_clipnorm=training_args.max_grad_norm,
             )
-            # Compute the per-sample loss only over the unmasked tokens
-            losses = tf.ragged.boolean_mask(losses, y_true != -100)
-            losses = tf.reduce_mean(losses, axis=-1)
-            return losses
+        else:
+            optimizer = "sgd"  # Just write anything because we won't be using it
 
         # endregion
 
-        # region Metric
-        metric = load_metric("rouge")
+        # region Metric and KerasMetricCallback
+        if training_args.do_eval:
+            metric = evaluate.load("rouge", cache_dir=model_args.cache_dir)
+
+            if data_args.val_max_target_length is None:
+                data_args.val_max_target_length = data_args.max_target_length
+
+            gen_kwargs = {
+                "max_length": data_args.val_max_target_length if data_args is not None else config.max_length,
+                "num_beams": data_args.num_beams,
+                "no_repeat_ngram_size": 0,  # Not supported under XLA right now, and some models set it by default
+            }
+
+            def compute_metrics(preds):
+                predictions, labels = preds
+                if isinstance(predictions, tuple):
+                    predictions = predictions[0]
+                decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+                labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
+                decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
+                decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
+                metrics = metric.compute(predictions=decoded_preds, references=decoded_labels, use_stemmer=True)
+                # Only print the mid f-measures, but there are a lot of other statistics in there too!
+                metrics = {key: round(val.mid.fmeasure * 100, 4) for key, val in metrics.items()}
+                return metrics
+
+            # The KerasMetricCallback allows metrics that are too complex to write as standard Keras metrics
+            # to be computed each epoch. Any Python code can be included in the metric_fn. This is especially
+            # useful for metrics like BLEU and ROUGE that perform string comparisons on decoded model outputs.
+            # For more information, see the docs at
+            # https://huggingface.co/docs/transformers/main_classes/keras_callbacks#transformers.KerasMetricCallback
+
+            metric_callback = KerasMetricCallback(
+                metric_fn=compute_metrics,
+                eval_dataset=tf_eval_dataset,
+                predict_with_generate=True,
+                use_xla_generation=True,
+                generate_kwargs=gen_kwargs,
+            )
+            callbacks = [metric_callback]
+        else:
+            callbacks = []
+        # endregion
+
+        # region Preparing push_to_hub and model card
+        push_to_hub_model_id = training_args.push_to_hub_model_id
+        model_name = model_args.model_name_or_path.split("/")[-1]
+        if not push_to_hub_model_id:
+            if data_args.dataset_name is not None:
+                push_to_hub_model_id = f"{model_name}-finetuned-{data_args.dataset_name}"
+            else:
+                push_to_hub_model_id = f"{model_name}-finetuned-summarization"
+
+        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "summarization"}
+        if data_args.dataset_name is not None:
+            model_card_kwargs["dataset_tags"] = data_args.dataset_name
+            if data_args.dataset_config_name is not None:
+                model_card_kwargs["dataset_args"] = data_args.dataset_config_name
+                model_card_kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            else:
+                model_card_kwargs["dataset"] = data_args.dataset_name
+
+        if training_args.push_to_hub:
+            # Because this training can be quite long, we save once per epoch.
+            callbacks.append(
+                PushToHubCallback(
+                    output_dir=training_args.output_dir,
+                    hub_model_id=push_to_hub_model_id,
+                    hub_token=training_args.push_to_hub_token,
+                    tokenizer=tokenizer,
+                    **model_card_kwargs,
+                )
+            )
         # endregion
 
         # region Training
-        model.compile(loss={"logits": masked_sparse_categorical_crossentropy}, optimizer=optimizer)
-
+        # Transformers models compute the right loss for their task by default when labels are passed, and will
+        # use this for training unless you specify your own loss function in compile().
+        model.compile(optimizer=optimizer, jit_compile=training_args.xla)
+        eval_metrics = None
         if training_args.do_train:
             logger.info("***** Running training *****")
             logger.info(f"  Num examples = {len(train_dataset)}")
@@ -643,28 +713,29 @@ def main():
             logger.info(f"  Total train batch size = {total_train_batch_size}")
             logger.info(f"  Total optimization steps = {num_train_steps}")
 
-            model.fit(
-                tf_train_dataset,
-                epochs=int(training_args.num_train_epochs),
-                steps_per_epoch=num_update_steps_per_epoch,
-            )
+            if training_args.xla and not data_args.pad_to_max_length:
+                logger.warning(
+                    "XLA training may be slow at first when --pad_to_max_length is not set "
+                    "until all possible shapes have been compiled."
+                )
+            history = model.fit(tf_train_dataset, epochs=int(training_args.num_train_epochs), callbacks=callbacks)
+            eval_metrics = {key: val[-1] for key, val in history.history.items()}
         # endregion
 
         # region Validation
-        if data_args.val_max_target_length is None:
-            data_args.val_max_target_length = data_args.max_target_length
 
-        gen_kwargs = {
-            "max_length": data_args.val_max_target_length if data_args is not None else config.max_length,
-            "num_beams": data_args.num_beams,
-        }
-        if training_args.do_eval:
+        if training_args.do_eval and not training_args.do_train:
+            # Do a standalone evaluation run
             logger.info("Evaluation...")
-            for batch, labels in tqdm(
-                tf_eval_dataset, total=len(eval_dataset) // training_args.per_device_eval_batch_size
-            ):
+
+            # Compiling generation with XLA yields enormous speedups, see https://huggingface.co/blog/tf-xla-generate
+            @tf.function(jit_compile=True)
+            def generate(**kwargs):
+                return model.generate(**kwargs)
+
+            for batch, labels in tf_eval_dataset:
                 batch.update(gen_kwargs)
-                generated_tokens = model.generate(**batch)
+                generated_tokens = generate(**batch)
                 if isinstance(generated_tokens, tuple):
                     generated_tokens = generated_tokens[0]
                 decoded_preds = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
@@ -674,16 +745,19 @@ def main():
 
                 metric.add_batch(predictions=decoded_preds, references=decoded_labels)
 
-            result = metric.compute(use_stemmer=True)
-            # Extract a few results from ROUGE
-            result = {key: value.mid.fmeasure * 100 for key, value in result.items()}
+            eval_metrics = metric.compute(use_stemmer=True)
 
-            result = {k: round(v, 4) for k, v in result.items()}
-
+            result = {key: round(val.mid.fmeasure * 100, 4) for key, val in eval_metrics.items()}
             logger.info(result)
         # endregion
 
-        if training_args.output_dir is not None:
+        if training_args.output_dir is not None and eval_metrics is not None:
+            output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+            with open(output_eval_file, "w") as writer:
+                writer.write(json.dumps(eval_metrics))
+
+        if training_args.output_dir is not None and not training_args.push_to_hub:
+            # If we're not pushing to hub, at least save a local copy when we're done
             model.save_pretrained(training_args.output_dir)
 
 

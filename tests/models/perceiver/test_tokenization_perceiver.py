@@ -36,7 +36,7 @@ else:
 
 
 class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "deepmind/language-perceiver"
     tokenizer_class = PerceiverTokenizer
     test_rust_tokenizer = False
 
@@ -114,9 +114,7 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_prepare_batch_integration(self):
         tokenizer = self.perceiver_tokenizer
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
-        # fmt: off
-        expected_src_tokens = [4, 71, 38, 114, 117, 116, 109, 38, 118, 103, 120, 103, 109, 120, 103, 118, 110, 38, 108, 117, 120, 38, 121, 123, 115, 115, 103, 120, 111, 128, 103, 122, 111, 117, 116, 52, 5, 0]
-        # fmt: on
+        expected_src_tokens = [4, 71, 38, 114, 117, 116, 109, 38, 118, 103, 120, 103, 109, 120, 103, 118, 110, 38, 108, 117, 120, 38, 121, 123, 115, 115, 103, 120, 111, 128, 103, 122, 111, 117, 116, 52, 5, 0]  # fmt: skip
         batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
         self.assertIsInstance(batch, BatchEncoding)
 
@@ -146,13 +144,12 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "Summary of the text.",
             "Another summary.",
         ]
-        with tokenizer.as_target_tokenizer():
-            targets = tokenizer(
-                tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors=FRAMEWORK
-            )
+        targets = tokenizer(
+            text_target=tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors=FRAMEWORK
+        )
         self.assertEqual(32, targets["input_ids"].shape[1])
 
-    # cannot use default save_and_load_tokenzier test method because tokenzier has no vocab
+    # cannot use default save_and_load_tokenizer test method because tokenizer has no vocab
     def test_save_and_load_tokenizer(self):
         # safety check on max_len default value so we are sure the test works
         tokenizers = self.get_tokenizers()
@@ -187,7 +184,9 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokenizer.add_tokens(["bim", "bambam"])
                 additional_special_tokens = tokenizer.additional_special_tokens
                 additional_special_tokens.append("new_additional_special_token")
-                tokenizer.add_special_tokens({"additional_special_tokens": additional_special_tokens})
+                tokenizer.add_special_tokens(
+                    {"additional_special_tokens": additional_special_tokens}, replace_additional_special_tokens=False
+                )
                 before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
                 tokenizer.save_pretrained(tmpdirname)
 
@@ -270,10 +269,6 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_decode_invalid_byte_id(self):
         tokenizer = self.perceiver_tokenizer
         self.assertEqual(tokenizer.decode([178]), "�")
-
-    # tokenizer can be instantiated without any pretrained files, so no need for pretrained tokenizer list
-    def test_pretrained_model_lists(self):
-        pass
 
     # tokenizer does not have vocabulary
     def test_get_vocab(self):
