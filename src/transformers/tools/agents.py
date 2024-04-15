@@ -234,6 +234,44 @@ class Toolbox():
                 self._tools[name] = load_tool(task_or_repo_id, remote=_remote)
 
 
+class AgentError(Exception):
+    """Base class for other agent-related exceptions"""
+    def __init__(self, message):
+        super().__init__(message)
+        self.message = message
+
+
+class AgentParsingError(AgentError):
+    """Exception raised for errors in parsing in the agent"""
+    pass
+
+
+class AgentExecutionError(AgentError):
+    """Exception raised for errors in execution in the agent"""
+    pass
+
+
+class AgentMaxIterationsError(AgentError):
+    """Exception raised for errors in execution in the agent"""
+    pass
+
+
+def get_inner_memory_from_logs(logs: List[Dict[str, Union[str, AgentError]]]) -> str:
+        """
+        Reads past llm_outputs, actions, and observations or errors from the logs.
+        """
+        memory = logs[0]["system_prompt"] + "\n" + logs[0]["task"]
+        for step_log in logs[1:]:
+            memory += "\nThought: " + step_log["llm_output"] + "\n"
+
+            if 'error' in step_log:
+                memory += str(step_log["error"]) + "\nNow let's retry: take care not to repeat previous errors! Try to adopt different approaches if you can.\n"
+
+            else:
+                memory += "Observation: " + step_log["observation"]
+        return memory
+
+
 class Agent:
     def __init__(
             self,
@@ -263,7 +301,7 @@ class Agent:
         self.system_prompt = format_prompt(self._toolbox, self.prompt_template, self.tool_description_template)
         self.memory = []
         self.prompt = None
-
+        self.logs = []
 
     @property
     def toolbox(self) -> Dict[str, Tool]:
@@ -284,7 +322,7 @@ class Agent:
         """
         try:
             split = llm_output.split(split_token)
-            _, action = split[-2], split[-1] # NOTE: using indexes starting from the end solves for when you have more than one split_token in the output
+            rationale, action = split[-2], split[-1] # NOTE: using indexes starting from the end solves for when you have more than one split_token in the output
         except Exception as e:
             self.log.error(e, exc_info=1)
             raise RuntimeError(f"Error: No '{split_token}' token provided. Be sure to include an action, prefaced with '{split_token}'!")
@@ -292,7 +330,7 @@ class Agent:
 
     def execute(self, tool_name: str, arguments: Dict[str, str]) -> None:
         """
-        Execute tool with the provided input and append the result to the memory
+        Execute tool with the provided input and returns the result.
 
         Args:
             tool_name (`str`): Name of the Tool to execute (shoulde be one from
@@ -395,7 +433,7 @@ class CodeAgent(Agent):
             return llm_output
 
         # Parse
-        code_action = self.extract_action(
+        _, code_action = self.extract_action(
             llm_output=llm_output,
             split_token="Answer:"
         )
@@ -471,7 +509,7 @@ class ReactAgent(Agent):
         from transformers.tools.base import CalculatorTool
 
         calculator = CalculatorTool()
-        agent = ReactAgent(toolbox=[CalculatorTool()])
+        agent = ReactAgent(tools=[CalculatorTool()])
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
@@ -479,15 +517,15 @@ class ReactAgent(Agent):
 
         self.task = task
         task_message = f"Task: {self.task}"
-        self.memory.append(task_message)
 
         final_answer = None
         iteration = 0
 
-        while final_answer is None and iteration < self.max_iterations:
+        while not final_answer and iteration < self.max_iterations:
+            self.logs.append({})
             try:
                 final_answer = self.step()
-            except Exception as e:
+            except AgentError as e:
                 self.log.error(e)
                 error_message = str(e) + ". Now let's retry."
                 self.memory.append(error_message)
@@ -502,7 +540,7 @@ class ReactAgent(Agent):
 
     def step(self):
         """
-        Runs agent step with the current prompt (task + state)
+        Runs agent step with the current prompt (task + state).
         """
         self.log.info("=====Calling LLM with these messages:=====")
         memory_as_text = '\n'.join(self.memory)
