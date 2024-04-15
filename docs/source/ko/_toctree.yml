@@ -72,13 +72,13 @@
       - local: tasks/monocular_depth_estimation
         title: 단일 영상 기반 깊이 추정
       - local: in_translation
-        title: Image-to-Image
-      - local: tasks/image_feature_extraction
-        title: Image Feature Extraction
-      - local: tasks/mask_generation
-        title: Mask Generation
-      - local: tasks/knowledge_distillation_for_image_classification
-        title: Knowledge Distillation for Computer Vision
+        title: (번역중) Image-to-Image
+      - local: in_translation
+        title: (번역중) Image Feature Extraction
+      - local: in_translation
+        title: (번역중) Mask Generation
+      - local: in_translation
+        title: (번역중) Knowledge Distillation for Computer Vision
     title: 컴퓨터 비전
   - isExpanded: false
     sections:
@@ -88,8 +88,8 @@
         title: 문서 질의 응답(Document Question Answering)
       - local: tasks/visual_question_answering
         title: 시각적 질의응답 (Visual Question Answering)
-      - local: tasks/text-to-speech
-        title: Text to speech
+      - local: in_translation
+        title: (번역중) Text to speech
     title: 멀티모달
   - isExpanded: false
     sections:
@@ -135,8 +135,8 @@
     title: 사용자 정의 도구와 프롬프트
   - local: troubleshooting
     title: 문제 해결
-  - local: hf_quantizer
-    title: Contribute new quantization method
+  - local: in_translation
+    title: (번역중) Contribute new quantization method
   title: (번역중) 개발자 가이드
 - sections:
   - local: performance
@@ -219,8 +219,8 @@
     title: 추론 웹 서버를 위한 파이프라인
   - local: model_memory_anatomy
     title: 모델 학습 해부하기
-  - local: llm_tutorial_optimization
-    title: Getting the most out of LLMs
+  - local: in_translation
+    title: (번역중) Getting the most out of LLMs
   title: (번역중) 개념 가이드
 - sections:
   - sections:
