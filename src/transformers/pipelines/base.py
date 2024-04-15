@@ -914,7 +914,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         self,
         save_directory: Union[str, os.PathLike],
         safe_serialization: bool = True,
-        token: Optional[Union[str, bool]] = None,
         **kwargs,
     ):
         """
