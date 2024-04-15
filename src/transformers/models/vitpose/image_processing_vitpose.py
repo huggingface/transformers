@@ -12,26 +12,63 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for ViTPose."""
+"""Image processor class for ViTPose."""
 
 import math
-from typing import Optional, Union
+from typing import Dict, List, Optional, Union
 
+# TODO get rid of cv2
 import cv2
 import numpy as np
-from PIL import Image
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
+    ChannelDimension,
     ImageInput,
-    is_torch_tensor,
+    is_scaled_image,
+    make_list_of_images,
+    to_numpy_array,
+    valid_images,
 )
-from ...utils import TensorType, logging
+from ...utils import TensorType, is_vision_available, logging
+
+
+if is_vision_available():
+    import PIL
 
 
 logger = logging.get_logger(__name__)
+
+
+def _box2cs(box, input_size):
+    """This encodes a bounding box (x,y,w,h) into (center, scale)
+
+    Args:
+        x, y, w, h
+
+    Returns:
+        tuple: A tuple containing center and scale.
+
+        - np.ndarray[float32](2,): Center of the bbox (x, y).
+        - np.ndarray[float32](2,): Scale of the bbox w & h.
+    """
+
+    x, y, w, h = box[:4]
+    aspect_ratio = input_size[0] / input_size[1]
+    center = np.array([x + w * 0.5, y + h * 0.5], dtype=np.float32)
+
+    if w > aspect_ratio * h:
+        h = w * 1.0 / aspect_ratio
+    elif w < aspect_ratio * h:
+        w = h * aspect_ratio
+
+    # pixel std is 200.0
+    scale = np.array([w / 200.0, h / 200.0], dtype=np.float32)
+    scale = scale * 1.25
+
+    return center, scale
 
 
 def _get_max_preds(heatmaps):
@@ -216,8 +253,14 @@ class ViTPoseImageProcessor(BaseImageProcessor):
     Args:
         do_affine_transform (`bool`, *optional*, defaults to `True`):
             Whether to apply an affine transformation to the input images.
+        size (`Dict[str, int]` *optional*, defaults to `{"height": 256, "width": 192}`):
+            Resolution of the image after `affine_transform` is applied. Only has an effect if `do_affine_transform` is set to `True`. Can
+            be overriden by `size` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.).
+        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+            Scale factor to use if rescaling the image. Can be overriden by `rescale_factor` in the `preprocess`
+            method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.
         image_mean (`List[int]`, defaults to `[0.485, 0.456, 0.406]`, *optional*):
@@ -229,27 +272,57 @@ class ViTPoseImageProcessor(BaseImageProcessor):
     model_input_names = ["pixel_values"]
 
     def __init__(
-        self, do_affine_transform=True, do_rescale=True, do_normalize=True, image_mean=None, image_std=None, **kwargs
+        self,
+        do_affine_transform: bool = True,
+        size: Dict[str, int] = None,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = True,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.do_affine_transform = do_affine_transform
+        self.size = size if size is not None else {"height": 256, "width": 192}
         self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
-    def affine_transform(self, image):
-        raise NotImplementedError("To do")
+    def affine_transform(
+        self,
+        image: np.array,
+        center: tuple[float],
+        scale: tuple[float],
+        rotation: float,
+        size: Dict[str, int],
+    ) -> np.array:
+        size = (size["width"], size["height"])
 
-        # transformation = get_warp_matrix(r, c * 2.0, image_size - 1.0, s * 200.0)
+        transformation = get_warp_matrix(rotation, center * 2.0, np.array(size) - 1.0, scale * 200.0)
 
-        # image = image.transform(transformation, Image.AFFINE, resample=Image.BILINEAR)
+        image = cv2.warpAffine(image, transformation, size, flags=cv2.INTER_LINEAR)
 
-        # return image
+        return image
 
     def preprocess(
-        self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
-    ) -> BatchFeature:
+        self,
+        images: ImageInput,
+        boxes,
+        do_affine_transform: bool = None,
+        size: Dict[str, int] = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
 
@@ -272,35 +345,52 @@ class ViTPoseImageProcessor(BaseImageProcessor):
             - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
               width).
         """
-        # Input type checking for clearer error
-        valid_images = False
+        do_affine_transform = do_affine_transform if do_affine_transform is not None else self.do_affine_transform
+        size = size if size is not None else self.size
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        image_mean = image_mean if image_mean is not None else self.image_mean
+        image_std = image_std if image_std is not None else self.image_std
 
-        # Check that images has a valid type
-        if isinstance(images, (Image.Image, np.ndarray)) or is_torch_tensor(images):
-            valid_images = True
-        elif isinstance(images, (list, tuple)):
-            if len(images) == 0 or isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]):
-                valid_images = True
+        images = make_list_of_images(images)
 
-        if not valid_images:
+        if not valid_images(images):
             raise ValueError(
-                "Images must of type `PIL.Image.Image`, `np.ndarray` or `torch.Tensor` (single example), "
-                "`List[PIL.Image.Image]`, `List[np.ndarray]` or `List[torch.Tensor]` (batch of examples)."
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        is_batched = bool(
-            isinstance(images, (list, tuple))
-            and (isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]))
-        )
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
 
-        if not is_batched:
-            images = [images]
+        if is_scaled_image(images[0]) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
 
         # transformations (affine transformation + rescaling + normalization)
+        new_images = []
         if self.do_affine_transform:
-            images = [self.affine_transform(image) for image in images]
+            for image, image_boxes in zip(images, boxes):
+                for box in image_boxes:
+                    center, scale = _box2cs(box, (size["width"], size["height"]))
+                    transformed_image = self.affine_transform(image, center, scale, rotation=0, size=size)
+                    new_images.append(transformed_image)
+
+        images = new_images
+
+        # TODO each image might have a variable number of boxes => padding?
+        # create pixel_values of shape (batch_size, num_boxes, num_channels, height, width)
+        for image in images:
+            print(image.shape)
+
         if self.do_rescale:
-            images = [self.to_numpy_array(image=image) for image in images]
+            images = [
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                for image in images
+            ]
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 
