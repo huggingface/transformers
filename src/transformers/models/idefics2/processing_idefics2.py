@@ -119,6 +119,7 @@ class Idefics2Processor(ProcessorMixin):
         >>> from transformers.image_utils import load_image
 
         >>> processor = Idefics2Processor.from_pretrained("HuggingFaceM4/idefics2-8b", image_seq_len=2)
+        >>> processor.image_processor.do_image_splitting = False  # Force as False to simplify the example
 
         >>> url1 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
         >>> url2 = "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg"
@@ -127,14 +128,14 @@ class Idefics2Processor(ProcessorMixin):
         >>> images = [[image1], [image2]]
 
         >>> text = [
-        ...     "<s><image>In this image, we see",
+        ...     "<image>In this image, we see",
         ...     "bla bla bla<image>",
         ... ]
         >>> outputs = processor(text=text, images=images, return_tensors="pt", padding=True)
         >>> input_ids = outputs.input_ids
         >>> input_tokens = processor.tokenizer.batch_decode(input_ids)
         >>> print(input_tokens)
-        ['<s><fake_token_around_image><image><image><fake_token_around_image>In this image, we see', '<s>bla bla bla<fake_token_around_image><image><image><fake_token_around_image>']
+        ['<s><fake_token_around_image><image><image><fake_token_around_image> In this image, we see', '<s> bla bla bla<fake_token_around_image><image><image><fake_token_around_image>']
         ```
 
         Args:
