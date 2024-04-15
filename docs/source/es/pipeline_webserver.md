@@ -5,16 +5,16 @@ rendered properly in your Markdown viewer.
 # Uso de un flujo de trabajo para un servidor web
 
 <Tip>
-Crear un motor de inferencia es un tema complejo, y la "mejor" solución probablemente dependerá de tu espacio de problemas. ¿Estás en CPU o en GPU? ¿Quieres la latencia más baja, el rendimiento más alto, soporte para muchos modelos o simplemente optimizar altamente un modelo específico? Hay muchas formas de abordar este tema, así que lo que vamos a presentar es un buen valor predeterminado para comenzar, que no necesariamente será la solución más óptima para ti.
+Crear un motor de inferencia es un tema complejo, y la "mejor" solución probablemente dependerá de tu caso de uso. ¿Estás en CPU o en GPU? ¿Quieres la latencia más baja, el rendimiento más alto, soporte para muchos modelos o simplemente optimizar altamente un modelo específico? Hay muchas formas de abordar este tema, así que lo que vamos a presentar es un buen valor predeterminado para comenzar, que no necesariamente será la solución más óptima para ti.
 </Tip>
 
 
-Lo fundamental para entender es que podemos usar un iterador, tal como [en un conjunto de datos](pipeline_tutorial), ya que un servidor web es básicamente un sistema que espera solicitudes y las trata a medida que llegan.
+Lo fundamental para entender es que podemos usar un iterador, tal como [en un conjunto de datos](https://huggingface.co/docs/transformers/pipeline_tutorial#using-pipelines-on-a-dataset), ya que un servidor web es básicamente un sistema que espera solicitudes y las trata a medida que llegan.
 
 <!--
 To do:
-Check the content of es/pipeline_tutorial.md
-And update the link [en un conjunto de datos](pipeline_tutorial) -> (pipeline_tutorial#using-pipelines-on-a-dataset)
+* Check the content of es/pipeline_tutorial.md
+* And update the link [en un conjunto de datos] -> (pipeline_tutorial#pipelines-en-un-conjunto-de-datos)
 -->
 
 Por lo general, los servidores web están multiplexados (multihilo, asíncrono, etc.) para manejar varias solicitudes simultáneamente. Por otro lado, los flujos de trabajo (y principalmente los modelos subyacentes) no son realmente ideales para el paralelismo; consumen mucha RAM, por lo que es mejor darles todos los recursos disponibles cuando se están ejecutando o es un trabajo intensivo en cómputo.
@@ -75,7 +75,7 @@ curl -X POST -d "test [MASK]" http://localhost:8000/
 
 ¡Y listo, ahora tienes una buena idea de cómo crear un servidor web!
 
-Lo realmente importante es cargar el modelo solo **una vez**, de modo que no haya copias del modelo en el servidor web. De esta manera, no se utiliza RAM innecesariamente. Luego, el mecanismo de queuing te permite hacer cosas sofisticadas como acumular algunos elementos antes de inferir para usar el agrupamiento dinámico:
+Lo realmente importante es cargar el modelo solo **una vez**, de modo que no haya copias del modelo en el servidor web. De esta manera, no se utiliza RAM innecesariamente. Luego, el mecanismo de queuing (colas) te permite hacer cosas sofisticadas como acumular algunos elementos antes de inferir para usar el agrupamiento dinámico:
 
 <Tip warning={true}>
 
