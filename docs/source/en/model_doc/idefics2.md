@@ -14,17 +14,17 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# IDEFICS-2
+# Idefics2
 
 ## Overview
 
-The IDEFICS-2 model was created by the [Hugging Face M4](https://huggingface.co/HuggingFaceM4) team and authored by Léo Tronchon, Hugo Laurencon, Victor Sanh.
+The Idefics2 model was created by the [Hugging Face M4](https://huggingface.co/HuggingFaceM4) team and authored by Léo Tronchon, Hugo Laurencon, Victor Sanh.
 The accompanying blog post can be found [here](https://huggingface.co/blog/idefics2).
 
-IDEFICS-2 is an open multimodal model that accepts arbitrary sequences of image and text inputs and produces text
+Idefics2 is an open multimodal model that accepts arbitrary sequences of image and text inputs and produces text
 outputs. The model can answer questions about images, describe visual content, create stories grounded on multiple
 images, or simply behave as a pure language model without visual inputs. It improves upon IDEFICS-1, notably on
-document understanding, OCR, or visual reasoning. IDEFICS-2 is lightweight (8 billion parameters) and treats
+document understanding, OCR, or visual reasoning. Idefics2 is lightweight (8 billion parameters) and treats
 images in their native aspect ratio and resolution, which allows for varying inference efficiency.
 
 Tips:
