@@ -21,7 +21,7 @@ import os
 import tempfile
 import urllib
 import warnings
-from typing import Any, Optional, Tuple, List
+from typing import Any, List, Optional, Tuple
 
 import torch
 from huggingface_hub.utils import insecure_hashlib
