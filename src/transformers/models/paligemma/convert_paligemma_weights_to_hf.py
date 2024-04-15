@@ -28,9 +28,12 @@ from transformers import (
     PaLIGemmaConfig,
     PaLIGemmaForConditionalGeneration,
     PaLIGemmaProcessor,
+    GemmaTokenizer,
+    GemmaTokenizerFast,
     SiglipImageProcessor,
 )
 from transformers.utils import logging
+from transformers.tokenization_utils_base import AddedToken
 
 
 device = "cpu"
@@ -367,10 +370,16 @@ def verify_logits(model, processor):
                 raise ValueError(f"Single-batch generation does not match batched. {single} != {batched}")
     print("All checks completed. Conversion is proper.")
 
+def write_tokenizer(tokenizer_path, input_tokenizer_path):
+    # Initialize the tokenizer based on the `spm` model
+    tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
+    print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
+    tokenizer = tokenizer_class(input_tokenizer_path)
+
 
 @torch.no_grad()
 def convert_paligemma_checkpoint(
-    checkpoint_path, pytorch_dump_folder_path, variant: str, do_verify_logits=True, do_convert_weights=False
+    checkpoint_path, tokenizer_model_file, pytorch_dump_folder_path, variant: str, do_verify_logits=True, do_convert_weights=False
 ):
     """
     Read checkpoints from flax npz files, rename/reshape, send result to state dict and verify logits if needed.
@@ -378,13 +387,24 @@ def convert_paligemma_checkpoint(
     config = get_paligemma_config(variant)
 
     if do_convert_weights:
-        #if variant == "2b":
-        tokenizer_id = "google/gemma-2b"
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
-        # tokenizer.padding_side = 'right'
+        if variant == "2b-test":
+            # for the test model, the vocabulary was smaller
+            tokenizer_id = "google/gemma-2b"
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
+        else:
+            tokenizer_class = GemmaTokenizer if GemmaTokenizerFast is None else GemmaTokenizer
+            tokenizer = tokenizer_class(tokenizer_model_file)
+        image_token = AddedToken("<image>", normalized=False, special=True)
+        tokens_to_add = {
+            "additional_special_tokens": [image_token]
+        }
+        tokenizer.add_special_tokens(tokens_to_add)
+        
+        # tokenizer.padding_side = 'right' # commented out, activate for testing purposes. 
 
         image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
         image_processor.size = {"width": config.vision_config.image_size, "height": config.vision_config.image_size}
+        image_processor.image_seq_length = config.vision_config.num_image_tokens
 
         processor = PaLIGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
         data = load(checkpoint_path)
@@ -409,22 +429,24 @@ def convert_paligemma_checkpoint(
     processor.save_pretrained(pytorch_dump_folder_path)
 
 if __name__ == "__main__":
-    """
-    Usage:
-
-    python src/transformers/models/paligemma/convert_paligemma_weights_to_hf.py --checkpoint_path="/home/pablo/gv-hf/pt_896px_512seq.params.npz" --pytorch_dump_folder_path="/home/pablo/paligemma/paligemma-896-hf" --do_convert_weights --do_verify_logits --variant="2b-896px"
-
-    """
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--checkpoint_path",
-        default="/home/ubuntu/gvhf/hf_test_ckpt.bv.params.npz",
+        default="/home/pablo/gv-hf/hf_test_ckpt.bv.params.npz",
         type=str,
         help="Path to the .npz checkpoint",
     )
+
+    parser.add_argument(
+        "--tokenizer_model_file",
+        default="/home/pablo/paligemma/paligemma_tokenizer.model",
+        type=str,
+        help="Path to the sentencepiece model file",
+    )
+
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default="/home/ubuntu/paligemma_hf",
+        default="/home/pablo/paligemma/paligemma-test-hf ",
         type=str,
         help="Path to the output PyTorch model directory.",
     )
@@ -449,6 +471,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     convert_paligemma_checkpoint(
         checkpoint_path=args.checkpoint_path,
+        tokenizer_model_file=args.tokenizer_model_file,
         pytorch_dump_folder_path=args.pytorch_dump_folder_path,
         variant=args.variant,
         do_verify_logits=args.do_verify_logits,

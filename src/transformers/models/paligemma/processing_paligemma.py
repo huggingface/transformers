@@ -23,7 +23,7 @@ from typing import List, Optional, Union
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy, AddedToken
+from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
 
 
@@ -79,18 +79,15 @@ class PaLIGemmaProcessor(ProcessorMixin):
     image_processor_class = "SiglipImageProcessor"
     tokenizer_class = ("GemmaTokenizer", "GemmaTokenizerFast")
 
-    def __init__(self, image_processor=None, tokenizer=None, image_seq_length: int=256):
+    def __init__(self, image_processor=None, tokenizer=None):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
-        # TODO can we derive image sequence length from config here?
-        self.image_token = AddedToken("<image>", normalized=False, special=True)
-        self.image_seq_length = image_seq_length
-        tokens_to_add = {
-            "additional_special_tokens": [self.image_token]
-        }
-        tokenizer.add_special_tokens(tokens_to_add)
+        if not hasattr(image_processor, "image_seq_length"):
+            raise ValueError("Image processor is missing an `image_seq_length` attribute.")
+        
+        self.image_seq_length = image_processor.image_seq_length
         super().__init__(image_processor, tokenizer)
 
     def __call__(
@@ -169,7 +166,8 @@ class PaLIGemmaProcessor(ProcessorMixin):
                 prompt=prompt,
                 bos_token=self.tokenizer.bos_token,
                 image_seq_len=self.image_seq_length,
-                image_token=self.image_token.content
+                image_token="<image>",
+
             )
             for prompt in text
         ]
