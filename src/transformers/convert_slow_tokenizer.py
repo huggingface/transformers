@@ -597,7 +597,7 @@ class SpmConverter(Converter):
             return normalizers.Sequence([normalizers.Precompiled(precompiled_charsmap)] + _normalizers)
 
     def pre_tokenizer(self, replacement, add_prefix_space):
-        prepend_scheme = "always"
+        prepend_scheme = "always" if add_prefix_space else "never"
         if hasattr(self.original_tokenizer, "legacy") and not self.original_tokenizer.legacy:
             prepend_scheme = "first"
         return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme)
