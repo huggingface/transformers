@@ -1937,12 +1937,11 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         )
         return model_inputs
 
-    def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder, model_inputs, **kwargs):
+    def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder, **kwargs):
         model_kwargs = super()._update_model_kwargs_for_generation(
             outputs=outputs,
             model_kwargs=model_kwargs,
             is_encoder_decoder=is_encoder_decoder,
-            model_inputs=model_inputs,
             **kwargs,
         )
         # Get the precomputed image_hidden_states
