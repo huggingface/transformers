@@ -825,15 +825,7 @@ class Pipeline(_ScikitCompat):
         self.image_processor = image_processor
         self.modelcard = modelcard
         self.framework = framework
-
-        # `accelerate` device map
-        hf_device_map = getattr(self.model, "hf_device_map", None)
-
-        if hf_device_map is not None and device is not None:
-            raise ValueError(
-                "The model has been loaded with `accelerate` and therefore cannot be moved to a specific device. Please "
-                "discard the `device` argument when creating your pipeline object."
-            )
+        self.binary_output = binary_output
 
         self.to(device, torch_dtype)
 
@@ -1192,6 +1184,15 @@ class Pipeline(_ScikitCompat):
             yield self.run_single(input_, preprocess_params, forward_params, postprocess_params)
 
     def to(self, device=None, dtype=torch.float32):
+        # `accelerate` device map
+        hf_device_map = getattr(self.model, "hf_device_map", None)
+
+        if hf_device_map is not None and device is not None:
+            raise ValueError(
+                "The model has been loaded with `accelerate` and therefore cannot be moved to a specific device. Please "
+                "discard the `device` argument when creating your pipeline object."
+            )
+        
         if device is None:
             if hf_device_map is not None:
                 # Take the first device used by `accelerate`.
@@ -1224,8 +1225,6 @@ class Pipeline(_ScikitCompat):
                 raise ValueError(f"{device} unrecognized or not available.")
         else:
             self.device = device if device is not None else -1
-
-        self.binary_output = binary_output
 
         # We shouldn't call `model.to()` for models loaded with accelerate
         if (
