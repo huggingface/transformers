@@ -782,6 +782,7 @@ def pipeline(
                 _raise_exceptions_for_gated_repo=False,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,
+                cache_dir=model_kwargs.get("cache_dir"),
                 **hub_kwargs,
             )
             hub_kwargs["_commit_hash"] = extract_commit_hash(resolved_config_file, commit_hash)

@@ -73,8 +73,7 @@ class CLIPSegProcessor(ProcessorMixin):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
+                tensor. Both channels-first and channels-last formats are supported.
             visual_prompt (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The visual prompt image or batch of images to be prepared. Each visual prompt image can be a PIL image,
                 NumPy array or PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape
