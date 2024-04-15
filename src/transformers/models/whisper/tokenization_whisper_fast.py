@@ -128,9 +128,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         self.add_bos_token = kwargs.pop("add_bos_token", False)
 
         pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
+        if pre_tok_state.get("prepend_scheme", add_prefix_space) != add_prefix_space:
             pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
+            pre_tok_state["prepend_scheme"] = "always" if add_prefix_space else "never"
             self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
 
         if normalizer_file is not None:
