@@ -58,6 +58,8 @@ class JetMoeConfig(PretrainedConfig):
             Defines the number of experts in the mixture of experts and mixture of attention heads.
         num_experts_per_tok (`int, *optional*, defaults to 2):
             The number of experts to root per-token.
+        aux_loss_coef (`float`, *optional*, defaults to 0.01): 
+            The coefficient for the auxiliary loss.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
