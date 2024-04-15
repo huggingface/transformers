@@ -196,7 +196,7 @@ class TrainerCallback:
         train_dataloader (`torch.utils.data.DataLoader`, *optional*):
             The current dataloader used for training.
         eval_dataloader (`torch.utils.data.DataLoader`, *optional*):
-            The current dataloader used for training.
+            The current dataloader used for evaluation.
         metrics (`Dict[str, float]`):
             The metrics computed by the last evaluation phase.
 

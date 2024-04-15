@@ -115,6 +115,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("gptj", "GPTJModel"),
         ("gptsan-japanese", "GPTSanJapaneseForConditionalGeneration"),
         ("graphormer", "GraphormerModel"),
+        ("grounding-dino", "GroundingDinoModel"),
         ("groupvit", "GroupViTModel"),
         ("hubert", "HubertModel"),
         ("ibert", "IBertModel"),
@@ -183,6 +184,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qdqbert", "QDQBertModel"),
         ("qwen2", "Qwen2Model"),
         ("qwen2_moe", "Qwen2MoeModel"),
+        ("recurrent_gemma", "RecurrentGemmaModel"),
         ("reformer", "ReformerModel"),
         ("regnet", "RegNetModel"),
         ("rembert", "RemBertModel"),
@@ -469,6 +471,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("qdqbert", "QDQBertLMHeadModel"),
         ("qwen2", "Qwen2ForCausalLM"),
         ("qwen2_moe", "Qwen2MoeForCausalLM"),
+        ("recurrent_gemma", "RecurrentGemmaForCausalLM"),
         ("reformer", "ReformerModelWithLMHead"),
         ("rembert", "RemBertForCausalLM"),
         ("roberta", "RobertaForCausalLM"),
@@ -751,6 +754,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Zero Shot Object Detection mapping
+        ("grounding-dino", "GroundingDinoForObjectDetection"),
         ("owlv2", "Owlv2ForObjectDetection"),
         ("owlvit", "OwlViTForObjectDetection"),
     ]
