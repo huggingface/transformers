@@ -4471,28 +4471,28 @@ class InstructBlipVisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class JetMoEForCausalLM(metaclass=DummyObject):
+class JetMoeForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class JetMoEForSequenceClassification(metaclass=DummyObject):
+class JetMoeForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class JetMoEModel(metaclass=DummyObject):
+class JetMoeModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class JetMoEPreTrainedModel(metaclass=DummyObject):
+class JetMoePreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

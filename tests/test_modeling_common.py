@@ -3927,6 +3927,7 @@ class ModelTesterMixin:
                 else:
                     _ = model(dummy_input)
                     # with attention mask
+                    print(dummy_attention_mask)
                     _ = model(dummy_input, attention_mask=dummy_attention_mask)
 
     @is_pt_tf_cross_test

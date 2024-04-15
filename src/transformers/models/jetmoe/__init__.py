@@ -1,4 +1,4 @@
-# Copyright 2024 JetMoE AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 JetMoe AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_jetmoe": ["JETMOE_PRETRAINED_CONFIG_ARCHIVE_MAP", "JetMoEConfig"],
+    "configuration_jetmoe": ["JetMoeConfig"],
 }
 
 
@@ -28,14 +28,14 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_jetmoe"] = [
-        "JetMoEForCausalLM",
-        "JetMoEModel",
-        "JetMoEPreTrainedModel",
-        "JetMoEForSequenceClassification",
+        "JetMoeForCausalLM",
+        "JetMoeModel",
+        "JetMoePreTrainedModel",
+        "JetMoeForSequenceClassification",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_jetmoe import JETMOE_PRETRAINED_CONFIG_ARCHIVE_MAP, JetMoEConfig
+    from .configuration_jetmoe import JetMoeConfig
 
     try:
         if not is_torch_available():
@@ -44,10 +44,10 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_jetmoe import (
-            JetMoEForCausalLM,
-            JetMoEForSequenceClassification,
-            JetMoEModel,
-            JetMoEPreTrainedModel,
+            JetMoeForCausalLM,
+            JetMoeForSequenceClassification,
+            JetMoeModel,
+            JetMoePreTrainedModel,
         )
 
 else:

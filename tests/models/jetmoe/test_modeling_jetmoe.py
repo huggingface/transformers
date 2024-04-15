@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 JetMoE AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 JetMoe AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,15 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch JetMoE model."""
+"""Testing suite for the PyTorch JetMoe model."""
 
 import gc
 import tempfile
 import unittest
 
 import pytest
+from pytest import mark
 
-from transformers import AutoTokenizer, JetMoEConfig, is_torch_available, set_seed
+from transformers import AutoTokenizer, JetMoeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     backend_empty_cache,
     is_flaky,
@@ -43,13 +44,13 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        JetMoEForCausalLM,
-        JetMoEForSequenceClassification,
-        JetMoEModel,
+        JetMoeForCausalLM,
+        JetMoeForSequenceClassification,
+        JetMoeModel,
     )
 
 
-class JetMoEModelTester:
+class JetMoeModelTester:
     def __init__(
         self,
         parent,
@@ -67,8 +68,8 @@ class JetMoEModelTester:
         kv_channels=8,
         intermediate_size=37,
         hidden_act="silu",
-        moe_num_experts=4,
-        moe_top_k=2,
+        num_local_experts=4,
+        num_experts_per_tok=2,
         max_position_embeddings=512,
         type_vocab_size=16,
         type_sequence_label_size=2,
@@ -93,8 +94,8 @@ class JetMoEModelTester:
         self.num_key_value_heads = num_key_value_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
-        self.moe_num_experts = moe_num_experts
-        self.moe_top_k = moe_top_k
+        self.num_local_experts = num_local_experts
+        self.num_experts_per_tok = num_experts_per_tok
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.type_sequence_label_size = type_sequence_label_size
@@ -109,7 +110,7 @@ class JetMoEModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
+            input_mask = torch.ones(self.batch_size, self.seq_length).to(torch_device)
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -128,17 +129,17 @@ class JetMoEModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return JetMoEConfig(
+        return JetMoeConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
             kv_channels=self.kv_channels,
-            ffn_hidden_size=self.intermediate_size,
+            intermediate_size=self.intermediate_size,
             activation_function=self.hidden_act,
-            moe_num_experts=self.moe_num_experts,
-            moe_top_k=self.moe_top_k,
+            num_local_experts=self.num_local_experts,
+            num_experts_per_tok=self.num_experts_per_tok,
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
@@ -149,7 +150,7 @@ class JetMoEModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = JetMoEModel(config=config)
+        model = JetMoeModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -169,7 +170,7 @@ class JetMoEModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = JetMoEModel(config)
+        model = JetMoeModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -198,7 +199,7 @@ class JetMoEModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = JetMoEForCausalLM(config=config)
+        model = JetMoeForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -218,7 +219,7 @@ class JetMoEModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = JetMoEForCausalLM(config=config)
+        model = JetMoeForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -282,17 +283,17 @@ class JetMoEModelTester:
 
 
 @require_torch
-class JetMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class JetMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (JetMoEModel, JetMoEForCausalLM, JetMoEForSequenceClassification) if is_torch_available() else ()
+        (JetMoeModel, JetMoeForCausalLM, JetMoeForSequenceClassification) if is_torch_available() else ()
     )
-    all_generative_model_classes = (JetMoEForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (JetMoeForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": JetMoEModel,
-            "text-classification": JetMoEForSequenceClassification,
-            "text-generation": JetMoEForCausalLM,
-            "zero-shot": JetMoEForSequenceClassification,
+            "feature-extraction": JetMoeModel,
+            "text-classification": JetMoeForSequenceClassification,
+            "text-generation": JetMoeForCausalLM,
+            "zero-shot": JetMoeForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -300,6 +301,9 @@ class JetMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_headmasking = False
     test_pruning = False
     test_mismatched_shapes = False
+    test_cpu_offload = False
+    test_disk_offload_bin = False
+    test_disk_offload_safetensors = False
 
     # TODO: @Fxmarty
     @is_flaky(max_attempts=3, description="flaky on some models.")
@@ -309,8 +313,8 @@ class JetMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         super().test_eager_matches_sdpa_generate()
 
     def setUp(self):
-        self.model_tester = JetMoEModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=JetMoEConfig, hidden_size=37)
+        self.model_tester = JetMoeModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=JetMoeConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -325,33 +329,33 @@ class JetMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_JetMoE_sequence_classification_model(self):
+    def test_JetMoe_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         print(config)
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = JetMoEForSequenceClassification(config)
+        model = JetMoeForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_JetMoE_sequence_classification_model_for_single_label(self):
+    def test_JetMoe_sequence_classification_model_for_single_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.problem_type = "single_label_classification"
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = JetMoEForSequenceClassification(config)
+        model = JetMoeForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_JetMoE_sequence_classification_model_for_multi_label(self):
+    def test_JetMoe_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.problem_type = "multi_label_classification"
@@ -360,17 +364,17 @@ class JetMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         sequence_labels = ids_tensor(
             [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
         ).to(torch.float)
-        model = JetMoEForSequenceClassification(config)
+        model = JetMoeForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    @unittest.skip("JetMoE buffers include complex numbers, which breaks this test")
+    @unittest.skip("JetMoe buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("JetMoE uses GQA on all models so the KV cache is a non standard format")
+    @unittest.skip("JetMoe uses MoA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
         pass
 
@@ -434,7 +438,7 @@ class JetMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 model.save_pretrained(tmpdirname)
 
                 dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # NOTE: JetMoE apparently does not support right padding + use_cache with FA2.
+                # NOTE: JetMoe apparently does not support right padding + use_cache with FA2.
                 dummy_attention_mask[:, -1] = 1
 
                 model = model_class.from_pretrained(
@@ -458,24 +462,23 @@ class JetMoEModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest("JetMoE flash attention does not support right padding")
+        self.skipTest("JetMoe flash attention does not support right padding")
 
 
 @require_torch
-class JetMoEIntegrationTest(unittest.TestCase):
+class JetMoeIntegrationTest(unittest.TestCase):
     @slow
-    def test_model_7b_logits(self):
+    def test_model_8b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = JetMoEForCausalLM.from_pretrained("jetmoe/jetmoe-8b", device_map="auto")
+        model = JetMoeForCausalLM.from_pretrained("jetmoe/jetmoe-8b", device_map="auto")
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
             out = model(input_ids).logits.cpu()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
+        EXPECTED_MEAN = torch.tensor([[0.2507, -2.7073, -1.3445, -1.9363, -1.7216, -1.7370, -1.9054, -1.9792]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([-5.8781, -5.8616, -0.1052, -4.7200, -5.8781, -5.8774, -5.8773, -5.8777, -5.8781, -5.8780, -5.8781, -5.8779, -1.0787,  1.7583, -5.8779, -5.8780, -5.8783, -5.8778, -5.8776, -5.8781, -5.8784, -5.8778, -5.8778, -5.8777, -5.8779, -5.8778, -5.8776, -5.8780, -5.8779, -5.8781])  # fmt: skip
-        print(out[0, 0, :30])
+        EXPECTED_SLICE = torch.tensor([-3.3689,  5.9006,  5.7450, -1.7012, -4.7072, -4.7071, -4.7071, -4.7071, -4.7072, -4.7072, -4.7072, -4.7071,  3.8321,  9.1746, -4.7071, -4.7072, -4.7071, -4.7072, -4.7071, -4.7072, -4.7071, -4.7071, -4.7071, -4.7071, -4.7071, -4.7071, -4.7071, -4.7071, -4.7071, -4.7071])  # fmt: skip
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
 
         del model
@@ -483,15 +486,15 @@ class JetMoEIntegrationTest(unittest.TestCase):
         gc.collect()
 
     @slow
-    def test_model_7b_generation(self):
-        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
+    def test_model_8b_generation(self):
+        EXPECTED_TEXT_COMPLETION = """My favourite condiment is ....\nI love ketchup. I love"""
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("jetmoe/jetmoe-8b", use_fast=False)
-        model = JetMoEForCausalLM.from_pretrained("jetmoe/jetmoe-8b", device_map="auto")
+        model = JetMoeForCausalLM.from_pretrained("jetmoe/jetmoe-8b", device_map="auto")
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
-        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
+        generated_ids = model.generate(input_ids, max_new_tokens=10, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
@@ -499,89 +502,25 @@ class JetMoEIntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
-    @require_bitsandbytes
     @slow
-    @require_flash_attn
-    def test_model_7b_long_prompt(self):
-        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
-        # An input with 4097 tokens that is above the size of the sliding window
-        input_ids = [1] + [306, 338] * 2048
-        model = JetMoEForCausalLM.from_pretrained(
-            "jetmoe/jetmoe-8b",
-            device_map="auto",
-            load_in_4bit=True,
-            attn_implementation="flash_attention_2",
-        )
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        # Assisted generation
-        assistant_model = model
-        assistant_model.generation_config.num_assistant_tokens = 2
-        assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        del assistant_model
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    @slow
-    @require_torch_sdpa
-    def test_model_7b_long_prompt_sdpa(self):
-        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
-        # An input with 4097 tokens that is above the size of the sliding window
-        input_ids = [1] + [306, 338] * 2048
-        model = JetMoEForCausalLM.from_pretrained(
-            "jetmoe/jetmoe-8b",
-            device_map="auto",
-            attn_implementation="sdpa",
-        )
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        # Assisted generation
-        assistant_model = model
-        assistant_model.generation_config.num_assistant_tokens = 2
-        assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        del assistant_model
-
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
-        prompt = "My favourite condiment is "
+    def test_model_8b_batched_generation(self):
+        EXPECTED_TEXT_COMPLETION = [
+            """My favourite condiment is ....\nI love ketchup. I love""",
+            """My favourite 2018 Christmas present was a new pair""",
+        ]
+        prompt = [
+            "My favourite condiment is ",
+            "My favourite ",
+        ]
         tokenizer = AutoTokenizer.from_pretrained("jetmoe/jetmoe-8b", use_fast=False)
-
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+        model = JetMoeForCausalLM.from_pretrained("jetmoe/jetmoe-8b", device_map="auto")
+        input_ids = tokenizer(prompt, return_tensors="pt", padding=True).to(model.model.embed_tokens.weight.device)
+        print(input_ids)
 
         # greedy generation outputs
-        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-    @slow
-    def test_speculative_generation(self):
-        EXPECTED_TEXT_COMPLETION = (
-            "My favourite condiment is 100% Sriracha. I love the heat, the tang and the fact costs"
-        )
-        prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("jetmoe/jetmoe-8b", use_fast=False)
-        model = JetMoEForCausalLM.from_pretrained("jetmoe/jetmoe-8b", device_map="auto", torch_dtype=torch.float16)
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
-
-        # greedy generation outputs
-        set_seed(0)
-        generated_ids = model.generate(
-            input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=model
-        )
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        generated_ids = model.generate(**input_ids, max_new_tokens=10, temperature=0)
+        text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        print(text)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
         del model

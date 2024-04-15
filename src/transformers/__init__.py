@@ -514,7 +514,7 @@ _import_structure = {
         "InstructBlipQFormerConfig",
         "InstructBlipVisionConfig",
     ],
-    "models.jetmoe": ["JETMOE_PRETRAINED_CONFIG_ARCHIVE_MAP", "JetMoEConfig"],
+    "models.jetmoe": ["JetMoeConfig"],
     "models.jukebox": [
         "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "JukeboxConfig",
@@ -2459,10 +2459,10 @@ else:
     )
     _import_structure["models.jetmoe"].extend(
         [
-            "JetMoEForCausalLM",
-            "JetMoEForSequenceClassification",
-            "JetMoEModel",
-            "JetMoEPreTrainedModel",
+            "JetMoeForCausalLM",
+            "JetMoeForSequenceClassification",
+            "JetMoeModel",
+            "JetMoePreTrainedModel",
         ]
     )
     _import_structure["models.jukebox"].extend(
@@ -5407,7 +5407,7 @@ if TYPE_CHECKING:
         InstructBlipQFormerConfig,
         InstructBlipVisionConfig,
     )
-    from .models.jetmoe import JETMOE_PRETRAINED_CONFIG_ARCHIVE_MAP, JetMoEConfig
+    from .models.jetmoe import JetMoeConfig
     from .models.jukebox import (
         JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP,
         JukeboxConfig,
@@ -7166,10 +7166,10 @@ if TYPE_CHECKING:
             InstructBlipVisionModel,
         )
         from .models.jetmoe import (
-            JetMoEForCausalLM,
-            JetMoEForSequenceClassification,
-            JetMoEModel,
-            JetMoEPreTrainedModel,
+            JetMoeForCausalLM,
+            JetMoeForSequenceClassification,
+            JetMoeModel,
+            JetMoePreTrainedModel,
         )
         from .models.jukebox import (
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,

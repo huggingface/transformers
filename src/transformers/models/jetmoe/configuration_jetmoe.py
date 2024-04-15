@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 JetMoE AI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 JetMoe AI and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""JetMoE model configuration"""
+"""JetMoe model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -21,14 +21,11 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import JETMOE_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
-class JetMoEConfig(PretrainedConfig):
+class JetMoeConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`JetMoEModel`]. It is used to instantiate an
-    JetMoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a configuration of the JetMoE-4B.
+    This is the configuration class to store the configuration of a [`JetMoeModel`]. It is used to instantiate an
+    JetMoe model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a configuration of the JetMoe-4B.
 
     [jetmoe/jetmoe-8b](https://huggingface.co/jetmoe/jetmoe-8b)
 
@@ -38,24 +35,29 @@ class JetMoEConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the JetMoE model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`JetMoEModel`]
+            Vocabulary size of the JetMoe model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`JetMoeModel`]
         hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
-        num_hidden_layers (`int`, *optional*, defaults to 12): Defines the number of blocks.
+        num_hidden_layers (`int`, *optional*, defaults to 12): 
+            Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_key_value_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each key and value in the Transformer encoder.
-        kv_channels (`int`, *optional*, defaults to 128): Defines the number of channels for the key and value tensors.
-        ffn_hidden_size (`int`, *optional*, defaults to 5632): Defines the hidden size of the feed-forward layer.
+        kv_channels (`int`, *optional*, defaults to 128): 
+            Defines the number of channels for the key and value tensors.
+        intermediate_size (`int`, *optional*, defaults to 5632): 
+            Dimension of the MLP representations.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
-            The maximum sequence length that this model might ever be used with. JetMoE's sliding window attention
-            allows sequence of up to 4096*32 tokens.
-        activation_function (`string`, *optional*, defaults to `"silu"`): Defines the activation function for MLP experts.
-        glu (`bool`, *optional*, defaults to `True`): Whether to use Gated Linear Units in the MLP experts.
-        moe_num_experts (`int`, *optional*, defaults to 8): Defines the number of experts in the mixture of experts.
-        moe_top_k (`int, *optional*, defaults to 2): Defines the number of experts to use for each token.
+            The maximum sequence length that this model might ever be used with. JetMoe's attention allows sequence of 
+            up to 4096 tokens.
+        activation_function (`string`, *optional*, defaults to `"silu"`): 
+            Defines the activation function for MLP experts.
+        num_local_experts (`int`, *optional*, defaults to 8): 
+            Defines the number of experts in the mixture of experts and mixture of attention heads.
+        num_experts_per_tok (`int, *optional*, defaults to 2): 
+            The number of experts to root per-token.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -74,13 +76,13 @@ class JetMoEConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     ```python
-    >>> from transformers import JetMoEModel, JetMoEConfig
+    >>> from transformers import JetMoeModel, JetMoeConfig
 
-    >>> # Initializing a JetMoE 4B style configuration
-    >>> configuration = JetMoEConfig()
+    >>> # Initializing a JetMoe 4B style configuration
+    >>> configuration = JetMoeConfig()
 
-    >>> # Initializing a model from the JetMoE 4B style configuration
-    >>> model = JetMoEModel(configuration)
+    >>> # Initializing a model from the JetMoe 4B style configuration
+    >>> model = JetMoeModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -97,12 +99,12 @@ class JetMoEConfig(PretrainedConfig):
         num_attention_heads=32,
         num_key_value_heads=16,
         kv_channels=128,
-        ffn_hidden_size=5632,
+        intermediate_size=5632,
         max_position_embeddings=4096,
         activation_function="silu",
-        glu=True,
-        moe_num_experts=8,
-        moe_top_k=2,
+        num_local_experts=8,
+        num_experts_per_tok=2,
+        aux_loss_coef=0.01,
         use_cache=True,
         bos_token_id=1,
         eos_token_id=2,
@@ -113,18 +115,20 @@ class JetMoEConfig(PretrainedConfig):
         initializer_range=0.01,
         **kwargs,
     ):
+        if num_experts_per_tok > num_local_experts:
+            raise ValueError("`num_experts_per_tok` must be less than or equal to `num_local_experts`")
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.kv_channels = kv_channels
-        self.ffn_hidden_size = ffn_hidden_size
+        self.intermediate_size = intermediate_size
         self.max_position_embeddings = max_position_embeddings
         self.activation_function = activation_function
-        self.glu = glu
-        self.moe_num_experts = moe_num_experts
-        self.moe_top_k = moe_top_k
+        self.num_local_experts = num_local_experts
+        self.num_experts_per_tok = num_experts_per_tok
+        self.aux_loss_coef = aux_loss_coef
         self.use_cache = use_cache
         self.initializer_range = initializer_range
 

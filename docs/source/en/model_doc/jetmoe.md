@@ -1,4 +1,4 @@
-<!--Copyright 2024 Mistral AI and The HuggingFace Team. All rights reserved.
+<!--Copyright 2024 JetMoe team and The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -14,35 +14,35 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# JetMoE
+# JetMoe
 
 ## Overview
 
-**JetMoE-8B** is an 8B Mixture-of-Experts (MoE) language model developed by [Yikang Shen](https://scholar.google.com.hk/citations?user=qff5rRYAAAAJ) and [MyShell](https://myshell.ai/).
-JetMoE project aims to provide an LLaMA2-level performance and efficient language model with a limited budget.
-To achieve this goal, JetMoE uses a sparsely activated architecture inspired by the [ModuleFormer](https://arxiv.org/abs/2306.04640). 
-Each JetMoE block consists of two MoE layers: Mixture of Attention Heads and Mixture of MLP Experts.
+**JetMoe-8B** is an 8B Mixture-of-Experts (MoE) language model developed by [Yikang Shen](https://scholar.google.com.hk/citations?user=qff5rRYAAAAJ) and [MyShell](https://myshell.ai/).
+JetMoe project aims to provide an LLaMA2-level performance and efficient language model with a limited budget.
+To achieve this goal, JetMoe uses a sparsely activated architecture inspired by the [ModuleFormer](https://arxiv.org/abs/2306.04640). 
+Each JetMoe block consists of two MoE layers: Mixture of Attention Heads and Mixture of MLP Experts.
 Given the input tokens, it activates a subset of its experts to process them.
-This sparse activation schema enables JetMoE to achieve much better training throughput than similar size dense models.
+This sparse activation schema enables JetMoe to achieve much better training throughput than similar size dense models.
 
 This model was contributed by [Yikang Shen](https://huggingface.co/YikangS).
 
 
-## JetMoEConfig
+## JetMoeConfig
 
-[[autodoc]] JetMoEConfig
+[[autodoc]] JetMoeConfig
 
-## JetMoEModel
+## JetMoeModel
 
-[[autodoc]] JetMoEModel
+[[autodoc]] JetMoeModel
     - forward
 
-## JetMoEForCausalLM
+## JetMoeForCausalLM
 
-[[autodoc]] JetMoEForCausalLM
+[[autodoc]] JetMoeForCausalLM
     - forward
 
-## JetMoEForSequenceClassification
+## JetMoeForSequenceClassification
 
-[[autodoc]] JetMoEForSequenceClassification
+[[autodoc]] JetMoeForSequenceClassification
     - forward
