@@ -63,13 +63,14 @@ class Idefics2VisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Idefics2VisionConfig, Idefics2VisionModel
+    >>> from transformers.models.idefics2.modeling_idefics2 import Idefics2VisionTransformer
+    >>> from transformers.models.idefics2.configuration_idefics2 import Idefics2VisionConfig
 
     >>> # Initializing a Idefics2VisionConfig with google/siglip-base-patch16-224 style configuration
     >>> configuration = Idefics2VisionConfig()
 
-    >>> # Initializing a Idefics2VisionModel (with random weights) from the google/siglip-base-patch16-224 style configuration
-    >>> model = Idefics2VisionModel(configuration)
+    >>> # Initializing a Idefics2VisionTransformer (with random weights) from the google/siglip-base-patch16-224 style configuration
+    >>> model = Idefics2VisionTransformer(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
