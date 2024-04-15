@@ -111,6 +111,7 @@ from . import (
     hubert,
     ibert,
     idefics,
+    idefics2,
     imagegpt,
     informer,
     instructblip,
