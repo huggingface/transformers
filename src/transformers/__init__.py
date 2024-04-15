@@ -507,6 +507,7 @@ _import_structure = {
         "IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "IdeficsConfig",
     ],
+    "models.idefics2": ["Idefics2Config"],
     "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
     "models.informer": ["INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "InformerConfig"],
     "models.instructblip": [
@@ -1335,6 +1336,7 @@ else:
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
+    _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
@@ -2439,6 +2441,15 @@ else:
             "IdeficsModel",
             "IdeficsPreTrainedModel",
             "IdeficsProcessor",
+        ]
+    )
+    _import_structure["models.idefics2"].extend(
+        [
+            "IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Idefics2ForConditionalGeneration",
+            "Idefics2Model",
+            "Idefics2PreTrainedModel",
+            "Idefics2Processor",
         ]
     )
     _import_structure["models.imagegpt"].extend(
@@ -5410,6 +5421,7 @@ if TYPE_CHECKING:
         IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         IdeficsConfig,
     )
+    from .models.idefics2 import Idefics2Config
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
     from .models.informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
     from .models.instructblip import (
@@ -6210,6 +6222,7 @@ if TYPE_CHECKING:
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.grounding_dino import GroundingDinoImageProcessor
         from .models.idefics import IdeficsImageProcessor
+        from .models.idefics2 import Idefics2ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.layoutlmv2 import (
             LayoutLMv2FeatureExtractor,
@@ -7162,6 +7175,13 @@ if TYPE_CHECKING:
             IdeficsModel,
             IdeficsPreTrainedModel,
             IdeficsProcessor,
+        )
+        from .models.idefics2 import (
+            IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Idefics2ForConditionalGeneration,
+            Idefics2Model,
+            Idefics2PreTrainedModel,
+            Idefics2Processor,
         )
         from .models.imagegpt import (
             IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
