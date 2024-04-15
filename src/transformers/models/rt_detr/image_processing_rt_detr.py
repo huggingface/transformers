@@ -492,7 +492,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
             Standard deviation values to use when normalizing the image. Can be a single value or a list of values, one
             for each channel. Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_convert_annotations (`bool`, *optional*, defaults to `False`):
+        do_convert_annotations (`bool`, *optional*, defaults to `True`):
             Controls whether to convert the annotations to the format expected by the DETR model. Converts the
             bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
             Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
@@ -515,7 +515,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
         do_normalize: bool = False,
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
-        do_convert_annotations: bool = False,
+        do_convert_annotations: bool = True,
         do_pad: bool = False,
         **kwargs,
     ) -> None:
