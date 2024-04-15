@@ -494,13 +494,7 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
                 hidden_states = keypoint_detection_output.hidden_states
             else:
                 if output_hidden_states:
-                    (
-                        keypoints,
-                        scores,
-                        descriptors,
-                        mask,
-                        hidden_states
-                    ) = keypoint_detection_output
+                    (keypoints, scores, descriptors, mask, hidden_states) = keypoint_detection_output
                 else:
                     (
                         keypoints,
