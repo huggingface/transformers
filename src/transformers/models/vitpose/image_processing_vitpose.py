@@ -37,14 +37,13 @@ logger = logging.get_logger(__name__)
 def _get_max_preds(heatmaps):
     """Get keypoint predictions from score maps.
 
-    Note:
-        batch_size: N
-        num_keypoints: K
-        heatmap height: H
-        heatmap width: W
-
     Args:
-        heatmaps (np.ndarray[N, K, H, W]): model predicted heatmaps.
+        heatmaps (np.ndarray of shape [N, K, H, W]):
+            Model predicted heatmaps. Note:
+            - batch_size: N
+            - num_keypoints: K
+            - heatmap height: H
+            - heatmap width: W
 
     Returns:
         tuple: A tuple containing aggregated results.
@@ -366,7 +365,13 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         heatmaps = heatmaps.copy()
 
         N, K, H, W = heatmaps.shape
+
+        print("Mean of heatmaps before _get_max_preds:", np.mean(heatmaps))
+
         preds, maxvals = _get_max_preds(heatmaps)
+
+        print("Preds after _get_max_preds:", preds)
+
         preds = post_dark_udp(preds, heatmaps, kernel=kernel)
 
         # Transform back to the image

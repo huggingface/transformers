@@ -77,6 +77,8 @@ def rename_key(name):
         name = name.replace("last_norm", "layernorm")
     if "final_layer." in name:
         name = name.replace("final_layer.", "")
+    if "keypoint_head" in name:
+        name = name.replace("keypoint_head", "head.conv")
 
     return name
 
@@ -127,15 +129,14 @@ def convert_vitpose_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     # load state_dict of original model, remove and rename some keys
     state_dict = torch.load(checkpoint_path, map_location="cpu")["state_dict"]
 
-    for name, param in state_dict.items():
-        print(name, param.shape)
+    # for name, param in state_dict.items():
+    #     print(name, param.shape)
 
     new_state_dict = convert_state_dict(state_dict, dim=config.hidden_size)
     model.load_state_dict(new_state_dict)
 
-    # TODO create image processor
+    # TODO verify image processor
     image_processor = ViTPoseImageProcessor()
-    # image_processor = ViTImageProcessor(size=config.image_size[::-1])
     # encoding = image_processor(images=prepare_img(), return_tensors="pt")
     # pixel_values = encoding["pixel_values"]
 
@@ -144,15 +145,33 @@ def convert_vitpose_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     img_metas = torch.load(filepath, map_location="cpu")["img_metas"]
 
     print("Shape of pixel values:", pixel_values.shape)
-    outputs = model(pixel_values)
+    with torch.no_grad():
+        # first forward pass
+        output_heatmap = model(pixel_values).logits
 
-    # TODO assert logits (output heatmap)
-    print("Shape of logits:", outputs.logits.shape)
-    print("First values of output heatmp:", outputs.logits[0, 0, :3, :3])
+        # TODO assert logits (output heatmap)
+        print("Shape of heatmap:", output_heatmap.shape)
+        print("Mean value of heatmap:", output_heatmap.numpy().mean())
+
+        print("----------------")
+
+        # second forward pass (flipped)
+        pixel_values_flipped = torch.flip(pixel_values, [3])
+        print("Mean of pixel_values_flipped:", pixel_values_flipped.mean())
+        output_flipped_heatmap = model(
+            pixel_values_flipped, flip_pairs=[[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16]]
+        ).logits
+
+        print("Shape of flipped heatmap:", output_flipped_heatmap.shape)
+        print("Mean value of flipped heatmap:", output_flipped_heatmap.mean())
+
+    output_heatmap = (output_heatmap + output_flipped_heatmap) * 0.5
+
+    print("Mean of final output_heatmap:", output_heatmap.mean())
 
     # TODO verify postprocessing
     batch_size = pixel_values.shape[0]
-    heatmaps = outputs.logits.cpu().numpy()
+    heatmaps = output_heatmap.cpu().numpy()
 
     if "bbox_id" in img_metas[0]:
         bbox_ids = []
@@ -173,7 +192,7 @@ def convert_vitpose_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
         if bbox_ids is not None:
             bbox_ids.append(img_metas[i]["bbox_id"])
 
-    preds, maxvals = image_processor.keypoints_from_heatmaps(heatmaps, center=c, scale=s)
+    preds, maxvals = image_processor.keypoints_from_heatmaps(heatmaps, center=c, scale=s, use_udp=True)
 
     all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
     all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
@@ -191,7 +210,7 @@ def convert_vitpose_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     result["image_paths"] = image_paths
     result["bbox_ids"] = bbox_ids
 
-    print(result["boxes"])
+    # print(result)
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)

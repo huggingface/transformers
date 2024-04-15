@@ -518,6 +518,66 @@ class ViTPoseModel(ViTPosePreTrainedModel):
         )
 
 
+def flip_back(output_flipped, flip_pairs, target_type="GaussianHeatmap"):
+    """Flip the flipped heatmaps back to the original form.
+
+    Note:
+        - batch_size: N
+        - num_keypoints: K
+        - heatmap height: H
+        - heatmap width: W
+
+    Args:
+        output_flipped (np.ndarray[N, K, H, W]): The output heatmaps obtained
+            from the flipped images.
+        flip_pairs (list[tuple()): Pairs of keypoints which are mirrored
+            (for example, left ear -- right ear).
+        target_type (str): GaussianHeatmap or CombinedTarget
+
+    Returns:
+        np.ndarray: heatmaps that flipped back to the original image
+    """
+    assert output_flipped.ndim == 4, "output_flipped should be [batch_size, num_keypoints, height, width]"
+    shape_ori = output_flipped.shape
+    channels = 1
+    if target_type.lower() == "CombinedTarget".lower():
+        channels = 3
+        output_flipped[:, 1::3, ...] = -output_flipped[:, 1::3, ...]
+    output_flipped = output_flipped.reshape(shape_ori[0], -1, channels, shape_ori[2], shape_ori[3])
+    output_flipped_back = output_flipped.copy()
+
+    # Swap left-right parts
+    for left, right in flip_pairs:
+        output_flipped_back[:, left, ...] = output_flipped[:, right, ...]
+        output_flipped_back[:, right, ...] = output_flipped[:, left, ...]
+    output_flipped_back = output_flipped_back.reshape(shape_ori)
+    # Flip horizontally
+    output_flipped_back = output_flipped_back[..., ::-1]
+    return output_flipped_back
+
+
+class ViTPoseKeyPointsHead(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+
+        self.conv = nn.Conv2d(config.hidden_size, config.num_keypoints, kernel_size=3, stride=1, padding=1)
+
+    def forward(self, hidden_state, flip_pairs) -> torch.Tensor:
+        # Transform input: ReLu + upsample
+        hidden_state = nn.functional.relu(hidden_state)
+        hidden_state = nn.functional.interpolate(hidden_state, scale_factor=4, mode="bilinear", align_corners=False)
+
+        print("Shape after upsampling:", hidden_state.shape)
+        print("First values after upsampling:", hidden_state[0, 0, :3, :3])
+
+        output = self.conv(hidden_state)
+
+        if flip_pairs is not None:
+            output = flip_back(output.detach().cpu().numpy(), flip_pairs)
+
+        return output
+
+
 class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
     def __init__(self, config: ViTPoseConfig) -> None:
         super().__init__(config)
@@ -525,12 +585,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         self.num_labels = config.num_labels
         self.vit = ViTPoseModel(config)
 
-        # Keypoint head
-        final_conv_kernel = 3
-        padding = 1
-        self.keypoint_head = nn.Conv2d(
-            config.hidden_size, config.num_keypoints, kernel_size=final_conv_kernel, stride=1, padding=padding
-        )
+        self.head = ViTPoseKeyPointsHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -538,6 +593,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
+        flip_pairs: Optional = None,
         head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -563,26 +619,22 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
             sequence_output.permute(0, 2, 1).reshape(batch_size, -1, patch_height, patch_width).contiguous()
         )
 
-        # ReLu + upsample
-        sequence_output = nn.functional.relu(sequence_output)
-        sequence_output = nn.functional.interpolate(
-            sequence_output, scale_factor=4, mode="bilinear", align_corners=False
-        )
+        print("Sequence output before head:", sequence_output.shape)
+        print("First values of sequence output before head:", sequence_output[0, 0, :3, :3])
 
-        # Conv2d
-        logits = self.keypoint_head(sequence_output)
+        heatmaps = self.head(sequence_output, flip_pairs=flip_pairs)
 
         loss = None
         if labels is not None:
             raise NotImplementedError("To do")
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (heatmaps,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutput(
             loss=loss,
-            logits=logits,
+            logits=heatmaps,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
