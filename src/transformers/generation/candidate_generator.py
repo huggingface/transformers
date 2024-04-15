@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from .configuration_utils import GenerationConfig
     from .logits_process import LogitsProcessorList
 
+
 class CandidateGenerator:
     """Abstract base class for all candidate generators that can be applied during assisted generation."""
 

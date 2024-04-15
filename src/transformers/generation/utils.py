@@ -598,7 +598,11 @@ class GenerationMixin:
 
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
-                if dict_to_expand[key] is not None and isinstance(dict_to_expand[key], torch.Tensor):
+                if (
+                    key != "cache_position"
+                    and dict_to_expand[key] is not None
+                    and isinstance(dict_to_expand[key], torch.Tensor)
+                ):
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
             return dict_to_expand
 
@@ -2107,11 +2111,10 @@ class GenerationMixin:
             if not isinstance(past, DynamicCache):
                 past = tuple(new_key_values)
             else:
-                for idx in range(len(past.key_cache)):
-                    if past.value_cache[idx].shape[1] != 0:
-                        k, v = new_key_values.pop()
-                        past.key_cache[idx] = k
-                        past.value_cache[idx] = v
+                for layer_idx in range(len(new_key_values)):
+                    past.key_cache[layer_idx] = new_key_values[layer_idx][0]
+                    past.value_cache[layer_idx] = new_key_values[layer_idx][1]
+            model_kwargs["past_key_values"] = past
 
             if sequential:
                 all_outputs = []
@@ -2199,12 +2202,9 @@ class GenerationMixin:
                 if not isinstance(next_past_key_values, DynamicCache):
                     next_past_key_values = tuple(new_key_values)
                 else:
-                    for idx in range(len(past.key_cache)):
-                        if past.value_cache[idx].shape[1] != 0:
-                            k, v = new_key_values.pop()
-                            past.key_cache[idx] = k
-                            past.value_cache[idx] = v
-                    next_past_key_values = past
+                    for layer_idx in range(len(new_key_values)):
+                        next_past_key_values.key_cache[layer_idx] = new_key_values[layer_idx][0]
+                        next_past_key_values.value_cache[layer_idx] = new_key_values[layer_idx][1]
 
             logit_for_next_step = torch.stack(torch.split(logits, top_k))[range(batch_size), selected_idx, :]
 
@@ -3144,6 +3144,7 @@ class GenerationMixin:
                         "transo_xl",
                         "xlnet",
                         "cpm",
+                        "jamba",
                     ]
                 ):
                     raise RuntimeError(

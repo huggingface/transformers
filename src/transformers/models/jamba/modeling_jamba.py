@@ -29,7 +29,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache # we need __iter__ and __len__ of pkv
+from ...cache_utils import Cache, DynamicCache  # we need __iter__ and __len__ of pkv
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
     _prepare_4d_causal_attention_mask,
@@ -285,7 +285,6 @@ class JambaAttention(nn.Module):
 
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-            print("maks:", causal_mask.shape, " attn_weight:", attn_weights.shape, "cache_position", cache_position)
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
@@ -699,8 +698,8 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
                 self.conv_states += [[]]
                 self.ssm_states += [[]]
 
-        self.key_cache = [torch.tensor([[]]*batch_size, device=device) for _ in range(config.num_hidden_layers)]
-        self.value_cache = [torch.tensor([[]]*batch_size, device=device)  for _ in range(config.num_hidden_layers)]
+        self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
+        self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
 
     def update(
         self,
@@ -791,7 +790,7 @@ class JambaMambaMixer(nn.Module):
 
         # 2. Convolution sequence transformation
         conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
-        if isinstance(cache_params,HybridMambaAttentionDynamicCache) and cache_params.seqlen_offset > 0:
+        if isinstance(cache_params, HybridMambaAttentionDynamicCache) and cache_params.seqlen_offset > 0:
             hidden_states = causal_conv1d_update(
                 hidden_states.squeeze(-1),
                 cache_params.conv_states[self.layer_idx],
@@ -1382,8 +1381,21 @@ class JambaModel(JambaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
         hidden_states = inputs_embeds
 
+        if use_cache and past_key_values is None:
+            logger.warning_once(
+                "Jamba requires an initialized `HybridMambaAttentionDynamicCache` to return a cache. None was "
+                "provided, so no cache will be returned."
+            )
+
         if cache_position is None:
-            cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)
+            past_seen_tokens = (
+                past_key_values.get_seq_length()
+                if isinstance(past_key_values, HybridMambaAttentionDynamicCache)
+                else 0
+            )
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + hidden_states.shape[1], device=hidden_states.device
+            )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
@@ -1466,7 +1478,6 @@ class JambaModel(JambaPreTrainedModel):
         sequence_length = input_tensor.shape[1]
         target_length = cache_position[-1] + 1
 
-        print(f"target_length: {target_length}, {attention_mask.shape}, cache_position {cache_position}")
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
         if sequence_length != 1:
             causal_mask = torch.triu(causal_mask, diagonal=1)
@@ -1641,8 +1652,10 @@ class JambaForCausalLM(JambaPreTrainedModel):
         cache_position=None,
         **kwargs,
     ):
+        empty_past_kv = past_key_values is None
+
         # Omit tokens covered by past_key_values
-        if past_key_values is not None:
+        if not empty_past_kv:
             past_length = cache_position[0] if cache_position is not None else attention_mask.shape[1]
             max_cache_length = self.config.sliding_window
             # Keep only the unprocessed tokens:
@@ -1665,22 +1678,23 @@ class JambaForCausalLM(JambaPreTrainedModel):
             ):
                 attention_mask = attention_mask[:, -max_cache_length:]
         else:
-            past_key_values = HybridMambaAttentionDynamicCache(self.config, input_ids.shape[0], self.dtype, device=self.device)
+            past_key_values = HybridMambaAttentionDynamicCache(
+                self.config, input_ids.shape[0], self.dtype, device=self.device
+            )
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
+            if not empty_past_kv:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
+        if inputs_embeds is not None and empty_past_kv:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
-
 
         model_inputs.update(
             {
@@ -1690,7 +1704,7 @@ class JambaForCausalLM(JambaPreTrainedModel):
                 "attention_mask": attention_mask,
                 "output_router_logits": output_router_logits,
                 "num_logits_to_keep": self.config.num_logits_to_keep,
-                "cache_position":cache_position
+                "cache_position": cache_position,
             }
         )
         return model_inputs
