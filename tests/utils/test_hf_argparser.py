@@ -28,7 +28,8 @@ import yaml
 
 from transformers import HfArgumentParser, TrainingArguments
 from transformers.hf_argparser import make_choice_type_function, string_to_bool
-from transformers.training_args import VALID_DICT_FIELDS
+from transformers.testing_utils import require_torch
+from transformers.training_args import _VALID_DICT_FIELDS
 
 
 # Since Python 3.10, we can use the builtin `|` operator for Union types
@@ -415,7 +416,7 @@ class HfArgumentParserTest(unittest.TestCase):
         If this fails, a type annotation change is
         needed on a new input
         """
-        base_list = VALID_DICT_FIELDS.copy()
+        base_list = _VALID_DICT_FIELDS.copy()
         args = TrainingArguments
 
         # First find any annotations that contain `dict`
@@ -459,5 +460,15 @@ class HfArgumentParserTest(unittest.TestCase):
             self.assertIn(
                 field.name,
                 base_list,
-                f"Optional dict field `{field.name}` is not in the base list of valid fields. Please add it to `training_args.VALID_DICT_FIELDS`",
+                f"Optional dict field `{field.name}` is not in the base list of valid fields. Please add it to `training_args._VALID_DICT_FIELDS`",
             )
+
+    @require_torch
+    def test_valid_dict_input_parsing(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                accelerator_config='{"split_batches": "True", "gradient_accumulation_kwargs": {"num_steps": 2}}',
+            )
+            self.assertEqual(args.accelerator_config.split_batches, True)
+            self.assertEqual(args.accelerator_config.gradient_accumulation_kwargs["num_steps"], 2)

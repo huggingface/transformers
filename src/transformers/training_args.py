@@ -177,13 +177,31 @@ class OptimizerNames(ExplicitEnum):
 # We need to track what fields those can be. Each time a new arg
 # has a dict type, it must be added to this list.
 # Important: These should be typed with Optional[Union[dict,str,...]]
-VALID_DICT_FIELDS = [
+_VALID_DICT_FIELDS = [
     "accelerator_config",
     "fsdp_config",
     "deepspeed",
     "gradient_checkpointing_kwargs",
     "lr_scheduler_kwargs",
 ]
+
+
+def _convert_str_dict(passed_value: dict):
+    "Safely checks that a passed value is a dictionary and converts any string values to their appropriate types."
+    for key, value in passed_value.items():
+        if isinstance(value, dict):
+            passed_value[key] = _convert_str_dict(value)
+        elif isinstance(value, str):
+            # First check for bool and convert
+            if value.lower() in ("true", "false"):
+                passed_value[key] = value.lower() == "true"
+            # Check for digit
+            elif value.isdigit():
+                passed_value[key] = int(value)
+            elif value.replace(".", "", 1).isdigit():
+                passed_value[key] = float(value)
+
+    return passed_value
 
 
 # TODO: `TrainingArguments` users rely on it being fully mutable. In the future see if we can narrow this to a few keys: https://github.com/huggingface/transformers/pull/25903
@@ -1391,12 +1409,15 @@ class TrainingArguments:
 
     def __post_init__(self):
         # Parse in args that could be `dict` sent in from the CLI as a string
-        for field in VALID_DICT_FIELDS:
+        for field in _VALID_DICT_FIELDS:
             passed_value = getattr(self, field)
             # We only want to do this if the str starts with a bracket to indiciate a `dict`
             # else its likely a filename if supported
             if isinstance(passed_value, str) and passed_value.startswith("{"):
-                setattr(self, field, json.loads(passed_value))
+                loaded_dict = json.loads(passed_value)
+                # Convert str values to types if applicable
+                loaded_dict = _convert_str_dict(loaded_dict)
+                setattr(self, field, loaded_dict)
 
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
