@@ -600,9 +600,7 @@ class SpmConverter(Converter):
         prepend_scheme = "always"
         if hasattr(self.original_tokenizer, "legacy") and not self.original_tokenizer.legacy:
             prepend_scheme = "first"
-        return pre_tokenizers.Metaspace(
-            replacement=replacement, prepend_scheme=prepend_scheme
-        )
+        return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme)
 
     def post_processor(self):
         return None
