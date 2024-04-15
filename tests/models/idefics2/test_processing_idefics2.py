@@ -19,6 +19,7 @@ from io import BytesIO
 import requests
 
 from transformers import Idefics2Processor
+from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
 
@@ -26,6 +27,8 @@ if is_vision_available():
     from PIL import Image
 
 
+@require_torch
+@require_vision
 class Idefics2ProcessorTest(unittest.TestCase):
     def setUp(self):
         self.processor = Idefics2Processor.from_pretrained("HuggingFaceM4/idefics2-8b", image_seq_len=2)
