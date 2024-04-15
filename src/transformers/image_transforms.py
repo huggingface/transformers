@@ -758,8 +758,6 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     if not isinstance(image, PIL.Image.Image):
         return image
 
-    # `image.convert("RGB")` would only work for .jpg images, as it creates a wrong background
-    # for transparent images. The call to `alpha_composite` handles this case
     if image.mode == "RGB":
         return image
 
