@@ -38,16 +38,17 @@ device = "cpu"
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
-PALIGEMMA_VARIANTS = ["2b"]  # TODO add 7b when available
+PALIGEMMA_VARIANTS = ["2b-test", "2b-224px", "2b-448px", "2b-896px"]
 
 
 def get_paligemma_config(variant: str):
     config = PaLIGemmaConfig()
 
-    if variant == "2b":
+    if variant == "2b-test":
         vocab_size = 257152
         image_size = 224
         patch_size = 14
+        config.image_token_index = 256000
         config.vision_config.image_size = image_size
         config.vision_config.patch_size = patch_size
         config.vision_config.num_image_tokens = int(
@@ -69,6 +70,84 @@ def get_paligemma_config(variant: str):
         config.pad_token_id = 0
         config.bos_token_id = 2
         config.eos_token_id = 1
+    elif variant == "2b-224px":
+        vocab_size = 257152
+        image_size = 224
+        patch_size = 14
+        config.image_token_index = 257152
+        config.vision_config.image_size = image_size
+        config.vision_config.patch_size = patch_size
+        config.vision_config.num_image_tokens = int(
+            config.vision_config.image_size**2 / config.vision_config.patch_size**2
+        )
+        config.vision_config.hidden_size = 1152
+        config.vision_config.intermediate_size = 4304
+        config.vision_config.num_hidden_layers = 27
+        config.vision_config.num_attention_heads = 16
+        config.vision_config.projector_hidden_act = "gelu_fast"
+
+        config.text_config.vocab_size = vocab_size
+        config.text_config.num_hidden_layers = 18
+        config.text_config.num_key_value_heads = 1
+        config.text_config.head_dim = 256
+        config.text_config.torch_dtype = "float32"
+        config.text_config.hidden_size = 2048
+        config.text_config.hidden_act = "gelu_pytorch_tanh"
+        config.pad_token_id = 0
+        config.bos_token_id = 2
+        config.eos_token_id = 1
+    elif variant == "2b-448px":
+        vocab_size = 257152
+        image_size = 448
+        patch_size = 14
+        config.image_token_index = 257152
+        config.vision_config.image_size = image_size
+        config.vision_config.patch_size = patch_size
+        config.vision_config.num_image_tokens = int(
+            config.vision_config.image_size**2 / config.vision_config.patch_size**2
+        )
+        config.vision_config.hidden_size = 1152
+        config.vision_config.intermediate_size = 4304
+        config.vision_config.num_hidden_layers = 27
+        config.vision_config.num_attention_heads = 16
+        config.vision_config.projector_hidden_act = "gelu_fast"
+
+        config.text_config.vocab_size = vocab_size
+        config.text_config.num_hidden_layers = 18
+        config.text_config.num_key_value_heads = 1
+        config.text_config.head_dim = 256
+        config.text_config.torch_dtype = "float32"
+        config.text_config.hidden_size = 2048
+        config.text_config.hidden_act = "gelu_pytorch_tanh"
+        config.pad_token_id = 0
+        config.bos_token_id = 2
+        config.eos_token_id = 1  
+    elif variant == "2b-896px":
+        vocab_size = 257152
+        image_size = 896
+        patch_size = 14
+        config.image_token_index = 257152
+        config.vision_config.image_size = image_size
+        config.vision_config.patch_size = patch_size
+        config.vision_config.num_image_tokens = int(
+            config.vision_config.image_size**2 / config.vision_config.patch_size**2
+        )
+        config.vision_config.hidden_size = 1152
+        config.vision_config.intermediate_size = 4304
+        config.vision_config.num_hidden_layers = 27
+        config.vision_config.num_attention_heads = 16
+        config.vision_config.projector_hidden_act = "gelu_fast"
+
+        config.text_config.vocab_size = vocab_size
+        config.text_config.num_hidden_layers = 18
+        config.text_config.num_key_value_heads = 1
+        config.text_config.head_dim = 256
+        config.text_config.torch_dtype = "float32"
+        config.text_config.hidden_size = 2048
+        config.text_config.hidden_act = "gelu_pytorch_tanh"
+        config.pad_token_id = 0
+        config.bos_token_id = 2
+        config.eos_token_id = 1  
     else:
         raise ValueError(f"Identifier {variant} not supported. Available: {PALIGEMMA_VARIANTS}")
     return config
@@ -218,6 +297,7 @@ def flatten_nested_dict(params, parent_key="", sep="/"):
     items = []
 
     for k, v in params.items():
+        k = k.removeprefix("params/")
         new_key = parent_key + sep + k if parent_key else k
 
         if isinstance(v, collections.abc.MutableMapping):
@@ -228,7 +308,11 @@ def flatten_nested_dict(params, parent_key="", sep="/"):
 
 
 def verify_logits(model, processor):
-    cow_on_beach_path = "/home/ubuntu/gvhf/cow_beach_1.png"
+    """
+    This verification is only valid for the variant "2b-test". There is currently no other verification available.
+    """
+
+    cow_on_beach_path = "/home/pablo/cow_beach_1.png"
 
     list_images = [Image.open(cow_on_beach_path), Image.open(cow_on_beach_path)]
     prompt = ["answer en Where is the cow standing?\n", "\n"]
@@ -269,7 +353,6 @@ def verify_logits(model, processor):
     
     print("Verifying that batched generation and single generation works.")
     big_batch_inputs = ["answer en What is that, isn't int a very strange happenstance? Most confusinglicious?\n", "\n", "answer en Where is the cow standing?\n"]
-    cow_on_beach_path = "/home/ubuntu/gvhf/cow_beach_1.png"
 
     list_images = [Image.open(cow_on_beach_path), Image.open(cow_on_beach_path), Image.open(cow_on_beach_path)]
     batch_model_inputs = processor(text=big_batch_inputs, images=list_images, padding="longest", return_tensors='pt')
@@ -293,17 +376,17 @@ def convert_paligemma_checkpoint(
     Read checkpoints from flax npz files, rename/reshape, send result to state dict and verify logits if needed.
     """
     config = get_paligemma_config(variant)
-    if variant == "2b":
-        tokenizer_id = "google/gemma-2b"
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
-    # tokenizer.padding_side = 'right'
 
-    image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
-    if variant == "2b":
-        image_processor.size = {"width": 224, "height": 224}
-
-    processor = PaLIGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
     if do_convert_weights:
+        #if variant == "2b":
+        tokenizer_id = "google/gemma-2b"
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
+        # tokenizer.padding_side = 'right'
+
+        image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
+        image_processor.size = {"width": config.vision_config.image_size, "height": config.vision_config.image_size}
+
+        processor = PaLIGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
         data = load(checkpoint_path)
         state_dict = flatten_nested_dict(data)
         del data
@@ -315,15 +398,23 @@ def convert_paligemma_checkpoint(
         del state_dict_transformers
 
     else:
+        processor = PaLIGemmaProcessor.from_pretrained(pytorch_dump_folder_path)
         model = PaLIGemmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path).eval()
     model.config._attn_implementation = 'eager'
     if do_verify_logits:
         print("Verifying logits...")
         verify_logits(model, processor)
-        model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
 
+    model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
+    processor.save_pretrained(pytorch_dump_folder_path)
 
 if __name__ == "__main__":
+    """
+    Usage:
+
+    python src/transformers/models/paligemma/convert_paligemma_weights_to_hf.py --checkpoint_path="/home/pablo/gv-hf/pt_896px_512seq.params.npz" --pytorch_dump_folder_path="/home/pablo/paligemma/paligemma-896-hf" --do_convert_weights --do_verify_logits --variant="2b-896px"
+
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--checkpoint_path",
@@ -340,14 +431,15 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--variant",
-          default="2b", 
+        default="2b-test",
+        choices=PALIGEMMA_VARIANTS,
         type=str,
         help="String identifier of the paligemma variant to convert."
     )
 
     parser.add_argument(
         "--do_verify_logits",
-        action="store_false",
+        action="store_true",
         help="Whether or not to run checks against original implementation.",
     )
     parser.add_argument(
