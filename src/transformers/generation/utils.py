@@ -4662,21 +4662,20 @@ class GenerationMixin:
             # we use this forward pass to also pick the subsequent logits in the original model.
 
             # 2.1. Prepare the model inputs
-            candidate_kwargs = copy.copy(model_kwargs)
-            candidate_kwargs = _prepare_attention_mask(
-                candidate_kwargs, candidate_input_ids.shape[1], self.config.is_encoder_decoder
+            model_kwargs = _prepare_attention_mask(
+                model_kwargs, candidate_input_ids.shape[1], self.config.is_encoder_decoder
             )
-            candidate_kwargs = _prepare_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
-            if "cache_position" in candidate_kwargs:
-                candidate_kwargs["cache_position"] = torch.cat(
+            model_kwargs = _prepare_token_type_ids(model_kwargs, candidate_input_ids.shape[1])
+            if "cache_position" in model_kwargs:
+                model_kwargs["cache_position"] = torch.cat(
                     (
-                        candidate_kwargs["cache_position"],
+                        model_kwargs["cache_position"],
                         torch.arange(cur_len, cur_len + candidate_length, device=input_ids.device, dtype=torch.long),
                     ),
                     dim=0,
                 )
 
-            model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **model_kwargs)
             if "num_logits_to_keep" in model_inputs:
                 model_inputs["num_logits_to_keep"] = candidate_length + 1
 
