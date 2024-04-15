@@ -4847,6 +4847,30 @@ class LlavaNextPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+LLAMAVID_LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class LLaMAVIDLlavaForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LLaMAVIDLlavaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LLaMAVIDLlavaProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

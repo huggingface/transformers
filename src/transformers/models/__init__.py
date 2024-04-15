@@ -124,6 +124,7 @@ from . import (
     levit,
     lilt,
     llama,
+    llamavid,
     llava,
     llava_next,
     longformer,
