@@ -259,6 +259,44 @@ class Toolbox():
                 self._tools[name] = load_tool(task_or_repo_id, remote=_remote)
 
 
+class AgentError(Exception):
+    """Base class for other agent-related exceptions"""
+    def __init__(self, message):
+        super().__init__(message)
+        self.message = message
+
+
+class AgentParsingError(AgentError):
+    """Exception raised for errors in parsing in the agent"""
+    pass
+
+
+class AgentExecutionError(AgentError):
+    """Exception raised for errors in execution in the agent"""
+    pass
+
+
+class AgentMaxIterationsError(AgentError):
+    """Exception raised for errors in execution in the agent"""
+    pass
+
+
+def get_inner_memory_from_logs(logs: List[Dict[str, Union[str, AgentError]]]) -> str:
+        """
+        Reads past llm_outputs, actions, and observations or errors from the logs.
+        """
+        memory = logs[0]["system_prompt"] + "\n" + logs[0]["task"]
+        for step_log in logs[1:]:
+            memory += "\nThought: " + step_log["llm_output"] + "\n"
+
+            if 'error' in step_log:
+                memory += str(step_log["error"]) + "\nNow let's retry: take care not to repeat previous errors! Try to adopt different approaches if you can.\n"
+
+            else:
+                memory += "Observation: " + step_log["observation"]
+        return memory
+
+
 class Agent:
     def __init__(
             self, 
@@ -283,9 +321,8 @@ class Agent:
 
         self._toolbox = Toolbox(tools, add_base_tools=add_base_tools)
 
-        self.memory = []
         self.prompt = None
-
+        self.logs = []
 
 
     @property
@@ -293,8 +330,9 @@ class Agent:
         """Get the toolbox currently available to the agent"""
         return self._toolbox
     
-    def show_memory(self):
-        self.log.info('\n'.join(self.memory))
+    def show_logs(self):
+        self.log.info('\n'.join(self.logs))
+
     
     def extract_action(self, llm_output: str, split_token: str) -> str:
         """
@@ -307,15 +345,15 @@ class Agent:
         """
         try:
             split = llm_output.split(split_token)
-            _, action = split[-2], split[-1] # NOTE: using indexes starting from the end solves for when you have more than one split_token in the output
+            rationale, action = split[-2], split[-1] # NOTE: using indexes starting from the end solves for when you have more than one split_token in the output
         except Exception as e:
             self.log.error(e, exc_info=1)
-            raise RuntimeError(f"Error: No '{split_token}' token provided in your output:///\n{llm_output}\n///. Be sure to include an action, prefaced with '{split_token}'!")
-        return action
+            raise AgentParsingError(f"Error: No '{split_token}' token provided in your output:///\n{llm_output}\n///. Be sure to include an action, prefaced with '{split_token}'!")
+        return rationale, action
      
     def execute(self, tool_name: str, arguments: Dict[str, str]) -> None:
         """
-        Execute tool with the provided input and append the result to the memory
+        Execute tool with the provided input and returns the result.
 
         Args:
             tool_name (`str`): Name of the Tool to execute (shoulde be one from
@@ -326,21 +364,18 @@ class Agent:
         if tool_name not in self.toolbox.tools:
             error_msg = f"Error: unknown tool {tool_name}, should be instead one of {[tool_name for tool_name in self.toolbox.tools.keys()]}."
             self.log.error(error_msg, exc_info=1)
-            raise KeyError(error_msg)
+            raise AgentExecutionError(error_msg)
         
-        self.log.info("\n\n==Result==")
         try:
             if isinstance(arguments, str):
                 observation = self.toolbox.tools[tool_name](arguments)
             else:
                 observation = self.toolbox.tools[tool_name](**arguments)
-            observation_message = "Observation: " + str(observation).strip()
-            self.log.info(observation_message)
-            self.memory.append(observation_message)
+            return observation
         except Exception as e:
-            raise RuntimeError(
-                f"Error in tool call execution: {e}. Make sure to re-read the tool arguments again and adapt your input."
-                f"As a reminder, this tool description is the following:\n{get_tool_description_with_args(self.toolbox.tools[tool_name])}"
+            raise AgentExecutionError(
+                f"Error in tool call execution: {e}.\nYour input was probably incorrect.\n"
+                f"As a reminder, this tool's description is the following:\n{get_tool_description_with_args(self.toolbox.tools[tool_name])}"
             )
     
     def run(self, **kwargs):
@@ -420,7 +455,7 @@ class CodeAgent(Agent):
             return llm_output
 
         # Parse
-        code_action = self.extract_action(
+        _, code_action = self.extract_action(
             llm_output=llm_output,
             split_token="Answer:"
         )
@@ -498,73 +533,77 @@ class ReactAgent(Agent):
         from transformers.tools.base import CalculatorTool
 
         calculator = CalculatorTool()
-        agent = ReactAgent(toolbox=[CalculatorTool()])
+        agent = ReactAgent(tools=[CalculatorTool()])
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
+        self.logs = []
         self.system_prompt = format_prompt(self._toolbox, self.system_prompt_template, self.tool_description_template)
-
-        self.memory = [self.system_prompt]
 
         self.task = task
         task_message = f"Task: {self.task}"
-        self.memory.append(task_message)
 
-        self.log.info("=====Initiating LLM with this prompt:=====")
-        self.log.info(self.system_prompt)
+        self.log.info("=====New task=====")
+        self.log.debug("System prompt is as follows:")
+        self.log.debug(self.system_prompt)
+        self.logs.append({"task": task_message, "system_prompt": self.system_prompt})
 
         final_answer = None
         iteration = 0
 
-        while final_answer is None and iteration < self.max_iterations:
+        while not final_answer and iteration < self.max_iterations:
+            self.logs.append({})
             try:
                 final_answer = self.step()
-            except Exception as e:
+            except AgentError as e:
                 self.log.error(e)
-                error_message = str(e) + "\nNow let's retry: take care not to repeat previous errors! Try to vary strategies as much as you can."
-                self.memory.append(error_message)
+                self.logs[-1]["error"] = e
             finally:
                 iteration += 1
         
         if not final_answer and iteration == self.max_iterations:
-            self.log.error("Failed by reaching max iterations.")
-            final_answer = "Failed by reaching max iterations."
+            error_message = "Failed by reaching max iterations."
+            self.log.error(error_message)
+            final_answer = error_message
+            self.logs.append({"error": AgentMaxIterationsError(error_message)})
 
         return final_answer
     
 
     def step(self):
         """
-        Runs agent step with the current prompt (task + state)
+        Runs agent step with the current prompt (task + state).
         """
-        memory_as_text = '\n'.join(self.memory)
-        self.prompt = memory_as_text + "\nThought: " # prepend the answer to steer the llm
-        print("=====-=====")
-        print("NEW STEP")
-        print("=====Initiating LLM with this prompt:=====")
-        print(self.prompt)
+        agent_memory = get_inner_memory_from_logs(self.logs[:-1])
+
+        self.prompt = agent_memory + "\nThought: " # prepend the answer to steer the llm
+        self.log.info("=====New step=====")
+        self.log.debug("=====Initiating LLM with this prompt:=====")
+        self.log.debug(self.prompt)
 
         if self.llm_engine_grammar:
             llm_output = self.llm_engine(self.prompt, stop=["Observation:"], grammar=self.llm_engine_grammar)
         else:
             llm_output = self.llm_engine(self.prompt, stop=["Observation:"])
-        self.log.info("=====Output message of the LLM:=====")
-        self.memory.append(llm_output)
-        self.log.info(llm_output)
-
+        self.log.debug("=====Output message of the LLM:=====")
+        self.log.debug(llm_output)
+        self.logs[-1]["llm_output"] = llm_output
 
         # Parse
-        self.log.info("=====Extracting action=====")
-        action = self.extract_action(
+        self.log.debug("=====Extracting action=====")
+        rationale, action = self.extract_action(
             llm_output=llm_output,
             split_token="Action:"
         )
 
-        self.log.info("=====Parsing action=====")
         try:
             tool_name, arguments = self.tool_parser(action)
         except Exception as e:
-            raise RuntimeError(f"Could not parse the given action: {e}.")
+            raise AgentParsingError(f"Could not parse the given action: {e}.")
+        
+        self.logs[-1]["rationale"] = rationale
+        self.logs[-1]["tool"] = tool_name
+        self.logs[-1]["arguments"] = arguments
     
         # Execute
         if tool_name == "final_answer":
@@ -573,5 +612,8 @@ class ReactAgent(Agent):
             else:
                 return arguments
         else:
-            self.execute(tool_name, arguments)
+            observation = self.execute(tool_name, arguments)
+            observation_message = "Observation: " + str(observation).strip()
+            self.log.info(observation_message)
+            self.logs[-1]["observation"] = observation_message
             return None
