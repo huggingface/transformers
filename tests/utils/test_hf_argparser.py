@@ -379,7 +379,7 @@ class HfArgumentParserTest(unittest.TestCase):
             os.mkdir(temp_local_path)
             with open(temp_local_path + ".json", "w+") as f:
                 json.dump(args_dict_for_json, f)
-            parsed_args = parser.parse_yaml_file(Path(temp_local_path + ".json"))[0]
+            parsed_args = parser.parse_json_file(Path(temp_local_path + ".json"))[0]
 
         args = BasicExample(**args_dict_for_json)
         self.assertEqual(parsed_args, args)
