@@ -574,4 +574,4 @@ class UdopModelIntegrationTests(unittest.TestCase):
         predicted_ids = model.generate(**encoding)
 
         predicted_text = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
-        self.assertEquals(predicted_text, "2013")
+        self.assertEqual(predicted_text, "2013")
