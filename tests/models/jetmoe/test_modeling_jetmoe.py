@@ -19,13 +19,11 @@ import tempfile
 import unittest
 
 import pytest
-from pytest import mark
 
-from transformers import AutoTokenizer, JetMoeConfig, is_torch_available, set_seed
+from transformers import AutoTokenizer, JetMoeConfig, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
     is_flaky,
-    require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_gpu,

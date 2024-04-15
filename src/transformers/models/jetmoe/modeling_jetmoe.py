@@ -242,7 +242,7 @@ class JetMoeMoE(nn.Module):
 
     def extra_repr(self):
         return "k={}, e={}".format(self.top_k, self.num_experts)
-    
+
     def build_topo(self, k: int, num_experts: int, top_k_gates: torch.Tensor, top_k_indices: torch.Tensor):
         """
         Compute gating values for the mixture of experts based on probabilities and top-k indices.
@@ -254,7 +254,7 @@ class JetMoeMoE(nn.Module):
             top_k_indices (`torch.Tensor`): Indices of top-k experts (batch_size x k).
 
         Returns:
-            `tuple(torch.Tensor)` containing (respectively) batch-level gating values, batch-level expert indices, 
+            `tuple(torch.Tensor)` containing (respectively) batch-level gating values, batch-level expert indices,
                 expert size for each expert, and sorted indices of top-k experts.
         """
         zeros = torch.zeros([top_k_gates.size(0), num_experts], dtype=top_k_gates.dtype, device=top_k_gates.device)
@@ -597,9 +597,7 @@ def _get_unpad_data(attention_mask):
 class JetMoeRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        JetMoeRMSNorm module
-
-        hidden_size (int): The size of the input tensor.
+        JetMoeRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -1042,14 +1040,7 @@ class JetMoeFlashAttention2(JetMoeAttention):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
-        self,
-        query_states,
-        key_states,
-        value_states,
-        attention_mask,
-        query_length,
-        dropout=0.0,
-        softmax_scale=None,
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -1520,7 +1511,6 @@ class JetMoeModel(JetMoePreTrainedModel):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with Llama->JetMoe, LLAMA->JETMOE
 class JetMoeForCausalLM(JetMoePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 

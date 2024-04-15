@@ -39,24 +39,24 @@ class JetMoeConfig(PretrainedConfig):
             `inputs_ids` passed when calling [`JetMoeModel`]
         hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
-        num_hidden_layers (`int`, *optional*, defaults to 12): 
+        num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_key_value_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each key and value in the Transformer encoder.
-        kv_channels (`int`, *optional*, defaults to 128): 
+        kv_channels (`int`, *optional*, defaults to 128):
             Defines the number of channels for the key and value tensors.
-        intermediate_size (`int`, *optional*, defaults to 5632): 
+        intermediate_size (`int`, *optional*, defaults to 5632):
             Dimension of the MLP representations.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
-            The maximum sequence length that this model might ever be used with. JetMoe's attention allows sequence of 
+            The maximum sequence length that this model might ever be used with. JetMoe's attention allows sequence of
             up to 4096 tokens.
-        activation_function (`string`, *optional*, defaults to `"silu"`): 
+        activation_function (`string`, *optional*, defaults to `"silu"`):
             Defines the activation function for MLP experts.
-        num_local_experts (`int`, *optional*, defaults to 8): 
+        num_local_experts (`int`, *optional*, defaults to 8):
             Defines the number of experts in the mixture of experts and mixture of attention heads.
-        num_experts_per_tok (`int, *optional*, defaults to 2): 
+        num_experts_per_tok (`int, *optional*, defaults to 2):
             The number of experts to root per-token.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
