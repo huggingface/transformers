@@ -368,9 +368,7 @@ class DbrxModelIntegrationTest(unittest.TestCase):
         model = DbrxForCausalLM.from_pretrained("databricks/dbrx-instruct")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
-
-        # TODO Replace vocab size
-        vocab_size = 32000
+        vocab_size = model.vocab_size
 
         expected_shape = torch.Size((1, 6, vocab_size))
         self.assertEqual(output.shape, expected_shape)
