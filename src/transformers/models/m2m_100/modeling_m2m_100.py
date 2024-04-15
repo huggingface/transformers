@@ -437,15 +437,6 @@ class M2M100FlashAttention2(nn.Module):
             query_states, key_states, value_states, attention_mask, q_len, dropout=self.dropout, softmax_scale=None
         )
 
-        # if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-        #     raise ValueError(
-        #         f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
-        #         f" {attn_output.size()}"
-        #     )
-
-        # attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        # attn_output = attn_output.transpose(1, 2)
-
         # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
         # partitioned across GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(bsz, q_len, self.embed_dim)
@@ -1354,6 +1345,11 @@ class M2M100Model(M2M100PreTrainedModel):
 
         self.encoder = M2M100Encoder(config, self.shared)
         self.decoder = M2M100Decoder(config, self.shared)
+
+        if config._attn_implementation == "flash_attention_2":
+            logger.warning_once(
+                "Attention with Flash Attention 2 does not support `layer_head_mask`. If you need this feature, please use standard attention."
+            )
 
         # Initialize weights and apply final processing
         self.post_init()
