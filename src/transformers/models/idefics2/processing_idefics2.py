@@ -123,7 +123,7 @@ class Idefics2Processor(ProcessorMixin):
         >>> url1 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
         >>> url2 = "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg"
 
-        >>> image1, image2 = load_image(image1), load_image(image2)
+        >>> image1, image2 = load_image(url1), load_image(url2)
         >>> images = [[image1], [image2]]
 
         >>> text = [
