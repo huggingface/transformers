@@ -88,7 +88,7 @@ class AqlmHfQuantizer(HfQuantizer):
         if aqlm_supports_training:
             return True
         else:
-            logger.warn(
+            logger.warning(
                 f"Currently installed `aqlm` version ({importlib.metadata.version('aqlm')}) doesn't support training. If you wish to train a quantized model, please update `aqlm` with `pip install aqlm>=1.0.2`"
             )
             return False
