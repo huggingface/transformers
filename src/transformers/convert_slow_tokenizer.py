@@ -608,7 +608,7 @@ class SpmConverter(Converter):
 
     def decoder(self, replacement, add_prefix_space):
         prepend_scheme = "always" if add_prefix_space else "never"
-        return decoders.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme)
+        return decoders.Metaspace(replacement=replacement, add_prefix_space=prepend_scheme)
 
     def converted(self) -> Tokenizer:
         tokenizer = self.tokenizer(self.proto)
