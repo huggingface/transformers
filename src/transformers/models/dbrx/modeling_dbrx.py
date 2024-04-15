@@ -950,9 +950,7 @@ class DbrxPreTrainedModel(PreTrainedModel):
             module.v1.data.normal_(mean=0.0, std=std)
             module.w2.data.normal_(mean=0.0, std=std)
 
-    def _setup_cache(
-        self, cache_cls: Any, max_batch_size: int, max_cache_len: int
-    ):  # TODO: how to set var type of class?
+    def _setup_cache(self, cache_cls: Any, max_batch_size: int, max_cache_len: int):
         if self.config._attn_implementation == "flash_attention_2" and cache_cls == StaticCache:
             raise ValueError(
                 "`static` cache implementation is not compatible with "
