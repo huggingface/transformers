@@ -1,4 +1,5 @@
 docs/source/en/generation_strategies.md
+docs/source/en/model_doc/code_llama.md
 docs/source/en/model_doc/ctrl.md
 docs/source/en/model_doc/kosmos-2.md
 docs/source/en/model_doc/seamless_m4t.md
