@@ -110,7 +110,9 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
 
         self.add_bos_token = kwargs.pop("add_bos_token", False)
 
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__()) # TODO this will no longer work
+        pre_tok_state = json.loads(
+            self.backend_tokenizer.pre_tokenizer.__getstate__()
+        )  # TODO this will no longer work
         if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
             pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
             pre_tok_state["add_prefix_space"] = add_prefix_space
