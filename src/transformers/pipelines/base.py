@@ -835,49 +835,7 @@ class Pipeline(_ScikitCompat):
                 "discard the `device` argument when creating your pipeline object."
             )
 
-        if device is None:
-            if hf_device_map is not None:
-                # Take the first device used by `accelerate`.
-                device = next(iter(hf_device_map.values()))
-            else:
-                device = -1
-
-        if is_torch_available() and self.framework == "pt":
-            if isinstance(device, torch.device):
-                if device.type == "xpu" and not is_torch_xpu_available(check_device=True):
-                    raise ValueError(f'{device} is not available, you should use device="cpu" instead')
-                self.device = device
-            elif isinstance(device, str):
-                if "xpu" in device and not is_torch_xpu_available(check_device=True):
-                    raise ValueError(f'{device} is not available, you should use device="cpu" instead')
-                self.device = torch.device(device)
-            elif device < 0:
-                self.device = torch.device("cpu")
-            elif is_torch_mlu_available():
-                self.device = torch.device(f"mlu:{device}")
-            elif is_torch_cuda_available():
-                self.device = torch.device(f"cuda:{device}")
-            elif is_torch_npu_available():
-                self.device = torch.device(f"npu:{device}")
-            elif is_torch_xpu_available(check_device=True):
-                self.device = torch.device(f"xpu:{device}")
-            elif is_torch_mps_available():
-                self.device = torch.device(f"mps:{device}")
-            else:
-                raise ValueError(f"{device} unrecognized or not available.")
-        else:
-            self.device = device if device is not None else -1
-
-        self.binary_output = binary_output
-
-        # We shouldn't call `model.to()` for models loaded with accelerate
-        if (
-            self.framework == "pt"
-            and self.device is not None
-            and not (isinstance(self.device, int) and self.device < 0)
-            and hf_device_map is None
-        ):
-            self.model.to(self.device)
+        self.to(device, torch_dtype)
 
         # Update config and generation_config with task specific parameters
         task_specific_params = self.model.config.task_specific_params
@@ -1232,6 +1190,54 @@ class Pipeline(_ScikitCompat):
         # easy solution.
         for input_ in inputs:
             yield self.run_single(input_, preprocess_params, forward_params, postprocess_params)
+
+    def to(self, device=None, dtype=torch.float32):
+        if device is None:
+            if hf_device_map is not None:
+                # Take the first device used by `accelerate`.
+                device = next(iter(hf_device_map.values()))
+            else:
+                device = -1
+
+        if is_torch_available() and self.framework == "pt":
+            if isinstance(device, torch.device):
+                if device.type == "xpu" and not is_torch_xpu_available(check_device=True):
+                    raise ValueError(f'{device} is not available, you should use device="cpu" instead')
+                self.device = device
+            elif isinstance(device, str):
+                if "xpu" in device and not is_torch_xpu_available(check_device=True):
+                    raise ValueError(f'{device} is not available, you should use device="cpu" instead')
+                self.device = torch.device(device)
+            elif device < 0:
+                self.device = torch.device("cpu")
+            elif is_torch_mlu_available():
+                self.device = torch.device(f"mlu:{device}")
+            elif is_torch_cuda_available():
+                self.device = torch.device(f"cuda:{device}")
+            elif is_torch_npu_available():
+                self.device = torch.device(f"npu:{device}")
+            elif is_torch_xpu_available(check_device=True):
+                self.device = torch.device(f"xpu:{device}")
+            elif is_torch_mps_available():
+                self.device = torch.device(f"mps:{device}")
+            else:
+                raise ValueError(f"{device} unrecognized or not available.")
+        else:
+            self.device = device if device is not None else -1
+
+        self.binary_output = binary_output
+
+        # We shouldn't call `model.to()` for models loaded with accelerate
+        if (
+            self.framework == "pt"
+            and self.device is not None
+            and not (isinstance(self.device, int) and self.device < 0)
+            and hf_device_map is None
+        ):
+            if dtype is not None:
+                self.model.to(self.device, dtype)
+            else:
+                self.model.to(self.device)
 
 
 class ChunkPipeline(Pipeline):
