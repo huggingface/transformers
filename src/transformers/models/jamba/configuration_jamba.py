@@ -207,3 +207,17 @@ class JambaConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+    @property
+    def layers_block_type(self):
+        return [
+            "attention" if i % self.attn_layer_period == self.attn_layer_offset else "mamba"
+            for i in range(self.num_hidden_layers)
+        ]
+
+    @property
+    def layers_num_experts(self):
+        return [
+            self.num_experts if i % self.expert_layer_period == self.expert_layer_offset else 1
+            for i in range(self.num_hidden_layers)
+        ]

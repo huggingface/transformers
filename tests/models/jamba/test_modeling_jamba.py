@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 import pytest
+from parameterized import parameterized
 
 from transformers import JambaConfig, is_torch_available
 from transformers.testing_utils import (
@@ -44,6 +45,7 @@ if is_torch_available():
         JambaModel,
     )
     from transformers.models.jamba.modeling_jamba import (
+        HybridMambaAttentionDynamicCache,
         JambaAttentionDecoderLayer,
         JambaMambaDecoderLayer,
     )
@@ -205,9 +207,14 @@ class JambaModelTester:
         model.eval()
 
         # first forward pass
+        # Attention: Jamba needs the cache to be initialized to return a cache!
+        past_key_values = HybridMambaAttentionDynamicCache(
+            config, input_ids.shape[0], model.dtype, device=model.device
+        )
         outputs = model(
             input_ids,
             attention_mask=input_mask,
+            past_key_values=past_key_values,
             use_cache=True,
         )
         past_key_values = outputs.past_key_values
@@ -740,6 +747,11 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         right padding + use cache with FA2
         """
         self.skipTest("Jamba flash attention does not support right padding")
+
+    @unittest.skip("Jamba has its own special cache type")
+    @parameterized.expand([(1, False), (1, True), (4, False)])
+    def test_new_cache_format(self, num_beams, do_sample):
+        pass
 
 
 @require_torch
