@@ -376,7 +376,9 @@ class RecurrentGemmaRglru(nn.Module):
                 return hidden_states, hidden_states[:, 0].type(acc_dtype)
 
             else:
-                contextualized_states = recurrent_gate.type(acc_dtype) * recurrent_states[:, None].to(recurrent_gate.device)
+                contextualized_states = recurrent_gate.type(acc_dtype) * recurrent_states[:, None].to(
+                    recurrent_gate.device
+                )
                 contextualized_states += hidden_states.type(acc_dtype)
                 return contextualized_states.type(hidden_states.dtype), contextualized_states[:, -1]
 
@@ -658,7 +660,9 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         self.final_norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
-        self.register_buffer("normalizer", torch.tensor(self.config.hidden_size**0.5, dtype=torch.bfloat16), persistent=False)
+        self.register_buffer(
+            "normalizer", torch.tensor(self.config.hidden_size**0.5, dtype=torch.bfloat16), persistent=False
+        )
         # Initialize weights and apply final processing
         self.post_init()
 
