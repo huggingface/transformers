@@ -337,7 +337,7 @@ def _get_unpad_data(attention_mask):
     )
 
 
-class M2M100FlashAttention2(nn.Module):
+class M2M100FlashAttention2(M2M100Attention):
     def __init__(
         self,
         embed_dim: int,
@@ -348,7 +348,6 @@ class M2M100FlashAttention2(nn.Module):
         is_causal: bool = False,
         config: Optional[M2M100Config] = None,
     ):
-        super().__init__()
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
