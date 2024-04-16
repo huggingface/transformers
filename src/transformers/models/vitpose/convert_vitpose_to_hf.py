@@ -48,7 +48,8 @@ def _xywh2xyxy(bbox_xywh):
 
 
 def get_config(model_name):
-    config = ViTPoseConfig(num_labels=17)
+    use_simple_decoder = "simple" in model_name
+    config = ViTPoseConfig(num_labels=17, use_simple_decoder=use_simple_decoder)
     # size of the architecture
     if "small" in model_name:
         config.hidden_size = 768
@@ -97,6 +98,8 @@ def rename_key(name):
     if "keypoint_head" in name:
         name = name.replace("keypoint_head", "head.conv")
 
+    # TODO classic decoder weights
+
     return name
 
 
@@ -130,8 +133,14 @@ def prepare_img():
     return im
 
 
+name_to_path = {
+    "vitpose-base-simple": "/Users/nielsrogge/Documents/ViTPose/vitpose-b-simple.pth",
+    "vitpose-base": "/Users/nielsrogge/Documents/ViTPose/vitpose-b.pth",
+}
+
+
 @torch.no_grad()
-def convert_vitpose_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub):
+def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     """
     Copy/paste/tweak model's weights to our ViTPose structure.
     """
@@ -143,12 +152,14 @@ def convert_vitpose_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     model = ViTPoseForPoseEstimation(config)
     model.eval()
 
-    # load state_dict of original model, remove and rename some keys
+    # load state_dict of original model
+    checkpoint_path = name_to_path[model_name]
     state_dict = torch.load(checkpoint_path, map_location="cpu")["state_dict"]
 
     # for name, param in state_dict.items():
     #     print(name, param.shape)
 
+    # rename some keys
     new_state_dict = convert_state_dict(state_dict, dim=config.hidden_size)
     model.load_state_dict(new_state_dict)
 
@@ -278,15 +289,10 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="vitpose_base",
+        default="vitpose-base-simple",
+        choices=name_to_path.keys(),
         type=str,
         help="Name of the ViTPose model you'd like to convert.",
-    )
-    parser.add_argument(
-        "--checkpoint_path",
-        default="/Users/nielsrogge/Documents/ViTPose/vitpose-b-simple.pth",
-        type=str,
-        help="Path to the original PyTorch checkpoint (.pt file).",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
@@ -296,4 +302,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_vitpose_checkpoint(args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_vitpose_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)

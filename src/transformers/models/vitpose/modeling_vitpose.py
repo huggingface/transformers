@@ -564,7 +564,12 @@ def flip_back(output_flipped, flip_pairs, target_type="GaussianHeatmap"):
     return output_flipped_back
 
 
-class ViTPoseKeyPointsHead(nn.Module):
+class ViTPoseSimpleDecoder(nn.Module):
+    """
+    Simple decoding head consisting of a ReLU activation, 4x upsampling and a 3x3 convolution, turning the
+    feature maps into heatmaps.
+    """
+
     def __init__(self, config) -> None:
         super().__init__()
 
@@ -578,17 +583,45 @@ class ViTPoseKeyPointsHead(nn.Module):
             hidden_state, scale_factor=self.scale_factor, mode="bilinear", align_corners=False
         )
 
-        print("Shape after upsampling:", hidden_state.shape)
-        print("First values after upsampling:", hidden_state[0, 0, :3, :3])
-
-        output = self.conv(hidden_state)
-
-        print("Shape after conv:", output.shape)
+        heatmaps = self.conv(hidden_state)
 
         if flip_pairs is not None:
-            output = flip_back(output.detach().cpu().numpy(), flip_pairs)
+            heatmaps = flip_back(heatmaps.detach().cpu().numpy(), flip_pairs)
 
-        return output
+        return heatmaps
+
+
+class ViTPoseClassicDecoder(nn.Module):
+    """
+    Classic decoding head consisting of a 2 deconvolutional blocks, followed by a 1x1 convolution layer,
+    turning the feature maps into heatmaps.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        self.deconv1 = nn.ConvTranspose2d(config.hidden_size, 256, kernel_size=4, stride=2, padding=1)
+        self.batchnorm1 = nn.BatchNorm2d(256)
+        self.relu1 = nn.ReLU()
+
+        self.deconv2 = nn.ConvTranspose2d(config.hidden_size, 256, kernel_size=4, stride=2, padding=1)
+        self.batchnorm2 = nn.BatchNorm2d(256)
+        self.relu2 = nn.ReLU()
+
+        self.conv = nn.Conv2d(256, config.num_labels, kernel_size=1, stride=1, padding=0)
+
+    def forward(self, hidden_state, flip_pairs):
+        hidden_state = self.deconv1(hidden_state)
+        hidden_state = self.batchnorm1(hidden_state)
+        hidden_state = self.relu1(hidden_state)
+
+        hidden_state = self.deconv2(hidden_state)
+        hidden_state = self.batchnorm2(hidden_state)
+        hidden_state = self.relu2(hidden_state)
+
+        heatmaps = self.conv(hidden_state)
+
+        return heatmaps
 
 
 class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
@@ -598,7 +631,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         self.num_labels = config.num_labels
         self.vit = ViTPoseModel(config)
 
-        self.head = ViTPoseKeyPointsHead(config)
+        self.head = ViTPoseSimpleDecoder(config) if config.use_simple_decoder else ViTPoseClassicDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()

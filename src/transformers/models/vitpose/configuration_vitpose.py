@@ -14,13 +14,8 @@
 # limitations under the License.
 """ ViTPose model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
-
-from packaging import version
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -72,6 +67,8 @@ class ViTPoseConfig(PretrainedConfig):
             Whether to add a bias to the queries, keys and values.
         scale_factor (`int`, *optional*, defaults to 4):
             Factor to upscale te feature maps coming from the ViT backbone.
+        use_simple_decoder (`bool`, *optional*, defaults to `True`):
+            Whether to use a simple decoder to decode the feature maps from the backbone into heatmaps.
 
     Example:
 
@@ -106,6 +103,7 @@ class ViTPoseConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         qkv_bias=True,
         scale_factor=4,
+        use_simple_decoder=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -124,3 +122,4 @@ class ViTPoseConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
         self.scale_factor = scale_factor
+        self.use_simple_decoder = use_simple_decoder
