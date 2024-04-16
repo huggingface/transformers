@@ -265,7 +265,7 @@ At this point, only three steps remain:
 ```py
 >>> training_args = TrainingArguments(
 ...     output_dir="my_awesome_swag_model",
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     save_strategy="epoch",
 ...     load_best_model_at_end=True,
 ...     learning_rate=5e-5,

@@ -283,7 +283,7 @@ To enable Neptune logging, in your `TrainingArguments`, set the `report_to` argu
 ```python
 training_args = TrainingArguments(
     "quick-training-distilbert-mrpc",
-    evaluation_strategy="steps",
+    eval_strategy="steps",
     eval_steps=20,
     report_to="neptune",
 )

@@ -233,7 +233,7 @@ pip install transformers datasets evaluate
 ```py
 >>> training_args = TrainingArguments(
 ...     output_dir="my_awesome_eli5_clm-model",
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     learning_rate=2e-5,
 ...     weight_decay=0.01,
 ...     push_to_hub=True,
