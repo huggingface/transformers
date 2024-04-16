@@ -662,7 +662,7 @@ _import_structure = {
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
     ],
-    "models.olmo": ["OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP", "OLMoConfig"],
+    "models.olmo": ["OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP", "OlmoConfig"],
     "models.oneformer": [
         "ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "OneFormerConfig",
@@ -2896,9 +2896,9 @@ else:
     )
     _import_structure["models.olmo"].extend(
         [
-            "OLMoForCausalLM",
-            "OLMoModel",
-            "OLMoPreTrainedModel",
+            "OlmoForCausalLM",
+            "OlmoModel",
+            "OlmoPreTrainedModel",
         ]
     )
     _import_structure["models.oneformer"].extend(
@@ -5572,7 +5572,7 @@ if TYPE_CHECKING:
         NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         NystromformerConfig,
     )
-    from .models.olmo import OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP, OLMoConfig
+    from .models.olmo import OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP, OlmoConfig
     from .models.oneformer import (
         ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OneFormerConfig,
@@ -7540,9 +7540,9 @@ if TYPE_CHECKING:
             NystromformerPreTrainedModel,
         )
         from .models.olmo import (
-            OLMoForCausalLM,
-            OLMoModel,
-            OLMoPreTrainedModel,
+            OlmoForCausalLM,
+            OlmoModel,
+            OlmoPreTrainedModel,
         )
         from .models.oneformer import (
             ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

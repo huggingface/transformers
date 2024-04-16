@@ -39,7 +39,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
-    add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
@@ -47,7 +46,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_olmo import OLMoConfig
+from .configuration_olmo import OlmoConfig
 
 
 if is_flash_attn_2_available():
@@ -57,7 +56,7 @@ if is_flash_attn_2_available():
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "OLMoConfig"
+_CONFIG_FOR_DOC = "OlmoConfig"
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
@@ -73,7 +72,7 @@ def _get_unpad_data(attention_mask):
     )
 
 
-class OLMoLayerNorm(nn.Module):
+class OlmoLayerNorm(nn.Module):
     """LayerNorm but with no learnable weight or bias."""
 
     def __init__(self, hidden_size: int) -> None:
@@ -87,11 +86,11 @@ class OLMoLayerNorm(nn.Module):
         )
 
 
-ALL_LAYERNORM_LAYERS.append(OLMoLayerNorm)
+ALL_LAYERNORM_LAYERS.append(OlmoLayerNorm)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->OLMo
-class OLMoRotaryEmbedding(nn.Module):
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Olmo
+class OlmoRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         super().__init__()
         self.scaling_factor = scaling_factor
@@ -114,7 +113,7 @@ class OLMoRotaryEmbedding(nn.Module):
     def sin_cached(self):
         logger.warning_once(
             "The sin_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead. It is not used in the `OLMoAttention` class"
+            "the forward method of RoPE from now on instead. It is not used in the `OlmoAttention` class"
         )
         return self._sin_cached
 
@@ -122,7 +121,7 @@ class OLMoRotaryEmbedding(nn.Module):
     def cos_cached(self):
         logger.warning_once(
             "The cos_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead. It is not used in the `OLMoAttention` class"
+            "the forward method of RoPE from now on instead. It is not used in the `OlmoAttention` class"
         )
         return self._cos_cached
 
@@ -143,9 +142,9 @@ class OLMoRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->OLMo
-class OLMoLinearScalingRotaryEmbedding(OLMoRotaryEmbedding):
-    """OLMoRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Olmo
+class OlmoLinearScalingRotaryEmbedding(OlmoRotaryEmbedding):
+    """OlmoRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
     def forward(self, x, position_ids):
         # difference to the original RoPE: a scaling factor is aplied to the position ids
@@ -154,9 +153,9 @@ class OLMoLinearScalingRotaryEmbedding(OLMoRotaryEmbedding):
         return cos, sin
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->OLMo
-class OLMoDynamicNTKScalingRotaryEmbedding(OLMoRotaryEmbedding):
-    """OLMoRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Olmo
+class OlmoDynamicNTKScalingRotaryEmbedding(OlmoRotaryEmbedding):
+    """OlmoRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
     def forward(self, x, position_ids):
         # difference to the original RoPE: inv_freq is recomputed when the sequence length > original length
@@ -210,7 +209,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class OLMoMLP(nn.Module):
+class OlmoMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -237,11 +236,11 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class OLMoAttention(nn.Module):
+class OlmoAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaAttention.__init__ with Llama->OLMo
-    def __init__(self, config: OLMoConfig, layer_idx: Optional[int] = None):
+    # Copied from transformers.models.llama.modeling_llama.LlamaAttention.__init__ with Llama->Olmo
+    def __init__(self, config: OlmoConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -274,10 +273,10 @@ class OLMoAttention(nn.Module):
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
         self._init_rope()
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaAttention._init_rope with Llama->OLMo
+    # Copied from transformers.models.llama.modeling_llama.LlamaAttention._init_rope with Llama->Olmo
     def _init_rope(self):
         if self.config.rope_scaling is None:
-            self.rotary_emb = OLMoRotaryEmbedding(
+            self.rotary_emb = OlmoRotaryEmbedding(
                 self.head_dim,
                 max_position_embeddings=self.max_position_embeddings,
                 base=self.rope_theta,
@@ -286,14 +285,14 @@ class OLMoAttention(nn.Module):
             scaling_type = self.config.rope_scaling["type"]
             scaling_factor = self.config.rope_scaling["factor"]
             if scaling_type == "linear":
-                self.rotary_emb = OLMoLinearScalingRotaryEmbedding(
+                self.rotary_emb = OlmoLinearScalingRotaryEmbedding(
                     self.head_dim,
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
                     base=self.rope_theta,
                 )
             elif scaling_type == "dynamic":
-                self.rotary_emb = OLMoDynamicNTKScalingRotaryEmbedding(
+                self.rotary_emb = OlmoDynamicNTKScalingRotaryEmbedding(
                     self.head_dim,
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
@@ -369,9 +368,9 @@ class OLMoAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class OLMoFlashAttention2(OLMoAttention):
+class OlmoFlashAttention2(OlmoAttention):
     """
-    OLMo flash attention module. This module inherits from `OLMoAttention` as the weights of the module stays
+    OLMo flash attention module. This module inherits from `OlmoAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
@@ -438,7 +437,7 @@ class OLMoFlashAttention2(OLMoAttention):
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in the correct dtype just to be sure everything works as expected.
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (OLMoRMSNorm handles it correctly)
+        # in fp32. (OlmoRMSNorm handles it correctly)
 
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
@@ -472,7 +471,7 @@ class OLMoFlashAttention2(OLMoAttention):
 
         return attn_output, attn_weights, past_key_value
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward with Llama->OLMo
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward with Llama->Olmo
     def _flash_attention_forward(
         self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
@@ -498,7 +497,7 @@ class OLMoFlashAttention2(OLMoAttention):
         if not self._flash_attn_uses_top_left_mask:
             causal = self.is_causal
         else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in OLMoFlashAttention2 __init__.
+            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in OlmoFlashAttention2 __init__.
             causal = self.is_causal and query_length != 1
 
         # Contains at least one padding token in the sequence
@@ -572,14 +571,14 @@ class OLMoFlashAttention2(OLMoAttention):
         )
 
 
-class OLMoSdpaAttention(OLMoAttention):
+class OlmoSdpaAttention(OlmoAttention):
     """
     OLMo attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `OLMoAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    `OlmoAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
 
-    # Adapted from OLMoAttention.forward
+    # Adapted from OlmoAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -593,7 +592,7 @@ class OLMoSdpaAttention(OLMoAttention):
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "OLMoModel is using OLMoSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                "OlmoModel is using OlmoSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
                 'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
@@ -664,22 +663,22 @@ class OLMoSdpaAttention(OLMoAttention):
 
 
 OLMO_ATTENTION_CLASSES = {
-    "eager": OLMoAttention,
-    "flash_attention_2": OLMoFlashAttention2,
-    "sdpa": OLMoSdpaAttention,
+    "eager": OlmoAttention,
+    "flash_attention_2": OlmoFlashAttention2,
+    "sdpa": OlmoSdpaAttention,
 }
 
 
-class OLMoDecoderLayer(nn.Module):
-    def __init__(self, config: OLMoConfig, layer_idx: int):
+class OlmoDecoderLayer(nn.Module):
+    def __init__(self, config: OlmoConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
         self.self_attn = OLMO_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
-        self.mlp = OLMoMLP(config)
-        self.input_layernorm = OLMoLayerNorm(config.hidden_size)
-        self.post_attention_layernorm = OLMoLayerNorm(config.hidden_size)
+        self.mlp = OlmoMLP(config)
+        self.input_layernorm = OlmoLayerNorm(config.hidden_size)
+        self.post_attention_layernorm = OlmoLayerNorm(config.hidden_size)
 
     # Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer.forward
     def forward(
@@ -756,7 +755,7 @@ OLMO_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`OLMoConfig`]):
+        config ([`OlmoConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -764,15 +763,15 @@ OLMO_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare OLMo Model outputting raw hidden-states without any specific head on top.",
+    "The bare Olmo Model outputting raw hidden-states without any specific head on top.",
     OLMO_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->OLMo
-class OLMoPreTrainedModel(PreTrainedModel):
-    config_class = OLMoConfig
+# Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->Olmo
+class OlmoPreTrainedModel(PreTrainedModel):
+    config_class = OlmoConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["OLMoDecoderLayer"]
+    _no_split_modules = ["OlmoDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -886,27 +885,27 @@ OLMO_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare OLMo Model outputting raw hidden-states without any specific head on top.",
+    "The bare Olmo Model outputting raw hidden-states without any specific head on top.",
     OLMO_START_DOCSTRING,
 )
-class OLMoModel(OLMoPreTrainedModel):
+class OlmoModel(OlmoPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`OLMoDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`OlmoDecoderLayer`]
 
     Args:
-        config: OLMoConfig
+        config: OlmoConfig
     """
 
-    def __init__(self, config: OLMoConfig):
+    def __init__(self, config: OlmoConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [OLMoDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [OlmoDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = OLMoLayerNorm(config.hidden_size)
+        self.norm = OlmoLayerNorm(config.hidden_size)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -1094,13 +1093,13 @@ class OLMoModel(OLMoPreTrainedModel):
         return causal_mask
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->OLMO,Llama->OLMo
-class OLMoForCausalLM(OLMoPreTrainedModel):
+# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->OLMO,Llama->Olmo
+class OlmoForCausalLM(OlmoPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = OLMoModel(config)
+        self.model = OlmoModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -1154,9 +1153,9 @@ class OLMoForCausalLM(OLMoPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, OLMoForCausalLM
+        >>> from transformers import AutoTokenizer, OlmoForCausalLM
 
-        >>> model = OLMoForCausalLM.from_pretrained("allenai/OLMo-1B-hf")
+        >>> model = OlmoForCausalLM.from_pretrained("allenai/OLMo-1B-hf")
         >>> tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-1B-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"

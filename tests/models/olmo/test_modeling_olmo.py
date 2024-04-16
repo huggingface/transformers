@@ -18,7 +18,7 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import OLMoConfig, is_torch_available, set_seed
+from transformers import OlmoConfig, is_torch_available, set_seed
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
     is_flaky,
@@ -38,12 +38,12 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        OLMoForCausalLM,
-        OLMoModel,
+        OlmoForCausalLM,
+        OlmoModel,
     )
 
 
-class OLMoModelTester:
+class OlmoModelTester:
     def __init__(
         self,
         parent,
@@ -118,7 +118,7 @@ class OLMoModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return OLMoConfig(
+        return OlmoConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -137,7 +137,7 @@ class OLMoModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = OLMoModel(config=config)
+        model = OlmoModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -157,7 +157,7 @@ class OLMoModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = OLMoModel(config)
+        model = OlmoModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -186,7 +186,7 @@ class OLMoModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = OLMoForCausalLM(config=config)
+        model = OlmoForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -206,7 +206,7 @@ class OLMoModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = OLMoForCausalLM(config=config)
+        model = OlmoForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -270,13 +270,13 @@ class OLMoModelTester:
 
 
 @require_torch
-class OLMoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (OLMoModel, OLMoForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (OLMoForCausalLM,) if is_torch_available() else ()
+class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (OlmoModel, OlmoForCausalLM) if is_torch_available() else ()
+    all_generative_model_classes = (OlmoForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": OLMoModel,
-            "text-generation": OLMoForCausalLM,
+            "feature-extraction": OlmoModel,
+            "text-generation": OlmoForCausalLM,
         }
         if is_torch_available()
         else {}
@@ -289,8 +289,8 @@ class OLMoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     model_split_percents = [0.5, 0.7, 0.8]
 
     def setUp(self):
-        self.model_tester = OLMoModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=OLMoConfig, hidden_size=37)
+        self.model_tester = OlmoModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=OlmoConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -327,7 +327,7 @@ class OLMoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = OLMoModel(config)
+        original_model = OlmoModel(config)
         original_model.to(torch_device)
         original_model.eval()
         original_short_output = original_model(short_input).last_hidden_state
@@ -335,7 +335,7 @@ class OLMoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = OLMoModel(config)
+        scaled_model = OlmoModel(config)
         scaled_model.to(torch_device)
         scaled_model.eval()
         scaled_short_output = scaled_model(short_input).last_hidden_state
@@ -358,11 +358,11 @@ class OLMoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
 
 @require_torch
-class OLMoIntegrationTest(unittest.TestCase):
+class OlmoIntegrationTest(unittest.TestCase):
     @slow
     def test_model_1b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = OLMoForCausalLM.from_pretrained("allenai/OLMo-1B-hf", device_map="auto")
+        model = OlmoForCausalLM.from_pretrained("allenai/OLMo-1B-hf", device_map="auto")
         out = model(torch.tensor(input_ids)).logits
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[2.2869, 0.3315, 0.9876, 1.4146, 1.8804, 2.0430, 1.7055, 1.2065]])
@@ -374,7 +374,7 @@ class OLMoIntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = OLMoForCausalLM.from_pretrained("allenai/OLMo-7B-hf", device_map="auto")
+        model = OlmoForCausalLM.from_pretrained("allenai/OLMo-7B-hf", device_map="auto")
         out = model(torch.tensor(input_ids)).logits
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[0.0271, 0.0249, -0.0578, -0.0870, 0.0167, 0.0710, 0.1002, 0.0677]])
@@ -386,7 +386,7 @@ class OLMoIntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_twin_2t_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = OLMoForCausalLM.from_pretrained("allenai/OLMo-7B-Twin-2T-hf", device_map="auto")
+        model = OlmoForCausalLM.from_pretrained("allenai/OLMo-7B-Twin-2T-hf", device_map="auto")
         out = model(torch.tensor(input_ids)).logits
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-0.3636, -0.3825, -0.4800, -0.3696, -0.8388, -0.9737, -0.9849, -0.8356]])
@@ -401,7 +401,7 @@ class OLMoIntegrationTest(unittest.TestCase):
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B-hf", device_map="auto")
         input_ids = tokenizer.encode(prompt, return_tensors="pt")
-        model = OLMoForCausalLM.from_pretrained("allenai/OLMo-7B-hf", device_map="auto")
+        model = OlmoForCausalLM.from_pretrained("allenai/OLMo-7B-hf", device_map="auto")
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)

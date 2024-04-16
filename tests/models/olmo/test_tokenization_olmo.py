@@ -41,7 +41,7 @@ if is_torch_available():
 
 @require_sentencepiece
 @require_tokenizers
-class OLMoTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class OlmoTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "allenai/OLMo-1B-hf"
 
     # `tokenizer_class` is normally supposed to be a slow tokenizer. It is set to the fast tokenizer
@@ -138,7 +138,7 @@ class OLMoTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
 @require_torch
 @require_tokenizers
-class OLMoIntegrationTest(unittest.TestCase):
+class OlmoIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         checkpoint_name = "allenai/OLMo-1B-hf"

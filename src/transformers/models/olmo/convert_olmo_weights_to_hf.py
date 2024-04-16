@@ -22,7 +22,7 @@ import torch
 import yaml
 from tokenizers import Tokenizer
 
-from transformers import OLMoConfig, OLMoForCausalLM
+from transformers import OlmoConfig, OlmoForCausalLM
 from transformers.models.gpt_neox.tokenization_gpt_neox_fast import GPTNeoXTokenizerFast
 
 
@@ -37,9 +37,9 @@ python src/transformers/models/olmo/convert_olmo_weights_to_hf.py \
 Thereafter, models can be loaded via:
 
 ```py
-from transformers import OLMoForCausalLM, AutoTokenizer
+from transformers import OlmoForCausalLM, AutoTokenizer
 
-model = OLMoForCausalLM.from_pretrained("/output/path")
+model = OlmoForCausalLM.from_pretrained("/output/path")
 tokenizer = AutoTokenizer.from_pretrained("/output/path")
 ```
 
@@ -149,7 +149,7 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
     else:
         intermediate_size = (dim * olmo_config["mlp_ratio"]) // 2
 
-    config = OLMoConfig(
+    config = OlmoConfig(
         vocab_size=vocab_size,
         hidden_size=dim,
         intermediate_size=intermediate_size,
@@ -175,7 +175,7 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
         _write_tokenizer(model_path, config, tokenizer_path, fix_eos_token_id)
 
     print("Loading the checkpoint in a OLMo model.")
-    model = OLMoForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.float32, low_cpu_mem_usage=True)
+    model = OlmoForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.float32, low_cpu_mem_usage=True)
     # Avoid saving this as part of the config.
     del model.config._name_or_path
     print("Saving in the Transformers format.")
@@ -184,7 +184,7 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
 
 
 def _write_tokenizer(
-    output_path: Path, config: OLMoConfig, input_tokenizer_path: Path, fix_eos_token_id: bool = True
+    output_path: Path, config: OlmoConfig, input_tokenizer_path: Path, fix_eos_token_id: bool = True
 ) -> None:
     print(f"Saving a {GPTNeoXTokenizerFast.__name__} to {output_path}.")
 

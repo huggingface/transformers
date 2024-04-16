@@ -23,7 +23,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_olmo": ["OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP", "OLMoConfig"],
+    "configuration_olmo": ["OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP", "OlmoConfig"],
 }
 
 try:
@@ -33,13 +33,13 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_olmo"] = [
-        "OLMoForCausalLM",
-        "OLMoModel",
-        "OLMoPreTrainedModel",
+        "OlmoForCausalLM",
+        "OlmoModel",
+        "OlmoPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_olmo import OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP, OLMoConfig
+    from .configuration_olmo import OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP, OlmoConfig
 
     try:
         if not is_torch_available():
@@ -48,9 +48,9 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_olmo import (
-            OLMoForCausalLM,
-            OLMoModel,
-            OLMoPreTrainedModel,
+            OlmoForCausalLM,
+            OlmoModel,
+            OlmoPreTrainedModel,
         )
 
 else:

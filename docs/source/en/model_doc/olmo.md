@@ -30,16 +30,16 @@ This model was contributed by [shanearora](https://huggingface.co/shanearora).
 The original code can be found [here](https://github.com/allenai/OLMo/tree/main/olmo).
 
 
-## OLMoConfig
+## OlmoConfig
 
-[[autodoc]] OLMoConfig
+[[autodoc]] OlmoConfig
 
-## OLMoModel
+## OlmoModel
 
-[[autodoc]] OLMoModel
+[[autodoc]] OlmoModel
     - forward
 
-## OLMoForCausalLM
+## OlmoForCausalLM
 
-[[autodoc]] OLMoForCausalLM
+[[autodoc]] OlmoForCausalLM
     - forward

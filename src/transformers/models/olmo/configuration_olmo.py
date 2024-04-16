@@ -27,9 +27,9 @@ from ..deprecated._archive_maps import OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP  # noq
 logger = logging.get_logger(__name__)
 
 
-class OLMoConfig(PretrainedConfig):
+class OlmoConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`OLMoModel`]. It is used to instantiate an OLMo
+    This is the configuration class to store the configuration of a [`OlmoModel`]. It is used to instantiate an OLMo
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the [allenai/OLMo-7B-hf](https://huggingface.co/allenai/OLMo-7B-hf).
 
@@ -40,7 +40,7 @@ class OLMoConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50304):
             Vocabulary size of the OLMo model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`OLMoModel`]
+            `inputs_ids` passed when calling [`OlmoModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
@@ -93,13 +93,13 @@ class OLMoConfig(PretrainedConfig):
             absolute value does not exceed this value.
 
     ```python
-    >>> from transformers import OLMoModel, OLMoConfig
+    >>> from transformers import OlmoModel, OlmoConfig
 
     >>> # Initializing a OLMo 7B style configuration
-    >>> configuration = OLMoConfig()
+    >>> configuration = OlmoConfig()
 
     >>> # Initializing a model from the OLMo 7B style configuration
-    >>> model = OLMoModel(configuration)
+    >>> model = OlmoModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
