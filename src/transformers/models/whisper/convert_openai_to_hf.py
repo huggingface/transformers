@@ -347,9 +347,11 @@ if __name__ == "__main__":
     if args.convert_preprocessor:
         try:
             if not _is_package_available("tiktoken"):
-                raise """`tiktoken` is not installed, use `pip install tiktoken` to convert the tokenizer"""
-        except Exception:
-            pass
+                raise ModuleNotFoundError(
+                    """`tiktoken` is not installed, use `pip install tiktoken` to convert the tokenizer"""
+                )
+        except Exception as e:
+            print(str(e))
         else:
             from tiktoken.load import load_tiktoken_bpe
 
