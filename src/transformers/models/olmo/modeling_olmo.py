@@ -1094,26 +1094,6 @@ class OLMoModel(OLMoPreTrainedModel):
         return causal_mask
 
 
-OLMO_GENERATION_EXAMPLE = r"""
-    Example:
-
-    ```python
-    >>> from transformers import AutoTokenizer, OLMoForCausalLM
-
-    >>> model = OLMoForCausalLM.from_pretrained("allenai/OLMo-1B-hf")
-    >>> tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-1B-hf")
-
-    >>> prompt = "Hey, are you conscious? Can you talk to me?"
-    >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-    >>> # Generate
-    >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-    >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-    'Hey, are you conscious? Can you talk to me?\nI’m not sure if you’re conscious of this, but I’m'
-    ```
-"""
-
-
 # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->OLMO,Llama->OLMo
 class OLMoForCausalLM(OLMoPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
@@ -1147,7 +1127,7 @@ class OLMoForCausalLM(OLMoPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(OLMO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
-    @add_end_docstrings(OLMO_GENERATION_EXAMPLE)
+    # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1170,6 +1150,23 @@ class OLMoForCausalLM(OLMoPreTrainedModel):
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, OLMoForCausalLM
+
+        >>> model = OLMoForCausalLM.from_pretrained("allenai/OLMo-1B-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-1B-hf")
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        'Hey, are you conscious? Can you talk to me?\nI’m not sure if you’re conscious of this, but I’m'
+        ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
