@@ -76,6 +76,9 @@ class ViTPoseEmbeddings(nn.Module):
         batch_size, num_channels, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values)
 
+        print("Shape of embeddings:", embeddings.shape)
+        print("Shape of position embeddings:", self.position_embeddings.shape)
+
         # add positional encoding to each token
         embeddings = embeddings + self.position_embeddings[:, 1:] + self.position_embeddings[:, :1]
 
@@ -108,12 +111,17 @@ class PatchEmbeddings(nn.Module):
         self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size, padding=2)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        batch_size, num_channels, height, width = pixel_values.shape
+        print("Shape of pixel values:", pixel_values.shape)
+        height, width = pixel_values.shape[-2:]
         if height != self.image_size[0] or width != self.image_size[1]:
             raise ValueError(
                 f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
-        x = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        x = self.projection(pixel_values)
+
+        print(x.shape)
+
+        x = x.flatten(2).transpose(1, 2)
         return x
 
 
@@ -372,7 +380,7 @@ class ViTPosePreTrainedModel(PreTrainedModel):
     """
 
     config_class = ViTPoseConfig
-    base_model_prefix = "vitpose"
+    base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ViTPoseEmbeddings", "ViTPoseLayer"]
@@ -560,17 +568,22 @@ class ViTPoseKeyPointsHead(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
 
-        self.conv = nn.Conv2d(config.hidden_size, config.num_keypoints, kernel_size=3, stride=1, padding=1)
+        self.scale_factor = config.scale_factor
+        self.conv = nn.Conv2d(config.hidden_size, config.num_labels, kernel_size=3, stride=1, padding=1)
 
     def forward(self, hidden_state, flip_pairs) -> torch.Tensor:
         # Transform input: ReLu + upsample
         hidden_state = nn.functional.relu(hidden_state)
-        hidden_state = nn.functional.interpolate(hidden_state, scale_factor=4, mode="bilinear", align_corners=False)
+        hidden_state = nn.functional.interpolate(
+            hidden_state, scale_factor=self.scale_factor, mode="bilinear", align_corners=False
+        )
 
         print("Shape after upsampling:", hidden_state.shape)
         print("First values after upsampling:", hidden_state[0, 0, :3, :3])
 
         output = self.conv(hidden_state)
+
+        print("Shape after conv:", output.shape)
 
         if flip_pairs is not None:
             output = flip_back(output.detach().cpu().numpy(), flip_pairs)
@@ -601,6 +614,9 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ImageClassifierOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if labels is not None:
+            raise NotImplementedError("Training is not yet supported")
 
         outputs = self.vit(
             pixel_values,

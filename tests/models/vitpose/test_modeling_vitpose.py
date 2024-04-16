@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,8 +44,8 @@ class ViTPoseModelTester:
         self,
         parent,
         batch_size=13,
-        image_size=30,
-        patch_size=2,
+        image_size=[16 * 8, 12 * 8],
+        patch_size=[8, 8],
         num_channels=3,
         is_training=True,
         use_labels=True,
@@ -58,8 +58,9 @@ class ViTPoseModelTester:
         attention_probs_dropout_prob=0.1,
         type_sequence_label_size=10,
         initializer_range=0.02,
+        num_labels=2,
+        scale_factor=4,
         scope=None,
-        encoder_stride=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -77,15 +78,16 @@ class ViTPoseModelTester:
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
+        self.num_labels = num_labels
+        self.scale_factor = scale_factor
         self.scope = scope
-        self.encoder_stride = encoder_stride
 
-        # in ViTPose, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+        # in ViTPose, the seq length equals the number of patches
+        num_patches = (image_size[0] // patch_size[0]) * (image_size[1] // patch_size[1])
+        self.seq_length = num_patches
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]])
 
         labels = None
         if self.use_labels:
@@ -107,9 +109,9 @@ class ViTPoseModelTester:
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            is_decoder=False,
             initializer_range=self.initializer_range,
-            encoder_stride=self.encoder_stride,
+            num_labels=self.num_labels,
+            scale_factor=self.scale_factor,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -118,6 +120,19 @@ class ViTPoseModelTester:
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+
+    def create_and_check_for_pose_estimation(self, config, pixel_values, labels):
+        model = ViTPoseForPoseEstimation(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        expected_height = (self.image_size[0] // self.patch_size[0]) * self.scale_factor
+        expected_width = (self.image_size[1] // self.patch_size[1]) * self.scale_factor
+
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_labels, expected_height, expected_width)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -162,6 +177,22 @@ class ViTPoseModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="ViTPose does not support training yet")
+    def test_training(self):
+        pass
+
+    @unittest.skip(reason="ViTPose does not support training yet")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="ViTPose does not support training yet")
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(reason="ViTPose does not support training yet")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -187,9 +218,9 @@ class ViTPoseModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_image_classification(self):
+    def test_for_pose_estimation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_pose_estimation(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

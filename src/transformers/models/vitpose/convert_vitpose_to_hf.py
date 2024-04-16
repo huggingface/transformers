@@ -48,7 +48,7 @@ def _xywh2xyxy(bbox_xywh):
 
 
 def get_config(model_name):
-    config = ViTPoseConfig()
+    config = ViTPoseConfig(num_labels=17)
     # size of the architecture
     if "small" in model_name:
         config.hidden_size = 768
@@ -229,7 +229,7 @@ def convert_vitpose_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     result["output_heatmap"] = None  # return_heatmap = False for inference in mmpose
 
     print(result)
-    poses, heatmap = result["preds"], result["output_heatmap"]
+    poses, _ = result["preds"], result["output_heatmap"]
 
     # create final results by adding person bbox information
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="vitpose_person_results.pt", repo_type="dataset")

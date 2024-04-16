@@ -70,8 +70,8 @@ class ViTPoseConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        num_keypoints (`int`, *optional*, defaults to 17):
-            The number of keypoints.
+        scale_factor (`int`, *optional*, defaults to 4):
+            Factor to upscale te feature maps coming from the ViT backbone.
 
     Example:
 
@@ -105,7 +105,7 @@ class ViTPoseConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         qkv_bias=True,
-        num_keypoints=17,
+        scale_factor=4,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -123,20 +123,4 @@ class ViTPoseConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
-        self.num_keypoints = num_keypoints
-
-
-class ViTPoseOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "sequence"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
+        self.scale_factor = scale_factor
