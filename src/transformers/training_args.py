@@ -1640,7 +1640,7 @@ class TrainingArguments:
                 raise ValueError("--optim adamw_torch_fused with --fp16 requires PyTorch>2.0")
 
         if is_accelerate_available():
-            if not self.framework == "pt" and not is_torch_available():
+            if self.framework != "pt" :
                 raise NotImplementedError(
                     "Passing in an `accelerator_config` is only supported for the PyTorch backend"
                 )
