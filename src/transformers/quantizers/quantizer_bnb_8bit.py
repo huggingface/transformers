@@ -213,11 +213,10 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             if unexpected_keys is not None:
                 unexpected_keys.remove(fp16_statistics_key)
 
-        if fp16_weights_format is not None:
-            # We just need to pop the `weight_format` keys from the state dict to remove unneeded
-            # messages. The correct format is correctly retrieved during the first forward pass.
-            if unexpected_keys is not None:
-                unexpected_keys.remove(fp16_weights_format_key)
+        # We just need to pop the `weight_format` keys from the state dict to remove unneeded
+        # messages. The correct format is correctly retrieved during the first forward pass.
+        if fp16_weights_format is not None and unexpected_keys is not None:
+            unexpected_keys.remove(fp16_weights_format_key)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         model.is_loaded_in_8bit = True
