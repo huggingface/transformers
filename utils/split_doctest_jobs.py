@@ -70,6 +70,7 @@ if __name__ == "__main__":
             refined_test_collection_map[file_dir] = " ".join(sorted(raw_test_collection_map[file_dir]))
 
     sorted_file_dirs = sorted(refined_test_collection_map.keys())
+    sorted_file_dirs = ["src/transformers/models/idefics2"]
 
     test_collection_map = {}
     for file_dir in sorted_file_dirs:
