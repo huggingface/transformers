@@ -2619,6 +2619,8 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_whisper_longform_multi_batch_hard_prev_cond(self):
+        # Without this set here, this test may fail if it is run with other tests (say, `test_tiny_*`). It's unclear
+        # why other tests may affect this tests: it seems some random operations are beyond the scene.
         set_seed(0)
         # fmt: off
         EXPECTED_TEXT = [
