@@ -771,43 +771,6 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         self.has_attentions = False
         super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
-    @slow
-    def test_compile_tf_model(self):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes[:2]:
-            model = model_class(config)
-
-            fixed_batch_size = 1  # Example fixed batch size
-            fixed_seq_length = 10  # Example fixed sequence length for input_ids and attention_mask
-            image_height, image_width, channels = 30, 30, 3  # Example fixed image dimensions for pixel_values
-
-            functional_inputs = {
-                key: keras.Input(
-                    shape=(
-                        (channels, image_height, image_width)
-                        if "pixel_values" in key
-                        else (2,)
-                        if key in ["input_ids", "attention_mask"]
-                        else (fixed_seq_length, fixed_batch_size)
-                    ),
-                    dtype=val.dtype,
-                    name=key,
-                    batch_size=fixed_batch_size,
-                )
-                for key, val in model.input_signature.items()
-                if key in model.dummy_inputs
-            }
-            # Pass the functional inputs to the model
-            outputs_dict = model(functional_inputs)
-            hidden_states = outputs_dict[0]
-            functional_model = keras.Model(inputs=functional_inputs, outputs=hidden_states)
-            model_out = functional_model.predict(model.dummy_inputs)
-            self.assertTrue(model_out is not None)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                functional_model.save(tmpdirname)  # Ensure we can save/export the whole functional model
-
     def test_keras_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

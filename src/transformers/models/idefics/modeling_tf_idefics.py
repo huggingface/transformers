@@ -467,18 +467,29 @@ class TFIdeficsDecoupledLinear(tf.keras.layers.Layer):
 
 def _make_causal_mask(input_ids_shape, dtype, past_key_values_length=0):
     """
-    Make causal mask used for bi-directional self-attention.
+    Make causal mask used for bi-directional self-attention, supporting both static and dynamic shapes.
     """
     bsz, tgt_len = input_ids_shape
+
+    # Create a matrix where only the lower triangle and diagonal are filled with zeros (causal mask)
     mask = tf.fill((tgt_len, tgt_len), tf.dtypes.as_dtype(dtype).min)
-    mask_cond = tf.range(mask.shape[-1])
-    zero_scalar = tf.zeros([], dtype=dtype)
-    mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (mask.shape[-1], 1)), zero_scalar, mask)
-    mask = tf.cast(mask, dtype)
+    mask_cond = tf.range(tgt_len)
+    mask = tf.where(mask_cond[:, None] >= mask_cond[None, :], 0.0, mask)
 
     if past_key_values_length > 0:
         mask = tf.concat([tf.zeros((tgt_len, past_key_values_length), dtype=dtype), mask], axis=-1)
-    return tf.broadcast_to(mask[None, None, :, :], (bsz, 1, tgt_len, tgt_len + past_key_values_length))
+
+    if bsz is None:
+        # When batch size is dynamic, expand and tile
+        # so we can compile a functional model
+        mask = tf.expand_dims(mask, 0)
+        mask = tf.expand_dims(mask, 0)  # shape: (1, 1, tgt_len, tgt_len + past_key_values_length)
+        mask = tf.tile(mask, [bsz, 1, 1, 1])
+    else:
+        # When batch size is static, directly use broadcast_to
+        mask = tf.broadcast_to(mask[None, None, :, :], (bsz, 1, tgt_len, tgt_len + past_key_values_length))
+
+    return mask
 
 
 def _expand_mask(mask, dtype, tgt_len=None):
@@ -689,7 +700,12 @@ class TFIdeficsAttention(tf.keras.layers.Layer):
         if past_key_value is not None:
             kv_seq_len += shape_list(past_key_value[0])[-2]
         if not is_cross_attention:
-            cos, sin = self.rotary_emb(value_states, seq_len=max(kv_seq_len, q_len))
+            # Below is to allow symbolic tensors compilation
+            if tf.is_tensor(kv_seq_len):
+                seq_len = tf.reduce_max(kv_seq_len, q_len)
+            else:
+                seq_len = max(kv_seq_len, q_len)
+            cos, sin = self.rotary_emb(value_states, seq_len)
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
         # [bsz, nh, t, hd]
 
@@ -704,11 +720,11 @@ class TFIdeficsAttention(tf.keras.layers.Layer):
             query_states = self.q_layer_norm(query_states)
             key_states = self.k_layer_norm(key_states)
 
-        if attention_mask is not None:
-            if attention_mask.shape != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.shape}"
-                )
+        tf.debugging.assert_equal(
+            tf.shape(attention_mask),
+            [bsz, 1, q_len, kv_seq_len],
+            message=f"Attention weights should be of size {[bsz, 1, q_len, kv_seq_len]}, but is {tf.shape(attention_mask)}",
+        )
 
         attn_output = scaled_dot_product_attention(
             query_states,
@@ -719,11 +735,11 @@ class TFIdeficsAttention(tf.keras.layers.Layer):
             is_causal=self.is_causal and attention_mask is None and q_len > 1,
         )
 
-        if attn_output.shape != (bsz, self.num_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.shape}"
-            )
+        tf.debugging.assert_equal(
+            tf.shape(attn_output),
+            [bsz, self.num_heads, q_len, self.head_dim],
+            message=f"Attention weights should be of size {[bsz, self.num_heads, q_len, self.head_dim]}, but is {tf.shape(attn_output)}",
+        )
 
         attn_output = tf.reshape(tf.transpose(attn_output, perm=[0, 2, 1, 3]), (bsz, q_len, self.hidden_size))
 
@@ -1252,12 +1268,12 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(
-                input_shape,
-                inputs_embeds.dtype,
-                past_key_values_length=past_key_values_length,
-            )
+        # if input_shape[-1] > 1:
+        combined_attention_mask = _make_causal_mask(
+            input_shape,
+            inputs_embeds.dtype,
+            past_key_values_length=past_key_values_length,
+        )
 
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
