@@ -129,7 +129,7 @@ jobs:
 
       - name: Tailscale # In order to be able to SSH when a test fails
         if: ${{ failure() || runner.debug == '1'}}
-        uses: huggingface/tailscale-action@ssh-improvments
+        uses: huggingface/tailscale-action@v1
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
           slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
