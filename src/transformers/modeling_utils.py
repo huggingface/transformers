@@ -2514,7 +2514,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ptrs[id(tensor)].append(name)
 
             # These are all the pointers of shared tensors
-            if hasattr(self, "device_map"):
+            if hasattr(self, "hf_device_map"):
                 # if the model has offloaded parameters, we must check using find_tied_parameters()
                 tied_params = find_tied_parameters(self)
                 if tied_params:

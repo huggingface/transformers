@@ -930,7 +930,7 @@ class ModelUtilsTest(TestCasePlus):
             presaved_output = offloaded_model(input_tokens)[0]
             presaved_memory = psutil.virtual_memory().used
             offloaded_model.save_pretrained(
-                tmp_dir, max_shard_size="200KB"
+                tmp_dir, max_shard_size="500KB"
             )  # model is 1.6MB, max shard size is allocated to cpu by default
             postsaved_memory = psutil.virtual_memory().used
             saved_model = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map=device_map)
