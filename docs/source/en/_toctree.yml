@@ -734,10 +734,14 @@
         title: FLAVA
       - local: model_doc/git
         title: GIT
+      - local: model_doc/grounding-dino
+        title: Grounding DINO
       - local: model_doc/groupvit
         title: GroupViT
       - local: model_doc/idefics
         title: IDEFICS
+      - local: model_doc/idefics2
+        title: Idefics2
       - local: model_doc/instructblip
         title: InstructBLIP
       - local: model_doc/kosmos-2

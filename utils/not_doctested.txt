@@ -165,6 +165,7 @@ docs/source/en/model_doc/megatron-bert.md
 docs/source/en/model_doc/megatron_gpt2.md
 docs/source/en/model_doc/mgp-str.md
 docs/source/en/model_doc/mistral.md
+docs/source/en/model_doc/mixtral.md
 docs/source/en/model_doc/mluke.md
 docs/source/en/model_doc/mms.md
 docs/source/en/model_doc/mobilebert.md

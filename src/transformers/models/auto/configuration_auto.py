@@ -120,10 +120,12 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("gptj", "GPTJConfig"),
         ("gptsan-japanese", "GPTSanJapaneseConfig"),
         ("graphormer", "GraphormerConfig"),
+        ("grounding-dino", "GroundingDinoConfig"),
         ("groupvit", "GroupViTConfig"),
         ("hubert", "HubertConfig"),
         ("ibert", "IBertConfig"),
         ("idefics", "IdeficsConfig"),
+        ("idefics2", "Idefics2Config"),
         ("imagegpt", "ImageGPTConfig"),
         ("informer", "InformerConfig"),
         ("instructblip", "InstructBlipConfig"),
@@ -283,6 +285,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
@@ -384,11 +387,13 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("gptj", "GPT-J"),
         ("gptsan-japanese", "GPTSAN-japanese"),
         ("graphormer", "Graphormer"),
+        ("grounding-dino", "Grounding DINO"),
         ("groupvit", "GroupViT"),
         ("herbert", "HerBERT"),
         ("hubert", "Hubert"),
         ("ibert", "I-BERT"),
         ("idefics", "IDEFICS"),
+        ("idefics2", "Idefics2"),
         ("imagegpt", "ImageGPT"),
         ("informer", "Informer"),
         ("instructblip", "InstructBLIP"),
