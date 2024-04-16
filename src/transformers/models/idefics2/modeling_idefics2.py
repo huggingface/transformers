@@ -1801,7 +1801,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         >>> prompts = [
         ...   "<image>In this image, we can see the city of New York, and more specifically the Statue of Liberty.<image>In this image,",
         ...   "In which city is that bridge located?<image>",
-        >>> ]
+        ... ]
         >>> images = [[image1, image2], [image3]]
         >>> inputs = processor(text=prompts, padding=True, return_tensors="pt").to("cuda")
 
