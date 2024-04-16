@@ -42,6 +42,9 @@ _import_structure = {
         "set_hf_deepspeed_config",
         "unset_hf_deepspeed_config",
     ],
+    "eetq":[
+        "replace_with_EETQ_linear"
+    ],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
         "AzureMLCallback",
@@ -110,6 +113,9 @@ if TYPE_CHECKING:
         is_deepspeed_zero3_enabled,
         set_hf_deepspeed_config,
         unset_hf_deepspeed_config,
+    )
+    from .eetq import (
+        replace_with_EETQ_linear
     )
     from .integration_utils import (
         INTEGRATION_TO_CALLBACK,

@@ -642,6 +642,32 @@ double_quant_config = BitsAndBytesConfig(
 model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b", quantization_config=double_quant_config)
 ```
 
+## EETQ
+The [EETQ](https://github.com/NetEase-FuXi/EETQ) supports int8 per-channel weight-only quantization for NVIDIA GPUS. The high-performance GEMM and GEMV kernels are from FasterTransformer and TensorRT-LLM. It requires no calibration dataset and does not need to pre-quantize your model. Moreover, the accuracy degradation is negligible owing to the per-channel quantization. 
+
+Make sure you have eetq installed via the source code https://github.com/NetEase-FuXi/EETQ
+```
+git clone https://github.com/NetEase-FuXi/EETQ.git
+cd EETQ/
+git submodule update --init --recursive
+pip install .
+```
+
+An unquantized model will be quantized via "from_pretrained".
+```py
+from transformers import AutoModelForCausalLM, EETQConfig
+path = "/path/to/model"
+config = EETQConfig("int8")
+model = AutoModelForCausalLM.from_pretrained(path, trust_remote_code=True, device_map="auto", quantization_config=config)
+```
+
+A quantized model shall be saved via "saved_pretrained" and be reused again via the "from_pretrained".
+```py
+quant_path = "/path/to/save/quantized/model"
+model.save_pretrained(quant_path)
+model = AutoModelForCausalLM.from_pretrained(path, trust_remote_code=True, device_map="auto")
+```
+
 ## Optimum
 
 The [Optimum](https://huggingface.co/docs/optimum/index) library supports quantization for Intel, Furiosa, ONNX Runtime, GPTQ, and lower-level PyTorch quantization functions. Consider using Optimum for quantization if you're using specific and optimized hardware like Intel CPUs, Furiosa NPUs or a model accelerator like ONNX Runtime.

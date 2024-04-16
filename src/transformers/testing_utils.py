@@ -56,6 +56,7 @@ from .utils import (
     is_accelerate_available,
     is_apex_available,
     is_aqlm_available,
+    is_eetq_available,
     is_auto_awq_available,
     is_auto_gptq_available,
     is_av_available,
@@ -1012,6 +1013,14 @@ def require_aqlm(test_case):
     Decorator marking a test that requires aqlm
     """
     return unittest.skipUnless(is_aqlm_available(), "test requires aqlm")(test_case)
+
+
+def require_eetq(test_case):
+    """
+    Decorator marking a test that requires eetq
+    """
+    return unittest.skipUnless(is_eetq_available(), "test requires eetq")(test_case)
+
 
 
 def require_av(test_case):

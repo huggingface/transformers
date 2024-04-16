@@ -40,6 +40,7 @@ class QuantizationMethod(str, Enum):
     AWQ = "awq"
     AQLM = "aqlm"
     QUANTO = "quanto"
+    EETQ = "eetq"
 
 
 class AWQLinearVersion(str, Enum):
@@ -893,3 +894,41 @@ class QuantoConfig(QuantizationConfigMixin):
             raise ValueError(f"Only support weights in {accepted_weights} but found {self.weights}")
         if self.activations not in accepted_activations:
             raise ValueError(f"Only support weights in {accepted_activations} but found {self.activations}")
+
+
+@dataclass
+class EETQConfig(QuantizationConfigMixin):
+    """
+    This is a wrapper class about all possible attributes and features that you can play with a model that has been
+    loaded using `eetq`.
+
+    Args:
+        weights (`str`, *optional*, defaults to `"int8"`):
+            The target dtype for the weights. Supported value is only "int8"
+        pre_quantized (`bool`, *optional*, defaults to False):
+            The flag representing whether the model has been quantized. The flag will be set True after quantizing
+            and saved to the config.json if calling "saved_pretrained"
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision.
+    """
+    def __init__(
+        self,
+        weights: str ="int8",
+        pre_quantized: bool = False,
+        modules_to_not_convert: Optional[List] = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.EETQ
+        self.weights = weights
+        self.modules_to_not_convert = modules_to_not_convert
+        self.pre_quantized = pre_quantized
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        accepted_weights = ["int8"]
+        if self.weights not in accepted_weights:
+            raise ValueError(f"Only support weights in {accepted_weights} but found {self.weights}")
