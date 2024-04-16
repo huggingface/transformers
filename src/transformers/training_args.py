@@ -639,6 +639,9 @@ class TrainingArguments:
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
             Whether or not the inputs will be passed to the `compute_metrics` function. This is intended for metrics
             that need inputs, predictions and references for scoring calculation in Metric class.
+        eval_do_concat_batches (`bool`, *optional*, defaults to `True`):
+            If set to `False`, inputs/losses/labels/predictions are stored as lists, with each batch kept separate. 
+            If set to `True`, tensors in these nested objects are recursively concatenated across batches.
         auto_find_batch_size (`bool`, *optional*, defaults to `False`)
             Whether to find a batch size that will fit into memory automatically through exponential decay, avoiding
             CUDA Out-of-Memory errors. Requires accelerate to be installed (`pip install accelerate`)
@@ -1260,6 +1263,9 @@ class TrainingArguments:
     )
     include_inputs_for_metrics: bool = field(
         default=False, metadata={"help": "Whether or not the inputs will be passed to the `compute_metrics` function."}
+    )
+    eval_do_concat_batches: bool = field(
+        default=True, metadata={"help": "Whether or not tensors in nested objects in batches should be recursively concatenated between batches."}
     )
     # Deprecated arguments
     fp16_backend: str = field(
