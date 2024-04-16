@@ -1269,7 +1269,7 @@ class TrainingArguments:
             "choices": ["auto", "apex", "cpu_amp"],
         },
     )
-    evaluation_strategy: Union[IntervalStrategy, str] = field(
+    evaluation_strategy: Optional[str] = field(
         default=None,
         metadata={"help": "Deprecated. Use `eval_strategy` instead"},
     )
