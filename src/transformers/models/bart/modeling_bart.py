@@ -1369,7 +1369,8 @@ class BartDecoder(BartPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input)
+        inputs_embeds = inputs_embeds * self.embed_scale
 
         if self._use_flash_attention_2:
             # 2d mask is passed through the layers
