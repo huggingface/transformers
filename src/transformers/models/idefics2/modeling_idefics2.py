@@ -1796,7 +1796,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b-base")
         >>> model = AutoModelForVision2Seq.from_pretrained(
         ...     "HuggingFaceM4/idefics2-8b-base",
-        >>> ).to(DEVICE)
+        ... ).to(DEVICE)
 
         >>> BAD_WORDS_IDS = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
         >>> EOS_WORDS_IDS = [processor.tokenizer.eos_token_id]
