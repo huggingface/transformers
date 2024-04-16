@@ -4997,6 +4997,20 @@ class LxmertXLayer(metaclass=DummyObject):
 M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class M2M100DecoderModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class M2M100EncoderModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class M2M100ForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 

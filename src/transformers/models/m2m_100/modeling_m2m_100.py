@@ -1434,7 +1434,7 @@ class M2M100DecoderModel(M2M100PreTrainedModel):
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
-        
+
         if encoder_outputs is None:
             raise ValueError("M2M100DecoderModel expects the `encoder_outputs` to be always present.")
 

@@ -17,7 +17,7 @@ This script converts fairseq/fairseq2 SONAR text encoder and decoder checkpoints
 The reference architectures are given in https://github.com/facebookresearch/SONAR/blob/main/sonar/models/sonar_text/builder.py.
 The checkpoints for conversion can be found in:
 - encoder: https://github.com/facebookresearch/SONAR/blob/main/sonar/cards/text_sonar_basic_encoder.yaml
-- decoder: https://github.com/facebookresearch/SONAR/blob/main/sonar/cards/text_sonar_basic_decoder.yaml 
+- decoder: https://github.com/facebookresearch/SONAR/blob/main/sonar/cards/text_sonar_basic_decoder.yaml
 """
 
 import argparse
@@ -25,7 +25,7 @@ import argparse
 import torch
 from torch import nn
 
-from transformers import M2M100Config, M2M100EncoderModel, M2M100DecoderModel
+from transformers import M2M100Config, M2M100DecoderModel, M2M100EncoderModel
 
 
 def make_linear_from_emb(emb):
@@ -42,30 +42,39 @@ def get_parameter_renames(model, state_dict, is_decoder=True):
 
     for trf_name in trf_names:
         fs2_name = trf_name
-        if trf_name == 'shared.weight':
-            fs2_name = 'decoder_frontend.embed.weight' if is_decoder else 'encoder_frontend.embed.weight'
-        if trf_name == 'lm_head.weight':
-            fs2_name = 'final_proj.weight'
+        if trf_name == "shared.weight":
+            fs2_name = "decoder_frontend.embed.weight" if is_decoder else "encoder_frontend.embed.weight"
+        if trf_name == "lm_head.weight":
+            fs2_name = "final_proj.weight"
 
-        if trf_name.startswith('layers.'):
-            fs2_name = 'decoder.'+ trf_name if is_decoder else 'encoder.'+ trf_name
-        if trf_name.startswith('layer_norm.') and is_decoder:
-            fs2_name = 'decoder.'+ trf_name
-        if trf_name.startswith('encoder.layer_norm.') and not is_decoder:
-            fs2_name = trf_name.split('.', 1)[1]
+        if trf_name.startswith("layers."):
+            fs2_name = "decoder." + trf_name if is_decoder else "encoder." + trf_name
+        if trf_name.startswith("layer_norm.") and is_decoder:
+            fs2_name = "decoder." + trf_name
+        if trf_name.startswith("encoder.layer_norm.") and not is_decoder:
+            fs2_name = trf_name.split(".", 1)[1]
 
         if ".encoder_attn." in fs2_name:
             fs2_name = fs2_name.replace(".encoder_attn.", ".encoder_decoder_attn.")
         if ".encoder_attn_layer_norm." in fs2_name:
             fs2_name = fs2_name.replace(".encoder_attn_layer_norm.", ".encoder_decoder_attn_layer_norm.")
-        if '.out_proj.' in fs2_name:
+        if ".out_proj." in fs2_name:
             fs2_name = fs2_name.replace(".out_proj.", ".output_proj.")
         if ".fc1." in fs2_name:
-            fs2_name = fs2_name.replace(".fc1.", ".ffn.inner_proj.", )
+            fs2_name = fs2_name.replace(
+                ".fc1.",
+                ".ffn.inner_proj.",
+            )
         if ".fc2." in fs2_name:
-            fs2_name = fs2_name.replace(".fc2.", ".ffn.output_proj.", )
+            fs2_name = fs2_name.replace(
+                ".fc2.",
+                ".ffn.output_proj.",
+            )
         if ".final_layer_norm." in fs2_name:
-            fs2_name = fs2_name.replace(".final_layer_norm.", ".ffn_layer_norm.", )
+            fs2_name = fs2_name.replace(
+                ".final_layer_norm.",
+                ".ffn_layer_norm.",
+            )
 
         if fs2_name in fs2_names:
             parameter_renames[trf_name] = fs2_name
@@ -76,12 +85,17 @@ def get_parameter_renames(model, state_dict, is_decoder=True):
 
 def reorder_special_tokens(new_state_dict):
     """
-    In fairseq2, special tokens are ['<pad>', '<unk>', '<s>', '</s>'].    
+    In fairseq2, special tokens are ['<pad>', '<unk>', '<s>', '</s>'].
     In transformers (NLLB) they are ['<s>', '<pad>', '</s>', '<unk>'].
     We want to reuse the NLLB tokenizer, so we reorder the embeddings.
     """
-    special_token_embs = new_state_dict['shared.weight'].data[[2, 0, 3, 1]].clone()
-    for param_name in ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight", "shared.weight"]:
+    special_token_embs = new_state_dict["shared.weight"].data[[2, 0, 3, 1]].clone()
+    for param_name in [
+        "encoder.embed_tokens.weight",
+        "decoder.embed_tokens.weight",
+        "lm_head.weight",
+        "shared.weight",
+    ]:
         if param_name in new_state_dict:
             new_state_dict[param_name].data[[0, 1, 2, 3]] = special_token_embs
 
@@ -115,20 +129,20 @@ def convert_sonar_checkpoint_from_disk(checkpoint_path):
     if any(parameter_name.startswith("encoder.") for parameter_name in state_dict):
         is_decoder = False
         model = M2M100EncoderModel(config)
-    elif any(parameter_name.startswith("decoder.") for parameter_name in state_dict): 
+    elif any(parameter_name.startswith("decoder.") for parameter_name in state_dict):
         is_decoder = True
         model = M2M100DecoderModel(config)
     else:
         raise ValueError("The state dict does not seem to contain SONAR encoder or decoder.")
 
-    parameter_renames = get_parameter_renames(model, state_dict, is_decoder )
+    parameter_renames = get_parameter_renames(model, state_dict, is_decoder)
     new_state_dict = {trf_name: state_dict[fs2_name] for trf_name, fs2_name in parameter_renames.items()}
     reorder_special_tokens(new_state_dict)
 
     if is_decoder:
-        new_state_dict['decoder.embed_tokens.weight'] = new_state_dict['shared.weight']
+        new_state_dict["decoder.embed_tokens.weight"] = new_state_dict["shared.weight"]
     else:
-        new_state_dict['encoder.embed_tokens.weight'] = new_state_dict['shared.weight']
+        new_state_dict["encoder.embed_tokens.weight"] = new_state_dict["shared.weight"]
 
     model.load_state_dict(new_state_dict, strict=True)
     model.tie_weights()
