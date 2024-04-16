@@ -162,7 +162,7 @@ jobs:
 
       - name: Run all tests on GPU
         working-directory: /transformers
-        run: python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
+        run: python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }} -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -230,7 +230,7 @@ jobs:
 
       - name: Run all tests on GPU
         working-directory: /transformers
-        run: python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
+        run: python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }} -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -287,7 +287,7 @@ jobs:
         working-directory: /transformers
         run: |
           pip install -r examples/pytorch/_tests_requirements.txt
-          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_examples_gpu examples/pytorch
+          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_examples_gpu examples/pytorch -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -343,7 +343,7 @@ jobs:
       - name: Run all pipeline tests on GPU
         working-directory: /transformers
         run: |
-          python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ matrix.machine_type }}_tests_torch_pipeline_gpu tests/pipelines
+          python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ matrix.machine_type }}_tests_torch_pipeline_gpu tests/pipelines -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -400,7 +400,7 @@ jobs:
 
       - name: Run all tests on GPU
         working-directory: /transformers
-        run: python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_torch_deepspeed_gpu tests/deepspeed tests/extended
+        run: python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_torch_deepspeed_gpu tests/deepspeed tests/extended -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}
