@@ -11,7 +11,10 @@ RUN apt update && \
 
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
-RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools ninja git+https://github.com/facebookresearch/detectron2.git pytesseract "itsdangerous<2.1.0"
+RUN python3 -m pip install --no-cache-dir --upgrade importlib-metadata setuptools ninja git+https://github.com/facebookresearch/detectron2.git pytesseract "itsdangerous<2.1.0"
+
+# torchaudio is missing from the base image.
+RUN git clone --depth 1 --branch v2.1.2 https://github.com/pytorch/audio.git torchaudio && cd torchaudio && USE_ROCM=1 USE_CUDA=0 pip install . --no-build-isolation
 
 ARG REF=main
 WORKDIR /
@@ -20,7 +23,7 @@ WORKDIR /
 ADD https://api.github.com/repos/huggingface/transformers/git/refs/heads/main version.json
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
-RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch,testing,video]
+RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch,testing,video] "torch<2.2"
 
 RUN python3 -m pip uninstall -y tensorflow flax
 
