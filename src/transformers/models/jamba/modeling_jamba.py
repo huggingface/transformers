@@ -218,6 +218,92 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+class HybridMambaAttentionDynamicCache(DynamicCache):
+    """
+    A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
+    (which has a constant shape regardless of seq_len).
+
+    This cache has two sets of lists of tensors: `key_cache` and `value_cache` for attention cache and `conv_states`
+    and `ssm_states` for mamba cache. Each of these lists has `num_layers` tensors. The expected shape for each tensor
+    For attention layers, `key_cache` and `value_cache` have a shape of `[batch_size, num_heads, seq_len, head_dim]`,
+    while `conv_states` and `ssm_states` have a shape of `[batch_size, 0]` (empty tensors).
+    For mamba layers, `key_cache` and `value_cache` have a shape of `[batch_size, 0]` (empty tensors),
+    while `conv_states` represents the convolution state and has a shape of `[batch_size, d_inner, d_conv]`,
+    and `ssm_states` represents the ssm state and has a shape of `[batch_size, d_inner, d_state]`.
+    """
+
+    def __init__(self, config, batch_size, dtype=torch.float16, device=None):
+        self.dtype = dtype
+        self.layers_block_type = config.layers_block_type
+        self.seqlen_offset = 0  # only used by mamba, cache_positions otherwise
+        intermediate_size = config.mamba_expand * config.hidden_size
+        ssm_state_size = config.mamba_d_state
+        conv_kernel_size = config.mamba_d_conv
+        self.conv_states = []
+        self.ssm_states = []
+        for i in range(config.num_hidden_layers):
+            if self.layers_block_type[i] == "mamba":
+                self.conv_states += [
+                    torch.zeros(batch_size, intermediate_size, conv_kernel_size, device=device, dtype=dtype)
+                ]
+                self.ssm_states += [
+                    torch.zeros(batch_size, intermediate_size, ssm_state_size, device=device, dtype=dtype)
+                ]
+            else:
+                self.conv_states += [torch.tensor([[]] * batch_size, device=device)]
+                self.ssm_states += [torch.tensor([[]] * batch_size, device=device)]
+
+        self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
+        self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
+
+    def update(
+            self,
+            key_states: torch.Tensor,
+            value_states: torch.Tensor,
+            layer_idx: int,
+            cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        # Update the cache
+        if self.key_cache[layer_idx].shape[-1] == 0:
+            self.key_cache[layer_idx] = key_states
+            self.value_cache[layer_idx] = value_states
+        else:
+            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=2)
+            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=2)
+
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        if len(self.key_cache) <= layer_idx:
+            return 0
+        if self.layers_block_type[layer_idx] == "mamba":
+            raise ValueError(
+                "Can't return seq_length from Mamba layers cache as it doesn't have a sequence length dimension."
+            )
+        return self.key_cache[layer_idx].shape[-2]
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        for layer_idx in range(len(self.key_cache)):
+            device = self.key_cache[layer_idx].device
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
+            device = self.value_cache[layer_idx].device
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
+
+            device = self.conv_states[layer_idx].device
+            self.conv_states[layer_idx] = self.conv_states[layer_idx].index_select(0, beam_idx.to(device))
+            device = self.ssm_states[layer_idx].device
+            self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
+
+    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
+        raise NotImplementedError("HybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
+
+    @classmethod
+    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
+        raise NotImplementedError("HybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
+
+
 # Adapted from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Jamba
 class JambaAttention(nn.Module):
     """
@@ -259,7 +345,7 @@ class JambaAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[HybridMambaAttentionDynamicCache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -331,7 +417,7 @@ class JambaFlashAttention2(JambaAttention):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[HybridMambaAttentionDynamicCache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -593,7 +679,7 @@ class JambaSdpaAttention(JambaAttention):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[HybridMambaAttentionDynamicCache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -663,89 +749,6 @@ JAMBA_ATTENTION_CLASSES = {
     "flash_attention_2": JambaFlashAttention2,
     "sdpa": JambaSdpaAttention,
 }
-
-
-class HybridMambaAttentionDynamicCache(DynamicCache):
-    """
-    A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
-    (which has a constant shape regardless of seq_len).
-
-    It stores the Key and Value states as a list of tensors, one for each layer.
-    The expected shape for each tensor for attention layers is `[batch_size, num_heads, seq_len, head_dim]`.
-    For the mamba layers, the `key_cache` represents the convolution state and has a shape of `[batch_size, d_inner, 1, d_conv]`,
-    and the `value_cache` represents the ssm state and has a shape of `[batch_size, d_inner, 1, d_state]`. Mamba cache
-    shape[2] is a dummy "seqlen" dimension to match the number of attention cache dimensions. For mamba, the cache
-    doesn't grow with seqlen so this dimension is always 1.
-    """
-
-    def __init__(self, config, batch_size, dtype=torch.float16, device=None):
-        self.dtype = dtype
-        self.layers_block_type = config.layers_block_type
-        self.seqlen_offset = 0  # only used by mamba, cache_positions otherwise
-        intermediate_size = config.mamba_expand * config.hidden_size
-        ssm_state_size = config.mamba_d_state
-        conv_kernel_size = config.mamba_d_conv
-        self.conv_states = []
-        self.ssm_states = []
-        for i in range(config.num_hidden_layers):
-            if self.layers_block_type[i] == "mamba":
-                self.conv_states += [
-                    torch.zeros(batch_size, intermediate_size, conv_kernel_size, device=device, dtype=dtype)
-                ]
-                self.ssm_states += [
-                    torch.zeros(batch_size, intermediate_size, ssm_state_size, device=device, dtype=dtype)
-                ]
-            else:
-                self.conv_states += [torch.tensor([[]] * batch_size, device=device)]
-                self.ssm_states += [torch.tensor([[]] * batch_size, device=device)]
-
-        self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
-        self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
-
-    def update(
-        self,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        layer_idx: int,
-        cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        # Update the cache
-        if self.key_cache[layer_idx].shape[-1] == 0:
-            self.key_cache[layer_idx] = key_states
-            self.value_cache[layer_idx] = value_states
-        else:
-            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=2)
-            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=2)
-
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
-
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
-        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        if len(self.key_cache) <= layer_idx:
-            return 0
-        if self.layers_block_type[layer_idx] == "mamba":
-            raise ValueError("Can't return seq_length from Mamba layers cache as it doesn't have a sequence length dimension.")
-        return self.key_cache[layer_idx].shape[-2]
-
-    def reorder_cache(self, beam_idx: torch.LongTensor):
-        """Reorders the cache for beam search, given the selected beam indices."""
-        for layer_idx in range(len(self.key_cache)):
-            device = self.key_cache[layer_idx].device
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-            device = self.value_cache[layer_idx].device
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
-
-            device = self.conv_states[layer_idx].device
-            self.conv_states[layer_idx] = self.conv_states[layer_idx].index_select(0, beam_idx.to(device))
-            device = self.ssm_states[layer_idx].device
-            self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
-
-    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
-        raise NotImplementedError("HybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
-
-    @classmethod
-    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
-        raise NotImplementedError("HybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
 
 
 # Adapted from transformers.models.mamba.modeling_mamba.MambaMixer
@@ -1076,7 +1079,7 @@ class JambaAttentionDecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[HybridMambaAttentionDynamicCache] = None,
         output_attentions: Optional[bool] = False,
         output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
@@ -1087,7 +1090,7 @@ class JambaAttentionDecoderLayer(nn.Module):
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_value (`HybridMambaAttentionDynamicCache`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1097,6 +1100,8 @@ class JambaAttentionDecoderLayer(nn.Module):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence.
         """
 
         residual = hidden_states
@@ -1167,7 +1172,7 @@ class JambaMambaDecoderLayer(nn.Module):
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_value (`HybridMambaAttentionDynamicCache`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1177,6 +1182,8 @@ class JambaMambaDecoderLayer(nn.Module):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence.
         """
 
         residual = hidden_states
@@ -1293,17 +1300,14 @@ JAMBA_INPUTS_DOCSTRING = r"""
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.num_hidden_layers`, with each tuple having 2 tensors
-            corresponding to the cache of the layer.
-            For attention layers, both tensors have shape of `(batch_size, num_kv_heads, sequence_length, embed_size_per_head)`
-            For mamba layers, the first tensor represents the convolution state and has shape of `(batch_size, d_inner, 1, d_conv)`,
-            and the second tensor represents the ssm state and has shape of `(batch_size, d_inner, 1, d_state)`. Mamba
-            cache shape[2] is a dummy "seqlen" dimension to match the number of attention cache dimensions. For mamba,
-            the cache doesn't grow with seqlen so this dimension is always 1.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and convolution and
-            ssm states in the mamba blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+        past_key_values (`HybridMambaAttentionDynamicCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            A HybridMambaAttentionDynamicCache object containing pre-computed hidden-states (keys and values in the
+            self-attention blocks and convolution and ssm states in the mamba blocks) that can be used (see 
+            `past_key_values` input) to speed up sequential decoding.
+            Key and value cache tensors have shape `[batch_size, num_heads, seq_len, head_dim]`.
+            Convolution and ssm states tensors have shape `[batch_size, d_inner, d_conv]` and
+            `[batch_size, d_inner, d_state]` respectively.
+            See the `HybridMambaAttentionDynamicCache` class for more details. 
 
             If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
@@ -1326,6 +1330,10 @@ JAMBA_INPUTS_DOCSTRING = r"""
             should not be returned during inference.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
 """
 
 ALL_DECODER_LAYER_TYPES = {"attention": JambaAttentionDecoderLayer, "mamba": JambaMambaDecoderLayer}
@@ -1375,7 +1383,7 @@ class JambaModel(JambaPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[List[torch.FloatTensor], HybridMambaAttentionDynamicCache]] = None,
+        past_key_values: Optional[HybridMambaAttentionDynamicCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1573,7 +1581,7 @@ class JambaForCausalLM(JambaPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[HybridMambaAttentionDynamicCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1738,15 +1746,6 @@ class JambaForCausalLM(JambaPreTrainedModel):
         )
         return model_inputs
 
-    @staticmethod  # TODO not sure this works
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
-
 
 @add_start_docstrings(
     """
@@ -1786,7 +1785,7 @@ class JambaForSequenceClassification(JambaPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[HybridMambaAttentionDynamicCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
