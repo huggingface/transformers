@@ -20,8 +20,10 @@ from parameterized import parameterized
 
 from transformers import OlmoConfig, is_torch_available, set_seed
 from transformers.models.auto.tokenization_auto import AutoTokenizer
+from transformers.models.gpt_neox.tokenization_gpt_neox_fast import GPTNeoXTokenizerFast
 from transformers.testing_utils import (
     is_flaky,
+    require_tokenizers,
     require_torch,
     require_torch_sdpa,
     slow,
@@ -407,3 +409,48 @@ class OlmoIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+    @require_tokenizers
+    def test_fast_special_tokens(self):
+        fast_tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMo-1B-hf")
+
+        original_add_eos_token = fast_tokenizer.add_eos_token
+
+        fast_tokenizer.add_eos_token = False
+        fast = fast_tokenizer.encode("A sample test")
+        self.assertEqual(fast, [34, 3410, 1071])
+
+        fast_tokenizer.add_eos_token = True
+        fast = fast_tokenizer.encode("A sample test")
+        self.assertEqual(fast, [34, 3410, 1071, 50279])
+
+        fast_tokenizer.add_eos_token = original_add_eos_token
+
+    @require_tokenizers
+    def test_simple_encode_decode(self):
+        rust_tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMo-1B-hf")
+
+        self.assertEqual(rust_tokenizer.encode("This is a test"), [1552, 310, 247, 1071])
+        self.assertEqual(rust_tokenizer.decode([1552, 310, 247, 1071], skip_special_tokens=True), "This is a test")
+
+        # bytefallback showcase
+        self.assertEqual(rust_tokenizer.encode("生活的真谛是"), [20025, 46549, 5225, 48561, 33656, 238, 12105])  # fmt: skip
+        self.assertEqual(
+            rust_tokenizer.decode([20025, 46549, 5225, 48561, 33656, 238, 12105], skip_special_tokens=True),
+            "生活的真谛是",
+        )
+
+        # Inner spaces showcase
+        self.assertEqual(rust_tokenizer.encode("Hi  Hello"), [12764, 50276, 12092])
+        self.assertEqual(rust_tokenizer.decode([12764, 50276, 12092], skip_special_tokens=True), "Hi  Hello")
+
+        self.assertEqual(rust_tokenizer.encode("Hi   Hello"), [12764, 50275, 12092])
+        self.assertEqual(rust_tokenizer.decode([12764, 50275, 12092], skip_special_tokens=True), "Hi   Hello")
+
+        self.assertEqual(rust_tokenizer.encode(""), [])
+
+        self.assertEqual(rust_tokenizer.encode(" "), [209])
+
+        self.assertEqual(rust_tokenizer.encode("  "), [50276])
+
+        self.assertEqual(rust_tokenizer.encode(" Hello"), [24387])
