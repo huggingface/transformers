@@ -680,6 +680,7 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
 
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         self.dtype = dtype
+        self.layers_block_type = config.layers_block_type
         self.seqlen_offset = 0  # only used by mamba, cache_positions otherwise
         intermediate_size = config.mamba_expand * config.hidden_size
         ssm_state_size = config.mamba_d_state
@@ -687,7 +688,7 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
         self.conv_states = []
         self.ssm_states = []
         for i in range(config.num_hidden_layers):
-            if config.layers_block_type[i] == "mamba":
+            if self.layers_block_type[i] == "mamba":
                 self.conv_states += [
                     torch.zeros(batch_size, intermediate_size, conv_kernel_size, device=device, dtype=dtype)
                 ]
@@ -695,8 +696,8 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
                     torch.zeros(batch_size, intermediate_size, ssm_state_size, device=device, dtype=dtype)
                 ]
             else:
-                self.conv_states += [[]]
-                self.ssm_states += [[]]
+                self.conv_states += [torch.tensor([[]] * batch_size, device=device)]
+                self.ssm_states += [torch.tensor([[]] * batch_size, device=device)]
 
         self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
         self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
@@ -717,6 +718,34 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
             self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=2)
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        if len(self.key_cache) <= layer_idx:
+            return 0
+        if self.layers_block_type[layer_idx] == "mamba":
+            raise ValueError("Can't return seq_length from Mamba layers cache as it doesn't have a sequence length dimension.")
+        return self.key_cache[layer_idx].shape[-2]
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        for layer_idx in range(len(self.key_cache)):
+            device = self.key_cache[layer_idx].device
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
+            device = self.value_cache[layer_idx].device
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
+
+            device = self.conv_states[layer_idx].device
+            self.conv_states[layer_idx] = self.conv_states[layer_idx].index_select(0, beam_idx.to(device))
+            device = self.ssm_states[layer_idx].device
+            self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
+
+    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
+        raise NotImplementedError("HybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
+
+    @classmethod
+    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
+        raise NotImplementedError("HybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
 
 
 # Adapted from transformers.models.mamba.modeling_mamba.MambaMixer
@@ -1389,7 +1418,7 @@ class JambaModel(JambaPreTrainedModel):
 
         if cache_position is None:
             past_seen_tokens = (
-                past_key_values.get_seq_length()
+                past_key_values.get_seq_length(self.config.layers_block_type.index("attention"))
                 if isinstance(past_key_values, HybridMambaAttentionDynamicCache)
                 else 0
             )
