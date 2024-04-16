@@ -439,6 +439,8 @@ class ModelTesterMixin:
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     @slow
+    @require_accelerate
+    @mark.accelerate_tests
     def test_save_load_low_cpu_mem_usage(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         with tempfile.TemporaryDirectory() as saved_model_path:
@@ -449,6 +451,8 @@ class ModelTesterMixin:
                 self._check_save_load_low_cpu_mem_usage(model_class, saved_model_path)
 
     @slow
+    @require_accelerate
+    @mark.accelerate_tests
     def test_save_load_low_cpu_mem_usage_checkpoints(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         with tempfile.TemporaryDirectory() as saved_model_path:
@@ -460,6 +464,8 @@ class ModelTesterMixin:
                 self._check_save_load_low_cpu_mem_usage(model_class, saved_model_path)
 
     @slow
+    @require_accelerate
+    @mark.accelerate_tests
     def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         with tempfile.TemporaryDirectory() as saved_model_path:
             for model_class in self.all_model_classes:
