@@ -348,6 +348,7 @@ class M2M100FlashAttention2(M2M100Attention):
         is_causal: bool = False,
         config: Optional[M2M100Config] = None,
     ):
+        super().__init__(embed_dim, num_heads, dropout, is_decoder, bias, is_causal, config)
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
