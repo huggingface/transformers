@@ -18,6 +18,8 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import torch
 
+from .logits_process import MinLengthLogitsProcessor
+
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -149,9 +151,14 @@ class AssistedCandidateGenerator(CandidateGenerator):
         self.generation_config.output_scores = True
 
         # avoid unnecessary warnings that min_length is larger than max_new_tokens
+        # remove the `MinLengthLogitsProcessor` if exists (NOTE: no need to check for `MinNewTokensLogitsProcessor`)
         self.main_model_min_length = self.generation_config.min_length
         self.generation_config.min_length = 0
         self.generation_config.min_new_tokens = None
+        for processor in self.logits_processor:
+            if type(processor) == MinLengthLogitsProcessor:
+                self.main_model_min_length = getattr(processor, "min_length")
+                self.logits_processor.remove(processor)
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
