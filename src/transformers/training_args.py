@@ -2063,7 +2063,6 @@ class TrainingArguments:
                     raise ValueError(
                         "Passing `'use_configured_state':True` to the AcceleratorConfig requires a pre-configured "
                         "`AcceleratorState` or `PartialState` to be defined before calling `TrainingArguments`. "
-                        "Please define this beforehand."
                     )
             else:
                 AcceleratorState._reset_state(reset_partial_state=True)
