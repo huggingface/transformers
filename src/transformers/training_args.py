@@ -734,7 +734,7 @@ class TrainingArguments:
     do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
     eval_strategy: Union[IntervalStrategy, str] = field(
-        default=None,
+        default="no",
         metadata={"help": "The evaluation strategy to use."},
     )
     prediction_loss_only: bool = field(
@@ -1269,7 +1269,7 @@ class TrainingArguments:
             "choices": ["auto", "apex", "cpu_amp"],
         },
     )
-    evaluation_strategy: Optional[str] = field(
+    evaluation_strategy: Union[IntervalStrategy, str] = field(
         default=None,
         metadata={"help": "Deprecated. Use `eval_strategy` instead"},
     )
