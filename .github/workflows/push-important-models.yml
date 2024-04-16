@@ -53,11 +53,12 @@ jobs:
   test_modified_files:
     needs: get_modified_models
     name: Slow & FA2 tests
+    runs-on: ubuntu-latest
     runs-on: [single-gpu, nvidia-gpu, a10, ci]
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    if: ${{ needs.get_modified_models.outputs.matrix != '[]' && needs.get_modified_models.outputs.matrix != '' }}
+    if: ${{ needs.get_modified_models.outputs.matrix != '[]' && needs.get_modified_models.outputs.matrix != '' && fromJson(needs.get_modified_models.outputs.matrix)[0] != null }}
     strategy:
       fail-fast: false
       matrix: 
