@@ -84,12 +84,12 @@ if is_torch_neuroncore_available(check_device=False):
     if os.environ.get("TORCHELASTIC_RUN_ID"):
         if is_optimum_neuron_available():
             logger.info(
-                "Make sure that you are performing the training with the TrainiumTrainer from optimum[neuron], this "
+                "Make sure that you are performing the training with the NeuronTrainer from optimum[neuron], this "
                 "will fail otherwise."
             )
         else:
             logger.warning(
-                "Please use the TrainiumTrainer from optimum[neuron] instead of the Transformers library to perform "
+                "Please use the NeuronTrainer from optimum[neuron] instead of the Transformers library to perform "
                 "training on AWS Trainium instances. More information here: "
                 "https://github.com/huggingface/optimum-neuron"
             )
