@@ -456,57 +456,6 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
-    def test_past_key_values_format(self):
-        r"""
-        Overriding the test_past_key_values_format test as the Jamba model has a non-standard KV cache format: (1) it
-        is a GQA model (2) it has mamba layers with different cache shapes
-        """
-        for model_class in self.all_generative_model_classes:
-            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-
-            # If it doesn't support cache, pass the test
-            if not hasattr(config, "use_cache"):
-                self.skipTest("This model doesn't support caching")
-
-            model = model_class(config).to(torch_device)
-            if "use_cache" not in inputs:
-                inputs["use_cache"] = True
-            outputs = model(**inputs)
-
-            # If "past_key_values" is not returned, pass the test (e.g. RWKV uses a different cache name and format)
-            if "past_key_values" not in outputs:
-                self.skipTest("This model doesn't return `past_key_values`")
-
-            num_hidden_layers = (
-                getattr(config, "decoder_layers", None)
-                or getattr(config, "num_decoder_layers", None)
-                or config.num_hidden_layers
-            )
-            num_attention_heads = getattr(config, "decoder_attention_heads", config.num_attention_heads)
-            num_kv_heads = config.num_key_value_heads
-            embed_dim = getattr(config, "d_model", config.hidden_size)
-            per_head_embed_dim = embed_dim // num_attention_heads
-
-            mamba_d_inner = embed_dim * config.mamba_expand
-            mamba_d_state = config.mamba_d_state
-            mamba_d_conv = config.mamba_d_conv
-
-            past_kv = outputs["past_key_values"]
-            self.assertEqual(len(past_kv), num_hidden_layers)
-
-            # Decoder-only checks
-            batch_size, seq_length = inputs["input_ids"].shape
-            for i in range(num_hidden_layers):
-                self.assertEqual(len(past_kv[0]), 2)  # K V for the decoder = 2
-                if isinstance(model.model.layers[i], JambaAttentionDecoderLayer):
-                    self.assertEqual(past_kv[i][0].shape, (batch_size, num_kv_heads, seq_length, per_head_embed_dim))
-                    self.assertEqual(past_kv[i][1].shape, (batch_size, num_kv_heads, seq_length, per_head_embed_dim))
-                elif isinstance(model.model.layers[i], JambaMambaDecoderLayer):
-                    self.assertEqual(past_kv[i][0].shape, (batch_size, mamba_d_inner, 1, mamba_d_conv))
-                    self.assertEqual(past_kv[i][1].shape, (batch_size, mamba_d_inner, 1, mamba_d_state))
-                else:
-                    self.fail(f"Unexpected layer type {model.model.layers[i]}")
-
     def test_left_padding_compatibility(self):
         r"""
         Overriding the test_left_padding_compatibility test as the mamba layers accentuate the numerical differences
@@ -551,65 +500,6 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
             # They should result in very similar logits
             self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=3e-3))
-
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config, num_beam_groups=1):
-        r"""
-        Overriding the _check_past_key_values_for_generate function test as the Jamba model has a non-standard KV cache
-        format - it has mamba layers with different cache shapes
-        """
-        self.assertIsInstance(past_key_values, tuple)
-        self.assertListEqual(
-            [isinstance(iter_past_key_values, tuple) for iter_past_key_values in past_key_values],
-            [True] * len(past_key_values),
-        )
-
-        # (batch, head, seq_length, head_features)
-        expected_attn_shape = (
-            batch_size * num_beam_groups,
-            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
-            seq_length,
-            config.hidden_size // config.num_attention_heads,
-        )
-        # (batch, mamba_inner, 1, d_conv)
-        expected_mamba_conv_shape = (
-            batch_size * num_beam_groups,
-            config.hidden_size * config.mamba_expand,
-            1,
-            config.mamba_d_conv,
-        )
-        # (batch, mamba_inner, 1, d_state)
-        expected_mamba_state_shape = (
-            batch_size * num_beam_groups,
-            config.hidden_size * config.mamba_expand,
-            1,
-            config.mamba_d_state,
-        )
-
-        def _is_attn_layer(idx, config):
-            if (idx - config.attn_layer_offset) % config.attn_layer_period == 0:
-                return True
-            return False
-
-        mamba_layer_idx = [_is_attn_layer(i, config) for i in range(len(past_key_values))].index(False)
-        if past_key_values[mamba_layer_idx][0].shape[2] > 1:
-            # special treatment for contrastive decoding which uses standard cache format also for mamba layers
-            past_key_values = JambaModel._convert_to_jamba_cache(past_key_values)
-
-        # check shape key, value
-        self.assertListEqual(
-            [layer_past_key_values[0].shape for layer_past_key_values in past_key_values],
-            [
-                expected_attn_shape if _is_attn_layer(i, config) else expected_mamba_conv_shape
-                for i in range(len(past_key_values))
-            ],
-        )
-        self.assertListEqual(
-            [layer_past_key_values[1].shape for layer_past_key_values in past_key_values],
-            [
-                expected_attn_shape if _is_attn_layer(i, config) else expected_mamba_state_shape
-                for i in range(len(past_key_values))
-            ],
-        )
 
     @require_flash_attn
     @require_torch_gpu
