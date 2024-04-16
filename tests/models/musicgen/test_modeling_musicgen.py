@@ -226,7 +226,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         model.train()
 
         # Contrarily to the initial method, we don't unfreeze freezed parameters.
-        # Otherwise, it'll mess with the freezed sinusoidal embeddings
+        # Indeed, sinusoidal position embeddings have frozen weights that should stay frozen.
 
         optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
@@ -1112,8 +1112,8 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
 
-            # Contrarily to the initial method, we don't unfreeze freezed parameters.
-            # We actually freeze the ones we don't want to train
+            # The audio encoder weights are not used during the forward pass (only during the generate pass)
+            # So we need to freeze it to be able to train.
             model.freeze_encoders(freeze_text_encoder=False)
 
             optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
@@ -2287,6 +2287,26 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 )
 
                 self.assertTrue(torch.allclose(res_eager, res_sdpa))
+
+    def test_requires_grad_with_frozen_encoders(self):
+        config = self.model_tester.get_config()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.freeze_encoders(freeze_text_encoder=False)
+
+            audio_encoder_grads = [param.requires_grad for param in model.audio_encoder.parameters()]
+            text_encoder_grads = [param.requires_grad for param in model.text_encoder.parameters()]
+
+            self.assertFalse(all(audio_encoder_grads))
+            self.assertTrue(all(text_encoder_grads))
+
+            model.freeze_encoders(freeze_text_encoder=True)
+
+            audio_encoder_grads = [param.requires_grad for param in model.audio_encoder.parameters()]
+            text_encoder_grads = [param.requires_grad for param in model.text_encoder.parameters()]
+
+            self.assertFalse(all(audio_encoder_grads))
+            self.assertFalse(all(text_encoder_grads))
 
 
 def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):

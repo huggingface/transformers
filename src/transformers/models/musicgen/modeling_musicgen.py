@@ -108,6 +108,8 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     """
     Shift input ids one token to the right.
     """
+    # transpose to get (bsz, num_codebooks, seq_len)
+    input_ids = input_ids.transpose(1, 2)
     shifted_input_ids = input_ids.new_zeros(input_ids.shape)
     shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
     if decoder_start_token_id is None:
@@ -1353,11 +1355,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (labels is not None) and (input_ids is None and inputs_embeds is None):
-            input_ids = shift_tokens_right(
-                labels.transpose(1, 2),
-                self.config.pad_token_id,
-                self.config.bos_token_id,
-            )
+            input_ids = shift_tokens_right(labels, self.config.pad_token_id, self.config.bos_token_id)
 
         outputs = self.model(
             input_ids,
@@ -1391,15 +1389,11 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             # -100 labels are ignored
             labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
 
-            mask = labels != -100
-
             # per codebook cross-entropy
             for codebook in range(self.config.num_codebooks):
                 codebook_logits = logits[:, codebook].contiguous().view(-1, logits.shape[-1])
-                codebook_mask = mask[..., codebook].contiguous().view(-1)
                 codebook_labels = labels[..., codebook].contiguous().view(-1)
-
-                loss += loss_fct(codebook_logits[codebook_mask], codebook_labels[codebook_mask])
+                loss += loss_fct(codebook_logits, codebook_labels)
 
             loss = loss / self.config.num_codebooks
 
@@ -2265,9 +2259,8 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             encoder_hidden_states = encoder_hidden_states * attention_mask[..., None]
 
         if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
-            # transpose to get (bsz, num_codebooks, seq_len)
             decoder_input_ids = shift_tokens_right(
-                labels.transpose(1, 2), self.config.decoder.pad_token_id, self.config.decoder.decoder_start_token_id
+                labels, self.config.decoder.pad_token_id, self.config.decoder.decoder_start_token_id
             )
 
         elif decoder_input_ids is None and decoder_inputs_embeds is None:
@@ -2548,9 +2541,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         return model_kwargs
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
-        return shift_tokens_right(
-            labels.transpose(1, 2), self.config.decoder.pad_token_id, self.config.decoder.bos_token_id
-        )
+        return shift_tokens_right(labels, self.config.decoder.pad_token_id, self.config.decoder.bos_token_id)
 
     def resize_token_embeddings(self, *args, **kwargs):
         raise NotImplementedError(
