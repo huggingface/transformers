@@ -1254,7 +1254,7 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         Predicted class: LABEL_0
-        """
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
