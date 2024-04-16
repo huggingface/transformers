@@ -682,13 +682,14 @@ class DetaMultiscaleDeformableAttention(nn.Module):
             batch_size, num_queries, self.n_heads, self.n_levels, self.n_points
         )
         # batch_size, num_queries, n_heads, n_levels, n_points, 2
-        if reference_points.shape[-1] == 2:
+        num_coordinates = reference_points.shape[-1]
+        if num_coordinates == 2:
             offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
             sampling_locations = (
                 reference_points[:, :, None, :, None, :]
                 + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
             )
-        elif reference_points.shape[-1] == 4:
+        elif num_coordinates == 4:
             sampling_locations = (
                 reference_points[:, :, None, :, None, :2]
                 + sampling_offsets / self.n_points * reference_points[:, :, None, :, None, 2:] * 0.5
@@ -1994,10 +1995,11 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         ...         f"Detected {model.config.id2label[label.item()]} with confidence "
         ...         f"{round(score.item(), 3)} at location {box}"
         ...     )
-        Detected cat with confidence 0.683 at location [345.85, 23.68, 639.86, 372.83]
-        Detected cat with confidence 0.683 at location [8.8, 52.49, 316.93, 473.45]
-        Detected remote with confidence 0.568 at location [40.02, 73.75, 175.96, 117.33]
-        Detected remote with confidence 0.546 at location [333.68, 77.13, 370.12, 187.51]
+        Detected cat with confidence 0.802 at location [9.87, 54.36, 316.93, 473.44]
+        Detected cat with confidence 0.795 at location [346.62, 24.35, 639.62, 373.2]
+        Detected remote with confidence 0.725 at location [40.41, 73.36, 175.77, 117.29]
+        Detected remote with confidence 0.638 at location [333.34, 76.81, 370.22, 187.94]
+        Detected couch with confidence 0.584 at location [0.03, 0.99, 640.02, 474.93]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
