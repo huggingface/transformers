@@ -46,8 +46,6 @@ if is_torch_available():
     )
     from transformers.models.jamba.modeling_jamba import (
         HybridMambaAttentionDynamicCache,
-        JambaAttentionDecoderLayer,
-        JambaMambaDecoderLayer,
     )
 
 
