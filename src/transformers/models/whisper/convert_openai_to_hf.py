@@ -351,7 +351,7 @@ if __name__ == "__main__":
                     """`tiktoken` is not installed, use `pip install tiktoken` to convert the tokenizer"""
                 )
         except Exception as e:
-            print(str(e))
+            print(e)
         else:
             from tiktoken.load import load_tiktoken_bpe
 
