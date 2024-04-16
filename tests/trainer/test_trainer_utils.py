@@ -20,7 +20,7 @@ import numpy as np
 
 from transformers.data.data_collator import default_data_collator
 from transformers.testing_utils import require_accelerate, require_torch
-from transformers.trainer_utils import RemoveColumnsCollator, find_executable_batch_size, EvalLoopContainer
+from transformers.trainer_utils import EvalLoopContainer, RemoveColumnsCollator, find_executable_batch_size
 from transformers.utils import is_torch_available
 
 
@@ -499,15 +499,14 @@ class TrainerUtilsTest(unittest.TestCase):
         self.assertIn("col3", logger.last_msg)
 
     def test_eval_loop_container(self):
-
         batch_1 = [
             torch.ones([8, 5]),
-            {"loss": torch.tensor(1.)},
+            {"loss": torch.tensor(1.0)},
             (torch.ones([8, 2, 3]), torch.ones([8, 2])),
         ]
         batch_2 = [
             torch.ones([4, 5]),
-            {"loss": torch.tensor(2.)},
+            {"loss": torch.tensor(2.0)},
             (torch.ones([4, 2, 3]), torch.ones([4, 6])),
         ]
 
@@ -525,7 +524,7 @@ class TrainerUtilsTest(unittest.TestCase):
         self.assertIsInstance(arrays[1], dict)
         self.assertIsInstance(arrays[1]["loss"], np.ndarray)
         self.assertEqual(arrays[1]["loss"].shape, (2,))
-        self.assertTrue(np.allclose(arrays[1]["loss"], np.array([1., 2.])))
+        self.assertTrue(np.allclose(arrays[1]["loss"], np.array([1.0, 2.0])))
         self.assertIsInstance(arrays[2], tuple)
         self.assertEqual(len(arrays[2]), 2)
         self.assertEqual(arrays[2][0].shape, (12, 2, 3))
@@ -580,7 +579,7 @@ class TrainerUtilsTest(unittest.TestCase):
         self.assertIsInstance(arrays[1], dict)
         self.assertIsInstance(arrays[1]["loss"], np.ndarray)
         self.assertEqual(arrays[1]["loss"].shape, ())
-        self.assertTrue(np.allclose(arrays[1]["loss"], np.array([1.])))
+        self.assertTrue(np.allclose(arrays[1]["loss"], np.array([1.0])))
         self.assertIsInstance(arrays[2], tuple)
         self.assertEqual(len(arrays[2]), 2)
         self.assertEqual(arrays[2][0].shape, (8, 2, 3))

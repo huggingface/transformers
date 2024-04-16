@@ -203,11 +203,11 @@ class TrainOutput(NamedTuple):
 class EvalLoopContainer:
     """
     Container to store intermediate results of evaluation loop
-    
+
     Args:
         do_nested_concat (`bool`, *optional*, defaults to `True`):
-            If set to `True`, each iteration will recursively concatenate a new object containing tensors to 
-            the existing stored tensors, provided that the structure of the existing object and the new one 
+            If set to `True`, each iteration will recursively concatenate a new object containing tensors to
+            the existing stored tensors, provided that the structure of the existing object and the new one
             are identical. If set to `False`, all newly added tensors will be stored in a list.
         padding_index (`int`, *optional*, defaults to -100):
             Value used to pad tensors of different shapes when `do_nested_concat=True`.
@@ -218,7 +218,7 @@ class EvalLoopContainer:
         self.padding_index = padding_index
         self.tensors = None
         self.arrays = None
-    
+
     def add(self, tensors) -> None:
         """Add tensors to the stored objects. If `do_nested_concat=True`, the tensors will be concatenated recursively."""
         if self.tensors is None:
@@ -227,14 +227,14 @@ class EvalLoopContainer:
             self.tensors = nested_concat(self.tensors, tensors, padding_index=self.padding_index)
         else:
             self.tensors.append(tensors)
-        
+
     def to_cpu_and_numpy(self) -> None:
         """Move tensors in stored objects to CPU and convert them to numpy arrays."""
 
         # Check if we have something to add, if not just return
         if self.tensors is None:
-            return 
-        
+            return
+
         new_arrays = nested_numpify(self.tensors)
         if self.arrays is None:
             self.arrays = new_arrays
