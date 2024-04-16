@@ -528,11 +528,11 @@ class TFGenerationMixin:
         >>> for tok, score in zip(generated_tokens[0], transition_scores[0]):
         ...     # | token | token string | logits | probability
         ...     print(f"| {tok:5d} | {tokenizer.decode(tok):8s} | {score.numpy():.3f} | {np.exp(score.numpy()):.2%}")
-        |   262 |  the     | -1.415 | 24.28%
-        |  1110 |  day     | -2.610 | 7.35%
+        |   262 |  the     | -1.414 | 24.33%
+        |  1110 |  day     | -2.609 | 7.36%
         |   618 |  when    | -2.010 | 13.40%
-        |   356 |  we      | -1.861 | 15.54%
-        |   460 |  can     | -2.508 | 8.15%
+        |   356 |  we      | -1.859 | 15.58%
+        |   460 |  can     | -2.508 | 8.14%
 
         >>> # Example 2: Reconstruct the sequence scores from Beam Search
         >>> outputs = model.generate(
