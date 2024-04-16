@@ -16,6 +16,7 @@
 # limitations under the License.
 import importlib.util
 import re
+from enum import Enum
 from ast import literal_eval
 from dataclasses import dataclass
 from typing import Dict, Union, List, Optional
@@ -79,6 +80,17 @@ class FinalAnswerTool(Tool):
     def __call__(self):
         pass
 
+class MessageRole(str, Enum):
+    USER = "user"
+    ASSITANT = "assistant"
+    SYSTEM = "system"
+    FUNCTION_CALL = "function-call"
+    FUNCTION_RESPONSE = "function-response"
+
+    @classmethod
+    def roles(cls):
+        return [r.value for r in cls]
+    
 
 def get_remote_tools(organization="huggingface-tools"):
     if is_offline_mode():
@@ -323,6 +335,11 @@ class Agent:
 
         self._toolbox = Toolbox(tools, add_base_tools=add_base_tools)
 
+        self.system_message = {
+            "role": MessageRole.SYSTEM,
+            "content": format_prompt(self._toolbox, self.prompt_template, self.tool_description_template)
+        }
+        self.messages = []
         self.prompt = None
         self.logs = []
 
@@ -331,11 +348,10 @@ class Agent:
     def toolbox(self) -> Dict[str, Tool]:
         """Get the toolbox currently available to the agent"""
         return self._toolbox
-    
-    def show_logs(self):
-        self.log.info('\n'.join(self.logs))
 
-    
+    def show_message_history(self):
+        self.log.info('\n'.join(self.messages))
+
     def extract_action(self, llm_output: str, split_token: str) -> str:
         """
         Parse action from the LLM output
@@ -376,7 +392,14 @@ class Agent:
                     if value in self.state:
                         arguments[key] = self.state[value]
                 observation = self.toolbox.tools[tool_name](**arguments)
-            return observation
+            observation_message = {
+                "role": MessageRole.FUNCTION_RESPONSE,
+                "content": "Observation: " + observation.strip()
+            }
+            self.log.info(observation_message)
+            self.memory.append(observation_message)
+            return observation_message
+
         except Exception as e:
             raise AgentExecutionError(
                 f"Error in tool call execution: {e}.\nYour input was probably incorrect.\n"
@@ -386,6 +409,26 @@ class Agent:
     def run(self, **kwargs):
         """To be implemented in the child class"""
         pass
+
+    def add_message(self, message: Dict[str, str]):
+        """
+        Append provided message to the message history of the current agent run.
+        Subsequent messages with the same role will be concatenated to a single message.
+
+        Args:
+            message (`Dict[str, str]`): Chat message with corresponding role. 
+        """
+
+        if not set(message.keys()) == {"role", "content"}:
+            raise ValueError("Message should contain only 'role' and 'content' keys!")
+        
+        if role := message["role"] not in MessageRole.roles():
+            raise ValueError(f"Incorrect role {role}, only {MessageRole.roles()} are supported for now.")
+        
+        if len(self.messages) > 0 and self.messages[-1]["role"] == message["role"]:
+            self.messages[-1]["content"] += "\n" + message["content"]
+        else:
+            self.messages.append(message)
 
 
 class CodeAgent(Agent):
@@ -455,13 +498,27 @@ class CodeAgent(Agent):
         self.log.info("====Executing with this prompt====")
         self.log.info(self.prompt)
         llm_output = self.llm_engine(self.prompt, stop=["Task:"])
+        self.memory = [self.system_message]
+
+        self.task = task
+        task_message = {
+            "role": MessageRole.USER,
+            "content": f"Task: {self.task}"
+        }
+        self.add_message(task_message)
+
+        self.log.info("====Executing with this prompt====")
+        self.show_message_history()
+
+        # Run LLM
+        llm_output = self.llm_engine(self.messages, stop=["Task:"])
 
         if return_generated_code:
-            return llm_output
+            return llm_output["content"]
 
         # Parse
         _, code_action = self.extract_action(
-            llm_output=llm_output,
+            llm_output=llm_output["content"],
             split_token="Answer:"
         )
         
@@ -558,6 +615,16 @@ class ReactAgent(Agent):
         self.log.debug(self.system_prompt)
         self.logs.append({"task": task_message, "system_prompt": self.system_prompt})
 
+        
+        self.memory = [self.system_message]
+
+        self.task = task
+        task_message = {
+            "role": MessageRole.USER,
+            "content": f"Task: {self.task}"
+        }
+        self.add_message(task_message)
+
         final_answer = None
         iteration = 0
 
@@ -568,6 +635,11 @@ class ReactAgent(Agent):
             except AgentError as e:
                 self.log.error(e)
                 self.logs[-1]["error"] = e
+                error_message = {
+                    "role": MessageRole.USER,
+                    "content": str(e) + ". Now let's retry."
+                }
+                self.add_message(error_message)
             finally:
                 iteration += 1
         
@@ -588,13 +660,13 @@ class ReactAgent(Agent):
 
         self.prompt = agent_memory + "\nThought: " # prepend the answer to steer the llm
         self.log.info("=====New step=====")
-        self.log.debug("=====Initiating LLM with this prompt:=====")
-        self.log.debug(self.prompt)
+        self.log.info("=====Calling LLM with these messages:=====")
+        self.show_message_history()
 
         if self.llm_engine_grammar:
-            llm_output = self.llm_engine(self.prompt, stop=["Observation:"], grammar=self.llm_engine_grammar)
+            llm_output = self.llm_engine(self.messages, stop=["Observation:"], grammar=self.llm_engine_grammar)
         else:
-            llm_output = self.llm_engine(self.prompt, stop=["Observation:"])
+            llm_output = self.llm_engine(self.messages, stop=["Observation:"])
         self.log.debug("=====Output message of the LLM:=====")
         self.log.debug(llm_output)
         self.logs[-1]["llm_output"] = llm_output
@@ -603,6 +675,7 @@ class ReactAgent(Agent):
         self.log.debug("=====Extracting action=====")
         rationale, action = self.extract_action(
             llm_output=llm_output,
+            llm_output=llm_output["content"],
             split_token="Action:"
         )
 
