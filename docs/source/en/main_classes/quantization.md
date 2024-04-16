@@ -38,6 +38,9 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 
 [[autodoc]] AwqConfig
 
+## EETQConfig
+[[autodoc]] EETQConfig
+
 ## GPTQConfig
 
 [[autodoc]] GPTQConfig
