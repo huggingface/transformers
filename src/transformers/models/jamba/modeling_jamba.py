@@ -20,7 +20,7 @@
 """ PyTorch Jamba model."""
 import inspect
 import math
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union, List
 
 import torch
 import torch.nn.functional as F
