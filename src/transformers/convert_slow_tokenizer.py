@@ -23,7 +23,6 @@ import warnings
 from typing import Dict, List, Tuple
 
 from packaging import version
-
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
@@ -607,8 +606,7 @@ class SpmConverter(Converter):
         return None
 
     def decoder(self, replacement, add_prefix_space):
-        prepend_scheme = "always" if add_prefix_space else "never"
-        return decoders.Metaspace(replacement=replacement, add_prefix_space=prepend_scheme)
+        return decoders.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
 
     def converted(self) -> Tokenizer:
         tokenizer = self.tokenizer(self.proto)
