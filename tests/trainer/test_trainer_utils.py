@@ -20,7 +20,7 @@ import numpy as np
 
 from transformers.data.data_collator import default_data_collator
 from transformers.testing_utils import require_accelerate, require_torch
-from transformers.trainer_utils import EvalLoopContainer, RemoveColumnsCollator, find_executable_batch_size
+from transformers.trainer_utils import RemoveColumnsCollator, find_executable_batch_size
 from transformers.utils import is_torch_available
 
 
@@ -35,6 +35,7 @@ if is_torch_available():
         DistributedLengthGroupedSampler,
         DistributedSamplerWithLoop,
         DistributedTensorGatherer,
+        EvalLoopContainer,
         IterableDatasetShard,
         LabelSmoother,
         LengthGroupedSampler,
