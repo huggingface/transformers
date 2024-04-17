@@ -130,14 +130,14 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
 
     # Override since phonemes cannot be converted back to strings
     def decode(self, token_ids, **kwargs):
-        logger.warn(
+        logger.warning(
             "Phonemes cannot be reliably converted to a string due to the one-many mapping, converting to tokens instead."
         )
         return self.convert_ids_to_tokens(token_ids)
 
     # Override since phonemes cannot be converted back to strings
     def convert_tokens_to_string(self, tokens, **kwargs):
-        logger.warn(
+        logger.warning(
             "Phonemes cannot be reliably converted to a string due to the one-many mapping, returning the tokens."
         )
         return tokens

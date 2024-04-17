@@ -893,7 +893,9 @@ class GemmaModel(GemmaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+        causal_mask = self._update_causal_mask(
+            attention_mask, inputs_embeds, cache_position, past_seen_tokens + inputs_embeds.shape[1]
+        )
 
         # embed positions
         hidden_states = inputs_embeds
@@ -967,7 +969,7 @@ class GemmaModel(GemmaPreTrainedModel):
     # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
     # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
     # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
-    def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
+    def _update_causal_mask(self, attention_mask, input_tensor, cache_position, current_length):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
@@ -980,7 +982,7 @@ class GemmaModel(GemmaPreTrainedModel):
             target_length = self.config.max_position_embeddings
         else:  # dynamic cache
             target_length = (
-                attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else cache_position[-1] + 1
+                attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else current_length + 1
             )
 
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
