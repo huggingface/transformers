@@ -598,7 +598,7 @@ class SpmConverter(Converter):
 
     def pre_tokenizer(self, replacement, add_prefix_space):
         prepend_scheme = "always" if add_prefix_space else "never"
-        if hasattr(self.original_tokenizer, "legacy") and not self.original_tokenizer.legacy:
+        if not getattr(self.original_tokenizer, "legacy", True) and add_prefix_space:
             prepend_scheme = "first"
         return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme)
 
@@ -1386,9 +1386,8 @@ class LlamaConverter(SpmConverter):
 
     def normalizer(self, proto):
         sequence = []
-        if hasattr(self.original_tokenizer, "add_prefix_space"):
-            if self.original_tokenizer.add_prefix_space:
-                sequence += [normalizers.Prepend(prepend="▁")]
+        if getattr(self.original_tokenizer, "add_prefix_space", False):
+            sequence += [normalizers.Prepend(prepend="▁")]
         sequence += [normalizers.Replace(pattern=" ", content="▁")]
         return normalizers.Sequence(sequence)
 
