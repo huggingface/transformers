@@ -103,7 +103,9 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
     @require_detectron2
     @require_pytesseract
     def test_small_model_pt(self):
-        dqa_pipeline = pipeline("document-question-answering", model="hf-internal-testing/tiny-random-layoutlmv2-for-dqa-test")
+        dqa_pipeline = pipeline(
+            "document-question-answering", model="hf-internal-testing/tiny-random-layoutlmv2-for-dqa-test"
+        )
         image = INVOICE_URL
         question = "How many cats are there?"
 
