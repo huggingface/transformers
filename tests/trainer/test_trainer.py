@@ -1131,21 +1131,22 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_lomo(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
+
+        previous_params = {n: p.clone() for n, p in tiny_llama.named_parameters()}
+
         x = torch.randint(0, 100, (128,))
         train_dataset = RepeatDataset(x)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Trainer without inf/nan filter
-            args = TrainingArguments(
-                tmpdir,
-                learning_rate=1e-9,
-                logging_steps=5,
-                optim="lomo",
-            )
+            args = TrainingArguments(tmpdir, learning_rate=1e-2, logging_steps=5, optim="lomo", max_steps=20)
             trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
 
             # Check this works
             _ = trainer.train()
+
+        for name, param in tiny_llama.named_parameters():
+            self.assertFalse(torch.allclose(param, previous_params[name].to(param.device), rtol=1e-12, atol=1e-12))
 
     @require_lomo
     @require_torch_gpu
