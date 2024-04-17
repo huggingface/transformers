@@ -377,14 +377,10 @@ from model_downloads import HFModelDownloadsTool
 tool = HFModelDownloadsTool()
 ```
 
-In order to let others benefit from it and for simpler initialization, we recommend pushing it to the Hub under your 
-namespace. To do so, just call `push_to_hub` on the `tool` variable (be sure to have created the space beforehand, and to be authenticated with a token that has read access!)
+You can also share your custom tool to the Hub by calling [`~Tool.push_to_hub` on the tool. Make sure you've created a repository for it on the Hub and have a token with read access.
 
 ```python
 tool.push_to_hub("{your_username}/hf-model-downloads")
-```
-
-You now have your code on the Hub! Let's take a look at the final step, which is to have the agent use it.
 
 ### Initializing an agent that uses the tool
 
