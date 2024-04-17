@@ -165,6 +165,7 @@ from . import (
     nllb_moe,
     nougat,
     nystromformer,
+    olmo,
     oneformer,
     openai,
     opt,
