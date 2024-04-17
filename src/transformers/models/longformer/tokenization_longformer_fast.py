@@ -132,11 +132,6 @@ class LongformerTokenizerFast(PreTrainedTokenizerFast):
         trim_offsets=True,
         **kwargs,
     ):
-        if add_prefix_space is not None:
-            kwargs["from_slow"] = True
-        else:
-            add_prefix_space = False
-    
         mask_token = (
             AddedToken(mask_token, lstrip=True, rstrip=False, normalized=False)
             if isinstance(mask_token, str)

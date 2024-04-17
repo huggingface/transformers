@@ -155,7 +155,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        add_prefix_space=None,
+        add_prefix_space=False,
         max_depth=50,
         max_width=1000,
         pad_width=1001,
@@ -173,11 +173,6 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
 
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
-        if add_prefix_space is not None:
-            kwargs["from_slow"] = True
-        else:
-            add_prefix_space = False
 
         super().__init__(
             vocab_file=vocab_file,
@@ -211,6 +206,12 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             )
 
         self.tags_dict = tags_dict
+
+        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
+        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
+            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
+            pre_tok_state["add_prefix_space"] = add_prefix_space
+            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
 
         self.add_prefix_space = add_prefix_space
 

@@ -129,11 +129,6 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         add_prefix_space=False,
         **kwargs,
     ):
-        if add_prefix_space is not None:
-            kwargs["from_slow"] = True
-        else:
-            add_prefix_space = False
-
         super().__init__(
             vocab_file=vocab_file,
             merges_file=merges_file,
@@ -155,6 +150,17 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         self.vocab_file = vocab_file
         self.grounded_generation_template = kwargs.pop("grounded_generation_template", None)
         self.tool_use_template = kwargs.pop("tool_use_template", None)
+
+        # TODO @ArthurZucker this can only work one way for now, to update later-on. Tests should also properly
+        # check this as they were green before.
+        pre_tok_state = pickle.dumps(self.backend_tokenizer.pre_tokenizer)
+        decoder_state = pickle.dumps(self.backend_tokenizer.decoder)
+
+        if add_prefix_space:
+            pre_tok_state = pre_tok_state.replace(b'"add_prefix_space":false', b'"add_prefix_space": true')
+            decoder_state = decoder_state.replace(b'"add_prefix_space":false', b'"add_prefix_space": true')
+        self.backend_tokenizer.pre_tokenizer = pickle.loads(pre_tok_state)
+        self.backend_tokenizer.decoder = pickle.loads(decoder_state)
 
         self.add_prefix_space = add_prefix_space
 

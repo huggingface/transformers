@@ -130,15 +130,10 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        add_prefix_space=None,
+        add_prefix_space=False,
         trim_offsets=True,
         **kwargs,
     ):
-        if add_prefix_space is not None:
-            kwargs["from_slow"] = True
-        else:
-            add_prefix_space = False
-
         # we have to specify that this tokens is special otherwise adding it will reset the normalized flag to `False` in `add_special_tokens`
         mask_token = (
             AddedToken(mask_token, lstrip=True, normalized=True, special=True)
@@ -161,6 +156,12 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
             trim_offsets=trim_offsets,
             **kwargs,
         )
+
+        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
+        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
+            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
+            pre_tok_state["add_prefix_space"] = add_prefix_space
+            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
 
         self.add_prefix_space = add_prefix_space
 

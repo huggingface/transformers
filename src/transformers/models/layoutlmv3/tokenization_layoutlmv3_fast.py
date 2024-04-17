@@ -131,7 +131,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        add_prefix_space=None,
+        add_prefix_space=True,
         trim_offsets=True,
         cls_token_box=[0, 0, 0, 0],
         sep_token_box=[0, 0, 0, 0],
@@ -140,11 +140,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         only_label_first_subword=True,
         **kwargs,
     ):
-        if add_prefix_space is not None:
-            kwargs["from_slow"] = True
-        else:
-            add_prefix_space = True
-    
         super().__init__(
             vocab_file,
             merges_file,

@@ -130,7 +130,7 @@ class MvpTokenizerFast(PreTrainedTokenizerFast):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        add_prefix_space=None,
+        add_prefix_space=False,
         trim_offsets=True,
         **kwargs,
     ):
@@ -143,12 +143,8 @@ class MvpTokenizerFast(PreTrainedTokenizerFast):
 
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
-        if add_prefix_space is not None:
+        if add_prefix_space:
             kwargs["from_slow"] = True
-        else:
-            add_prefix_space = False
-        
         super().__init__(
             vocab_file,
             merges_file,

@@ -112,14 +112,9 @@ class DebertaTokenizerFast(PreTrainedTokenizerFast):
         unk_token="[UNK]",
         pad_token="[PAD]",
         mask_token="[MASK]",
-        add_prefix_space=None,
+        add_prefix_space=False,
         **kwargs,
     ):
-        if add_prefix_space is not None:
-            kwargs["from_slow"] = True
-        else:
-            add_prefix_space = False
-    
         super().__init__(
             vocab_file,
             merges_file,
@@ -136,6 +131,12 @@ class DebertaTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
         self.add_bos_token = kwargs.pop("add_bos_token", False)
+
+        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
+        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
+            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
+            pre_tok_state["add_prefix_space"] = add_prefix_space
+            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
 
         self.add_prefix_space = add_prefix_space
 
