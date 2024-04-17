@@ -161,7 +161,7 @@ class Seq2seqTrainerTester(TestCasePlus):
             tokenizer=tokenizer,
             data_collator=data_collator,
             compute_metrics=lambda x: {"samples": x[0].shape[0]},
-            report_to="tensorboard",
+            report_to="none",
         )
 
         def prepare_data(examples):
