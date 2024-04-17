@@ -66,7 +66,7 @@ def _replace_with_eetq_linear(
     return model, has_been_replaced
 
 
-def replace_with_EETQ_linear(model, modules_to_not_convert=None, current_key_name=None, quantization_config=None):
+def replace_with_eetq_linear(model, modules_to_not_convert=None, current_key_name=None, quantization_config=None):
     """
     A helper function to replace all `torch.nn.Linear` modules by `eetq.EETQLinear` modules from the `eetq`
     library. This will enable running your models using high performance int8 weight-only gemm kerner from 
