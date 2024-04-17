@@ -49,6 +49,7 @@ if is_torch_available():
 @require_sentencepiece
 @require_tokenizers
 class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google/gemma-7b"
     tokenizer_class = GemmaTokenizer
     rust_tokenizer_class = GemmaTokenizerFast
 
@@ -150,10 +151,6 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @unittest.skip("worker 'gw4' crashed on CI, passing locally.")
     def test_subword_regularization_tokenizer(self):
-        pass
-
-    @unittest.skip("This test will be removed from main @LysandreJik")
-    def test_pretrained_model_lists(self):
         pass
 
     @unittest.skip("Skipping")

@@ -61,6 +61,7 @@ PATH_TO_DOC = "docs/source/en"
 PRIVATE_MODELS = [
     "AltRobertaModel",
     "DPRSpanPredictor",
+    "UdopStack",
     "LongT5Stack",
     "RealmBertModel",
     "T5Stack",
@@ -85,6 +86,7 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "RecurrentGemmaModel",  # Building part of bigger (tested) model.
     "FuyuForCausalLM",  # Not tested fort now
     "InstructBlipQFormerModel",  # Building part of bigger (tested) model.
     "UMT5EncoderModel",  # Building part of bigger (tested) model.
@@ -293,6 +295,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BarkCoarseModel",
     "BarkFineModel",
     "BarkSemanticModel",
+    "MusicgenMelodyModel",
     "MusicgenModel",
     "MusicgenForConditionalGeneration",
     "SpeechT5ForSpeechToSpeech",
@@ -304,10 +307,12 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SeamlessM4TCodeHifiGan",
     "SeamlessM4TForSpeechToSpeech",  # no auto class for speech-to-speech
     "TvpForVideoGrounding",
+    "UdopForConditionalGeneration",
     "SeamlessM4Tv2NARTextToUnitModel",
     "SeamlessM4Tv2NARTextToUnitForConditionalGeneration",
     "SeamlessM4Tv2CodeHifiGan",
     "SeamlessM4Tv2ForSpeechToSpeech",  # no auto class for speech-to-speech
+    "SegGptForImageSegmentation",
     "SiglipVisionModel",
     "SiglipTextModel",
 ]
@@ -732,6 +737,8 @@ def check_all_auto_object_names_being_defined():
                         # module, if it's a private model defined in this file.
                         if name.endswith("MODEL_MAPPING_NAMES") and is_a_private_model(class_name):
                             continue
+                        if name.endswith("MODEL_FOR_IMAGE_MAPPING_NAMES") and is_a_private_model(class_name):
+                            continue
                         failures.append(
                             f"`{class_name}` appears in the mapping `{name}` but it is not defined in the library."
                         )
@@ -990,6 +997,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "MaskFormerSwinConfig",
     "MaskFormerSwinModel",
     "NatBackbone",
+    "PvtV2Backbone",
     "ResNetBackbone",
     "SwinBackbone",
     "Swinv2Backbone",

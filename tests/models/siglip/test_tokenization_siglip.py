@@ -38,6 +38,7 @@ else:
 @require_sentencepiece
 @require_tokenizers
 class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google/siglip-base-patch16-224"
     tokenizer_class = SiglipTokenizer
     test_rust_tokenizer = False
     test_sentencepiece = True
@@ -346,14 +347,6 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             rust_tokenizer = self.get_rust_tokenizer()
             special_tokens_string_rust = rust_tokenizer.convert_tokens_to_string(special_tokens)
             self.assertEqual(special_tokens_string, special_tokens_string_rust)
-
-    # overwritten from `test_tokenization_common` since Siglip has no max length
-    # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.test_pretrained_model_lists with T5->Siglip
-    def test_pretrained_model_lists(self):
-        # We should have at least one default checkpoint for each tokenizer
-        # We should specify the max input length as well (used in some part to list the pretrained checkpoints)
-        self.assertGreaterEqual(len(self.tokenizer_class.pretrained_vocab_files_map), 1)
-        self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
 
     @slow
     def test_tokenizer_integration(self):

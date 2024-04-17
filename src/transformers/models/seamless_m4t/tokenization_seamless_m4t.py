@@ -32,23 +32,11 @@ from ...utils import PaddingStrategy, logging
 
 logger = logging.get_logger(__name__)
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/hf-seamless-m4t-medium": (
-            "https://huggingface.co/facebook/hf-seamless-m4t-medium/blob/main/sentencepiece.bpe.model"
-        ),
-    }
-}
 
 SPIECE_UNDERLINE = "▁"
 
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
-
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/hf-seamless-m4t-medium": 2048,
-}
 
 
 class SeamlessM4TTokenizer(PreTrainedTokenizer):
@@ -126,8 +114,6 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     model_input_names = ["input_ids", "attention_mask"]
 
     prefix_tokens: List[int] = []
@@ -447,7 +433,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         return tokenizer
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
-    def tokenize(self, text: "TextInput", add_special_tokens=False, **kwargs) -> List[str]:
+    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
         """
         Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
         first token is special.
@@ -459,7 +445,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         if self.add_prefix_space:
             text = SPIECE_UNDERLINE + text
 
-        tokens = super().tokenize(text, add_special_tokens=add_special_tokens, **kwargs)
+        tokens = super().tokenize(text, **kwargs)
 
         if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
             tokens = tokens[1:]

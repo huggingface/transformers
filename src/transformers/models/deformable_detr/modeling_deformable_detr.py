@@ -60,7 +60,7 @@ def load_cuda_kernels():
 
     global MultiScaleDeformableAttention
 
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deta"
+    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deformable_detr"
     src_files = [
         root / filename
         for filename in [
@@ -152,10 +152,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DeformableDetrConfig"
 _CHECKPOINT_FOR_DOC = "sensetime/deformable-detr"
 
-DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "sensetime/deformable-detr",
-    # See all Deformable DETR models at https://huggingface.co/models?filter=deformable-detr
-]
+
+from ..deprecated._archive_maps import DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -712,13 +710,14 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
             batch_size, num_queries, self.n_heads, self.n_levels, self.n_points
         )
         # batch_size, num_queries, n_heads, n_levels, n_points, 2
-        if reference_points.shape[-1] == 2:
+        num_coordinates = reference_points.shape[-1]
+        if num_coordinates == 2:
             offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
             sampling_locations = (
                 reference_points[:, :, None, :, None, :]
                 + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
             )
-        elif reference_points.shape[-1] == 4:
+        elif num_coordinates == 4:
             sampling_locations = (
                 reference_points[:, :, None, :, None, :2]
                 + sampling_offsets / self.n_points * reference_points[:, :, None, :, None, 2:] * 0.5
@@ -1403,14 +1402,15 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
         intermediate_reference_points = ()
 
         for idx, decoder_layer in enumerate(self.layers):
-            if reference_points.shape[-1] == 4:
+            num_coordinates = reference_points.shape[-1]
+            if num_coordinates == 4:
                 reference_points_input = (
                     reference_points[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
                 )
-            else:
-                if reference_points.shape[-1] != 2:
-                    raise ValueError("Reference points' last dimension must be of size 2")
+            elif reference_points.shape[-1] == 2:
                 reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
+            else:
+                raise ValueError("Reference points' last dimension must be of size 2")
 
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -1444,17 +1444,18 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
             # hack implementation for iterative bounding box refinement
             if self.bbox_embed is not None:
                 tmp = self.bbox_embed[idx](hidden_states)
-                if reference_points.shape[-1] == 4:
+                num_coordinates = reference_points.shape[-1]
+                if num_coordinates == 4:
                     new_reference_points = tmp + inverse_sigmoid(reference_points)
                     new_reference_points = new_reference_points.sigmoid()
-                else:
-                    if reference_points.shape[-1] != 2:
-                        raise ValueError(
-                            f"Reference points' last dimension must be of size 2, but is {reference_points.shape[-1]}"
-                        )
+                elif num_coordinates == 2:
                     new_reference_points = tmp
                     new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(reference_points)
                     new_reference_points = new_reference_points.sigmoid()
+                else:
+                    raise ValueError(
+                        f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}"
+                    )
                 reference_points = new_reference_points.detach()
 
             intermediate += (hidden_states,)
@@ -1758,7 +1759,6 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
-        valid_ratios = valid_ratios.float()
 
         # Fourth, sent source_flatten + mask_flatten + lvl_pos_embed_flatten (backbone + proj layer output) through encoder
         # Also provide spatial_shapes, level_start_index and valid_ratios
@@ -2282,9 +2282,10 @@ class DeformableDetrLoss(nn.Module):
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         world_size = 1
-        if PartialState._shared_state != {}:
-            num_boxes = reduce(num_boxes)
-            world_size = PartialState().num_processes
+        if is_accelerate_available():
+            if PartialState._shared_state != {}:
+                num_boxes = reduce(num_boxes)
+                world_size = PartialState().num_processes
         num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
 
         # Compute all the requested losses

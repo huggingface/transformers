@@ -47,10 +47,8 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "Salesforce/instructblip-flan-t5-xl"
 
-INSTRUCTBLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Salesforce/instructblip-flan-t5-xl",
-    # See all InstructBLIP models at https://huggingface.co/models?filter=instructblip
-]
+
+from ..deprecated._archive_maps import INSTRUCTBLIP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -1537,19 +1535,33 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         inputs_embeds = self.get_input_embeddings()(input_ids)
         inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
 
+        # add image_embeds length to max_length, so that the final max_length in counted only on token embeds
+        # -1 is to account for the prepended BOS after `generate.`
+        if not self.language_model.config.is_encoder_decoder:
+            generate_kwargs["max_length"] = generate_kwargs.get("max_length", 20) + language_model_inputs.shape[1] - 1
+            generate_kwargs["min_length"] = generate_kwargs.get("min_length", 0) + language_model_inputs.shape[1]
+
         outputs = self.language_model.generate(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             **generate_kwargs,
         )
 
-        # the InstructBLIP authors used inconsistent tokenizer/model files during training,
-        # with the tokenizer's bos token being set to </s> which has ID=2,
-        # whereas the model's text config has bos token id = 0
-        if self.config.text_config.architectures[0] == "LLaMAForCausalLM":
-            if isinstance(outputs, torch.Tensor):
-                outputs[outputs == 0] = 2
+        # this is a temporary workaround to be consistent with other generation models and
+        # have BOS as the first token, even though under the hood we are calling LM with embeds
+        if not self.language_model.config.is_encoder_decoder:
+            # the InstructBLIP authors used inconsistent tokenizer/model files during training,
+            # with the tokenizer's bos token being set to </s> which has ID=2,
+            # whereas the model's text config has bos token id = 0
+            bos_token_id = (
+                2
+                if self.config.text_config.architectures[0] == "LLaMAForCausalLM"
+                else self.config.text_config.bos_token_id
+            )
+            bos_tokens = torch.LongTensor([[bos_token_id]]).repeat(batch_size, 1).to(image_embeds.device)
+            if not isinstance(outputs, torch.Tensor):
+                outputs.sequences = torch.cat([bos_tokens, outputs.sequences], dim=-1)
             else:
-                outputs.sequences[outputs.sequences == 0] = 2
+                outputs = torch.cat([bos_tokens, outputs], dim=-1)
 
         return outputs

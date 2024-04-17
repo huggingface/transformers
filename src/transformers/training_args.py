@@ -46,10 +46,11 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_mlu_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tf32_available,
-    is_torch_tpu_available,
+    is_torch_xla_available,
     is_torch_xpu_available,
     logging,
     requires_backends,
@@ -66,13 +67,15 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
 
+    from .pytorch_utils import is_torch_greater_or_equal_than_2_0
+
 if is_accelerate_available():
     from accelerate.state import AcceleratorState, PartialState
     from accelerate.utils import DistributedType
 
     from .trainer_pt_utils import AcceleratorConfig
 
-if is_torch_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 if is_torch_neuroncore_available(check_device=False):
@@ -128,7 +131,9 @@ def get_xla_device_type(device: "torch.device") -> Optional[str]:
     """
     Returns the xla device type (CPU|GPU|TPU) or None if the device is a non-xla device.
     """
-    if is_torch_tpu_available():
+    if is_torch_xla_available():
+        if device.type == "cpu":
+            return "CPU"
         return xm.xla_real_devices([device])[0].split(":")[0]
     return None
 
@@ -160,6 +165,43 @@ class OptimizerNames(ExplicitEnum):
     RMSPROP_BNB = "rmsprop_bnb"
     RMSPROP_8BIT = "rmsprop_bnb_8bit"
     RMSPROP_32BIT = "rmsprop_bnb_32bit"
+    GALORE_ADAMW = "galore_adamw"
+    GALORE_ADAMW_8BIT = "galore_adamw_8bit"
+    GALORE_ADAFACTOR = "galore_adafactor"
+    GALORE_ADAMW_LAYERWISE = "galore_adamw_layerwise"
+    GALORE_ADAMW_8BIT_LAYERWISE = "galore_adamw_8bit_layerwise"
+    GALORE_ADAFACTOR_LAYERWISE = "galore_adafactor_layerwise"
+
+
+# Sometimes users will pass in a `str` repr of a dict in the CLI
+# We need to track what fields those can be. Each time a new arg
+# has a dict type, it must be added to this list.
+# Important: These should be typed with Optional[Union[dict,str,...]]
+_VALID_DICT_FIELDS = [
+    "accelerator_config",
+    "fsdp_config",
+    "deepspeed",
+    "gradient_checkpointing_kwargs",
+    "lr_scheduler_kwargs",
+]
+
+
+def _convert_str_dict(passed_value: dict):
+    "Safely checks that a passed value is a dictionary and converts any string values to their appropriate types."
+    for key, value in passed_value.items():
+        if isinstance(value, dict):
+            passed_value[key] = _convert_str_dict(value)
+        elif isinstance(value, str):
+            # First check for bool and convert
+            if value.lower() in ("true", "false"):
+                passed_value[key] = value.lower() == "true"
+            # Check for digit
+            elif value.isdigit():
+                passed_value[key] = int(value)
+            elif value.replace(".", "", 1).isdigit():
+                passed_value[key] = float(value)
+
+    return passed_value
 
 
 # TODO: `TrainingArguments` users rely on it being fully mutable. In the future see if we can narrow this to a few keys: https://github.com/huggingface/transformers/pull/25903
@@ -493,6 +535,11 @@ class TrainingArguments:
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
             `ds_config.json`) or an already loaded json file as a `dict`"
 
+            <Tip warning={true}>
+                If enabling any Zero-init, make sure that your model is not initialized until
+                *after* initializing the `TrainingArguments`, else it will not be applied.
+            </Tip>
+
         accelerator_config (`str`, `dict`, or `AcceleratorConfig`, *optional*):
             Config to be used with the internal `Accelerator` implementation. The value is either a location of
             accelerator json config file (e.g., `accelerator_config.json`), an already loaded json file as `dict`,
@@ -623,6 +670,9 @@ class TrainingArguments:
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
             Whether or not the inputs will be passed to the `compute_metrics` function. This is intended for metrics
             that need inputs, predictions and references for scoring calculation in Metric class.
+        eval_do_concat_batches (`bool`, *optional*, defaults to `True`):
+            Whether to recursively concat inputs/losses/labels/predictions across batches. If `False`,
+            will instead store them as lists, with each batch kept separate.
         auto_find_batch_size (`bool`, *optional*, defaults to `False`)
             Whether to find a batch size that will fit into memory automatically through exponential decay, avoiding
             CUDA Out-of-Memory errors. Requires accelerate to be installed (`pip install accelerate`)
@@ -692,6 +742,12 @@ class TrainingArguments:
             for instruction fine-tuning. Check out the [original paper](https://arxiv.org/abs/2310.05914) and the
             [original code](https://github.com/neelsjain/NEFTune). Support transformers `PreTrainedModel` and also
             `PeftModel` from peft.
+        optim_target_modules (`Union[str, List[str]]`, *optional*):
+            The target modules to optimize, i.e. the module names that you would like to train, right now this is used only for GaLore algorithm
+            https://arxiv.org/abs/2403.03507
+            See: https://github.com/jiaweizzhao/GaLore for more details. You need to make sure to pass a valid GaloRe
+            optimizer, e.g. one of: "galore_adamw", "galore_adamw_8bit", "galore_adafactor" and make sure that the target modules are `nn.Linear` modules
+            only.
     """
 
     framework = "pt"
@@ -781,11 +837,11 @@ class TrainingArguments:
         default="linear",
         metadata={"help": "The scheduler type to use."},
     )
-    lr_scheduler_kwargs: Optional[Dict] = field(
+    lr_scheduler_kwargs: Optional[Union[dict, str]] = field(
         default_factory=dict,
         metadata={
             "help": (
-                "Extra parameters for the lr_scheduler such as {'num_cycles': 1} for the cosine with hard restarts"
+                "Extra parameters for the lr_scheduler such as {'num_cycles': 1} for the cosine with hard restarts."
             )
         },
     )
@@ -977,7 +1033,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": "The backend to be used for distributed training",
-            "choices": ["nccl", "gloo", "mpi", "ccl", "hccl"],
+            "choices": ["nccl", "gloo", "mpi", "ccl", "hccl", "cncl"],
         },
     )
     tpu_num_cores: Optional[int] = field(
@@ -1023,13 +1079,13 @@ class TrainingArguments:
             )
         },
     )
-    dataloader_prefetch_factor: int = field(
-        default=None,
+    dataloader_prefetch_factor: Optional[int] = field(
+        default=None if not is_torch_available() or is_torch_greater_or_equal_than_2_0 else 2,
         metadata={
             "help": (
                 "Number of batches loaded in advance by each worker. "
                 "2 means there will be a total of 2 * num_workers batches prefetched across all workers. "
-                "Default is unset"
+                "Default is 2 for PyTorch < 2.0.0 and otherwise None."
             )
         },
     )
@@ -1096,7 +1152,6 @@ class TrainingArguments:
             )
         },
     )
-    # Do not touch this type annotation or it will stop working in CLI
     fsdp_config: Optional[Union[dict, str]] = field(
         default=None,
         metadata={
@@ -1115,8 +1170,7 @@ class TrainingArguments:
             )
         },
     )
-    # Do not touch this type annotation or it will stop working in CLI
-    accelerator_config: Optional[str] = field(
+    accelerator_config: Optional[Union[dict, str]] = field(
         default=None,
         metadata={
             "help": (
@@ -1125,8 +1179,7 @@ class TrainingArguments:
             )
         },
     )
-    # Do not touch this type annotation or it will stop working in CLI
-    deepspeed: Optional[str] = field(
+    deepspeed: Optional[Union[dict, str]] = field(
         default=None,
         metadata={
             "help": (
@@ -1159,7 +1212,7 @@ class TrainingArguments:
         default="length",
         metadata={"help": "Column name with precomputed lengths to use when grouping by length."},
     )
-    report_to: Optional[List[str]] = field(
+    report_to: Union[None, str, List[str]] = field(
         default=None, metadata={"help": "The list of integrations to report the results and logs to."}
     )
     ddp_find_unused_parameters: Optional[bool] = field(
@@ -1230,7 +1283,7 @@ class TrainingArguments:
             "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
         },
     )
-    gradient_checkpointing_kwargs: Optional[dict] = field(
+    gradient_checkpointing_kwargs: Optional[Union[dict, str]] = field(
         default=None,
         metadata={
             "help": "Gradient checkpointing key word arguments such as `use_reentrant`. Will be passed to `torch.utils.checkpoint.checkpoint` through `model.gradient_checkpointing_enable`."
@@ -1238,6 +1291,12 @@ class TrainingArguments:
     )
     include_inputs_for_metrics: bool = field(
         default=False, metadata={"help": "Whether or not the inputs will be passed to the `compute_metrics` function."}
+    )
+    eval_do_concat_batches: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to recursively concat inputs/losses/labels/predictions across batches. If `False`, will instead store them as lists, with each batch kept separate."
+        },
     )
     # Deprecated arguments
     fp16_backend: str = field(
@@ -1350,7 +1409,25 @@ class TrainingArguments:
         },
     )
 
+    optim_target_modules: Union[None, str, List[str]] = field(
+        default=None,
+        metadata={
+            "help": "Target modules for the optimizer defined in the `optim` argument. Only used for the GaLore optimizer at the moment."
+        },
+    )
+
     def __post_init__(self):
+        # Parse in args that could be `dict` sent in from the CLI as a string
+        for field in _VALID_DICT_FIELDS:
+            passed_value = getattr(self, field)
+            # We only want to do this if the str starts with a bracket to indiciate a `dict`
+            # else its likely a filename if supported
+            if isinstance(passed_value, str) and passed_value.startswith("{"):
+                loaded_dict = json.loads(passed_value)
+                # Convert str values to types if applicable
+                loaded_dict = _convert_str_dict(loaded_dict)
+                setattr(self, field, loaded_dict)
+
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
         # see https://github.com/huggingface/transformers/issues/10628
@@ -1473,7 +1550,7 @@ class TrainingArguments:
                 self.half_precision_backend = self.fp16_backend
 
             if self.bf16 or self.bf16_full_eval:
-                if self.use_cpu and not is_torch_bf16_cpu_available() and not is_torch_tpu_available():
+                if self.use_cpu and not is_torch_bf16_cpu_available() and not is_torch_xla_available():
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
                 elif not self.use_cpu:
@@ -1526,30 +1603,32 @@ class TrainingArguments:
             self.framework == "pt"
             and is_torch_available()
             and (self.device.type != "cuda")
+            and (self.device.type != "mlu")
             and (self.device.type != "npu")
             and (self.device.type != "xpu")
-            and (get_xla_device_type(self.device) != "GPU")
+            and (get_xla_device_type(self.device) not in ["GPU", "CUDA"])
             and (self.fp16 or self.fp16_full_eval)
         ):
             raise ValueError(
                 "FP16 Mixed precision training with AMP or APEX (`--fp16`) and FP16 half precision evaluation"
-                " (`--fp16_full_eval`) can only be used on CUDA or NPU devices or certain XPU devices (with IPEX)."
+                " (`--fp16_full_eval`) can only be used on CUDA or MLU devices or NPU devices or certain XPU devices (with IPEX)."
             )
 
         if (
             self.framework == "pt"
             and is_torch_available()
             and (self.device.type != "cuda")
+            and (self.device.type != "mlu")
             and (self.device.type != "npu")
             and (self.device.type != "xpu")
-            and (get_xla_device_type(self.device) != "GPU")
+            and (get_xla_device_type(self.device) not in ["GPU", "CUDA"])
             and (get_xla_device_type(self.device) != "TPU")
             and (self.device.type != "cpu")
             and (self.bf16 or self.bf16_full_eval)
         ):
             raise ValueError(
                 "BF16 Mixed precision training with AMP (`--bf16`) and BF16 half precision evaluation"
-                " (`--bf16_full_eval`) can only be used on CUDA, XPU (with IPEX), NPU or CPU/TPU/NeuronCore devices."
+                " (`--bf16_full_eval`) can only be used on CUDA, XPU (with IPEX), NPU, MLU or CPU/TPU/NeuronCore devices."
             )
 
         if self.torchdynamo is not None:
@@ -1692,7 +1771,8 @@ class TrainingArguments:
         if self.fsdp_config["xla"]:
             if len(self.fsdp) > 0:
                 # store XLA fsdp configuration parameters into a dictionary
-                self.xla_fsdp_config = self.fsdp_config.get("xla_fsdp_settings", {})
+                # Copy the config to avoid modifying the original config (which may be used for JSON serialization)
+                self.xla_fsdp_config = self.fsdp_config.get("xla_fsdp_settings", {}).copy()
                 # apply appropriate string to torch.dtype conversions for parameters
                 if "compute_dtype" in self.xla_fsdp_config:
                     self.xla_fsdp_config["compute_dtype"] = getattr(torch, self.xla_fsdp_config["compute_dtype"])
@@ -1716,8 +1796,10 @@ class TrainingArguments:
             for fsdp_option in self.fsdp:
                 if fsdp_option.upper() in FSDP_SHARDING_STRATEGY:
                     # set environment variable for FSDP sharding strategy
-                    os.environ[f"{prefix}SHARDING_STRATEGY"] = str(
-                        FSDP_SHARDING_STRATEGY.index(fsdp_option.upper()) + 1
+                    os.environ[f"{prefix}SHARDING_STRATEGY"] = (
+                        str(FSDP_SHARDING_STRATEGY.index(fsdp_option.upper()) + 1)
+                        if is_accelerate_available("0.26.0")
+                        else fsdp_option.upper()
                     )
                 elif fsdp_option == FSDPOption.OFFLOAD:
                     os.environ[f"{prefix}OFFLOAD_PARAMS"] = "true"
@@ -1730,16 +1812,25 @@ class TrainingArguments:
                         os.environ[f"{prefix}TRANSFORMER_CLS_TO_WRAP"] = ",".join(
                             self.fsdp_config["transformer_layer_cls_to_wrap"]
                         )
-            prefetch_policy = self.fsdp_config.get("fsdp_backward_prefetch", "NO_PREFETCH")
+            prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
             os.environ[f"{prefix}BACKWARD_PREFETCH"] = prefetch_policy.upper()
-            os.environ[f"{prefix}FORWARD_PREFETCH"] = self.fsdp_config.get("forward_prefect", "false")
+            os.environ[f"{prefix}FORWARD_PREFETCH"] = self.fsdp_config.get("forward_prefetch", "false")
             os.environ[f"{prefix}SYNC_MODULE_STATES"] = self.fsdp_config.get("sync_module_states", "true")
             os.environ[f"{prefix}USE_ORIG_PARAMS"] = self.fsdp_config.get("use_orig_params", "true")
 
         if is_accelerate_available():
-            if not isinstance(self.accelerator_config, (AcceleratorConfig, dict)):
+            if not isinstance(self.accelerator_config, (AcceleratorConfig)):
                 if self.accelerator_config is None:
                     self.accelerator_config = AcceleratorConfig()
+                elif isinstance(self.accelerator_config, dict):
+                    self.accelerator_config = AcceleratorConfig(**self.accelerator_config)
+                # Check that a user didn't pass in the class instantiator
+                # such as `accelerator_config = AcceleratorConfig`
+                elif isinstance(self.accelerator_config, type):
+                    raise NotImplementedError(
+                        "Tried passing in a callable to `accelerator_config`, but this is not supported. "
+                        "Please pass in a fully constructed `AcceleratorConfig` object instead."
+                    )
                 else:
                     self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
             if self.dispatch_batches is not None:
@@ -1748,7 +1839,7 @@ class TrainingArguments:
                     " `--accelerator_config {'dispatch_batches':VALUE} instead",
                     FutureWarning,
                 )
-                self.accelerator_config["dispatch_batches"] = self.dispatch_batches
+                self.accelerator_config.dispatch_batches = self.dispatch_batches
 
             if self.split_batches is not None:
                 warnings.warn(
@@ -1756,7 +1847,7 @@ class TrainingArguments:
                     " `--accelerator_config {'split_batches':VALUE} instead",
                     FutureWarning,
                 )
-                self.accelerator_config["split_batches"] = self.split_batches
+                self.accelerator_config.split_batches = self.split_batches
 
         if self.tpu_metrics_debug:
             warnings.warn(
@@ -1805,7 +1896,11 @@ class TrainingArguments:
         if self.use_cpu:
             self.dataloader_pin_memory = False
 
-        if self.dataloader_num_workers == 0 and self.dataloader_prefetch_factor is not None:
+        if (
+            (not is_torch_available() or is_torch_greater_or_equal_than_2_0)
+            and self.dataloader_num_workers == 0
+            and self.dataloader_prefetch_factor is not None
+        ):
             raise ValueError(
                 "--dataloader_prefetch_factor can only be set when data is loaded in a different process, i.e."
                 " when --dataloader_num_workers > 1."
@@ -1940,7 +2035,7 @@ class TrainingArguments:
                 "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
             )
-        if is_torch_tpu_available():
+        if is_torch_xla_available():
             device = self.distributed_state.device
             self._n_gpu = 0
         elif is_sagemaker_dp_enabled() or is_sagemaker_mp_enabled():
@@ -1966,6 +2061,10 @@ class TrainingArguments:
             elif is_torch_xpu_available():
                 device = torch.device("xpu:0")
                 torch.xpu.set_device(device)
+                self._n_gpu = 1
+            elif is_torch_mlu_available():
+                device = torch.device("mlu:0")
+                torch.mlu.set_device(device)
                 self._n_gpu = 1
             elif is_torch_npu_available():
                 device = torch.device("npu:0")
@@ -2021,7 +2120,7 @@ class TrainingArguments:
         - `ParallelMode.TPU`: several TPU cores.
         """
         requires_backends(self, ["torch"])
-        if is_torch_tpu_available():
+        if is_torch_xla_available():
             return ParallelMode.TPU
         elif is_sagemaker_mp_enabled():
             return ParallelMode.SAGEMAKER_MODEL_PARALLEL
@@ -2172,7 +2271,7 @@ class TrainingArguments:
                     # tell all replicas to wait
                     logger.debug(f"{self.process_index}: waiting for the {main_process_desc} to perform {desc}")
 
-                    if is_torch_tpu_available():
+                    if is_torch_xla_available():
                         xm.rendezvous(desc)
                     else:
                         dist.barrier()
@@ -2181,7 +2280,7 @@ class TrainingArguments:
                 if is_main_process:
                     # the wait is over
                     logger.debug(f"{self.process_index}: {main_process_desc} completed {desc}, releasing all replicas")
-                    if is_torch_tpu_available():
+                    if is_torch_xla_available():
                         xm.rendezvous(desc)
                     else:
                         dist.barrier()
