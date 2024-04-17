@@ -2614,6 +2614,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 # assign shard to be the completed state dict
                 shard = state_dict
+                del state_dict
+                gc.collect()
 
             if safe_serialization:
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
