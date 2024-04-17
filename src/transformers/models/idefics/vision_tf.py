@@ -129,6 +129,10 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
         # Input `pixel_values` is NCHW format which doesn't run on CPU so first thing we do is
         # transpose it to change it to NHWC
         # TODO: Alazar don't forget to change format back to NCHW
+
+        if isinstance(pixel_values, dict):
+            pixel_values = pixel_values["pixel_values"]
+
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
         batch_size, height, width, num_channels = shape_list(pixel_values)
         if not interpolate_pos_encoding:
@@ -219,11 +223,11 @@ class TFIdeficsVisionAttention(tf.keras.layers.Layer):
         src_len = shape_list(key_states)[1]
         attn_weights = tf.linalg.matmul(query_states, key_states, transpose_b=True)
 
-        if shape_list(attn_weights) != [bsz * self.num_heads, tgt_len, src_len]:
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {shape_list(attn_weights)}"
-            )
+        tf.debugging.assert_equal(
+            tf.shape(attn_weights),
+            [bsz * self.num_heads, tgt_len, src_len],
+            message=f"Attention weights should be of size {[bsz * self.num_heads, tgt_len, src_len]}, but is {tf.shape(attn_weights)}",
+        )
 
         # apply the causal_attention_mask first
         if causal_attention_mask is not None:
@@ -259,11 +263,11 @@ class TFIdeficsVisionAttention(tf.keras.layers.Layer):
 
         attn_output = tf.linalg.matmul(attn_probs, value_states)
 
-        if shape_list(attn_output) != [bsz * self.num_heads, tgt_len, self.head_dim]:
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {shape_list(attn_output)}"
-            )
+        tf.debugging.assert_equal(
+            tf.shape(attn_output),
+            [bsz * self.num_heads, tgt_len, self.head_dim],
+            message=f"Attention weights should be of size {[bsz * self.num_heads, tgt_len, self.head_dim]}, but is {tf.shape(attn_output)}",
+        )
 
         attn_output = tf.reshape(attn_output, (bsz, self.num_heads, tgt_len, self.head_dim))
         attn_output = tf.transpose(attn_output, perm=[0, 2, 1, 3])
