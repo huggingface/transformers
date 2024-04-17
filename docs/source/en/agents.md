@@ -405,12 +405,8 @@ And the output:
 
 
 
-<Tip>
-
-Depending on the LLM, some are quite brittle and require very exact prompts in order to work well. Having a well-defined
-name and description of the tool is paramount to having it be leveraged by the agent.
-
-</Tip>
+> [!TIP]
+> Some LLMs can be brittle and require very exact prompts in order to work well. It is very important that your tool has a well-defined name and description in order for the agent to successfully leverage it.
 
 ### Adding a new tool to an existing agent's toolbox
 
