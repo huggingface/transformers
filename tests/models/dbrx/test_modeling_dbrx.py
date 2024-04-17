@@ -364,8 +364,8 @@ class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 @require_torch
 class DbrxModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_masked_lm(self):
-        model = DbrxForCausalLM.from_pretrained("databricks/dbrx-instruct")
+    def test_tiny_model_logits(self):
+        model = DbrxForCausalLM.from_pretrained("Rocketknight1/dbrx-tiny-random")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
         vocab_size = model.vocab_size
@@ -375,7 +375,12 @@ class DbrxModelIntegrationTest(unittest.TestCase):
 
         # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
+            [
+                [
+                    [-1.6300e-04, 5.0118e-04, 2.5437e-04],
+                    [2.0422e-05, 2.7210e-04, -1.5125e-04],
+                    [-1.5105e-04, 4.6879e-04, 3.3309e-04],
+                ]
+            ]
         )
-
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
