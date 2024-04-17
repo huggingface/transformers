@@ -17,7 +17,7 @@ import gc
 import tempfile
 import unittest
 
-from transformers import EetqConfig, AutoConfig, AutoModelForCausalLM, AutoTokenizer, OPTForCausalLM
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, EetqConfig, OPTForCausalLM
 from transformers.testing_utils import (
     require_accelerate,
     require_eetq,
@@ -52,11 +52,7 @@ class EetqConfigTest(unittest.TestCase):
         """
         Simple test that checks if one uses a dict and converts it to a config object, the config object is the same as the dict
         """
-        dict = {
-            "modules_to_not_convert": ["lm_head.weight"],
-            "quant_method": "eetq",
-            "weights": "int8"
-        }
+        dict = {"modules_to_not_convert": ["lm_head.weight"], "quant_method": "eetq", "weights": "int8"}
         quantization_config = EetqConfig.from_dict(dict)
 
         self.assertEqual(dict["modules_to_not_convert"], quantization_config.modules_to_not_convert)
@@ -84,12 +80,10 @@ class EetqTest(unittest.TestCase):
         """
         Setup quantized model
         """
-        quantization_config = EetqConfig(weights='int8')
+        quantization_config = EetqConfig(weights="int8")
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
-            cls.model_name,
-            device_map=cls.device_map,
-            quantization_config=quantization_config
+            cls.model_name, device_map=cls.device_map, quantization_config=quantization_config
         )
 
     def tearDown(self):
@@ -107,7 +101,7 @@ class EetqTest(unittest.TestCase):
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
-        quantization_config = EetqConfig(weights='int8')
+        quantization_config = EetqConfig(weights="int8")
 
         with init_empty_weights():
             model = OPTForCausalLM(config)
@@ -128,10 +122,8 @@ class EetqTest(unittest.TestCase):
         # Try with `linear_weights_not_to_quantize`
         with init_empty_weights():
             model = OPTForCausalLM(config)
-        quantization_config = EetqConfig(modules_to_not_convert=['fc1'])
-        model = replace_with_eetq_linear(
-            model, quantization_config=quantization_config
-        )
+        quantization_config = EetqConfig(modules_to_not_convert=["fc1"])
+        model = replace_with_eetq_linear(model, quantization_config=quantization_config)
         nb_eetq_linear = 0
         for module in model.modules():
             if isinstance(module, EetqLinear):
@@ -175,7 +167,9 @@ class EetqTest(unittest.TestCase):
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
         quantization_config = EetqConfig()
-        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto", quantization_config=quantization_config)
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name, device_map="auto", quantization_config=quantization_config
+        )
         self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)

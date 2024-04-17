@@ -1,5 +1,6 @@
 from ..utils import is_accelerate_available, is_eetq_available, logging
 
+
 if is_eetq_available():
     import eetq
     import torch.nn as nn
@@ -16,7 +17,7 @@ def _replace_with_eetq_linear(
     current_key_name=None,
     quantization_config=None,
     has_been_replaced=False,
-    pre_quantized=False
+    pre_quantized=False,
 ):
     """
     Private method that wraps the recursion for module replacement.
@@ -38,10 +39,7 @@ def _replace_with_eetq_linear(
                     in_features = module.in_features
                     out_features = module.out_features
                     model._modules[name] = eetq.EetqLinear(
-                        in_features,
-                        out_features,
-                        module.bias is not None,
-                        module.weight.device
+                        in_features, out_features, module.bias is not None, module.weight.device
                     )
                     if pre_quantized:
                         model._modules[name].register_scale(module.weight.device)
@@ -56,14 +54,16 @@ def _replace_with_eetq_linear(
                 current_key_name,
                 quantization_config,
                 has_been_replaced=has_been_replaced,
-                pre_quantized=pre_quantized
+                pre_quantized=pre_quantized,
             )
         # Remove the last key for recursion
         current_key_name.pop(-1)
     return model, has_been_replaced
 
 
-def replace_with_eetq_linear(model, modules_to_not_convert=None, current_key_name=None, quantization_config=None, pre_quantized=False):
+def replace_with_eetq_linear(
+    model, modules_to_not_convert=None, current_key_name=None, quantization_config=None, pre_quantized=False
+):
     """
     A helper function to replace all `torch.nn.Linear` modules by `eetq.EetqLinear` modules from the `eetq`
     library. This will enable running your models using high performance int8 weight-only gemm kerner from

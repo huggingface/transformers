@@ -909,9 +909,10 @@ class EetqConfig(QuantizationConfigMixin):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
     """
+
     def __init__(
         self,
-        weights: str ="int8",
+        weights: str = "int8",
         modules_to_not_convert: Optional[List] = None,
         **kwargs,
     ):
