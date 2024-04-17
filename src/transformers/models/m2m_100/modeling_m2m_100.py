@@ -1187,10 +1187,10 @@ class M2M100Decoder(M2M100PreTrainedModel):
 
         if self._use_flash_attention_2:
             # 2d mask is passed through the layers
-            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+            combined_attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
             # 4d mask is passed through the layers
-            attention_mask = _prepare_4d_causal_attention_mask(
+            combined_attention_mask = _prepare_4d_causal_attention_mask(
                 attention_mask, input_shape, inputs_embeds, past_key_values_length
             )
 
@@ -1252,8 +1252,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
                     layer_outputs = self._gradient_checkpointing_func(
                         decoder_layer.__call__,
                         hidden_states,
-                        # combined_attention_mask,
-                        attention_mask,
+                        combined_attention_mask,
                         encoder_hidden_states,
                         encoder_attention_mask,
                         head_mask[idx] if head_mask is not None else None,
@@ -1265,8 +1264,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
                 else:
                     layer_outputs = decoder_layer(
                         hidden_states,
-                        # attention_mask=combined_attention_mask,
-                        attention_mask=attention_mask,
+                        attention_mask=combined_attention_mask,
                         encoder_hidden_states=encoder_hidden_states,
                         encoder_attention_mask=encoder_attention_mask,
                         layer_head_mask=(head_mask[idx] if head_mask is not None else None),
