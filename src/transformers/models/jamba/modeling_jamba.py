@@ -821,6 +821,8 @@ class JambaMambaMixer(nn.Module):
             )
 
     def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params: HybridMambaAttentionDynamicCache = None):
+        seq_len = hidden_states.shape[1]
+        use_precoumpted_states = cache_params is not None and cache_params.has_previous_state and seq_len == 1
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
@@ -830,7 +832,7 @@ class JambaMambaMixer(nn.Module):
 
         # 2. Convolution sequence transformation
         conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
-        if isinstance(cache_params, HybridMambaAttentionDynamicCache) and cache_params.has_previous_state:
+        if use_precoumpted_states:
             hidden_states = causal_conv1d_update(
                 hidden_states.squeeze(-1),
                 cache_params.conv_states[self.layer_idx],
@@ -869,7 +871,7 @@ class JambaMambaMixer(nn.Module):
         A = -torch.exp(self.A_log.float())
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         time_proj_bias = time_proj_bias.float() if time_proj_bias is not None else None
-        if cache_params is not None and cache_params.has_previous_state:
+        if use_precoumpted_states:
             scan_outputs = selective_state_update(
                 cache_params.ssm_states[self.layer_idx],
                 hidden_states[..., 0],
@@ -920,7 +922,7 @@ class JambaMambaMixer(nn.Module):
             else:
                 ssm_state = cache_params.ssm_states[self.layer_idx]
 
-            if cache_params.has_previous_state:
+            if cache_params.has_previous_state and seq_len == 1:
                 conv_state = cache_params.conv_states[self.layer_idx]                   # [batch, intermediate_size, conv_kernel_size]
                 conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
                 conv_state[:, :, -1] = hidden_states[:, :, 0]
