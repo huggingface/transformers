@@ -3,8 +3,8 @@ name: Build docker images (scheduled)
 on:
   push:
     branches:
-      # - build_ci_docker_image*
-      - test-eetq-dockerfile
+      - build_ci_docker_image*
+      # - test-eetq-dockerfile
   repository_dispatch:
   workflow_call:
     inputs:
