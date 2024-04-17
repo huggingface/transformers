@@ -650,7 +650,11 @@ class LlamaSdpaAttention(LlamaAttention):
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            if self.layer_idx >= len(past_key_value.key_cache):
+                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            else:
+                key_states, value_states = past_key_value.update(key_states.to(past_key_value[self.layer_idx][0].device), value_states.to(past_key_value[self.layer_idx][1].device), self.layer_idx, cache_kwargs)
+                query_states = query_states.to(past_key_value[self.layer_idx][0].device)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -659,6 +663,8 @@ class LlamaSdpaAttention(LlamaAttention):
         # if attention_mask is not None and cache_position is not None:
         if attention_mask is not None:
             causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
+
+        causal_mask = causal_mask.to(query_states.device)
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
