@@ -17,9 +17,7 @@ rendered properly in your Markdown viewer.
 
 Large Language Models (LLMs) trained to perform [causal language modeling](./tasks/language_modeling.) can tackle a wide range of tasks, but they often struggle with basic tasks like logic, calculation, and search. The worst scenario is when they perform poorly in a domain, such as math, yet still attempt to handle all the calculations themselves.
 
-One approach to overcome this weakness is to embed the LLM into a system where it has the ability to call tools: such a system is called an LLM Agent.
-
-The augmentation with tools gives the LLM superpowers. See for yourselves:
+One approach to overcome this weakness is to create an *agent*, a program powered by an LLM. The agent is empowered by *tools* to help the agent perform an action.
 
 ```python
 agent.run("Caption the following image", image=image)
