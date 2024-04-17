@@ -29,7 +29,7 @@ from .quantizer_aqlm import AqlmHfQuantizer
 from .quantizer_awq import AwqQuantizer
 from .quantizer_bnb_4bit import Bnb4BitHfQuantizer
 from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
-from .quantizer_eetq import EETQHfQuantizer
+from .quantizer_eetq import EetqQHfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
 
