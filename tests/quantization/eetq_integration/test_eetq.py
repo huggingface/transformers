@@ -113,7 +113,7 @@ class EETQTest(unittest.TestCase):
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
-        quantization_config = EETQConfig()
+        quantization_config = EETQConfig(weights='int8')
 
         with init_empty_weights():
             model = OPTForCausalLM(config)
