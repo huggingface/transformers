@@ -53,7 +53,6 @@ jobs:
   test_modified_files:
     needs: get_modified_models
     name: Slow & FA2 tests
-    runs-on: ubuntu-latest
     runs-on: [single-gpu, nvidia-gpu, a10, ci]
     container:
       image: huggingface/transformers-all-latest-gpu
