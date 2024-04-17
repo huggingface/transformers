@@ -1012,4 +1012,3 @@ class RTDetrImageProcessor(BaseImageProcessor):
             results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
-                     
