@@ -147,7 +147,7 @@ class EetqHfQuantizer(HfQuantizer):
         if self.quantization_config.modules_to_not_convert is not None:
             self.modules_to_not_convert.extend(self.quantization_config.modules_to_not_convert)
 
-        model = replace_with_EETQ_linear(
+        model = replace_with_eetq_linear(
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
 
