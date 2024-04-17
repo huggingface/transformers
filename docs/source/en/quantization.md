@@ -645,7 +645,7 @@ model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13
 ## EETQ
 The [EETQ](https://github.com/NetEase-FuXi/EETQ) supports int8 per-channel weight-only quantization for NVIDIA GPUS. The high-performance GEMM and GEMV kernels are from FasterTransformer and TensorRT-LLM. It requires no calibration dataset and does not need to pre-quantize your model. Moreover, the accuracy degradation is negligible owing to the per-channel quantization. 
 
-Make sure you have eetq installed via the source code https://github.com/NetEase-FuXi/EETQ
+Make sure you have eetq installed via the source code https://github.com/NetEase-FuXi/EETQ. EETQ requires CUDA capability <= 8.9 and >= 7.0
 ```
 git clone https://github.com/NetEase-FuXi/EETQ.git
 cd EETQ/
@@ -655,16 +655,19 @@ pip install .
 
 An unquantized model will be quantized via "from_pretrained".
 ```py
-from transformers import AutoModelForCausalLM, EETQConfig
+from transformers import AutoModelForCausalLM, EetqConfig
 path = "/path/to/model"
-quantization_config = EETQConfig("int8")
+quantization_config = EetqConfig("int8")
 model = AutoModelForCausalLM.from_pretrained(path, device_map="auto", quantization_config=quantization_config)
+```
 
 A quantized model shall be saved via "saved_pretrained" and be reused again via the "from_pretrained".
+
 ```py
 quant_path = "/path/to/save/quantized/model"
 model.save_pretrained(quant_path)
 model = AutoModelForCausalLM.from_pretrained(quant_path, device_map="auto")
+```
 
 ## Optimum
 
