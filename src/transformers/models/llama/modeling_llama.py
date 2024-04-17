@@ -1070,7 +1070,6 @@ class LlamaModel(LlamaPreTrainedModel):
                 return attention_mask
             return None
 
-        ignore_causal_mask = False
         if self.config._attn_implementation == "sdpa":
             # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument,
             # in order to dispatch on Flash Attention 2.
