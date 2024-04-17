@@ -41,11 +41,7 @@ agent.run("Read the following text out loud", text=text)
 | A beaver is swimming in the water | <audio controls><source src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tts_example.wav" type="audio/wav"> your browser does not support the audio element. </audio>
 ```
 
-Here you will learn:
-
-- what an agent is,
-- how to build one using `transformers` ,
-- and how to use it.
+In this tutorial, you'll learn what agents and tools are, how to build one with Transformers, and how to use them.
 
 ## Quickstart
 
