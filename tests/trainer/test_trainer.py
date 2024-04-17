@@ -696,7 +696,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             lr_scheduler_kwargs=extra_kwargs,
             learning_rate=0.2,
             warmup_steps=num_warmup_steps,
-            report_to="none"
+            report_to="none",
         )
         trainer = Trainer(model, args, train_dataset=train_dataset)
         trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
@@ -723,7 +723,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             lr_scheduler_kwargs=extra_kwargs,
             learning_rate=0.2,
             warmup_steps=num_warmup_steps,
-            report_to="none"
+            report_to="none",
         )
         trainer = Trainer(model, args, train_dataset=train_dataset)
         trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
@@ -779,7 +779,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             metric_for_best_model="eval_loss",
             num_train_epochs=10,
             learning_rate=0.2,
-            report_to="none"
+            report_to="none",
         )
         model = RegressionModel()
         trainer = TrainerWithLRLogs(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
@@ -1027,7 +1027,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         # Trainer without inf/nan filter
         args = TrainingArguments(
-            "./test", learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, neftune_noise_alpha=0.4, report_to="none"
+            "./test",
+            learning_rate=1e-9,
+            logging_steps=5,
+            logging_nan_inf_filter=False,
+            neftune_noise_alpha=0.4,
+            report_to="none",
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
@@ -1044,7 +1049,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         tiny_gpt2 = GPT2LMHeadModel(config)
         # Trainer without inf/nan filter
         args = TrainingArguments(
-            "./test", learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, neftune_noise_alpha=0.4, report_to="none"
+            "./test",
+            learning_rate=1e-9,
+            logging_steps=5,
+            logging_nan_inf_filter=False,
+            neftune_noise_alpha=0.4,
+            report_to="none",
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
@@ -1070,13 +1080,17 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_dataset = RepeatDataset(x)
 
         # Trainer without inf/nan filter
-        args = TrainingArguments("./test", learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=False, report_to="none")
+        args = TrainingArguments(
+            "./test", learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=False, report_to="none"
+        )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
         trainer.train()
         log_history_no_filter = trainer.state.log_history
 
         # Trainer with inf/nan filter
-        args = TrainingArguments("./test", learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=True, report_to="none")
+        args = TrainingArguments(
+            "./test", learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=True, report_to="none"
+        )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
         trainer.train()
         log_history_filter = trainer.state.log_history
@@ -1124,7 +1138,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_dataloader_without_dataset(self):
         train_dataset = RegressionDataset(length=128)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = CustomDataloaderTrainer(model=RegressionModel(), train_dataset=train_dataset, eval_dataset=train_dataset, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
+            trainer = CustomDataloaderTrainer(
+                model=RegressionModel(),
+                train_dataset=train_dataset,
+                eval_dataset=train_dataset,
+                args=TrainingArguments(output_dir=tmp_dir, report_to="none"),
+            )
 
             trainer.train()
             trainer.evaluate()
@@ -1422,7 +1441,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # Make the Trainer believe it's a parallelized model
         model.is_parallelizable = True
         model.model_parallel = True
-        args = TrainingArguments("./regression", per_device_train_batch_size=16, per_device_eval_batch_size=16, report_to="none")
+        args = TrainingArguments(
+            "./regression", per_device_train_batch_size=16, per_device_eval_batch_size=16, report_to="none"
+        )
         trainer = Trainer(model, args, train_dataset=RegressionDataset(), eval_dataset=RegressionDataset())
         # Check the Trainer was fooled
         self.assertTrue(trainer.is_model_parallel)

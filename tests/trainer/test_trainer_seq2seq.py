@@ -193,7 +193,9 @@ class Seq2seqTrainerTester(TestCasePlus):
         data_collator = DataCollatorForSeq2Seq(tokenizer, model=model, return_tensors="pt", padding="longest")
         gen_config = GenerationConfig(do_sample=False, top_p=0.9)  # bad: top_p is not compatible with do_sample=False
 
-        training_args = Seq2SeqTrainingArguments(".", predict_with_generate=True, generation_config=gen_config, report_to="tensorboard")
+        training_args = Seq2SeqTrainingArguments(
+            ".", predict_with_generate=True, generation_config=gen_config, report_to="tensorboard"
+        )
         with self.assertRaises(ValueError) as exc:
             _ = Seq2SeqTrainer(
                 model=model,
