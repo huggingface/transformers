@@ -385,22 +385,13 @@ tool.push_to_hub("{your_username}/hf-model-downloads")
 Load the tool with the [`~Tool.load_tool] function and pass it to the `tools` parameter in your agent.
 
 ```python
-from transformers import load_tool
+from transformers import load_tool, CodeAgent
 
 model_download_tool = load_tool("m-ric/hf-model-downloads")
-```
-
-In order to use it in the agent, simply pass it to the agent initialization method.
-
-```python
-from transformers import CodeAgent
-
 agent = CodeAgent(llm_engine, tools=[model_download_tool])
-
 agent.run(
     "Can you give me the name of the model that has the most downloads in the 'text-to-video' task on the Hugging Face Hub?"
 )
-```
 You get the following:
 ```text
 ==Executing the code below:==
