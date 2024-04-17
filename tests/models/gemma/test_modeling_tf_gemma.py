@@ -12,35 +12,30 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Gemma model. """
+""" Testing suite for the TF Gemma model. """
 import tempfile
 import unittest
 
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_tf_available
 from transformers.testing_utils import (
-    require_bitsandbytes,
-    require_flash_attn,
+    require_tf,
     require_read_token,
-    require_torch,
-    require_torch_gpu,
-    require_torch_sdpa,
     slow,
-    torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-if is_torch_available():
-    import torch
+if is_tf_available():
+    import tensorflow as tf
 
-    from transformers import GemmaForCausalLM, GemmaForSequenceClassification, GemmaModel
+    from transformers import TFGemmaForCausalLM, TFGemmaForSequenceClassification, TFGemmaModel
+    from transformers.modeling_tf_utils import keras
 
 
 class GemmaModelTester:
@@ -103,7 +98,7 @@ class GemmaModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
+            input_mask = tf.linalg.band_part(tf.ones((self.batch_size, self.seq_length)), -1, 0)
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -145,9 +140,7 @@ class GemmaModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = GemmaModel(config=config)
-        model.to(torch_device)
-        model.eval()
+        model = TFGemmaModel(config=config)
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
@@ -166,9 +159,7 @@ class GemmaModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = GemmaModel(config)
-        model.to(torch_device)
-        model.eval()
+        model = TFGemmaModel(config)
         result = model(
             input_ids,
             attention_mask=input_mask,
@@ -196,9 +187,7 @@ class GemmaModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = GemmaForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
+        model = TFGemmaForCausalLM(config=config)
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
@@ -217,9 +206,7 @@ class GemmaModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = GemmaForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
+        model = TFGemmaForCausalLM(config=config)
 
         # first forward pass
         outputs = model(
@@ -236,8 +223,8 @@ class GemmaModelTester:
         next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
 
         # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
+        next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
+        next_attention_mask = tf.concat([input_mask, next_mask], axis=-1)
 
         output_from_no_past = model(
             next_input_ids,
@@ -263,7 +250,7 @@ class GemmaModelTester:
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(tf.reduce_all(tf.abs(output_from_past_slice - output_from_no_past_slice) <= 1e-3))
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common with Llama->Gemma
     def prepare_config_and_inputs_for_common(self):
@@ -281,18 +268,20 @@ class GemmaModelTester:
         return config, inputs_dict
 
 
-@require_torch
-class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (GemmaModel, GemmaForCausalLM, GemmaForSequenceClassification) if is_torch_available() else ()
-    all_generative_model_classes = (GemmaForCausalLM,) if is_torch_available() else ()
+@require_tf
+class TFGemmaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (
+        (TFGemmaModel, TFGemmaForCausalLM, TFGemmaForSequenceClassification) if is_tf_available() else ()
+    )
+    all_generative_model_classes = (TFGemmaForCausalLM,) if is_tf_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": GemmaModel,
-            "text-classification": GemmaForSequenceClassification,
-            "text-generation": GemmaForCausalLM,
-            "zero-shot": GemmaForSequenceClassification,
+            "feature-extraction": TFGemmaModel,
+            "text-classification": TFGemmaForSequenceClassification,
+            "text-generation": TFGemmaForCausalLM,
+            "zero-shot": TFGemmaForSequenceClassification,
         }
-        if is_torch_available()
+        if is_tf_available()
         else {}
     )
     test_headmasking = False
@@ -330,11 +319,9 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         print(config)
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
+        attention_mask = tf.cast(tf.not_equal(input_ids, 1), tf.int32)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = GemmaForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
+        model = TFGemmaForSequenceClassification(config)
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
@@ -343,11 +330,9 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config.num_labels = 3
         config.problem_type = "single_label_classification"
         input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
+        attention_mask = tf.cast(tf.not_equal(input_ids, 1), tf.int32)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = GemmaForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
+        model = TFGemmaForSequenceClassification(config)
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
@@ -356,13 +341,11 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config.num_labels = 3
         config.problem_type = "multi_label_classification"
         input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
+        attention_mask = tf.cast(tf.not_equal(input_ids, 1), tf.int32)
         sequence_labels = ids_tensor(
             [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
-        ).to(torch.float)
-        model = GemmaForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
+        )
+        model = TFGemmaForSequenceClassification(config)
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
@@ -379,162 +362,10 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_past_key_values_format(self):
         pass
 
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_padding_right(self):
-        import torch
 
-        for model_class in self.all_generative_model_classes:
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
-                    torch_device
-                )
-
-                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [1, 1, 1, 0]]).to(torch_device)
-
-                model.generate(dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False)
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                with self.assertRaises(ValueError):
-                    _ = model.generate(
-                        dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
-                    )
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_use_cache(self):
-        import torch
-
-        max_new_tokens = 30
-
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
-
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # NOTE: Gemma apparently does not support right padding + use_cache with FA2.
-                dummy_attention_mask[:, -1] = 1
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                # Just test that a large cache works as expected
-                _ = model.generate(
-                    dummy_input,
-                    attention_mask=dummy_attention_mask,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    use_cache=True,
-                )
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest("Gemma flash attention does not support right padding")
-
-    @require_torch_sdpa
-    @require_torch_gpu
-    @slow
-    def test_sdpa_equivalence(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_sdpa:
-                return
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="sdpa"
-                )
-                model_sdpa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
-                model.to(torch_device)
-
-                dummy_input = inputs_dict[model_class.main_input_name]
-                dummy_input = dummy_input.to(torch_device)
-                outputs = model(dummy_input, output_hidden_states=True)
-                outputs_sdpa = model_sdpa(dummy_input, output_hidden_states=True)
-
-                logits = outputs.hidden_states[-1]
-                logits_sdpa = outputs_sdpa.hidden_states[-1]
-
-                # gemma sdpa needs a high tolerance
-                assert torch.allclose(logits_sdpa, logits, atol=3e-3)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_equivalence(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
-                return
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
-                model.to(torch_device)
-
-                dummy_input = inputs_dict[model_class.main_input_name]
-                dummy_input = dummy_input.to(torch_device)
-                outputs = model(dummy_input, output_hidden_states=True)
-                outputs_fa = model_fa(dummy_input, output_hidden_states=True)
-
-                logits = outputs.hidden_states[-1]
-                logits_fa = outputs_fa.hidden_states[-1]
-
-                # gemma flash attention 2 needs a high tolerance
-                assert torch.allclose(logits_fa, logits, atol=3e-3)
-
-
-@require_torch_gpu
 @slow
 @require_read_token
-class GemmaIntegrationTest(unittest.TestCase):
+class TFGemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
 
     def test_model_2b_fp32(self):
@@ -544,10 +375,10 @@ class GemmaIntegrationTest(unittest.TestCase):
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, from_pt=True)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(self.input_text, return_tensors="tf", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
@@ -561,12 +392,10 @@ class GemmaIntegrationTest(unittest.TestCase):
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_id, from_pt=True)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(self.input_text, return_tensors="tf", padding=True, from_pt=True)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
@@ -580,14 +409,12 @@ class GemmaIntegrationTest(unittest.TestCase):
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_id, from_pt=True)
 
         model.generation_config.cache_implementation = "static"
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
@@ -601,12 +428,10 @@ class GemmaIntegrationTest(unittest.TestCase):
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_id, from_pt=True)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(self.input_text, return_tensors="tf", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
@@ -620,92 +445,10 @@ class GemmaIntegrationTest(unittest.TestCase):
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="eager"
-        )
-        model.to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="eager", from_pt=True)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    @require_torch_sdpa
-    def test_model_2b_sdpa(self):
-        model_id = "google/gemma-2b"
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="sdpa"
-        )
-        model.to(torch_device)
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    @pytest.mark.flash_attn_test
-    @require_flash_attn
-    def test_model_2b_flash_attn(self):
-        model_id = "google/gemma-2b"
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-        )
-        model.to(torch_device)
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    @require_bitsandbytes
-    def test_model_2b_4bit(self):
-        model_id = "google/gemma-2b"
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project and I need to make a 3d model of a house. I have been using",
-            "Hi today I'd like to share with you my experience with the new wattpad wattpad wattpad wattpad wattpad wattpad wattpad",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, load_in_4bit=True)
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    @unittest.skip("The test will not fit our CI runners")
-    def test_model_7b_fp32(self):
-        model_id = "google/gemma-7b"
-        EXPECTED_TEXTS = [
-            "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
-            "Hi,\n\nI have a problem with my 2005 1.6 16",
-        ]
-
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(torch_device)
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
@@ -719,12 +462,10 @@ class GemmaIntegrationTest(unittest.TestCase):
             "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_id, from_pt=True)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
@@ -738,12 +479,10 @@ class GemmaIntegrationTest(unittest.TestCase):
             "Hi today I am going to show you how to make a very simple and easy to make a very simple and",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_id, from_pt=True)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(self.input_text, return_tensors="tf", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
@@ -757,21 +496,19 @@ class GemmaIntegrationTest(unittest.TestCase):
             "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_id, from_pt=True)
 
         model.generation_config.cache_implementation = "static"
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(model_id, from_pt=True)
+        inputs = tokenizer(self.input_text, return_tensors="tf", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @require_bitsandbytes
+    @slow
     def test_model_7b_4bit(self):
         model_id = "google/gemma-7b"
         EXPECTED_TEXTS = [
@@ -782,7 +519,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, load_in_4bit=True)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(self.input_text, return_tensors="tf", padding=True, from_pt=True)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)

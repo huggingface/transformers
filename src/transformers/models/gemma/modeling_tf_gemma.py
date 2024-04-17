@@ -21,9 +21,13 @@ from typing import List, Optional, Tuple, Union
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...modeling_tf_outputs import TFBaseModelOutputWithPast, TFCausalLMOutputWithPast, TFSequenceClassifierOutputWithPast
+from ...modeling_tf_outputs import (
+    TFBaseModelOutputWithPast,
+    TFCausalLMOutputWithPast,
+    TFSequenceClassifierOutputWithPast,
+)
 from ...modeling_tf_utils import (
-    TFPreTrainedModel, 
+    TFPreTrainedModel,
     TFCausalLanguageModelingLoss,
     TFSequenceClassificationLoss,
     get_initializer,
@@ -83,7 +87,7 @@ class TFGemmaRotaryEmbedding(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.inv_freq = 1.0 / (self.base ** (tf.range(0, self.dim, 2, dtype=tf.float32) / self.dim))
-        #self.inv_freq = tf.expand_dims(tf.expand_dims(inv_freq, 0), 0)
+        # self.inv_freq = tf.expand_dims(tf.expand_dims(inv_freq, 0), 0)
         super().build(input_shape)
 
     def call(self, x, position_ids):
@@ -122,7 +126,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """
     cos = tf.expand_dims(cos, unsqueeze_dim)
     sin = tf.expand_dims(sin, unsqueeze_dim)
-    q_embed = tf.math.multiply(q, cos) + tf.math.multiply(rotate_half(q),  sin)
+    q_embed = tf.math.multiply(q, cos) + tf.math.multiply(rotate_half(q), sin)
     k_embed = tf.math.multiply(k, cos) + tf.math.multiply(rotate_half(k), sin)
     return q_embed, k_embed
 
@@ -260,9 +264,7 @@ class TFGemmaAttention(tf.keras.layers.Layer):
         attn_output_shape = shape_list(attn_output)
         expected_shape = [bsz, self.num_heads, q_len, self.head_dim]
         if attn_output_shape != expected_shape:
-            raise ValueError(
-                f"`attn_output` should be of size {expected_shape}, but is {attn_output_shape}"
-            )
+            raise ValueError(f"`attn_output` should be of size {expected_shape}, but is {attn_output_shape}")
         attn_output = tf.transpose(attn_output, [0, 2, 1, 3])
         attn_output = tf.reshape(attn_output, [bsz, q_len, -1])
         attn_output = self.o_proj(attn_output)
@@ -283,7 +285,9 @@ class TFGemmaDecoderLayer(tf.keras.layers.Layer):
 
         self.mlp = TFGemmaMLP(config, name="mlp")
         self.input_layernorm = TFGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="input_layernorm")
-        self.post_attention_layernorm = TFGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="post_attention_layernorm")
+        self.post_attention_layernorm = TFGemmaRMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps, name="post_attention_layernorm"
+        )
 
     def call(
         self,
@@ -447,6 +451,7 @@ GEMMA_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 class TFGemmaModel(TFGemmaPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -466,8 +471,7 @@ class TFGemmaModel(TFGemmaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        ) -> Union[TFBaseModelOutputWithPast, Tuple[tf.Tensor]]:
-
+    ) -> Union[TFBaseModelOutputWithPast, Tuple[tf.Tensor]]:
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -478,7 +482,7 @@ class TFGemmaModel(TFGemmaPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training=training
+            training=training,
         )
         return outputs
 
@@ -490,7 +494,7 @@ class TFGemmaModel(TFGemmaPreTrainedModel):
             with tf.name_scope(self.model.name):
                 self.model.build(None)
 
-        
+
 @add_start_docstrings(
     "The bare Gemma Model outputting raw hidden-states without any specific head on top.",
     GEMMA_START_DOCSTRING,
@@ -498,7 +502,7 @@ class TFGemmaModel(TFGemmaPreTrainedModel):
 # Claude: Translated from PyTorch to TensorFlow
 class TFGemmaMainLayer(tf.keras.layers.Layer):
     config_class = GemmaConfig
-    
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
 
@@ -510,14 +514,18 @@ class TFGemmaMainLayer(tf.keras.layers.Layer):
             input_dim=config.vocab_size,
             output_dim=config.hidden_size,
             mask_zero=True if self.padding_idx == 0 else False,
-            #embeddings_initializer=get_initializer(config.initializer_range),
+            # embeddings_initializer=get_initializer(config.initializer_range),
             name="embed_tokens",
         )
 
-        self.decoder_layers = [TFGemmaDecoderLayer(config, layer_idx=i, name=f"layers.{i}") for i in range(config.num_hidden_layers)]
+        self.decoder_layers = [
+            TFGemmaDecoderLayer(config, layer_idx=i, name=f"layers.{i}") for i in range(config.num_hidden_layers)
+        ]
         self.norm = TFGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="norm")
 
-        self.causal_mask = 1 - tf.linalg.band_part(tf.ones((config.max_position_embeddings, config.max_position_embeddings)), -1, 0)
+        self.causal_mask = 1 - tf.linalg.band_part(
+            tf.ones((config.max_position_embeddings, config.max_position_embeddings)), -1, 0
+        )
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -528,7 +536,7 @@ class TFGemmaMainLayer(tf.keras.layers.Layer):
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GEMMA_INPUTS_DOCSTRING)
-    #@replace_return_docstrings(output_type=TFBaseModelOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    # @replace_return_docstrings(output_type=TFBaseModelOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids: tf.Tensor = None,
@@ -635,7 +643,9 @@ class TFGemmaMainLayer(tf.keras.layers.Layer):
 
         # support going beyond cached `max_position_embedding`
         if seq_length > self.config.max_position_embeddings:
-            causal_mask = tf.ones((2 * self.config.max_position_embeddings, 2 * self.config.max_position_embeddings), dtype=tf.bool)
+            causal_mask = tf.ones(
+                (2 * self.config.max_position_embeddings, 2 * self.config.max_position_embeddings), dtype=tf.bool
+            )
             causal_mask = tf.linalg.band_part(causal_mask, 0, -1)
             causal_mask = tf.cast(causal_mask, dtype)
         else:
@@ -646,7 +656,9 @@ class TFGemmaMainLayer(tf.keras.layers.Layer):
 
         if attention_mask is not None and tf.rank(attention_mask) == 2:
             mask_length = shape_list(attention_mask)[-1]
-            padding_mask = tf.equal(causal_mask[..., :mask_length], 0) & tf.equal(tf.expand_dims(tf.expand_dims(attention_mask, 1), 1), 0)
+            padding_mask = tf.equal(causal_mask[..., :mask_length], 0) & tf.equal(
+                tf.expand_dims(tf.expand_dims(attention_mask, 1), 1), 0
+            )
 
             causal_mask = tf.where(padding_mask, tf.cast(tf.float32.min, dtype), causal_mask[..., :mask_length])
 
@@ -661,7 +673,12 @@ class TFGemmaForCausalLM(TFGemmaPreTrainedModel):
         super().__init__(config)
         self.model = TFGemmaMainLayer(config, name="model")
         self.vocab_size = config.vocab_size
-        self.lm_head = tf.keras.layers.Dense(config.vocab_size, use_bias=False, name="lm_head", kernel_initializer=get_initializer(config.initializer_range))
+        self.lm_head = tf.keras.layers.Dense(
+            config.vocab_size,
+            use_bias=False,
+            name="lm_head",
+            kernel_initializer=get_initializer(config.initializer_range),
+        )
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -771,7 +788,9 @@ class TFGemmaForCausalLM(TFGemmaPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+    ):
         past_length = 0
 
         if past_key_values is not None:
@@ -859,7 +878,7 @@ class TFGemmaForSequenceClassification(TFGemmaPreTrainedModel):
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GEMMA_INPUTS_DOCSTRING)
-    #@replace_return_docstrings(output_type=TFSequenceClassifierOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    # @replace_return_docstrings(output_type=TFSequenceClassifierOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids: tf.Tensor = None,
@@ -908,11 +927,14 @@ class TFGemmaForSequenceClassification(TFGemmaPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = tf.reduce_sum(tf.cast(tf.not_equal(input_ids, self.config.pad_token_id), tf.int32), axis=-1) - 1
+                sequence_lengths = (
+                    tf.reduce_sum(tf.cast(tf.not_equal(input_ids, self.config.pad_token_id), tf.int32), axis=-1) - 1
+                )
             else:
-                sequence_lengths = -1
+                sequence_lengths = tf.constant([inputs_embeds.shape[1] - 1] * inputs_embeds.shape[0])
 
-        pooled_logits = tf.gather(logits, sequence_lengths, batch_dims=1)
+        indicies = tf.stack([tf.range(batch_size), sequence_lengths], axis=1)
+        pooled_logits = tf.gather_nd(logits, indicies)
 
         loss = None
         if labels is not None:
@@ -952,7 +974,7 @@ class TFGemmaForSequenceClassification(TFGemmaPreTrainedModel):
 
 # Claude: Some key points about the translation:
 # - The PyTorch modules and functions have been replaced with their TensorFlow/Keras equivalents where possible. This includes using `tf.keras.layers` for the model layers, `tf.keras.losses` for the loss functions, etc.
-# - The `torch.Tensor` inputs and outputs have been replaced with `tf.Tensor`. 
+# - The `torch.Tensor` inputs and outputs have been replaced with `tf.Tensor`.
 # - PyTorch operations like `torch.matmul`, `torch.arange`, `torch.where`, etc. have been replaced with the TensorFlow equivalents.
 # - The `forward` methods have been renamed to `call` to match the Keras layer API.
 # - The `past_key_values` cache format seems to be custom in the PyTorch implementation with a `Cache` class. I've left comments indicating that this would need to be implemented separately for TensorFlow, as the cache format is different. For now, the cache-related code paths are mostly unimplemented or simplified.
