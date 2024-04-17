@@ -48,7 +48,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "awq": AwqConfig,
     "bitsandbytes_4bit": BitsAndBytesConfig,
     "bitsandbytes_8bit": BitsAndBytesConfig,
-    "eetq": EETQConfig,
+    "eetq": EetqConfig,
     "gptq": GPTQConfig,
     "aqlm": AqlmConfig,
     "quanto": QuantoConfig,
