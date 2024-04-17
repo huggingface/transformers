@@ -805,9 +805,9 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
                 after_outputs = model(inputs_dict)
                 self.assert_outputs_same(after_outputs, outputs)
 
-    @slow
+    @unittest.skip(reason="IDEFICS test_keras_fit testing done in TFIdeficsForVisionText2TextTest")
     def test_keras_fit(self):
-        super().test_keras_fit()
+        pass
 
     @slow
     def test_model_from_pretrained(self):
@@ -858,6 +858,10 @@ class TFIdeficsForVisionText2TextTest(TFIdeficsModelTest, unittest.TestCase):
     @unittest.skip(reason="""IDEFICS test_save_load fails on CI, skipping temporarily""")
     def test_save_load(self):
         pass
+
+    @slow
+    def test_keras_fit(self):
+        super().test_keras_fit()
 
 
 @require_tf
