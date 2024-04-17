@@ -32,7 +32,7 @@ class TextToSpeechTool(PipelineTool):
     description = (
         "This is a tool that reads an English text out loud. It returns a waveform object containing the sound."
     )
-    name = "text_reader"
+    name = "text_to_speech"
     pre_processor_class = SpeechT5Processor
     model_class = SpeechT5ForTextToSpeech
     post_processor_class = SpeechT5HifiGan

@@ -26,6 +26,7 @@ from ..utils import is_offline_mode, logging
 from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, get_tool_description_with_args, load_tool, supports_remote, OPENAI_TOOL_DESCRIPTION_TEMPLATE,DEFAULT_TOOL_DESCRIPTION_TEMPLATE
 from .prompts import DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT
 from .python_interpreter import evaluate_python_code
+from PIL import Image
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -63,9 +64,9 @@ HUGGINGFACE_DEFAULT_TOOLS = {}
 
 HUGGINGFACE_DEFAULT_TOOLS_FROM_HUB = [
     "image-transformation",
-    "text-download",
+    # "text-download",
     "text-to-image",
-    "text-to-video",
+    # "text-to-video",
 ]
 
 
@@ -125,6 +126,7 @@ def _setup_default_tools():
             description=tool_class.description,
             repo_id=None
         )
+
     if not is_offline_mode():
         for task_name in HUGGINGFACE_DEFAULT_TOOLS_FROM_HUB:
             found = False
@@ -348,7 +350,7 @@ class Agent:
             rationale, action = split[-2], split[-1] # NOTE: using indexes starting from the end solves for when you have more than one split_token in the output
         except Exception as e:
             self.log.error(e, exc_info=1)
-            raise AgentParsingError(f"Error: No '{split_token}' token provided in your output:///\n{llm_output}\n///. Be sure to include an action, prefaced with '{split_token}'!")
+            raise AgentParsingError(f"Error: No '{split_token}' token provided in your output.\nYour output:\n{llm_output}\n. Be sure to include an action, prefaced with '{split_token}'!")
         return rationale, action
      
     def execute(self, tool_name: str, arguments: Dict[str, str]) -> None:
@@ -370,6 +372,9 @@ class Agent:
             if isinstance(arguments, str):
                 observation = self.toolbox.tools[tool_name](arguments)
             else:
+                for key, value in arguments.items():
+                    if value in self.state:
+                        arguments[key] = self.state[value]
                 observation = self.toolbox.tools[tool_name](**arguments)
             return observation
         except Exception as e:
@@ -519,7 +524,7 @@ class ReactAgent(Agent):
         return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
     
 
-    def run(self, task):
+    def run(self, task, **kwargs):
         """
         Sends a request to the agent.
 
@@ -537,8 +542,13 @@ class ReactAgent(Agent):
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
+        
         self.logs = []
         self.system_prompt = format_prompt(self._toolbox, self.system_prompt_template, self.tool_description_template)
+
+        self.state=kwargs.copy()
+        if '<<additional_args>>' in self.system_prompt:
+            self.system_prompt = self.system_prompt.replace('<<additional_args>>', str(self.state))
 
         self.task = task
         task_message = f"Task: {self.task}"
@@ -608,12 +618,26 @@ class ReactAgent(Agent):
         # Execute
         if tool_name == "final_answer":
             if isinstance(arguments, dict):
-                return arguments['answer']
+                answer = arguments['answer']
             else:
-                return arguments
+                answer = arguments
+            if answer in self.state: # if the answer is a state variable, return the value
+                answer = self.state[answer]
+            return answer
         else:
             observation = self.execute(tool_name, arguments)
-            observation_message = "Observation: " + str(observation).strip()
+            observation_type = type(observation)
+            if observation_type in [str, int, float, bool]:
+                observation_message = str(observation).strip()
+            else: # if the execution result is an object, store it
+                if observation_type == Image.Image:
+                    observation_name = "image.png"
+                else:
+                    observation_name = "object.object"
+                # TODO: improve observation name choice
+
+                self.state[observation_name] = observation
+                observation_message = f"Stored '{observation_name}' in memory."
             self.log.info(observation_message)
             self.logs[-1]["observation"] = observation_message
             return None
