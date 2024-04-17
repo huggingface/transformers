@@ -143,7 +143,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_torch_pipeline_gpu"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.machine_type }}_run_tests_torch_pipeline_gpu
           path: /transformers/reports/${{ matrix.machine_type }}_tests_torch_pipeline_gpu
@@ -194,7 +194,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_tf_pipeline_gpu"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.machine_type }}_run_tests_tf_pipeline_gpu
           path: /transformers/reports/${{ matrix.machine_type }}_tests_tf_pipeline_gpu
@@ -245,7 +245,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_examples_gpu"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.machine_type }}_run_examples_gpu
           path: /transformers/reports/${{ matrix.machine_type }}_examples_gpu
@@ -305,7 +305,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports
           path: /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu
@@ -366,7 +366,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_quantization_torch_gpu_${{ env.matrix_folders }}"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.machine_type }}_run_tests_quantization_torch_gpu_${{ env.matrix_folders }}
           path: /transformers/reports/${{ matrix.machine_type }}_tests_quantization_torch_gpu_${{ matrix.folders }}
@@ -379,7 +379,7 @@ jobs:
     needs: [setup, run_tests_gpu]
     steps:
       - name: Checkout transformers
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
@@ -392,7 +392,7 @@ jobs:
       - name: Create output directory
         run: mkdir warnings_in_ci
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           path: warnings_in_ci
 
@@ -407,7 +407,7 @@ jobs:
 
       - name: Upload artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: warnings_in_ci
           path: warnings_in_ci/selected_warnings.json
