@@ -32,7 +32,7 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
         audio_classifier = pipeline(
             task="zero-shot-audio-classification", model="hf-internal-testing/tiny-clap-htsat-unfused"
         )
-        dataset = load_dataset("ashraq/esc50")
+        dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         audio = dataset["train"]["audio"][-1]["array"]
         output = audio_classifier(audio, candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"])
         self.assertEqual(
