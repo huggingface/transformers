@@ -23,6 +23,7 @@ import warnings
 from typing import Dict, List, Tuple
 
 from packaging import version
+
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
@@ -41,6 +42,7 @@ def import_protobuf(error_message=""):
         return sentencepiece_model_pb2
     else:
         raise ImportError(PROTOBUF_IMPORT_ERROR.format(error_message))
+
 
 def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
     if add_prefix_space:
@@ -607,9 +609,7 @@ class SpmConverter(Converter):
 
     def pre_tokenizer(self, replacement, add_prefix_space):
         prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
-        return pre_tokenizers.Metaspace(
-            replacement=replacement, prepend_scheme=prepend_scheme
-        )
+        return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme)
 
     def post_processor(self):
         return None
