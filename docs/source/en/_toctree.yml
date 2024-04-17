@@ -172,7 +172,7 @@
       title: GPU inference
     title: Optimizing inference
   - local: big_models
-    title: Instantiating a big model
+    title: Instantiate a big model
   - local: debugging
     title: Debugging
   - local: tf_xla
@@ -468,6 +468,8 @@
         title: RAG
       - local: model_doc/realm
         title: REALM
+      - local: model_doc/recurrent_gemma
+        title: RecurrentGemma
       - local: model_doc/reformer
         title: Reformer
       - local: model_doc/rembert
@@ -730,10 +732,14 @@
         title: FLAVA
       - local: model_doc/git
         title: GIT
+      - local: model_doc/grounding-dino
+        title: Grounding DINO
       - local: model_doc/groupvit
         title: GroupViT
       - local: model_doc/idefics
         title: IDEFICS
+      - local: model_doc/idefics2
+        title: Idefics2
       - local: model_doc/instructblip
         title: InstructBLIP
       - local: model_doc/kosmos-2

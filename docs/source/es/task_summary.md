@@ -325,7 +325,7 @@ Las respuestas a preguntas de documentos es una tarea que responde preguntas en 
 >>> from PIL import Image
 >>> import requests
 
->>> url = "https://datasets-server.huggingface.co/assets/hf-internal-testing/example-documents/--/hf-internal-testing--example-documents/test/2/image/image.jpg"
+>>> url = "https://huggingface.co/datasets/hf-internal-testing/example-documents/resolve/main/jpeg_images/2.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> doc_question_answerer = pipeline("document-question-answering", model="magorshunov/layoutlm-invoices")

@@ -227,10 +227,13 @@ class Message:
         button_text = "Check warnings (Link not found)"
         # Use the workflow run link
         job_link = f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}"
-        if "Extract warnings in CI artifacts" in github_actions_job_links:
-            button_text = "Check warnings"
-            # Use the actual job link
-            job_link = f"{github_actions_job_links['Extract warnings in CI artifacts']}"
+
+        for job in github_actions_jobs:
+            if "Extract warnings in CI artifacts" in job["name"] and job["conclusion"] == "success":
+                button_text = "Check warnings"
+                # Use the actual job link
+                job_link = job["html_url"]
+                break
 
         huggingface_hub_warnings = [x for x in self.selected_warnings if "huggingface_hub" in x]
         text = f"There are {len(self.selected_warnings)} warnings being selected."
@@ -573,7 +576,7 @@ class Message:
         print(json.dumps({"blocks": blocks}))
 
         client.chat_postMessage(
-            channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
+            channel=SLACK_REPORT_CHANNEL_ID,
             text=text,
             blocks=payload,
         )
@@ -586,7 +589,7 @@ class Message:
         text = f"{self.n_failures} failures out of {self.n_tests} tests," if self.n_failures else "All tests passed."
 
         self.thread_ts = client.chat_postMessage(
-            channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
+            channel=SLACK_REPORT_CHANNEL_ID,
             blocks=payload,
             text=text,
         )
@@ -712,7 +715,7 @@ class Message:
                     print(json.dumps({"blocks": blocks}))
 
                     client.chat_postMessage(
-                        channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
+                        channel=SLACK_REPORT_CHANNEL_ID,
                         text=f"Results for {job}",
                         blocks=blocks,
                         thread_ts=self.thread_ts["ts"],
@@ -735,7 +738,7 @@ class Message:
                     print(json.dumps({"blocks": blocks}))
 
                     client.chat_postMessage(
-                        channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
+                        channel=SLACK_REPORT_CHANNEL_ID,
                         text=f"Results for {job}",
                         blocks=blocks,
                         thread_ts=self.thread_ts["ts"],
@@ -749,7 +752,7 @@ class Message:
             print(json.dumps({"blocks": blocks}))
 
             client.chat_postMessage(
-                channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
+                channel=SLACK_REPORT_CHANNEL_ID,
                 text="Results for new failures",
                 blocks=blocks,
                 thread_ts=self.thread_ts["ts"],
@@ -852,6 +855,8 @@ def prepare_reports(title, header, reports, to_truncate=True):
 
 
 if __name__ == "__main__":
+    SLACK_REPORT_CHANNEL_ID = os.environ["SLACK_REPORT_CHANNEL"]
+
     # runner_status = os.environ.get("RUNNER_STATUS")
     # runner_env_status = os.environ.get("RUNNER_ENV_STATUS")
     setup_status = os.environ.get("SETUP_STATUS")
@@ -861,7 +866,8 @@ if __name__ == "__main__":
     # Let's keep the lines regardig runners' status (we might be able to use them again in the future)
     runner_not_available = False
     runner_failed = False
-    setup_failed = True if setup_status is not None and setup_status != "success" else False
+    # Some jobs don't depend (`needs`) on the job `setup`: in this case, the status of the job `setup` is `skipped`.
+    setup_failed = False if setup_status in ["skipped", "success"] else True
 
     org = "huggingface"
     repo = "transformers"
@@ -929,14 +935,21 @@ if __name__ == "__main__":
         Message.error_out(title, ci_title, runner_not_available, runner_failed, setup_failed)
         exit(0)
 
-    arguments = sys.argv[1:][0]
-    try:
-        folder_slices = ast.literal_eval(arguments)
-        # Need to change from elements like `models/bert` to `models_bert` (the ones used as artifact names).
-        models = [x.replace("models/", "models_") for folders in folder_slices for x in folders]
-    except SyntaxError:
-        Message.error_out(title, ci_title)
-        raise ValueError("Errored out.")
+    # sys.argv[0] is always `utils/notification_service.py`.
+    arguments = sys.argv[1:]
+    # In our usage in `.github/workflows/slack-report.yml`, we always pass an argument when calling this script.
+    # The argument could be an empty string `""` if a job doesn't depend on the job `setup`.
+    if arguments[0] == "":
+        models = []
+    else:
+        model_list_as_str = arguments[0]
+        try:
+            folder_slices = ast.literal_eval(model_list_as_str)
+            # Need to change from elements like `models/bert` to `models_bert` (the ones used as artifact names).
+            models = [x.replace("models/", "models_") for folders in folder_slices for x in folders]
+        except Exception:
+            Message.error_out(title, ci_title)
+            raise ValueError("Errored out.")
 
     github_actions_jobs = get_jobs(
         workflow_run_id=os.environ["GITHUB_RUN_ID"], token=os.environ["ACCESS_REPO_INFO_TOKEN"]
@@ -1039,11 +1052,10 @@ if __name__ == "__main__":
 
     # Additional runs
     additional_files = {
-        "Examples directory": "run_examples_gpu",
         "PyTorch pipelines": "run_tests_torch_pipeline_gpu",
         "TensorFlow pipelines": "run_tests_tf_pipeline_gpu",
+        "Examples directory": "run_examples_gpu",
         "Torch CUDA extension tests": "run_tests_torch_cuda_extensions_gpu_test_reports",
-        "Quantization tests": "run_tests_quantization_torch_gpu",
     }
 
     if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
@@ -1055,6 +1067,23 @@ if __name__ == "__main__":
         del additional_files["Torch CUDA extension tests"]
     elif ci_event.startswith("Push CI (AMD)"):
         additional_files = {}
+
+    # A map associating the job names (specified by `inputs.job` in a workflow file) with the keys of
+    # `additional_files`. This is used to remove some entries in `additional_files` that are not concerned by a
+    # specific job. See below.
+    job_to_test_map = {
+        "run_pipelines_torch_gpu": "PyTorch pipelines",
+        "run_pipelines_tf_gpu": "TensorFlow pipelines",
+        "run_examples_gpu": "Examples directory",
+        "run_all_tests_torch_cuda_extensions_gpu": "Torch CUDA extension tests",
+    }
+
+    # Remove some entries in `additional_files` if they are not concerned.
+    test_name = None
+    job_name = os.getenv("CI_TEST_JOB")
+    if job_name in job_to_test_map:
+        test_name = job_to_test_map[job_name]
+    additional_files = {k: v for k, v in additional_files.items() if k == test_name}
 
     additional_results = {
         key: {
@@ -1103,17 +1132,24 @@ if __name__ == "__main__":
                             {"line": line, "trace": stacktraces.pop(0)}
                         )
 
+    # Let's only check the warning for the model testing job. Currently, the job `run_extract_warnings` is only run
+    # when `inputs.job` (in the workflow file) is `run_tests_gpu`. The reason is: otherwise we need to save several
+    # artifacts with different names which complicates the logic for an insignificant part of the CI workflow reporting.
     selected_warnings = []
-    if "warnings_in_ci" in available_artifacts:
-        directory = available_artifacts["warnings_in_ci"].paths[0]["path"]
-        with open(os.path.join(directory, "selected_warnings.json")) as fp:
-            selected_warnings = json.load(fp)
+    if job_name == "run_tests_gpu":
+        if "warnings_in_ci" in available_artifacts:
+            directory = available_artifacts["warnings_in_ci"].paths[0]["path"]
+            with open(os.path.join(directory, "selected_warnings.json")) as fp:
+                selected_warnings = json.load(fp)
 
     if not os.path.isdir(os.path.join(os.getcwd(), "prev_ci_results")):
         os.makedirs(os.path.join(os.getcwd(), "prev_ci_results"))
 
-    with open("prev_ci_results/model_results.json", "w", encoding="UTF-8") as fp:
-        json.dump(model_results, fp, indent=4, ensure_ascii=False)
+    # Only the model testing job is concerned: this condition is to avoid other jobs to upload the empty list as
+    # results.
+    if job_name == "run_tests_gpu":
+        with open("prev_ci_results/model_results.json", "w", encoding="UTF-8") as fp:
+            json.dump(model_results, fp, indent=4, ensure_ascii=False)
 
     prev_ci_artifacts = None
     target_workflow = "huggingface/transformers/.github/workflows/self-scheduled.yml@refs/heads/main"

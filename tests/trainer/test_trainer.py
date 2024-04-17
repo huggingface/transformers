@@ -2540,16 +2540,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
             checkpoint_trainer.train(resume_from_checkpoint=checkpoint)
 
+        self.assertIn("save_steps: 10 (from args) != 5 (from trainer_state.json)", cl.out)
+
         self.assertIn(
-            "Warning: The training argument 'save_steps' value (10) does not match the trainer state 'save_steps' value (5). This argument will be overridden by the one found in trainer_state.json within the checkpoint directory.",
+            "per_device_train_batch_size: 8 (from args) != 4 (from trainer_state.json)",
             cl.out,
         )
         self.assertIn(
-            "Warning: The training argument 'per_device_train_batch_size' value (8) does not match the trainer state 'train_batch_size' value (4). This argument will be overridden by the one found in trainer_state.json within the checkpoint directory.",
-            cl.out,
-        )
-        self.assertIn(
-            "Warning: The training argument 'eval_steps' value (10) does not match the trainer state 'eval_steps' value (5). This argument will be overridden by the one found in trainer_state.json within the checkpoint directory.",
+            "eval_steps: 10 (from args) != 5 (from trainer_state.json)",
             cl.out,
         )
 
@@ -3105,6 +3103,35 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             with self.assertRaises(Exception) as context:
                 trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
             self.assertTrue("The `AcceleratorConfig`'s `num_steps` is set but" in str(context.exception))
+
+    def test_accelerator_config_not_instantiated(self):
+        # Checks that accelerator kwargs can be passed through
+        # and the accelerator is initialized respectively
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(NotImplementedError) as context:
+                _ = RegressionTrainingArguments(
+                    output_dir=tmp_dir,
+                    accelerator_config=AcceleratorConfig,
+                )
+            self.assertTrue("Tried passing in a callable to `accelerator_config`" in str(context.exception))
+
+        # Now test with a custom subclass
+        @dataclasses.dataclass
+        class CustomAcceleratorConfig(AcceleratorConfig):
+            pass
+
+        @dataclasses.dataclass
+        class CustomTrainingArguments(TrainingArguments):
+            accelerator_config: dict = dataclasses.field(
+                default=CustomAcceleratorConfig,
+            )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(NotImplementedError) as context:
+                _ = CustomTrainingArguments(
+                    output_dir=tmp_dir,
+                )
+            self.assertTrue("Tried passing in a callable to `accelerator_config`" in str(context.exception))
 
 
 @require_torch
