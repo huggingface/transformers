@@ -59,10 +59,10 @@ jobs:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     if: ${{ needs.get_modified_models.outputs.matrix != '[]' && needs.get_modified_models.outputs.matrix != '' && fromJson(needs.get_modified_models.outputs.matrix)[0] != null }}
-    strategy:
-      fail-fast: false
-      matrix: 
-        model-name: ${{ fromJson(needs.get_modified_models.outputs.matrix) }}
+      strategy:
+        fail-fast: false
+        matrix: 
+          model-name: ${{ fromJson(needs.get_modified_models.outputs.matrix) }}
 
     steps:
       - name: Check out code
