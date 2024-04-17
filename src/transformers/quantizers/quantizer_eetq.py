@@ -25,7 +25,7 @@ from .quantizers_utils import get_module_from_name
 
 if is_torch_available():
     import torch
-    
+
 
 logger = logging.get_logger(__name__)
 
@@ -51,7 +51,7 @@ class EetqHfQuantizer(HfQuantizer):
                 "Using `eetq` 8-bit quantization requires eetq."
                 "Please install the latest version of eetq from : https://github.com/NetEase-FuXi/EETQ"
             )
-        
+
         if not is_accelerate_available():
             raise ImportError("Loading an EETQ quantized model requires accelerate (`pip install accelerate`)")
 
@@ -83,7 +83,7 @@ class EetqHfQuantizer(HfQuantizer):
         elif torch_dtype != torch.float16:
             logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with EETQ.")
         return torch_dtype
-    
+
     def check_quantized_param(
         self,
         model: "PreTrainedModel",

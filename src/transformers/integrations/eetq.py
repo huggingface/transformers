@@ -43,7 +43,7 @@ def _replace_with_eetq_linear(
                         module.bias is not None,
                         module.weight.device
                     )
-                    if pre_quantized == True:
+                    if pre_quantized:
                         model._modules[name].register_scale(module.weight.device)
                     has_been_replaced = True
 
@@ -66,9 +66,9 @@ def _replace_with_eetq_linear(
 def replace_with_eetq_linear(model, modules_to_not_convert=None, current_key_name=None, quantization_config=None, pre_quantized=False):
     """
     A helper function to replace all `torch.nn.Linear` modules by `eetq.EetqLinear` modules from the `eetq`
-    library. This will enable running your models using high performance int8 weight-only gemm kerner from 
+    library. This will enable running your models using high performance int8 weight-only gemm kerner from
     FasterTransformer and TensorRT-LLM. Make sure `eetq` compiled with the correct CUDA
-    version of your hardware is installed before running this function. EETQ shall be installed via the source 
+    version of your hardware is installed before running this function. EETQ shall be installed via the source
     'https://github.com/NetEase-FuXi/EETQ'
 
     The function will be run recursively and replace all `torch.nn.Linear` modules except for the `lm_head` that should

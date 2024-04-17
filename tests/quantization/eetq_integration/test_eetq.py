@@ -159,7 +159,7 @@ class EetqTest(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
-            
+
             model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
