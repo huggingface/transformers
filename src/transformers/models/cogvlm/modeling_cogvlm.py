@@ -137,7 +137,6 @@ class CogvlmVisionAttention(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.output_dropout = torch.nn.Dropout(config.dropout_prob)
 
-        # Reference: https://github.com/bigscience-workshop/Megatron-DeepSpeed/pull/118
         head_dim = config.hidden_size // config.num_attention_heads
         self.scale = 1.0 / math.sqrt(head_dim)
 

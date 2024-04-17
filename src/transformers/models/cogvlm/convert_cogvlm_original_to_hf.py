@@ -183,7 +183,7 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     print("median reldiff", reldiff.median())
 
     # assert values
-    assert torch.allclose(original_logits.to(logits.device), logits, atol=1e-3, rtol=1e-3)
+    assert torch.allclose(original_logits.to(logits.device), logits, atol=1e-4)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
