@@ -95,7 +95,7 @@ class EETQTest(unittest.TestCase):
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
             device_map=cls.device_map,
-            quantization_config=config
+            quantization_config=quantization_config
         )
 
     def tearDown(self):
