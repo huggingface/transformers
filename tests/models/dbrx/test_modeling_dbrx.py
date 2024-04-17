@@ -373,7 +373,6 @@ class DbrxModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 6, vocab_size))
         self.assertEqual(output.shape, expected_shape)
 
-        # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
             [
                 [
