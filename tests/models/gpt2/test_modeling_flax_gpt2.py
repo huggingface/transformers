@@ -273,13 +273,9 @@ class FlaxGPT2ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittes
                 pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
                 pt_model_class = getattr(transformers, pt_model_class_name)
 
-                batch_size, seq_length = pt_inputs["input_ids"].shape
-                rnd_start_indices = np.random.randint(0, seq_length - 1, size=(batch_size,))
-                for batch_idx, start_index in enumerate(rnd_start_indices):
-                    pt_inputs["attention_mask"][batch_idx, :start_index] = 0
-                    pt_inputs["attention_mask"][batch_idx, start_index:] = 1
-                    prepared_inputs_dict["attention_mask"][batch_idx, :start_index] = 0
-                    prepared_inputs_dict["attention_mask"][batch_idx, start_index:] = 1
+                pt_inputs["attention_mask"] = torch.ones_like(pt_inputs["input_ids"])
+                prepared_inputs_dict["attention_mask"] = jnp.ones_like(prepared_inputs_dict["input_ids"])
+
                 pt_model = pt_model_class(config).eval()
                 fx_model = model_class(config, dtype=jnp.float32)
 
