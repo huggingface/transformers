@@ -119,7 +119,7 @@ class Seq2seqTrainerTester(TestCasePlus):
             warmup_steps=0,
             eval_steps=2,
             logging_steps=2,
-            report_to="tensorboard",
+            report_to="none",
         )
 
         # instantiate trainer
