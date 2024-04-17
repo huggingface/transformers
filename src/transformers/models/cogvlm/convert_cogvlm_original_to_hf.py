@@ -34,12 +34,14 @@ from transformers import (
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 
-original_device = "cuda:1"
+original_device = "cuda:0"
 hf_device = "cuda:3"
 
 
 @torch.no_grad()
-def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
+def convert_cogvlm_checkpoint(
+    model_name, pytorch_dump_folder_path=None, push_to_hub=False, attn_implementation: str = "sdpa"
+):
     """
     Copy/paste/tweak model's weights to Transformers design.
     """
@@ -109,6 +111,7 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     original_model.config.vision_config["num_channels"] = original_model.config.vision_config.pop("in_channels")
 
     config = CogvlmConfig(**original_model.config.to_dict())
+    config._attn_implementation = attn_implementation
     with init_empty_weights():
         model = CogvlmForCausalLM(config)
 
@@ -165,8 +168,9 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
 
     # verify logits
     with torch.no_grad():
-        original_logits = original_model(**original_inputs).logits
-        logits = model(**inputs).logits
+        with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
+            original_logits = original_model(**original_inputs).logits
+            logits = model(**inputs).logits
 
     assert original_logits.shape == logits.shape
     print("First values of original logits:", original_logits[0, :3, :3])
@@ -178,7 +182,6 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     print("Last values of HF logits:", logits[0, -3:, -3:])
 
     reldiff = (original_logits[0, -3:, -3:].to("cuda:0") - logits[0, -3:, -3:].to("cuda:0")).abs()
-    print("reldiff", reldiff.shape)
     print("max reldiff", reldiff.max())
     print("median reldiff", reldiff.median())
 
@@ -216,7 +219,16 @@ if __name__ == "__main__":
         action="store_true",
         help="Whether to push the model and processor to the hub after converting",
     )
+    parser.add_argument(
+        "--attn_implementation",
+        type=str,
+        default="sdpa",
+        choices=["sdpa", "eager"],
+        help="Whether to use Transformers SDPA or eager implementation for attention",
+    )
 
     args = parser.parse_args()
 
-    convert_cogvlm_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_cogvlm_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.attn_implementation
+    )

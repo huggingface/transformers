@@ -409,7 +409,7 @@ class CogvlmVisionExpertAttention(nn.Module):
         self.language_expert_query_key_value = nn.Linear(self.hidden_size, self.hidden_size * 3, bias=False)
         self.language_expert_dense = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
-        # Reference: https://github.com/bigscience-workshop/Megatron-DeepSpeed/pull/118
+        # Reference: https://github.com/bigscience-workshop/Megatron-DeepSpeed/pull/118 and SDPA C++ implementation.
         self.sqrt_scale = math.sqrt(1 / math.sqrt(self.head_dim))
 
     def _transpose_for_scores(self, tensor):
@@ -460,7 +460,7 @@ class CogvlmVisionExpertAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attn_weights = torch.matmul(query_states * self.sqrt_scale, key_states.transpose(2, 3) * self.sqrt_scale)
+        attn_weights = torch.matmul(query_states * self.sqrt_scale, (key_states * self.sqrt_scale).transpose(2, 3))
 
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
