@@ -90,7 +90,7 @@ class EETQTest(unittest.TestCase):
         Setup quantized model
         """
         from eetq import EETQLinear
-        config = EETQConfig()
+        quantization_config = EETQConfig(weights='int8')
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
