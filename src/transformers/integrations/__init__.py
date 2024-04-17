@@ -115,7 +115,7 @@ if TYPE_CHECKING:
         unset_hf_deepspeed_config,
     )
     from .eetq import (
-        replace_with_EETQ_linear
+        replace_with_eetq_linear
     )
     from .integration_utils import (
         INTEGRATION_TO_CALLBACK,
