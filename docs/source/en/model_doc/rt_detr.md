@@ -49,7 +49,10 @@ target = {"image_id": 39769, "annotations": target}
 image_processing = RTDetrImageProcessor.from_pretrained("sbchoi/rtdetr_r50vd")
 encoding = image_processing(images=image, annotations=target, return_tensors="pt")
 model = RTDetrForObjectDetection.from_pretrained("sbchoi/rtdetr_r50vd")
-outputs = model(**encoding)
+
+with torch.no_grad():
+   outputs = model(**encoding)
+
 results = image_processing.post_process_object_detection(outputs, target_sizes=torch.tensor([[480, 640]]), threshold=0.3)
 ```
 
