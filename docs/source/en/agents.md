@@ -382,9 +382,7 @@ You can also share your custom tool to the Hub by calling [`~Tool.push_to_hub` o
 ```python
 tool.push_to_hub("{your_username}/hf-model-downloads")
 
-### Initializing an agent that uses the tool
-
-We now have our tool that lives on the Hub which can be instantiated as such (change the user name for your tool):
+Load the tool with the [`~Tool.load_tool] function and pass it to the `tools` parameter in your agent.
 
 ```python
 from transformers import load_tool
