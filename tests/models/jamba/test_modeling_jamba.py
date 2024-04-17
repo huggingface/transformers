@@ -657,12 +657,14 @@ class JambaModelIntegrationTest(unittest.TestCase):
     def test_simple_generate(self):
         self.model.to(torch_device)
 
-        input_ids = self.tokenizer("Hey how are you today?", return_tensors="pt")["input_ids"].to(torch_device)
+        input_ids = self.tokenizer("Hey how are you doing on this lovely evening?", return_tensors="pt")[
+            "input_ids"
+        ].to(torch_device)
         out = self.model.generate(input_ids, do_sample=False, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(out[0, :])
         self.assertEqual(
             output_sentence,
-            "<|startoftext|>Hey how are you today? travaill sigmamillionbuilt Spanishconsumer Lois reportedteras Fot",
+            "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh Hebrew cases Cats",
         )
 
         with torch.no_grad():
@@ -670,11 +672,11 @@ class JambaModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS_NO_GRAD = torch.tensor(
             [
-                 0.2031, -0.0295, -0.0554, -0.2285, -0.0317,  0.2812, -0.0359,  0.2070,
-                -0.2734,  0.0591,  0.2412, -0.4824, -0.1650, -0.2578, -0.2520,  0.1514,
-                 0.0972,  0.0491,  0.2090, -0.1094, -0.2256, -0.1768, -0.0767,  0.1533,
-                 0.1426,  0.2832,  0.0413,  0.1084, -0.0889, -0.1030,  0.1748, -0.5859,
-                 0.1973, -0.5898, -0.0044,  0.1592,  0.1787, -0.2197,  0.1289, -0.0811
+                0.0140, -0.2246,  0.0408, -0.1016,  0.0471,  0.2715, -0.1465,  0.1631,
+               -0.2949, -0.0297,  0.0250, -0.5586, -0.2139, -0.1426, -0.1602,  0.1309,
+                0.0703,  0.2236,  0.1729, -0.2285, -0.1152, -0.1177, -0.1367,  0.0289,
+                0.1245,  0.2363,  0.0442,  0.1094, -0.1348, -0.2295,  0.1494, -0.3945,
+                0.1777, -0.4570, -0.0408,  0.2412,  0.1562, -0.1943,  0.2373, -0.0593
             ]
             , dtype=torch.float32)  # fmt: skip
 
@@ -684,18 +686,18 @@ class JambaModelIntegrationTest(unittest.TestCase):
     def test_simple_batched_generate_with_padding(self):
         self.model.to(torch_device)
 
-        inputs = self.tokenizer(["Hey how are you today?", "Tell me a story"], padding=True, return_tensors="pt").to(
-            torch_device
-        )
+        inputs = self.tokenizer(
+            ["Hey how are you doing on this lovely evening?", "Tell me a story"], padding=True, return_tensors="pt"
+        ).to(torch_device)
         out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_sentences = self.tokenizer.batch_decode(out)
         self.assertEqual(
             output_sentences[0],
-            "<|startoftext|>Hey how are you today? travaill sigmamillionbuilt Spanishconsumer Lois reportedteras Fot",
+            "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh Hebrew cases Cats",
         )
         self.assertEqual(
             output_sentences[1],
-            "<|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",
+            "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",
         )
 
         with torch.no_grad():
@@ -703,21 +705,21 @@ class JambaModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS_NO_GRAD_0 = torch.tensor(
             [
-                0.2031, -0.0295, -0.0554, -0.2285, -0.0317,  0.2812, -0.0359,  0.2070,
-               -0.2734,  0.0591,  0.2412, -0.4824, -0.1650, -0.2578, -0.2520,  0.1514,
-                0.0972,  0.0491,  0.2090, -0.1094, -0.2256, -0.1768, -0.0767,  0.1533,
-                0.1426,  0.2832,  0.0413,  0.1084, -0.0889, -0.1030,  0.1748, -0.5859,
-                0.1973, -0.5898, -0.0044,  0.1592,  0.1787, -0.2197,  0.1289, -0.0811
+                0.0140, -0.2246,  0.0408, -0.1016,  0.0471,  0.2715, -0.1465,  0.1631,
+               -0.2949, -0.0297,  0.0250, -0.5586, -0.2139, -0.1426, -0.1602,  0.1309,
+                0.0703,  0.2236,  0.1729, -0.2285, -0.1152, -0.1177, -0.1367,  0.0289,
+                0.1245,  0.2363,  0.0442,  0.1094, -0.1348, -0.2295,  0.1494, -0.3945,
+                0.1777, -0.4570, -0.0408,  0.2412,  0.1562, -0.1943,  0.2373, -0.0593
             ]
             , dtype=torch.float32)  # fmt: skip
 
         EXPECTED_LOGITS_NO_GRAD_1 = torch.tensor(
             [
-               -0.1289,  0.2031, -0.4414, -0.0403, -0.0466,  0.0635,  0.2158,  0.0830,
-                0.1162,  0.2148, -0.0879, -0.1865, -0.1494, -0.1187, -0.0850, -0.2422,
-                0.2061, -0.3184,  0.0293, -0.1797, -0.2500, -0.0898, -0.1748,  0.2539,
-                0.0649,  0.2031,  0.2129,  0.0962,  0.1709, -0.1387, -0.2637, -0.3477,
-                0.2617,  0.2617,  0.1143, -0.1465,  0.2197, -0.1147,  0.2168, -0.0239
+               -0.1289,  0.2363, -0.4180, -0.0302, -0.0476,  0.0327,  0.2578,  0.0874,
+                0.1484,  0.2305, -0.1152, -0.1396, -0.1494, -0.1113, -0.0021, -0.2832,
+                0.2002, -0.2676,  0.0598, -0.1982, -0.2539, -0.1133, -0.1973,  0.2148,
+                0.0559,  0.1670,  0.1846,  0.1270,  0.1680, -0.1250, -0.2656, -0.2871,
+                0.2344,  0.2637,  0.0510, -0.1855,  0.2158, -0.1289,  0.1758,  0.0074
             ]
             , dtype=torch.float32)  # fmt: skip
 
