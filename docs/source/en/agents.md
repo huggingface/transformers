@@ -218,7 +218,7 @@ tool = load_tool("text-to-speech")
 audio = tool("This is a text to speech tool")
 ```
 
-# Getting the best out of your agents
+# Get the best out of your agents
 
 To be performant, your agents should be tailored to the task you intend to give them.
 
@@ -229,7 +229,7 @@ The things that you can easily customize in a `transformers` agent are:
 
 We will now see how to optimize the usage of both of these!
 
-## Customizing the prompt
+## Customize the prompt
 
 As we’ve seen above, the LLM generates its output based on a prompt. Let’s take a look at our system prompt for the React agent:
 
@@ -301,11 +301,11 @@ of the tools, it has available to it.
 </Tip>
 
 
-## Adding new tools
+## Add new tools
 
 In this section, we show how to create a new tool that can be added to the agent.
 
-### Creating a new tool and sharing it to the Hub
+### Create a new tool and sharing it to the Hub
 
 We'll first start by creating a tool. We'll add the not-so-useful yet fun task of fetching the model on the Hugging Face
 Hub with the most downloads for a given task.
@@ -341,6 +341,11 @@ This class has a few needs:
   and will allow for a gradio-demo to be spawned when we push our tool to the Hub.
 - An attribute `output_type` specifying the type of the ouput. 
 - A `__call__` method which contains the inference code. This is the code we've played with above!
+
+
+> [!TIP]
+> Some LLMs can be brittle and require very exact prompts in order to work well. It is very important that your tool has a well-defined name and description in order for the agent to successfully leverage it.
+
 
 Here's what our class looks like now:
 
@@ -404,11 +409,7 @@ And the output:
 `"The most downloaded model in the 'text-to-video' task is 'ByteDance/AnimateDiff-Lightning'."`
 
 
-
-> [!TIP]
-> Some LLMs can be brittle and require very exact prompts in order to work well. It is very important that your tool has a well-defined name and description in order for the agent to successfully leverage it.
-
-### Adding a new tool to an existing agent's toolbox
+### Manage agent toolbox
 
 If you have alread initialized an agent, it can be heavy to have to reinitialize it from scratch with your desired set of tools.
 
@@ -446,8 +447,6 @@ tools to be selected instead of the one you have defined.
 </Tip>
 
 
-### Replacing an existing tool in the agent's toolbox
-
 Replacing existing tools can be done simply by updating the agent's toolbox using method `agent.toolbox.update_tool()`.
 
 
@@ -461,8 +460,7 @@ tool are updated.
 </Tip>
 
 
-
-### Leveraging gradio-tools
+### Leverage gradio-tools
 
 [gradio-tools](https://github.com/freddyaboulton/gradio-tools) is a powerful library that allows using Hugging
 Face Spaces as tools. It supports many existing Spaces as well as custom Spaces to be designed with it.
@@ -523,7 +521,7 @@ work to improve the support.
 
 </Tip>
 
-### Importing tools from LangChain
+### Import tools from LangChain
 
 You can also use method `from_langchain`to quickly initialize a tool from a LangChain tool.
 This goes as follows: 
