@@ -821,8 +821,15 @@ class JambaMambaMixer(nn.Module):
             )
 
     def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params: HybridMambaAttentionDynamicCache = None):
-        seq_len = hidden_states.shape[1]
-        use_precoumpted_states = cache_params is not None and cache_params.has_previous_state and seq_len == 1
+        batch_size, seq_len, _ = hidden_states.shape
+        use_precoumpted_states = (
+            cache_params is not None
+            and cache_params.has_previous_state
+            and seq_len == 1
+            and cache_params.conv_states[self.layer_idx].shape[0]
+            == cache_params.ssm_states[self.layer_idx].shape[0]
+            == batch_size
+        )
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
@@ -922,7 +929,8 @@ class JambaMambaMixer(nn.Module):
             else:
                 ssm_state = cache_params.ssm_states[self.layer_idx]
 
-            if cache_params.has_previous_state and seq_len == 1:
+            if cache_params.has_previous_state and seq_len == 1 and \
+                    cache_params.conv_states[self.layer_idx].shape[0] == batch_size:
                 conv_state = cache_params.conv_states[self.layer_idx]                   # [batch, intermediate_size, conv_kernel_size]
                 conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
                 conv_state[:, :, -1] = hidden_states[:, :, 0]
