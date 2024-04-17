@@ -363,7 +363,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             # [num_image_patches, embedding_dimension]
             # num_image_patches = these are not the 336x336 patches. They are 
             # the TOTAL number of 14x14 patches, each yielding an embedding of
-            # dim 4096.
+            # dim 4096. list of 576*num_patches (3/4/5)
             # The language tokens are also each having 4096
             # sized embeddings. Thus the input_embeds is a vector of
             # shape [batch_size, max_seq_len, 4096]
@@ -371,7 +371,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         num_images = len(image_features)
 
         patches_lengths = [x.shape[0] for x in image_features] # list[int]
-        # print("received these patches lens: ", patches_lengths)
+        print("received these patches lens: ", patches_lengths)
         max_num_patches  = max(patches_lengths) # int
 
         # Each patch should have the same image embedding dimension
@@ -382,20 +382,20 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
         # 1. Create a mask to know where special image tokens are
         special_image_token_mask = input_ids == self.config.image_token_index
-        # print("special image_token_index num: ", self.config.image_token_index)
-        # print("special image token_mask shape: ", special_image_token_mask.shape)
-        # print("input embeds shape: ", inputs_embeds.shape)
+        print("special image_token_index num: ", self.config.image_token_index)
+        print("special image token_mask shape: ", special_image_token_mask.shape)
+        print("input embeds shape: ", inputs_embeds.shape)
 
-        # print("input ids shape: ", input_ids.shape)
+        print("input ids shape: ", input_ids.shape)
         num_special_image_tokens = torch.sum(special_image_token_mask, dim=-1)
-        # print("num of special image tokens found in each ", num_special_image_tokens)
+        print("num of special image tokens found in each ", num_special_image_tokens)
         # Compute the maximum embed dimension
         max_embed_dim = (num_special_image_tokens.max().item() * (max_num_patches - 1)) + sequence_length # int
-        # print("max embed dim found: ", max_embed_dim)
+        print("max embed dim found: ", max_embed_dim)
 
         batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
-        # print("batch_indices shape: ", batch_indices.shape)
-        # print("non_image_indices shape: ", non_image_indices.shape)
+        print("batch_indices shape: ", batch_indices.shape)
+        print("non_image_indices shape: ", non_image_indices.shape)
 
         # 2. Compute the positions where text should be written
         # Calculate new positions for text tokens in merged image-text sequence.
@@ -405,17 +405,17 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         patches_lengths = torch.tensor(patches_lengths, device=inputs_embeds.device).unsqueeze(dim=1)
         repeated_patches = patches_lengths.repeat(1, special_image_token_mask.shape[1]) 
         new_token_positions = torch.cumsum(special_image_token_mask * (repeated_patches - 1) + 1, -1) - 1
-        # print("shape of new_token_positions: ", new_token_positions.shape)
+        print("shape of new_token_positions: ", new_token_positions.shape)
         nb_image_pad = max_embed_dim - 1 - new_token_positions[:, -1]
-        # print("value of nb_image_pad: ", nb_image_pad)
+        print("value of nb_image_pad: ", nb_image_pad)
         if left_padding:
             new_token_positions += nb_image_pad[:, None]  # offset for left padding
-            # print("shape of new_token_positions: L402", new_token_positions.shape)
-            # print("new_token_positions: L402", new_token_positions[0])
+            print("shape of new_token_positions: L402", new_token_positions.shape)
+            print("new_token_positions: L402", new_token_positions[0])
         
         text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
-        # print("text to overwrite shape: ", text_to_overwrite.shape)
-        # print("text to overwrite: ", text_to_overwrite)
+        print("text to overwrite shape: ", text_to_overwrite.shape)
+        print("text to overwrite: ", text_to_overwrite)
  
 
         # 3. Create the full embedding, already padded to the maximum position
@@ -425,6 +425,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         final_attention_mask = torch.zeros(
             batch_size, max_embed_dim, dtype=attention_mask.dtype, device=inputs_embeds.device
         )
+        print("this is the final embedding shape: ", final_embedding.shape)
         if labels is not None:
             final_labels = torch.full(
                 (batch_size, max_embed_dim), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
@@ -450,7 +451,11 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
 
         # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
         image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
+        print("this is image to overwrite shape: l1", image_to_overwrite.shape)
         image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
+        print("this is image to overwrite shape: l2", image_to_overwrite.shape)
+
+        print("this is image to overwrite: l2", image_to_overwrite)
 
         # Compute the sum of lengths of image_features
         total_len_img_ftrs = sum([img.shape[0] for img in image_features])
@@ -462,7 +467,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         
         
         contiguous_img_ftrs = torch.cat(image_features, dim=0)
-        # print("shape pf contiguous image ftrs: ", contiguous_img_ftrs.shape)
+        print("shape pf contiguous image ftrs: ", contiguous_img_ftrs.shape)
 
 
         final_embedding[image_to_overwrite] = contiguous_img_ftrs.to(target_device)
@@ -565,7 +570,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 print("pad token id in model: ", self.pad_token_id)
                 print("img indices without padding: ", img_idcs_with_no_pad)
                 patches_lengths[img_idcs_with_no_pad] = max_num_patches
-                # print("these are the patches lengths: ", patches_lengths)
+                print("these are the patches lengths: ", patches_lengths)
 
                 # Each image in pixel_values is a 336x336 image
                 # We need to remove the images which are just padded tokens
