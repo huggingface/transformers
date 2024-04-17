@@ -14,7 +14,7 @@ if is_accelerate_available():
 logger = logging.get_logger(__name__)
 
 
-def _replace_with_EETQ_linear(
+def _replace_with_eetq_linear(
     model,
     modules_to_not_convert=None,
     current_key_name=None,
