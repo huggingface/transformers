@@ -587,7 +587,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
         # Base training. Should have the same results as test_reproducible_training
         model = RegressionModel()
-        args = TrainingArguments("./regression", learning_rate=0.1)
+        args = TrainingArguments("./regression", learning_rate=0.1, report_to="none")
         trainer = Trainer(model, args, train_dataset=train_dataset)
         trainer.train()
         self.check_trained_model(trainer.model)
@@ -609,7 +609,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
     def test_model_init(self):
         train_dataset = RegressionDataset()
-        args = TrainingArguments("./regression", learning_rate=0.1)
+        args = TrainingArguments("./regression", learning_rate=0.1, report_to="none")
         trainer = Trainer(args=args, train_dataset=train_dataset, model_init=lambda: RegressionModel())
         trainer.train()
         self.check_trained_model(trainer.model)
@@ -672,7 +672,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
     def test_custom_optimizer(self):
         train_dataset = RegressionDataset()
-        args = TrainingArguments("./regression")
+        args = TrainingArguments("./regression", report_to="none")
         model = RegressionModel()
         optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
         lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda x: 1.0)
@@ -696,6 +696,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             lr_scheduler_kwargs=extra_kwargs,
             learning_rate=0.2,
             warmup_steps=num_warmup_steps,
+            report_to="none"
         )
         trainer = Trainer(model, args, train_dataset=train_dataset)
         trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
@@ -722,6 +723,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             lr_scheduler_kwargs=extra_kwargs,
             learning_rate=0.2,
             warmup_steps=num_warmup_steps,
+            report_to="none"
         )
         trainer = Trainer(model, args, train_dataset=train_dataset)
         trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
@@ -742,6 +744,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             "./regression",
             evaluation_strategy="epoch",
             metric_for_best_model="eval_loss",
+            report_to="none",
         )
         model = RegressionModel()
         optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
@@ -776,6 +779,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             metric_for_best_model="eval_loss",
             num_train_epochs=10,
             learning_rate=0.2,
+            report_to="none"
         )
         model = RegressionModel()
         trainer = TrainerWithLRLogs(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
@@ -808,7 +812,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         from transformers.optimization import Adafactor, AdafactorSchedule
 
         train_dataset = RegressionDataset()
-        args = TrainingArguments("./regression")
+        args = TrainingArguments("./regression", report_to="none")
         model = RegressionModel()
         optimizer = Adafactor(model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
         lr_scheduler = AdafactorSchedule(optimizer)
@@ -859,7 +863,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_dataset = RegressionDataset()
         eval_dataset = RegressionDataset()
         model = RegressionDictModel()
-        args = TrainingArguments("./regression")
+        args = TrainingArguments("./regression", report_to="none")
         trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
         trainer.train()
         _ = trainer.evaluate()
@@ -870,7 +874,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         tiny_gpt2 = GPT2LMHeadModel(config)
         x = torch.randint(0, 100, (128,))
         eval_dataset = RepeatDataset(x)
-        args = TrainingArguments("./test")
+        args = TrainingArguments("./test", report_to="none")
         trainer = Trainer(tiny_gpt2, args, eval_dataset=eval_dataset)
         # By default the past_key_values are removed
         result = trainer.predict(eval_dataset)
@@ -1023,7 +1027,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         # Trainer without inf/nan filter
         args = TrainingArguments(
-            "./test", learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, neftune_noise_alpha=0.4
+            "./test", learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, neftune_noise_alpha=0.4, report_to="none"
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
@@ -1040,7 +1044,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         tiny_gpt2 = GPT2LMHeadModel(config)
         # Trainer without inf/nan filter
         args = TrainingArguments(
-            "./test", learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, neftune_noise_alpha=0.4
+            "./test", learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, neftune_noise_alpha=0.4, report_to="none"
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
@@ -1066,13 +1070,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_dataset = RepeatDataset(x)
 
         # Trainer without inf/nan filter
-        args = TrainingArguments("./test", learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=False)
+        args = TrainingArguments("./test", learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=False, report_to="none")
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
         trainer.train()
         log_history_no_filter = trainer.state.log_history
 
         # Trainer with inf/nan filter
-        args = TrainingArguments("./test", learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=True)
+        args = TrainingArguments("./test", learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=True, report_to="none")
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
         trainer.train()
         log_history_filter = trainer.state.log_history
@@ -1119,11 +1123,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     # tests that we do not require dataloader to have a .dataset attribute
     def test_dataloader_without_dataset(self):
         train_dataset = RegressionDataset(length=128)
-        trainer = CustomDataloaderTrainer(
-            model=RegressionModel(), train_dataset=train_dataset, eval_dataset=train_dataset
-        )
-        trainer.train()
-        trainer.evaluate()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = CustomDataloaderTrainer(model=RegressionModel(), train_dataset=train_dataset, eval_dataset=train_dataset, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
+
+            trainer.train()
+            trainer.evaluate()
 
     def test_galore_matched_modules(self):
         regex_patterns = [r".*.attn.*", r".*.mlp.*"]
@@ -1418,7 +1422,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # Make the Trainer believe it's a parallelized model
         model.is_parallelizable = True
         model.model_parallel = True
-        args = TrainingArguments("./regression", per_device_train_batch_size=16, per_device_eval_batch_size=16)
+        args = TrainingArguments("./regression", per_device_train_batch_size=16, per_device_eval_batch_size=16, report_to="none")
         trainer = Trainer(model, args, train_dataset=RegressionDataset(), eval_dataset=RegressionDataset())
         # Check the Trainer was fooled
         self.assertTrue(trainer.is_model_parallel)
@@ -1677,7 +1681,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_dynamic_shapes(self):
         eval_dataset = DynamicShapesDataset(batch_size=self.batch_size)
         model = RegressionModel(a=2, b=1)
-        args = TrainingArguments("./regression")
+        args = TrainingArguments("./regression", report_to="none")
         trainer = Trainer(model, args, eval_dataset=eval_dataset)
 
         # Check evaluation can run to completion
@@ -1694,7 +1698,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
 
         # Same tests with eval accumulation
-        args = TrainingArguments("./regression", eval_accumulation_steps=2)
+        args = TrainingArguments("./regression", eval_accumulation_steps=2, report_to="none")
         trainer = Trainer(model, args, eval_dataset=eval_dataset)
 
         # Check evaluation can run to completion
@@ -2810,13 +2814,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     def test_no_wd_param_group(self):
         model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))
-        trainer = Trainer(model=model)
-        trainer.create_optimizer_and_scheduler(10)
-        wd_names = ['0.linear1.weight', '0.linear2.weight', '1.0.linear1.weight', '1.0.linear2.weight', '1.1.linear1.weight', '1.1.linear2.weight']  # fmt: skip
-        wd_params = [p for n, p in model.named_parameters() if n in wd_names]
-        no_wd_params = [p for n, p in model.named_parameters() if n not in wd_names]
-        self.assertListEqual(trainer.optimizer.param_groups[0]["params"], wd_params)
-        self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
+            trainer.create_optimizer_and_scheduler(10)
+            wd_names = ['0.linear1.weight', '0.linear2.weight', '1.0.linear1.weight', '1.0.linear2.weight', '1.1.linear1.weight', '1.1.linear2.weight']  # fmt: skip
+            wd_params = [p for n, p in model.named_parameters() if n in wd_names]
+            no_wd_params = [p for n, p in model.named_parameters() if n not in wd_names]
+            self.assertListEqual(trainer.optimizer.param_groups[0]["params"], wd_params)
+            self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
 
     @slow
     @require_torch_multi_accelerator
@@ -3931,32 +3936,35 @@ class OptimizerAndModelInspectionTest(unittest.TestCase):
         # in_features * out_features + bias
         layer_1 = 128 * 64 + 64
         layer_2 = 64 * 32 + 32
-        trainer = Trainer(model=model)
-        self.assertEqual(trainer.get_num_trainable_parameters(), layer_1 + layer_2)
-        # Freeze the last layer
-        for param in model[-1].parameters():
-            param.requires_grad = False
-        self.assertEqual(trainer.get_num_trainable_parameters(), layer_1)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
+            self.assertEqual(trainer.get_num_trainable_parameters(), layer_1 + layer_2)
+            # Freeze the last layer
+            for param in model[-1].parameters():
+                param.requires_grad = False
+            self.assertEqual(trainer.get_num_trainable_parameters(), layer_1)
 
     def test_get_learning_rates(self):
         model = nn.Sequential(nn.Linear(128, 64))
-        trainer = Trainer(model=model)
-        with self.assertRaises(ValueError):
-            trainer.get_learning_rates()
-        trainer.create_optimizer()
-        self.assertEqual(trainer.get_learning_rates(), [5e-05, 5e-05])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
+            with self.assertRaises(ValueError):
+                trainer.get_learning_rates()
+            trainer.create_optimizer()
+            self.assertEqual(trainer.get_learning_rates(), [5e-05, 5e-05])
 
     def test_get_optimizer_group(self):
         model = nn.Sequential(nn.Linear(128, 64))
-        trainer = Trainer(model=model)
-        # ValueError is raised if optimizer is None
-        with self.assertRaises(ValueError):
-            trainer.get_optimizer_group()
-        trainer.create_optimizer()
-        # Get groups
-        num_groups = len(trainer.get_optimizer_group())
-        self.assertEqual(num_groups, 2)
-        # Get group of parameter
-        param = next(model.parameters())
-        group = trainer.get_optimizer_group(param)
-        self.assertIn(param, group["params"])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
+            # ValueError is raised if optimizer is None
+            with self.assertRaises(ValueError):
+                trainer.get_optimizer_group()
+            trainer.create_optimizer()
+            # Get groups
+            num_groups = len(trainer.get_optimizer_group())
+            self.assertEqual(num_groups, 2)
+            # Get group of parameter
+            param = next(model.parameters())
+            group = trainer.get_optimizer_group(param)
+            self.assertIn(param, group["params"])

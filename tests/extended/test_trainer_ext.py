@@ -146,6 +146,7 @@ class TestTrainerExt(TestCasePlus):
             "do_eval": False,
             "do_predict": False,
             "n_gpus_to_use": 2,
+            "report_to", "none",
         }
         log_info_string = "Running training"
         with CaptureStderr() as cl:
@@ -301,6 +302,7 @@ class TestTrainerExt(TestCasePlus):
             --label_smoothing_factor 0.1
             --target_lang ro_RO
             --source_lang en_XX
+            --report_to none
         """.split()
 
         args_eval = f"""
