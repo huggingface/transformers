@@ -1208,6 +1208,7 @@ class JambaMambaDecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
 
         # feed-forward (experts/MLP)
+        residual = hidden_states
         hidden_states = self.pre_ff_layernorm(hidden_states)
         ff_outputs = self.feed_forward(hidden_states)
         if isinstance(ff_outputs, tuple):
