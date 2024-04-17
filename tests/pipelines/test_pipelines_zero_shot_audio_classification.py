@@ -52,7 +52,7 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
             model="laion/clap-htsat-unfused",
         )
         # This is an audio of a dog
-        dataset = load_dataset("ashraq/esc50")
+        dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         audio = dataset["train"]["audio"][-1]["array"]
         output = audio_classifier(audio, candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"])
 
