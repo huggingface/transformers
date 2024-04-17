@@ -43,7 +43,7 @@ _import_structure = {
         "unset_hf_deepspeed_config",
     ],
     "eetq":[
-        "replace_with_EETQ_linear"
+        "replace_with_eetq_linear"
     ],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
