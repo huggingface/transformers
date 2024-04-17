@@ -657,9 +657,8 @@ An unquantized model will be quantized via "from_pretrained".
 ```py
 from transformers import AutoModelForCausalLM, EETQConfig
 path = "/path/to/model"
-config = EETQConfig("int8")
-model = AutoModelForCausalLM.from_pretrained(path, trust_remote_code=True, device_map="auto", quantization_config=config)
-```
+quantization_config = EETQConfig("int8")
+model = AutoModelForCausalLM.from_pretrained(path, device_map="auto", quantization_config=quantization_config)
 
 A quantized model shall be saved via "saved_pretrained" and be reused again via the "from_pretrained".
 ```py
