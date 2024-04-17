@@ -562,7 +562,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 mask = pixel_values[:, :, 0, 0, 0] == self.pad_token_id
                 # patches_lengths is a list contaning the lengths of the patches
                 # contained in every image 
-                print("pixel values first row, ", pixel_values[0][-1])
+                # print("pixel values first row, ", pixel_values[0][-1])
                 print("mask: ", mask)
                 patches_lengths = torch.argmax(mask.to(torch.int), dim=1)
                 img_idcs_with_no_pad = ~mask.any(dim=1) 
