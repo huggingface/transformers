@@ -25,7 +25,7 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       
       - name: Get changed files
         id: changed-files
@@ -57,7 +57,7 @@ jobs:
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    if: ${{ needs.get_modified_models.outputs.matrix != '[]' && needs.get_modified_models.outputs.matrix != '' }}
+    if: ${{ needs.get_modified_models.outputs.matrix != '[]' && needs.get_modified_models.outputs.matrix != '' && fromJson(needs.get_modified_models.outputs.matrix)[0] != null }}
     strategy:
       fail-fast: false
       matrix: 
@@ -65,7 +65,7 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       
       - name: Install locally transformers & other libs
         run: |
@@ -90,7 +90,7 @@ jobs:
       
       - name: "Test suite reports artifacts: ${{ matrix.model-name }}_fa2_tests"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.model-name }}_fa2_tests
           path: /transformers/reports/${{ matrix.model-name }}_fa2_tests
@@ -112,7 +112,7 @@ jobs:
       
       - name: "Test suite reports artifacts: tests_integration_${{ matrix.model-name }}"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: tests_integration_${{ matrix.model-name }}
           path: /transformers/reports/tests_integration_${{ matrix.model-name }}
@@ -128,7 +128,7 @@ jobs:
 
       - name: Tailscale # In order to be able to SSH when a test fails
         if: ${{ failure() || runner.debug == '1'}}
-        uses: huggingface/tailscale-action@ssh-improvments
+        uses: huggingface/tailscale-action@v1
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
           slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}

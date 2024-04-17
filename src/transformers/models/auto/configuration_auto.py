@@ -125,6 +125,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("hubert", "HubertConfig"),
         ("ibert", "IBertConfig"),
         ("idefics", "IdeficsConfig"),
+        ("idefics2", "Idefics2Config"),
         ("imagegpt", "ImageGPTConfig"),
         ("informer", "InformerConfig"),
         ("instructblip", "InstructBlipConfig"),
@@ -174,6 +175,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("nllb-moe", "NllbMoeConfig"),
         ("nougat", "VisionEncoderDecoderConfig"),
         ("nystromformer", "NystromformerConfig"),
+        ("olmo", "OlmoConfig"),
         ("oneformer", "OneFormerConfig"),
         ("open-llama", "OpenLlamaConfig"),
         ("openai-gpt", "OpenAIGPTConfig"),
@@ -283,6 +285,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
@@ -390,6 +393,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("hubert", "Hubert"),
         ("ibert", "I-BERT"),
         ("idefics", "IDEFICS"),
+        ("idefics2", "Idefics2"),
         ("imagegpt", "ImageGPT"),
         ("informer", "Informer"),
         ("instructblip", "InstructBLIP"),
@@ -448,6 +452,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("nllb-moe", "NLLB-MOE"),
         ("nougat", "Nougat"),
         ("nystromformer", "Nyströmformer"),
+        ("olmo", "OLMo"),
         ("oneformer", "OneFormer"),
         ("open-llama", "OpenLlama"),
         ("openai-gpt", "OpenAI GPT"),

@@ -440,6 +440,8 @@
         title: NLLB-MoE
       - local: model_doc/nystromformer
         title: Nyströmformer
+      - local: model_doc/olmo
+        title: OLMo
       - local: model_doc/open-llama
         title: Open-Llama
       - local: model_doc/opt
@@ -738,6 +740,8 @@
         title: GroupViT
       - local: model_doc/idefics
         title: IDEFICS
+      - local: model_doc/idefics2
+        title: Idefics2
       - local: model_doc/instructblip
         title: InstructBLIP
       - local: model_doc/kosmos-2
