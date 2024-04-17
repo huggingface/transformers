@@ -94,7 +94,7 @@ def replace_with_eetq_linear(model, modules_to_not_convert=None, current_key_nam
     
     if quantization_config.modules_to_not_convert is not None:
         modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
-    model, has_been_replaced = _replace_with_EETQ_linear(
+    model, has_been_replaced = _replace_with_eetq_linear(
         model, modules_to_not_convert, current_key_name, quantization_config
     )
 
