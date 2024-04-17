@@ -32,7 +32,6 @@ from ...activations import ACT2FN
 from ...cache_utils import DynamicCache  # we need __iter__ and __len__ of pkv
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
-    _prepare_4d_causal_attention_mask,
 )
 from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
@@ -40,7 +39,6 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import is_torch_greater_or_equal_than_1_13
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -52,7 +50,6 @@ from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_flash_attn_2_available,
     is_mamba_ssm_available,
-    is_torch_fx_available,
 )
 from .configuration_jamba import JambaConfig
 
@@ -265,16 +262,6 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
             self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=2)
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
-
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
-        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        if len(self.key_cache) <= layer_idx:
-            return 0
-        if self.layers_block_type[layer_idx] == "mamba":
-            raise ValueError(
-                "Can't return seq_length from Mamba layers cache as it doesn't have a sequence length dimension."
-            )
-        return self.key_cache[layer_idx].shape[-2]
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
@@ -1437,14 +1424,7 @@ class JambaModel(JambaPreTrainedModel):
             )
 
         if cache_position is None:
-            past_seen_tokens = (
-                past_key_values.get_seq_length(self.config.layers_block_type.index("attention"))
-                if isinstance(past_key_values, HybridMambaAttentionDynamicCache)
-                else 0
-            )
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + hidden_states.shape[1], device=hidden_states.device
-            )
+            cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 

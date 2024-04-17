@@ -235,6 +235,9 @@ class JambaModelTester:
             attention_mask=next_attention_mask,
             past_key_values=past_key_values,
             output_hidden_states=True,
+            cache_position=torch.arange(
+                input_ids.shape[1], input_ids.shape[1] + next_tokens.shape[1], device=model.device
+            ),
         )["hidden_states"][0]
 
         # select random slice
