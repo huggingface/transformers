@@ -1722,17 +1722,17 @@ class TFIdeficsForVisionText2Text(TFPreTrainedModel, TFCausalLanguageModelingLos
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, TFIdeficsForVisionText2Text
+        >> from transformers import AutoTokenizer, TFIdeficsForVisionText2Text
 
-        >>> model = TFIdeficsForVisionText2Text.from_pretrained("HuggingFaceM4/idefics-9b")
-        >>> tokenizer = AutoTokenizer.from_pretrained("HuggingFaceM4/idefics-9b")
+        >> model = TFIdeficsForVisionText2Text.from_pretrained("HuggingFaceM4/idefics-9b")
+        >> tokenizer = AutoTokenizer.from_pretrained("HuggingFaceM4/idefics-9b")
 
-        >>> prompt = "Hey, are you consciours? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="tf")
+        >> prompt = "Hey, are you consciours? Can you talk to me?"
+        >> inputs = tokenizer(prompt, return_tensors="tf")
 
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        >> # Generate
+        >> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you consciours? Can you talk to me?\nI'm not consciours, but I can talk to you."
         ```"""
 
