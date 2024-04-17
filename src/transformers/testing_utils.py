@@ -56,7 +56,6 @@ from .utils import (
     is_accelerate_available,
     is_apex_available,
     is_aqlm_available,
-    is_eetq_available,
     is_auto_awq_available,
     is_auto_gptq_available,
     is_av_available,
@@ -66,6 +65,7 @@ from .utils import (
     is_cython_available,
     is_decord_available,
     is_detectron2_available,
+    is_eetq_available,
     is_essentia_available,
     is_faiss_available,
     is_flash_attn_2_available,
@@ -1020,7 +1020,6 @@ def require_eetq(test_case):
     Decorator marking a test that requires eetq
     """
     return unittest.skipUnless(is_eetq_available(), "test requires eetq")(test_case)
-
 
 
 def require_av(test_case):

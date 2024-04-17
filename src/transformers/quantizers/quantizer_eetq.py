@@ -36,6 +36,7 @@ class EetqHfQuantizer(HfQuantizer):
         before loading: converts transformer layers into W8A16Linear during loading: load 16bit weight and pass to the
         layer object after: quantizes individual weights in Linear8bitLt into 8bit at first .cuda() call
     """
+
     requires_parameters_quantization = True
     requires_calibration = False
 
@@ -93,15 +94,16 @@ class EetqHfQuantizer(HfQuantizer):
         **kwargs,
     ):
         from eetq import EetqLinear
+
         module, tensor_name = get_module_from_name(model, param_name)
 
         if isinstance(module, EetqLinear):
-            if self.pre_quantized or tensor_name == 'bias':
-                if tensor_name == 'weight' and param_value.dtype != torch.int8:
+            if self.pre_quantized or tensor_name == "bias":
+                if tensor_name == "weight" and param_value.dtype != torch.int8:
                     raise ValueError("Expect quantized weights but got an unquantized weight")
                 return False
             else:
-                if tensor_name == 'weight_scale':
+                if tensor_name == "weight_scale":
                     raise ValueError("Expect unquantized weights but got a quantized weight_scale")
                 return True
         return False
@@ -119,6 +121,7 @@ class EetqHfQuantizer(HfQuantizer):
         quantizes weights into qweight and weight_scales
         """
         from eetq import quantize_and_preprocess_weights
+
         module, tensor_name = get_module_from_name(model, param_name)
         new_value, weight_scale = quantize_and_preprocess_weights(param_value)
 
@@ -143,7 +146,10 @@ class EetqHfQuantizer(HfQuantizer):
             self.modules_to_not_convert.extend(self.quantization_config.modules_to_not_convert)
 
         model = replace_with_eetq_linear(
-            model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config, pre_quantized = self.pre_quantized
+            model,
+            modules_to_not_convert=self.modules_to_not_convert,
+            quantization_config=self.quantization_config,
+            pre_quantized=self.pre_quantized,
         )
 
         model.config.quantization_config = self.quantization_config
