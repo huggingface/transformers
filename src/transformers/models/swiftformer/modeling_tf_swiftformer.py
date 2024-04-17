@@ -800,7 +800,6 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
 
         return loss
 
-
     @unpack_inputs
     @add_start_docstrings_to_model_forward(TFSWIFTFORMER_INPUTS_DOCSTRING)
     def call(
