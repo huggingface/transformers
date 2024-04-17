@@ -31,5 +31,5 @@ RUN python3 -m pip uninstall -y tensorflow flax
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
 
-# Remove nvml as it is not compatible with ROCm
-RUN python3 -m pip uninstall py3nvml pynvml -y
+# Remove nvml as it is not compatible with ROCm. apex is not tested on NVIDIA either.
+RUN python3 -m pip uninstall py3nvml pynvml apex -y
