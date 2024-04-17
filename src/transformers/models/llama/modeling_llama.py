@@ -1077,10 +1077,6 @@ class LlamaModel(LlamaPreTrainedModel):
                 attention_mask, inputs_embeds=input_tensor, past_key_values_length=past_seen_tokens
             ):
                return None
-
-            if ignore_causal_mask:
-                return None
-
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
