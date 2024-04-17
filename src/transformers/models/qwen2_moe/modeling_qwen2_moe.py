@@ -1613,6 +1613,13 @@ class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = Qwen2MoeModel(config)
+        if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None:
+            classifier_dropout = config.classifier_dropout
+        elif hasattr(config, "hidden_dropout") and config.hidden_dropout is not None:
+            classifier_dropout = config.hidden_dropout
+        else:
+            classifier_dropout = 0.1
+        self.dropout = nn.Dropout(classifier_dropout)
         self.score = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
@@ -1658,6 +1665,7 @@ class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = outputs[0]
+        sequence_output = self.dropout(sequence_output)
         logits = self.score(sequence_output)
 
         loss = None
