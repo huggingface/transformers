@@ -33,7 +33,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class EETQHfQuantizer(HfQuantizer):
+class EetqHfQuantizer(HfQuantizer):
     """
     8-bit quantization from EETQ quantization method:
         before loading: converts transformer layers into W8A16Linear during loading: load 16bit weight and pass to the
