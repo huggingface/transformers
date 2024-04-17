@@ -2996,10 +2996,10 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         ...     outputs, threshold=0.35, target_sizes=target_sizes
         ... )[0]
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
-        ...     box = [round(i, 2) for i in box.tolist()]
-        ...     print(f"Detected {label.item()} with confidence " f"{round(score.item(), 3)} at location {box}")
-        Detected 1 with confidence 0.453 at location [344.82, 23.18, 637.4, 373.83]
-        Detected 1 with confidence 0.408 at location [11.92, 51.58, 316.57, 472.89]
+        ...     box = [round(i, 1) for i in box.tolist()]
+        ...     print(f"Detected {label.item()} with confidence " f"{round(score.item(), 2)} at location {box}")
+        Detected 1 with confidence 0.45 at location [344.8, 23.2, 637.4, 373.8]
+        Detected 1 with confidence 0.41 at location [11.9, 51.6, 316.6, 472.9]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

@@ -3048,7 +3048,7 @@ class Trainer:
                 The values to log.
         """
         if self.state.epoch is not None:
-            logs["epoch"] = round(self.state.epoch, 2)
+            logs["epoch"] = self.state.epoch
         if self.args.include_num_input_tokens_seen:
             logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
 
