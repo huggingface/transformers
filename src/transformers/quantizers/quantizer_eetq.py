@@ -11,10 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
-
-from packaging import version
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from .base import HfQuantizer
 
@@ -83,6 +80,8 @@ class EetqHfQuantizer(HfQuantizer):
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
             torch_dtype = torch.float16
+        elif torch_dtype != torch.float16:
+            logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with EETQ.")
         return torch_dtype
     
     def check_quantized_param(
@@ -93,11 +92,11 @@ class EetqHfQuantizer(HfQuantizer):
         state_dict: Dict[str, Any],
         **kwargs,
     ):
-        from eetq import EETQLinear
+        from eetq import EetqLinear
         module, tensor_name = get_module_from_name(model, param_name)
 
-        if isinstance(module, EETQLinear):
-            if self.quantization_config.pre_quantized or tensor_name == 'bias':
+        if isinstance(module, EetqLinear):
+            if self.pre_quantized or tensor_name == 'bias':
                 if tensor_name == 'weight' and param_value.dtype != torch.int8:
                     raise ValueError("Expect quantized weights but got an unquantized weight")
                 return False
@@ -127,11 +126,7 @@ class EetqHfQuantizer(HfQuantizer):
         module.register("weight_scales", weight_scale.to(target_device))
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        """
-        sets the pre_quantized to True for saved_pretrained. The saved quantized model can be loaded via from_pretrained
-        
-        """
-        model.config.quantization_config.pre_quantized = True
+        return model
 
     def _process_model_before_weight_loading(
         self,
@@ -140,7 +135,7 @@ class EetqHfQuantizer(HfQuantizer):
         keep_in_fp32_modules: List[str] = [],
         **kwargs,
     ):
-        from ..integrations import get_keys_to_not_convert, replace_with_EETQ_linear
+        from ..integrations import get_keys_to_not_convert, replace_with_eetq_linear
 
         self.modules_to_not_convert = get_keys_to_not_convert(model)
 
@@ -148,7 +143,7 @@ class EetqHfQuantizer(HfQuantizer):
             self.modules_to_not_convert.extend(self.quantization_config.modules_to_not_convert)
 
         model = replace_with_eetq_linear(
-            model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
+            model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config, pre_quantized = self.pre_quantized
         )
 
         model.config.quantization_config = self.quantization_config
