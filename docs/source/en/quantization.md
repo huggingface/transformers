@@ -664,8 +664,7 @@ A quantized model shall be saved via "saved_pretrained" and be reused again via 
 ```py
 quant_path = "/path/to/save/quantized/model"
 model.save_pretrained(quant_path)
-model = AutoModelForCausalLM.from_pretrained(quant_path, trust_remote_code=True, device_map="auto")
-```
+model = AutoModelForCausalLM.from_pretrained(quant_path, device_map="auto")
 
 ## Optimum
 
