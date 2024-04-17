@@ -153,7 +153,7 @@ class Seq2seqTrainerTester(TestCasePlus):
             "google-t5/t5-small", max_length=None, min_length=None, max_new_tokens=256, min_new_tokens=1, num_beams=5
         )
 
-        training_args = Seq2SeqTrainingArguments(".", predict_with_generate=True, report_to="tensorboard")
+        training_args = Seq2SeqTrainingArguments(".", predict_with_generate=True, report_to="none")
 
         trainer = Seq2SeqTrainer(
             model=model,
