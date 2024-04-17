@@ -38,7 +38,6 @@ from .prompts import DEFAULT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_SYSTEM_PROMPT
 from .python_interpreter import evaluate_python_code
 from PIL import Image
 
-
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
@@ -382,6 +381,7 @@ class Agent:
                 observation = self.toolbox.tools[tool_name](arguments)
             else:
                 for key, value in arguments.items():
+                    # if the value is the name of a state variable like "image.png", replace it with the actual value
                     if value in self.state:
                         arguments[key] = self.state[value]
                 observation = self.toolbox.tools[tool_name](**arguments)
@@ -531,7 +531,6 @@ class ReactAgent(Agent):
             "your model, please set `tokenizer.tool_description_template` to an appropriate template. "
         )
         return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
-
 
     def run(self, task, **kwargs):
         """

@@ -172,7 +172,6 @@ Action:
 }
 
 To provide the final answer to the task, use an action blob with "action": "final_answer" tool. It is the only way to complete the task, else you will be stuck on a loop. So your final output should look like this:
-
 Action:
 {
   "action": "final_answer",
