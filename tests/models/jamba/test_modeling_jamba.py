@@ -20,7 +20,7 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import JambaConfig, is_torch_available
+from transformers import AutoTokenizer, JambaConfig, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -643,23 +643,83 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 
 @require_torch
-@unittest.skip("Update once we have a tiny Jamba model")
 class JambaModelIntegrationTest(unittest.TestCase):
+    model = None
+    tokenizer = None
+
+    @classmethod
+    def setUpClass(cls):
+        model_id = "ai21labs/Jamba-tiny-random"
+        cls.model = JambaForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+        cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
+
     @slow
-    def test_inference_masked_lm(self):
-        model = JambaForCausalLM.from_pretrained("...")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
+    def test_simple_generate(self):
+        self.model.to(torch_device)
 
-        # TODO Replace vocab size
-        vocab_size = 32000
-
-        expected_shape = torch.Size((1, 6, vocab_size))
-        self.assertEqual(output.shape, expected_shape)
-
-        # TODO Replace values below with what was printed above.
-        expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
+        input_ids = self.tokenizer("Hey how are you today?", return_tensors="pt")["input_ids"].to(torch_device)
+        out = self.model.generate(input_ids, do_sample=False, max_new_tokens=10)
+        output_sentence = self.tokenizer.decode(out[0, :])
+        self.assertEqual(
+            output_sentence,
+            "<|startoftext|>Hey how are you today? travaill sigmamillionbuilt Spanishconsumer Lois reportedteras Fot",
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        with torch.no_grad():
+            logits = self.model(input_ids=input_ids).logits
+
+        EXPECTED_LOGITS_NO_GRAD = torch.tensor(
+            [
+                 0.2031, -0.0295, -0.0554, -0.2285, -0.0317,  0.2812, -0.0359,  0.2070,
+                -0.2734,  0.0591,  0.2412, -0.4824, -0.1650, -0.2578, -0.2520,  0.1514,
+                 0.0972,  0.0491,  0.2090, -0.1094, -0.2256, -0.1768, -0.0767,  0.1533,
+                 0.1426,  0.2832,  0.0413,  0.1084, -0.0889, -0.1030,  0.1748, -0.5859,
+                 0.1973, -0.5898, -0.0044,  0.1592,  0.1787, -0.2197,  0.1289, -0.0811
+            ]
+            , dtype=torch.float32)  # fmt: skip
+
+        torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
+
+    @slow
+    def test_simple_batched_generate_with_padding(self):
+        self.model.to(torch_device)
+
+        inputs = self.tokenizer(["Hey how are you today?", "Tell me a story"], padding=True, return_tensors="pt").to(
+            torch_device
+        )
+        out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
+        output_sentences = self.tokenizer.batch_decode(out)
+        self.assertEqual(
+            output_sentences[0],
+            "<|startoftext|>Hey how are you today? travaill sigmamillionbuilt Spanishconsumer Lois reportedteras Fot",
+        )
+        self.assertEqual(
+            output_sentences[1],
+            "<|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",
+        )
+
+        with torch.no_grad():
+            logits = self.model(input_ids=inputs["input_ids"]).logits
+
+        EXPECTED_LOGITS_NO_GRAD_0 = torch.tensor(
+            [
+                0.2031, -0.0295, -0.0554, -0.2285, -0.0317,  0.2812, -0.0359,  0.2070,
+               -0.2734,  0.0591,  0.2412, -0.4824, -0.1650, -0.2578, -0.2520,  0.1514,
+                0.0972,  0.0491,  0.2090, -0.1094, -0.2256, -0.1768, -0.0767,  0.1533,
+                0.1426,  0.2832,  0.0413,  0.1084, -0.0889, -0.1030,  0.1748, -0.5859,
+                0.1973, -0.5898, -0.0044,  0.1592,  0.1787, -0.2197,  0.1289, -0.0811
+            ]
+            , dtype=torch.float32)  # fmt: skip
+
+        EXPECTED_LOGITS_NO_GRAD_1 = torch.tensor(
+            [
+               -0.1289,  0.2031, -0.4414, -0.0403, -0.0466,  0.0635,  0.2158,  0.0830,
+                0.1162,  0.2148, -0.0879, -0.1865, -0.1494, -0.1187, -0.0850, -0.2422,
+                0.2061, -0.3184,  0.0293, -0.1797, -0.2500, -0.0898, -0.1748,  0.2539,
+                0.0649,  0.2031,  0.2129,  0.0962,  0.1709, -0.1387, -0.2637, -0.3477,
+                0.2617,  0.2617,  0.1143, -0.1465,  0.2197, -0.1147,  0.2168, -0.0239
+            ]
+            , dtype=torch.float32)  # fmt: skip
+
+        torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1e-3)
