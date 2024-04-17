@@ -137,14 +137,14 @@ Specifically, this json should have a `action` key (name of the tool to use) and
 
 The value in the "action" field should belong to this list: <<tool_names>>.
 
-The $ACTION_JSON_BLOB should only contain a SINGLE action, do NOT return a list of multiple actions. It should be formatted in json. Do not try to escape special characters. Here is an example of a valid $ACTION_JSON_BLOB:
+The $ACTION_JSON_BLOB should only contain a SINGLE action, do NOT return a list of multiple actions. It should be formatted in json. Do not try to escape special characters. Here is the template of a valid $ACTION_JSON_BLOB:
 Action:
 {
   "action": $TOOL_NAME,
   "action_input": $INPUT
 }
 
-Make sure to have the $INPUT in the right format for the tool you are using, and do not put variable names as input if you can find the right values.
+Make sure to have the $INPUT as a dictionnary in the right format for the tool you are using, and do not put variable names as input if you can find the right values.
 
 You will be given:
 
@@ -159,14 +159,26 @@ Observation: the result of the action
 ... (this Thought/Action/Observation can repeat N times, you should take several steps when needed. The $ACTION_JSON_BLOB must only use a SINGLE action at a time.)
 
 ALWAYS provide a 'Thought:' and an 'Action:' sequence. You MUST provide at least the 'Action:' sequence to move forward.
-To provide the final answer to the task, use an action blob with "action": 'final_answer' tool. It is the only way to complete the task, else you will be stuck on a loop. So your final output should look like this:
+You can use the result of the previous action as input for the next action.
+The observation will always be a string: it can represent a file, like "imag_1.jpg".
+Then you can use it as input for the next action. You can do it for instance as follows:
+
+Observation: "image_1.jpg"
+Thought: I need to transform the image that I received in the previous observation to make it green.
 Action:
 {
-  "action": 'final_answer',
-  "action_input": "insert your final answer here"
+  "action": "image_transformer",
+  "action_input": {"image": "image_1.jpg"}
 }
 
-Now begin!
+To provide the final answer to the task, use an action blob with "action": "final_answer" tool. It is the only way to complete the task, else you will be stuck on a loop. So your final output should look like this:
+Action:
+{
+  "action": "final_answer",
+  "action_input": {"answer": "insert your final answer here"}
+}
+
+Now begin! You have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: <<additional_args>>
 """
 
 
