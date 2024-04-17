@@ -822,7 +822,7 @@ class JambaMambaMixer(nn.Module):
 
     def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params: HybridMambaAttentionDynamicCache = None):
         batch_size, seq_len, _ = hidden_states.shape
-        use_precoumpted_states = (
+        use_precomputed_states = (
             cache_params is not None
             and cache_params.has_previous_state
             and seq_len == 1
@@ -839,7 +839,7 @@ class JambaMambaMixer(nn.Module):
 
         # 2. Convolution sequence transformation
         conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
-        if use_precoumpted_states:
+        if use_precomputed_states:
             hidden_states = causal_conv1d_update(
                 hidden_states.squeeze(-1),
                 cache_params.conv_states[self.layer_idx],
@@ -878,7 +878,7 @@ class JambaMambaMixer(nn.Module):
         A = -torch.exp(self.A_log.float())
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         time_proj_bias = time_proj_bias.float() if time_proj_bias is not None else None
-        if use_precoumpted_states:
+        if use_precomputed_states:
             scan_outputs = selective_state_update(
                 cache_params.ssm_states[self.layer_idx],
                 hidden_states[..., 0],
