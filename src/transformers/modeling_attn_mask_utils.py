@@ -358,7 +358,7 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
     attn_mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=sliding_window)
 
     key_value_length = input_shape[-1] + past_key_values_length
-    batch_size, query_length = input_shape
+    _, query_length = input_shape
 
     # torch.jit.trace, symbolic_trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
     # used as an SDPA argument. We keep compatibility with these tracing tools by always using SDPA's `attn_mask` argument in case we are tracing.
@@ -369,7 +369,12 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
         or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
     )
 
-    if attention_mask is not None:
+    ignore_causal_mask = False
+
+    if attention_mask is None:
+        if sliding_window is None or key_value_length < sliding_window:
+            ignore_causal_mask = not is_tracing
+    elif sliding_window is None or key_value_length < sliding_window:
         # 4d mask is passed through
         if len(attention_mask.shape) == 4:
             expected_shape = (input_shape[0], 1, input_shape[1], key_value_length)
@@ -388,26 +393,17 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
         elif not is_tracing and torch.all(attention_mask == 1):
             if query_length == 1:
                 # For query_length == 1, causal attention and bi-directional attention are the same.
-                attention_mask = None
+                ignore_causal_mask = True
             elif key_value_length == query_length:
-                attention_mask = None
-            else:
-                # Unfortunately, for query_length > 1 and key_value_length != query_length, we cannot generally ignore the attention mask, as SDPA causal mask generation
-                # may be wrong. We will set `is_causal=False` in SDPA and rely on Transformers attention_mask instead, hence not setting it to None here.
-                # Reference: https://github.com/pytorch/pytorch/issues/108108
-                pass
-    elif query_length > 1 and key_value_length != query_length:
-        # See the comment above (https://github.com/pytorch/pytorch/issues/108108).
-        # Ugly: we set it to True here to dispatch in the following controlflow to `to_causal_4d`.
-        attention_mask = True
-    elif is_tracing:
-        raise ValueError(
-            'Attention using SDPA can not be traced with torch.jit.trace when no attention_mask is provided. To solve this issue, please either load your model with the argument `attn_implementation="eager"` or pass an attention_mask input when tracing the model.'
-        )
+                ignore_causal_mask = True
 
-    if attention_mask is None:
+            # Unfortunately, for query_length > 1 and key_value_length != query_length, we cannot generally ignore the attention mask, as SDPA causal mask generation
+            # may be wrong. We will set `is_causal=False` in SDPA and rely on Transformers attention_mask instead, hence not setting it to None here.
+            # Reference: https://github.com/pytorch/pytorch/issues/108108
+
+    if ignore_causal_mask:
         expanded_4d_mask = None
-    elif attention_mask is True:
+    elif attention_mask is None:
         expanded_4d_mask = attn_mask_converter.to_causal_4d(
             input_shape[0], input_shape[-1], key_value_length, dtype=inputs_embeds.dtype, device=inputs_embeds.device
         )
