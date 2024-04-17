@@ -82,6 +82,7 @@ from .trainer_callback import (
 )
 from .trainer_pt_utils import (
     DistributedTensorGatherer,
+    EvalLoopContainer,
     IterableDatasetShard,
     LabelSmoother,
     LayerWiseDummyOptimizer,
@@ -104,7 +105,6 @@ from .trainer_pt_utils import (
 from .trainer_utils import (
     PREFIX_CHECKPOINT_DIR,
     BestRun,
-    EvalLoopContainer,
     EvalLoopOutput,
     EvalPrediction,
     HPSearchBackend,
