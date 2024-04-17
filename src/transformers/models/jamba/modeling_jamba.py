@@ -235,7 +235,7 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         self.dtype = dtype
         self.layers_block_type = config.layers_block_type
-        self.seqlen_offset = 0  # only used by mamba, cache_positions otherwise
+        self.has_previous_state = False  # only used by mamba
         intermediate_size = config.mamba_expand * config.hidden_size
         ssm_state_size = config.mamba_d_state
         conv_kernel_size = config.mamba_d_conv
@@ -830,7 +830,7 @@ class JambaMambaMixer(nn.Module):
 
         # 2. Convolution sequence transformation
         conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
-        if isinstance(cache_params, HybridMambaAttentionDynamicCache) and cache_params.seqlen_offset > 0:
+        if isinstance(cache_params, HybridMambaAttentionDynamicCache) and cache_params.has_previous_state:
             hidden_states = causal_conv1d_update(
                 hidden_states.squeeze(-1),
                 cache_params.conv_states[self.layer_idx],
@@ -869,7 +869,7 @@ class JambaMambaMixer(nn.Module):
         A = -torch.exp(self.A_log.float())
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         time_proj_bias = time_proj_bias.float() if time_proj_bias is not None else None
-        if cache_params is not None and cache_params.seqlen_offset > 0:
+        if cache_params is not None and cache_params.has_previous_state:
             scan_outputs = selective_state_update(
                 cache_params.ssm_states[self.layer_idx],
                 hidden_states[..., 0],
@@ -920,7 +920,7 @@ class JambaMambaMixer(nn.Module):
             else:
                 ssm_state = cache_params.ssm_states[self.layer_idx]
 
-            if cache_params.seqlen_offset > 0:
+            if cache_params.has_previous_state:
                 conv_state = cache_params.conv_states[self.layer_idx]                   # [batch, intermediate_size, conv_kernel_size]
                 conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
                 conv_state[:, :, -1] = hidden_states[:, :, 0]
@@ -1496,6 +1496,9 @@ class JambaModel(JambaPreTrainedModel):
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
+
+        if past_key_values and not past_key_values.has_previous_state:
+            past_key_values.has_previous_state = True
 
         next_cache = None if not use_cache else past_key_values
 
