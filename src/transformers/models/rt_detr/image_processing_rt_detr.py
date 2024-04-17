@@ -28,7 +28,6 @@ from ...image_transforms import (
     pad,
     rescale,
     resize,
-    rgb_to_id,
     to_channel_dimension_format,
 )
 from ...image_utils import (
@@ -67,12 +66,12 @@ if is_torch_available():
 
 
 if is_vision_available():
-    import PIL
+    pass
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
+SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION,)
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
@@ -236,42 +235,6 @@ def make_pixel_mask(
     return mask
 
 
-# Copied from transformers.models.detr.image_processing_detr.convert_coco_poly_to_mask
-def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndarray:
-    """
-    Convert a COCO polygon annotation to a mask.
-
-    Args:
-        segmentations (`List[List[float]]`):
-            List of polygons, each polygon represented by a list of x-y coordinates.
-        height (`int`):
-            Height of the mask.
-        width (`int`):
-            Width of the mask.
-    """
-    try:
-        from pycocotools import mask as coco_mask
-    except ImportError:
-        raise ImportError("Pycocotools is not installed in your environment.")
-
-    masks = []
-    for polygons in segmentations:
-        rles = coco_mask.frPyObjects(polygons, height, width)
-        mask = coco_mask.decode(rles)
-        if len(mask.shape) < 3:
-            mask = mask[..., None]
-        mask = np.asarray(mask, dtype=np.uint8)
-        mask = np.any(mask, axis=2)
-        masks.append(mask)
-    if masks:
-        masks = np.stack(masks, axis=0)
-    else:
-        masks = np.zeros((0, height, width), dtype=np.uint8)
-
-    return masks
-
-
-# Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation with DETR->RTDETR
 def prepare_coco_detection_annotation(
     image,
     target,
@@ -323,88 +286,6 @@ def prepare_coco_detection_annotation(
         num_keypoints = keypoints.shape[0]
         keypoints = keypoints.reshape((-1, 3)) if num_keypoints else keypoints
         new_target["keypoints"] = keypoints
-
-    if return_segmentation_masks:
-        segmentation_masks = [obj["segmentation"] for obj in annotations]
-        masks = convert_coco_poly_to_mask(segmentation_masks, image_height, image_width)
-        new_target["masks"] = masks[keep]
-
-    return new_target
-
-
-# Copied from transformers.models.detr.image_processing_detr.masks_to_boxes
-def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
-    """
-    Compute the bounding boxes around the provided panoptic segmentation masks.
-
-    Args:
-        masks: masks in format `[number_masks, height, width]` where N is the number of masks
-
-    Returns:
-        boxes: bounding boxes in format `[number_masks, 4]` in xyxy format
-    """
-    if masks.size == 0:
-        return np.zeros((0, 4))
-
-    h, w = masks.shape[-2:]
-    y = np.arange(0, h, dtype=np.float32)
-    x = np.arange(0, w, dtype=np.float32)
-    # see https://github.com/pytorch/pytorch/issues/50276
-    y, x = np.meshgrid(y, x, indexing="ij")
-
-    x_mask = masks * np.expand_dims(x, axis=0)
-    x_max = x_mask.reshape(x_mask.shape[0], -1).max(-1)
-    x = np.ma.array(x_mask, mask=~(np.array(masks, dtype=bool)))
-    x_min = x.filled(fill_value=1e8)
-    x_min = x_min.reshape(x_min.shape[0], -1).min(-1)
-
-    y_mask = masks * np.expand_dims(y, axis=0)
-    y_max = y_mask.reshape(x_mask.shape[0], -1).max(-1)
-    y = np.ma.array(y_mask, mask=~(np.array(masks, dtype=bool)))
-    y_min = y.filled(fill_value=1e8)
-    y_min = y_min.reshape(y_min.shape[0], -1).min(-1)
-
-    return np.stack([x_min, y_min, x_max, y_max], 1)
-
-
-# Copied from transformers.models.detr.image_processing_detr.prepare_coco_panoptic_annotation with DETR->RTDETR
-def prepare_coco_panoptic_annotation(
-    image: np.ndarray,
-    target: Dict,
-    masks_path: Union[str, pathlib.Path],
-    return_masks: bool = True,
-    input_data_format: Union[ChannelDimension, str] = None,
-) -> Dict:
-    """
-    Prepare a coco panoptic annotation for RTDETR.
-    """
-    image_height, image_width = get_image_size(image, channel_dim=input_data_format)
-    annotation_path = pathlib.Path(masks_path) / target["file_name"]
-
-    new_target = {}
-    new_target["image_id"] = np.asarray([target["image_id"] if "image_id" in target else target["id"]], dtype=np.int64)
-    new_target["size"] = np.asarray([image_height, image_width], dtype=np.int64)
-    new_target["orig_size"] = np.asarray([image_height, image_width], dtype=np.int64)
-
-    if "segments_info" in target:
-        masks = np.asarray(PIL.Image.open(annotation_path), dtype=np.uint32)
-        masks = rgb_to_id(masks)
-
-        ids = np.array([segment_info["id"] for segment_info in target["segments_info"]])
-        masks = masks == ids[:, None, None]
-        masks = masks.astype(np.uint8)
-        if return_masks:
-            new_target["masks"] = masks
-        new_target["boxes"] = masks_to_boxes(masks)
-        new_target["class_labels"] = np.array(
-            [segment_info["category_id"] for segment_info in target["segments_info"]], dtype=np.int64
-        )
-        new_target["iscrowd"] = np.asarray(
-            [segment_info["iscrowd"] for segment_info in target["segments_info"]], dtype=np.int64
-        )
-        new_target["area"] = np.asarray(
-            [segment_info["area"] for segment_info in target["segments_info"]], dtype=np.float32
-        )
 
     return new_target
 
@@ -540,7 +421,6 @@ class RTDetrImageProcessor(BaseImageProcessor):
         self._valid_processor_keys = [
             "images",
             "annotations",
-            "return_segmentation_masks",
             "masks_path",
             "do_resize",
             "size",
@@ -558,7 +438,6 @@ class RTDetrImageProcessor(BaseImageProcessor):
             "input_data_format",
         ]
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation with DETR->RTDETR
     def prepare_annotation(
         self,
         image: np.ndarray,
@@ -577,15 +456,6 @@ class RTDetrImageProcessor(BaseImageProcessor):
             return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
             target = prepare_coco_detection_annotation(
                 image, target, return_segmentation_masks, input_data_format=input_data_format
-            )
-        elif format == AnnotationFormat.COCO_PANOPTIC:
-            return_segmentation_masks = True if return_segmentation_masks is None else return_segmentation_masks
-            target = prepare_coco_panoptic_annotation(
-                image,
-                target,
-                masks_path=masks_path,
-                return_masks=return_segmentation_masks,
-                input_data_format=input_data_format,
             )
         else:
             raise ValueError(f"Format {format} is not supported.")
@@ -980,16 +850,6 @@ class RTDetrImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if (
-            masks_path is not None
-            and format == AnnotationFormat.COCO_PANOPTIC
-            and not isinstance(masks_path, (pathlib.Path, str))
-        ):
-            raise ValueError(
-                "The path to the directory containing the mask PNG files should be provided as a"
-                f" `pathlib.Path` or string object, but is {type(masks_path)} instead."
-            )
-
         # All transformations expect numpy arrays
         images = [to_numpy_array(image) for image in images]
 
@@ -1152,3 +1012,4 @@ class RTDetrImageProcessor(BaseImageProcessor):
             results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
+                     
