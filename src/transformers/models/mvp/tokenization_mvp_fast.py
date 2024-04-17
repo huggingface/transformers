@@ -130,7 +130,7 @@ class MvpTokenizerFast(PreTrainedTokenizerFast):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        add_prefix_space=False,
+        add_prefix_space=None,
         trim_offsets=True,
         **kwargs,
     ):
@@ -143,6 +143,12 @@ class MvpTokenizerFast(PreTrainedTokenizerFast):
 
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
+        if add_prefix_space is not None:
+            kwargs["from_slow"] = True
+        else:
+            add_prefix_space = False
+        
         super().__init__(
             vocab_file,
             merges_file,
@@ -159,12 +165,6 @@ class MvpTokenizerFast(PreTrainedTokenizerFast):
             trim_offsets=trim_offsets,
             **kwargs,
         )
-
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("prepend_scheme", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["prepend_scheme"] = "always" if add_prefix_space else "never"
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
 
         self.add_prefix_space = add_prefix_space
 
