@@ -178,7 +178,7 @@ To load a model using Flash Attention 2, we can pass the argument `attn_implemen
 ...     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["deu_Latn"], max_length=30
 ... )
 >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
-UN-Chef sagt, es gibt keine militärische Lösung in Syrien
+"UN-Chef sagt, es gibt keine militärische Lösung in Syrien"
 ```
 
 ### Expected speedups
