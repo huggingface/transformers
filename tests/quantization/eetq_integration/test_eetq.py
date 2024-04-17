@@ -14,13 +14,10 @@
 # limitations under the License.
 
 import gc
-import importlib
 import tempfile
 import unittest
 
-from packaging import version
-
-from transformers import EETQConfig, AutoConfig, AutoModelForCausalLM, AutoTokenizer, OPTForCausalLM, StaticCache
+from transformers import EetqConfig, AutoConfig, AutoModelForCausalLM, AutoTokenizer, OPTForCausalLM
 from transformers.testing_utils import (
     require_accelerate,
     require_eetq,
@@ -29,7 +26,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_eetq_available, is_torch_available
+from transformers.utils import is_accelerate_available, is_torch_available
 
 
 if is_torch_available():
@@ -40,12 +37,12 @@ if is_accelerate_available():
 
 
 @require_torch_gpu
-class EETQConfigTest(unittest.TestCase):
+class EetqConfigTest(unittest.TestCase):
     def test_to_dict(self):
         """
         Simple test that checks if one uses a config and converts it to a dict, the dict is the same as the config object
         """
-        quantization_config = EETQConfig()
+        quantization_config = EetqConfig()
         config_to_dict = quantization_config.to_dict()
 
         for key in config_to_dict:
@@ -57,14 +54,12 @@ class EETQConfigTest(unittest.TestCase):
         """
         dict = {
             "modules_to_not_convert": ["lm_head.weight"],
-            "pre_quantized": True,
             "quant_method": "eetq",
             "weights": "int8"
         }
-        quantization_config = EETQConfig.from_dict(dict)
+        quantization_config = EetqConfig.from_dict(dict)
 
         self.assertEqual(dict["modules_to_not_convert"], quantization_config.modules_to_not_convert)
-        self.assertEqual(dict["pre_quantized"], quantization_config.pre_quantized)
         self.assertEqual(dict["quant_method"], quantization_config.quant_method)
         self.assertEqual(dict["weights"], quantization_config.weights)
 
@@ -73,7 +68,7 @@ class EETQConfigTest(unittest.TestCase):
 @require_torch_gpu
 @require_eetq
 @require_accelerate
-class EETQTest(unittest.TestCase):
+class EetqTest(unittest.TestCase):
     model_name = "facebook/opt-350m"
 
     input_text = "What are we having for dinner?"
@@ -89,8 +84,7 @@ class EETQTest(unittest.TestCase):
         """
         Setup quantized model
         """
-        from eetq import EETQLinear
-        quantization_config = EETQConfig(weights='int8')
+        quantization_config = EetqConfig(weights='int8')
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
@@ -107,13 +101,13 @@ class EETQTest(unittest.TestCase):
         """
         Simple test that checks if the quantized model has been converted properly
         """
-        from eetq import EETQLinear
+        from eetq import EetqLinear
 
         from transformers.integrations import replace_with_eetq_linear
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
-        quantization_config = EETQConfig(weights='int8')
+        quantization_config = EetqConfig(weights='int8')
 
         with init_empty_weights():
             model = OPTForCausalLM(config)
@@ -123,10 +117,10 @@ class EETQTest(unittest.TestCase):
             if isinstance(module, torch.nn.Linear):
                 nb_linears += 1
 
-        model = replace_with_EETQ_linear(model, quantization_config=quantization_config)
+        model = replace_with_eetq_linear(model, quantization_config=quantization_config)
         nb_eetq_linear = 0
         for module in model.modules():
-            if isinstance(module, EETQLinear):
+            if isinstance(module, EetqLinear):
                 nb_eetq_linear += 1
 
         self.assertEqual(nb_linears - 1, nb_eetq_linear)
@@ -134,13 +128,13 @@ class EETQTest(unittest.TestCase):
         # Try with `linear_weights_not_to_quantize`
         with init_empty_weights():
             model = OPTForCausalLM(config)
-        quantization_config = EETQConfig(modules_to_not_convert=['fc1'])
-        model = replace_with_EETQ_linear(
+        quantization_config = EetqConfig(modules_to_not_convert=['fc1'])
+        model = replace_with_eetq_linear(
             model, quantization_config=quantization_config
         )
         nb_eetq_linear = 0
         for module in model.modules():
-            if isinstance(module, EETQLinear):
+            if isinstance(module, EetqLinear):
                 nb_eetq_linear += 1
 
         self.assertEqual(nb_linears - 25, nb_eetq_linear)
@@ -156,7 +150,7 @@ class EETQTest(unittest.TestCase):
 
     def test_raise_if_non_quantized(self):
         model_id = "facebook/opt-125m"
-        quantization_config = EETQConfig()
+        quantization_config = EetqConfig()
         _ = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quantization_config=quantization_config)
 
     def test_save_pretrained(self):
@@ -165,6 +159,7 @@ class EETQTest(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
+            
             model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
@@ -179,8 +174,8 @@ class EETQTest(unittest.TestCase):
         set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUS
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
-        config = EETQConfig()
-        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto", quantization_config=config)
+        quantization_config = EetqConfig()
+        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto", quantization_config=quantization_config)
         self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
