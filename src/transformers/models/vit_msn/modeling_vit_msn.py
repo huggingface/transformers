@@ -636,7 +636,7 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_label = logits.argmax(-1).item()
         >>> print(model.config.id2label[predicted_label])
-        Kerry blue terrier
+        tusker
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

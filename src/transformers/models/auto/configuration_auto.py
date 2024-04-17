@@ -120,10 +120,12 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("gptj", "GPTJConfig"),
         ("gptsan-japanese", "GPTSanJapaneseConfig"),
         ("graphormer", "GraphormerConfig"),
+        ("grounding-dino", "GroundingDinoConfig"),
         ("groupvit", "GroupViTConfig"),
         ("hubert", "HubertConfig"),
         ("ibert", "IBertConfig"),
         ("idefics", "IdeficsConfig"),
+        ("idefics2", "Idefics2Config"),
         ("imagegpt", "ImageGPTConfig"),
         ("informer", "InformerConfig"),
         ("instructblip", "InstructBlipConfig"),
@@ -198,6 +200,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("qwen2_moe", "Qwen2MoeConfig"),
         ("rag", "RagConfig"),
         ("realm", "RealmConfig"),
+        ("recurrent_gemma", "RecurrentGemmaConfig"),
         ("reformer", "ReformerConfig"),
         ("regnet", "RegNetConfig"),
         ("rembert", "RemBertConfig"),
@@ -280,6 +283,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("yoso", "YosoConfig"),
     ]
 )
+
 
 MODEL_NAMES_MAPPING = OrderedDict(
     [
@@ -382,11 +386,13 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("gptj", "GPT-J"),
         ("gptsan-japanese", "GPTSAN-japanese"),
         ("graphormer", "Graphormer"),
+        ("grounding-dino", "Grounding DINO"),
         ("groupvit", "GroupViT"),
         ("herbert", "HerBERT"),
         ("hubert", "Hubert"),
         ("ibert", "I-BERT"),
         ("idefics", "IDEFICS"),
+        ("idefics2", "Idefics2"),
         ("imagegpt", "ImageGPT"),
         ("informer", "Informer"),
         ("instructblip", "InstructBLIP"),
@@ -471,6 +477,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("qwen2_moe", "Qwen2MoE"),
         ("rag", "RAG"),
         ("realm", "REALM"),
+        ("recurrent_gemma", "RecurrentGemma"),
         ("reformer", "Reformer"),
         ("regnet", "RegNet"),
         ("rembert", "RemBERT"),
