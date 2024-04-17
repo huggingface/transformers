@@ -41,7 +41,7 @@ AUTO_QUANTIZER_MAPPING = {
     "gptq": GptqHfQuantizer,
     "aqlm": AqlmHfQuantizer,
     "quanto": QuantoHfQuantizer,
-    "eetq": EETQHfQuantizer
+    "eetq": EetqHfQuantizer
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
