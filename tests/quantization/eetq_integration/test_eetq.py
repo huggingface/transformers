@@ -109,7 +109,7 @@ class EETQTest(unittest.TestCase):
         """
         from eetq import EETQLinear
 
-        from transformers.integrations import replace_with_EETQ_linear
+        from transformers.integrations import replace_with_eetq_linear
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
