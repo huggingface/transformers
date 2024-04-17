@@ -43,9 +43,7 @@ agent.run("Read the following text out loud", text=text)
 
 In this tutorial, you'll learn what agents and tools are, how to build one with Transformers, and how to use them.
 
-## Quickstart
-
-### What is an agent?
+## Agents
 
 The definition of LLM Agents is quite broad: all systems that use LLMs as their engine, and have access to functions called **tools**.
 
