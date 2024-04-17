@@ -2198,7 +2198,7 @@ class RTDetrLoss(nn.Module):
                     losses.update(l_dict)
 
         # In case of cdn auxiliary losses. For rtdetr
-        if "dn_aux_outputs" in outputs:
+        if "dn_auxiliary_outputs" in outputs:
             if "denoising_meta_values" not in outputs:
                 raise ValueError(
                     "The output must have the 'denoising_meta_values` key. Please, ensure that 'outputs' includes a 'denoising_meta_values' entry."
@@ -2206,14 +2206,14 @@ class RTDetrLoss(nn.Module):
             indices = self.get_cdn_matched_indices(outputs["denoising_meta_values"], targets)
             num_boxes = num_boxes * outputs["denoising_meta_values"]["dn_num_group"]
 
-            for i, aux_outputs in enumerate(outputs["dn_aux_outputs"]):
-                # indices = self.matcher(aux_outputs, targets)
+            for i, auxiliary_outputs in enumerate(outputs["dn_auxiliary_outputs"]):
+                # indices = self.matcher(auxiliary_outputs, targets)
                 for loss in self.losses:
                     if loss == "masks":
                         # Intermediate masks losses are too costly to compute, we ignore them.
                         continue
                     kwargs = {}
-                    l_dict = self.get_loss(loss, aux_outputs, targets, indices, num_boxes, **kwargs)
+                    l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes, **kwargs)
                     l_dict = {k: l_dict[k] * self.weight_dict[k] for k in l_dict if k in self.weight_dict}
                     l_dict = {k + f"_dn_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
@@ -2604,10 +2604,10 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
                 enc_topk_logits = outputs.enc_topk_logits if return_dict else outputs[-5]
                 enc_topk_bboxes = outputs.enc_topk_bboxes if return_dict else outputs[-4]
                 auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
-                outputs_loss["aux_outputs"] = auxiliary_outputs
-                outputs_loss["aux_outputs"].extend(self._set_aux_loss([enc_topk_logits], [enc_topk_bboxes]))
+                outputs_loss["auxiliary_outputs"] = auxiliary_outputs
+                outputs_loss["auxiliary_outputs"].extend(self._set_aux_loss([enc_topk_logits], [enc_topk_bboxes]))
                 if self.training and denoising_meta_values is not None:
-                    outputs_loss["dn_aux_outputs"] = self._set_aux_loss(dn_out_class, dn_out_coord)
+                    outputs_loss["dn_auxiliary_outputs"] = self._set_aux_loss(dn_out_class, dn_out_coord)
                     outputs_loss["denoising_meta_values"] = denoising_meta_values
 
             loss_dict = criterion(outputs_loss, labels)
