@@ -426,6 +426,7 @@ class M2M100FlashAttention2(M2M100Attention):
 
         return attn_output, None, past_key_value
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
         self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
