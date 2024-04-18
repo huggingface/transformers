@@ -24,6 +24,8 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
     LLaMAVIDLlavaConfig,
+    LLaMAVIDLlavaVisionConfig,
+    LLaMAVIDLlavaQFormerConfig,
     LLaMAVIDLlavaForConditionalGeneration,
     is_torch_available,
     is_vision_available,

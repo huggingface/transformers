@@ -555,6 +555,9 @@ _import_structure = {
     "models.llamavid": [
         "LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LLaMAVIDLlavaConfig",
+        "LLaMAVIDLlavaVisionConfig"
+        "LLaMAVIDLlavaQFormerConfig"
+        "LLaMAVIDLlavaProcessor",
     ],
     "models.llava": [
         "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -2553,6 +2556,8 @@ else:
             "LLaMAVIDLlavaForConditionalGeneration",
             "LLaMAVIDLlavaPreTrainedModel",
             "LLaMAVIDLlavaProcessor",
+            "LLaMAVIDLlavaQFormerModel",
+            "LLaMAVIDLlavaVisionModel",
         ]
     )
     _import_structure["models.llava"].extend(
@@ -5457,6 +5462,13 @@ if TYPE_CHECKING:
         LlavaConfig,
         LlavaProcessor,
     )
+    from .models.llamavid import (
+        LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LLaMAVIDLlavaConfig,
+        LLaMAVIDLlavaVisionConfig,
+        LLaMAVIDLlavaQFormerConfig,
+        LLaMAVIDLlavaProcessor,
+    )
     from .models.llava_next import (
         LLAVA_NEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LlavaNextConfig,
@@ -7243,21 +7255,13 @@ if TYPE_CHECKING:
 
         # PyTorch model imports
         from .models.llamavid import (
-            LLAMAVID_LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            LLAMAVID_PRETRAINED_MODEL_ARCHIVE_LIST,
-            LlamaVidForCausalLM,
-            LlamaVidForMaskedLM,
-            LlamaVidForMultipleChoice,
-            LlamaVidForQuestionAnswering,
-            LlamaVidForSequenceClassification,
-            LlamaVidForTokenClassification,
-            LlamaVidLayer,
+            LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
             LLaMAVIDLlavaForConditionalGeneration,
             LLaMAVIDLlavaPreTrainedModel,
             LLaMAVIDLlavaProcessor,
-            LlamaVidModel,
-            LlamaVidPreTrainedModel,
-            load_tf_weights_in_llamavid,
+            LLaMAVIDLlavaQFormerModel,
+            LLaMAVIDLlavaVisionModel,
+
         )
         from .models.llava import (
             LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,

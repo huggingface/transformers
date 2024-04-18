@@ -16,7 +16,8 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_llamavid": ["LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LLaMAVIDLlavaConfig"]}
+_import_structure = {"configuration_llamavid": ["LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LLaMAVIDLlavaConfig", "LLaMAVIDLlavaVisionConfig" , "LLaMAVIDLlavaQFormerConfig"],
+                      "processing_llamavid": ["LLaMAVIDLlavaProcessor"],}
 
 
 try:
@@ -29,12 +30,21 @@ else:
         "LLAMAVID_LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "LLaMAVIDLlavaForConditionalGeneration",
         "LLaMAVIDLlavaPreTrainedModel",
+        "LLaMAVIDLlavaQFormerModel",
+        "LLaMAVIDLlavaVisionModel",
     ]
-    _import_structure["processing_llava"] = ["LLaMAVIDLlavaProcessor"]
+    _import_structure["processing_llamavid"] = ["LLaMAVIDLlavaProcessor"]
 
 
 if TYPE_CHECKING:
-    from .configuration_llamavid import LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP, LLaMAVIDLlavaConfig
+    from .configuration_llamavid import (
+        LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LLaMAVIDLlavaConfig,
+        LLaMAVIDLlavaQFormerConfig,
+        LLaMAVIDLlavaVisionConfig,
+    )
+    from .processing_llamavid import LLaMAVIDLlavaProcessor
+
 
     try:
         if not is_torch_available():
@@ -46,6 +56,8 @@ if TYPE_CHECKING:
             LLAMAVID_LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
             LLaMAVIDLlavaForConditionalGeneration,
             LLaMAVIDLlavaPreTrainedModel,
+            LLaMAVIDLlavaQFormerModel,
+            LLaMAVIDLlavaVisionModel,
         )
         from .processing_llamavid import LLaMAVIDLlavaProcessor
 
