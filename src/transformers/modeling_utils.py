@@ -4822,7 +4822,9 @@ def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module:
         kwargs = {}
         if recursive:
             if not is_accelerate_available("0.29.0"):
-                raise RuntimeError("Setting `recursive=True` to `unwrap_model` requires `accelerate` v0.29.0. Please upgrade your version of accelerate")
+                raise RuntimeError(
+                    "Setting `recursive=True` to `unwrap_model` requires `accelerate` v0.29.0. Please upgrade your version of accelerate"
+                )
             else:
                 kwargs["recursive"] = recursive
         return extract_model_from_parallel(model, **kwargs)
