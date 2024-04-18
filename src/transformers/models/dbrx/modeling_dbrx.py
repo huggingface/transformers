@@ -1417,6 +1417,8 @@ class DbrxForCausalLM(DbrxPreTrainedModel):
 
         if not return_dict:
             output = (logits,) + outputs[1:]
+            if output_router_logits:
+                output = (aux_loss,) + output
             return (loss,) + output if loss is not None else output
 
         return MoeCausalLMOutputWithPast(
