@@ -656,7 +656,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
+# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=2):
     """Applies Rotary Position Embedding to the query and key tensors.
 
