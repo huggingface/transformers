@@ -631,6 +631,8 @@ src/transformers/models/instructblip/configuration_instructblip.py
 src/transformers/models/instructblip/convert_instructblip_original_to_pytorch.py
 src/transformers/models/instructblip/modeling_instructblip.py
 src/transformers/models/instructblip/processing_instructblip.py
+src/transformers/models/jamba/configuration_jamba.py
+src/transformers/models/jamba/modeling_jamba.py
 src/transformers/models/jukebox/configuration_jukebox.py
 src/transformers/models/jukebox/convert_jukebox.py
 src/transformers/models/jukebox/modeling_jukebox.py

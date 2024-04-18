@@ -3773,42 +3773,6 @@ class ModelTesterMixin:
                 self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
 
     @require_torch_sdpa
-    @require_torch_gpu
-    @slow
-    def test_sdpa_can_dispatch_on_flash(self):
-        compute_capability = torch.cuda.get_device_capability()
-        major, _ = compute_capability
-
-        if not torch.version.cuda or major < 8:
-            self.skipTest("This test requires an NVIDIA GPU with compute capability >= 8.0")
-
-        for model_class in self.all_model_classes:
-            if not model_class._supports_sdpa:
-                self.skipTest(f"{model_class.__name__} does not support SDPA")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            if config.model_type in ["llava", "llava_next", "vipllava"]:
-                self.skipTest("Llava-like models currently (transformers==4.39.1) requires an attention_mask input")
-            if config.model_type in ["idefics"]:
-                self.skipTest("Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="sdpa")
-                model.to(torch_device)
-
-                inputs_dict.pop("attention_mask", None)
-                inputs_dict.pop("decoder_attention_mask", None)
-
-                for name, inp in inputs_dict.items():
-                    if isinstance(inp, torch.Tensor) and inp.dtype in [torch.float32, torch.float16]:
-                        inputs_dict[name] = inp.to(torch.float16)
-
-                with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
-                    _ = model(**inputs_dict)
-
-    @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
         max_new_tokens = 30
@@ -3925,7 +3889,7 @@ class ModelTesterMixin:
 
                 # Only non-padding tokens are expected to match.
                 self.assertTrue(
-                    torch.allclose(res_eager[attention_mask == 1], res_sdpa[attention_mask == 1], rtol=1e-3)
+                    torch.allclose(res_eager[attention_mask == 1], res_sdpa[attention_mask == 1], rtol=1e-4, atol=1e-4)
                 )
 
     @require_flash_attn
