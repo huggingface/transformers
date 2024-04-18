@@ -320,6 +320,8 @@
         title: CPMANT
       - local: model_doc/ctrl
         title: CTRL
+      - local: model_doc/dbrx
+        title: DBRX
       - local: model_doc/deberta
         title: DeBERTa
       - local: model_doc/deberta-v2
@@ -382,6 +384,8 @@
         title: HerBERT
       - local: model_doc/ibert
         title: I-BERT
+      - local: model_doc/jamba
+        title: Jamba
       - local: model_doc/jukebox
         title: Jukebox
       - local: model_doc/led
@@ -440,6 +444,8 @@
         title: NLLB-MoE
       - local: model_doc/nystromformer
         title: Nyströmformer
+      - local: model_doc/olmo
+        title: OLMo
       - local: model_doc/open-llama
         title: Open-Llama
       - local: model_doc/opt

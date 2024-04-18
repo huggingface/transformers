@@ -599,7 +599,11 @@ class GenerationMixin:
 
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
-                if dict_to_expand[key] is not None and isinstance(dict_to_expand[key], torch.Tensor):
+                if (
+                    key != "cache_position"
+                    and dict_to_expand[key] is not None
+                    and isinstance(dict_to_expand[key], torch.Tensor)
+                ):
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
             return dict_to_expand
 
@@ -2099,7 +2103,8 @@ class GenerationMixin:
 
             # Replicates the new past_key_values to match the `top_k` candidates
             new_key_values = []
-            for layer in model_kwargs["past_key_values"]:
+            past = model_kwargs["past_key_values"]
+            for layer in past:
                 items = []
                 # item is either the key or the value matrix
                 for item in layer:
@@ -2108,7 +2113,13 @@ class GenerationMixin:
                     else:
                         items.append(item.repeat_interleave(top_k, dim=0))
                 new_key_values.append(tuple(items))
-            model_kwargs["past_key_values"] = tuple(new_key_values)
+            if not isinstance(past, DynamicCache):
+                past = tuple(new_key_values)
+            else:
+                for layer_idx in range(len(new_key_values)):
+                    past.key_cache[layer_idx] = new_key_values[layer_idx][0]
+                    past.value_cache[layer_idx] = new_key_values[layer_idx][1]
+            model_kwargs["past_key_values"] = past
 
             if sequential:
                 all_outputs = []
@@ -2183,16 +2194,22 @@ class GenerationMixin:
 
             else:
                 next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
-                new_key_values = ()
+                new_key_values = []
                 for layer in next_past_key_values:
-                    items = ()
+                    items = []
                     # item is either the key or the value matrix
                     for item in layer:
                         item = torch.stack(torch.split(item, top_k, dim=0))  # [B, K, num_head, seq_len, esz]
                         item = item[range(batch_size), selected_idx, ...]  # [B, num_head, seq_len, esz]
-                        items += (item,)
-                    new_key_values += (items,)
-                next_past_key_values = new_key_values
+                        items += [item]
+                    new_key_values += [items]
+
+                if not isinstance(next_past_key_values, DynamicCache):
+                    next_past_key_values = tuple(new_key_values)
+                else:
+                    for layer_idx in range(len(new_key_values)):
+                        next_past_key_values.key_cache[layer_idx] = new_key_values[layer_idx][0]
+                        next_past_key_values.value_cache[layer_idx] = new_key_values[layer_idx][1]
 
             logit_for_next_step = torch.stack(torch.split(logits, top_k))[range(batch_size), selected_idx, :]
 
@@ -3132,6 +3149,7 @@ class GenerationMixin:
                         "transo_xl",
                         "xlnet",
                         "cpm",
+                        "jamba",
                     ]
                 ):
                     raise RuntimeError(
@@ -4650,22 +4668,23 @@ class GenerationMixin:
             # we use this forward pass to also pick the subsequent logits in the original model.
 
             # 2.1. Prepare the model inputs
-            candidate_kwargs = copy.copy(model_kwargs)
-            candidate_kwargs = _prepare_attention_mask(
-                candidate_kwargs, candidate_input_ids.shape[1], self.config.is_encoder_decoder
+            model_kwargs = _prepare_attention_mask(
+                model_kwargs, candidate_input_ids.shape[1], self.config.is_encoder_decoder
             )
-            candidate_kwargs = _prepare_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
-            candidate_kwargs = _prepare_position_ids(candidate_kwargs, candidate_input_ids.shape[1])
-            if "cache_position" in candidate_kwargs:
-                candidate_kwargs["cache_position"] = torch.cat(
+            model_kwargs = _prepare_token_type_ids(model_kwargs, candidate_input_ids.shape[1])
+            candidate_kwargs = _prepare_position_ids(model_kwargs, candidate_input_ids.shape[1])
+            if "cache_position" in model_kwargs:
+                model_kwargs["cache_position"] = torch.cat(
                     (
-                        candidate_kwargs["cache_position"],
+                        model_kwargs["cache_position"],
                         torch.arange(cur_len, cur_len + candidate_length, device=input_ids.device, dtype=torch.long),
                     ),
                     dim=0,
                 )
 
-            model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **model_kwargs)
+            if "num_logits_to_keep" in model_inputs:
+                model_inputs["num_logits_to_keep"] = candidate_length + 1
 
             # 2.2. Run a forward pass on the candidate sequence
             outputs = self(
@@ -4991,7 +5010,7 @@ def _split_model_inputs(
     # ModelOutput object.
     # bool should not be split but replicated for each split
     bool_keys = [k for k in keys if isinstance(model_input[k], bool) or k == "cache_position"]
-    keys_to_ignore = ["cache_position", "encoder_outputs"]
+    keys_to_ignore = ["cache_position", "encoder_outputs", "num_logits_to_keep"]
     non_bool_keys = [k for k in keys if not isinstance(model_input[k], bool) and k not in keys_to_ignore]
 
     # we split the tensors and tuples of tensors
@@ -5006,6 +5025,11 @@ def _split_model_inputs(
         encoder_outputs_split = _split_model_inputs(model_input["encoder_outputs"], split_size, full_batch_size)
         data_split_list = [
             {**data_split, "encoder_outputs": encoder_outputs_split[i]} for i, data_split in enumerate(data_split_list)
+        ]
+    # num_logits_to_keep should be replicated for each split, similar to bool values
+    if "num_logits_to_keep" in model_input:
+        data_split_list = [
+            {**data_split, "num_logits_to_keep": model_input["num_logits_to_keep"]} for data_split in data_split_list
         ]
 
     # Convert each dictionary in the list to an object of the inferred class

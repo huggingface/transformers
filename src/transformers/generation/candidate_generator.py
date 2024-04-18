@@ -18,6 +18,8 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import torch
 
+from ..cache_utils import DynamicCache
+
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -372,7 +374,13 @@ def _crop_past_key_values(model, past_key_values, maximum_length):
         else:
             for idx in range(len(past_key_values)):
                 past_key_values[idx] = past_key_values[idx][:, :, :maximum_length, :]
-    else:
+    elif isinstance(past_key_values, DynamicCache):
+        for idx in range(len(past_key_values.key_cache)):
+            if past_key_values.value_cache[idx].shape[-1] != 0:
+                past_key_values.key_cache[idx] = past_key_values.key_cache[idx][:, :, :maximum_length, :]
+                past_key_values.value_cache[idx] = past_key_values.value_cache[idx][:, :, :maximum_length, :]
+
+    elif past_key_values is not None:
         for idx in range(len(past_key_values)):
             new_past.append(
                 (
