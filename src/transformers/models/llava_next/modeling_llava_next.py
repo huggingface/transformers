@@ -394,8 +394,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         print("max embed dim found: ", max_embed_dim)
 
         batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
-        print("batch_indices shape: ", batch_indices.shape)
-        print("non_image_indices shape: ", non_image_indices.shape)
+        # print("batch_indices shape: ", batch_indices.shape)
+        # print("non_image_indices shape: ", non_image_indices.shape)
 
         # 2. Compute the positions where text should be written
         # Calculate new positions for text tokens in merged image-text sequence.
@@ -405,17 +405,17 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         patches_lengths = torch.tensor(patches_lengths, device=inputs_embeds.device).unsqueeze(dim=1)
         repeated_patches = patches_lengths.repeat(1, special_image_token_mask.shape[1]) 
         new_token_positions = torch.cumsum(special_image_token_mask * (repeated_patches - 1) + 1, -1) - 1
-        print("shape of new_token_positions: ", new_token_positions.shape)
+        # print("shape of new_token_positions: ", new_token_positions.shape)
         nb_image_pad = max_embed_dim - 1 - new_token_positions[:, -1]
-        print("value of nb_image_pad: ", nb_image_pad)
+        # print("value of nb_image_pad: ", nb_image_pad)
         if left_padding:
             new_token_positions += nb_image_pad[:, None]  # offset for left padding
-            print("shape of new_token_positions: L402", new_token_positions.shape)
-            print("new_token_positions: L402", new_token_positions[0])
+            # print("shape of new_token_positions: L402", new_token_positions.shape)
+            # print("new_token_positions: L402", new_token_positions[0])
         
         text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
         print("text to overwrite shape: ", text_to_overwrite.shape)
-        print("text to overwrite: ", text_to_overwrite)
+        # print("text to overwrite: ", text_to_overwrite)
  
 
         # 3. Create the full embedding, already padded to the maximum position
@@ -451,15 +451,27 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
 
         # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
         image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
-        print("this is image to overwrite shape: l1", image_to_overwrite.shape)
+        # print("this is image to overwrite shape: l1", image_to_overwrite.shape)
         image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
-        print("this is image to overwrite shape: l2", image_to_overwrite.shape)
+        # print("this is image to overwrite shape: l2", image_to_overwrite.shape)
 
-        print("this is image to overwrite: l2", image_to_overwrite)
+        # print("this is image to overwrite: l2", image_to_overwrite)
 
         # Compute the sum of lengths of image_features
         total_len_img_ftrs = sum([img.shape[0] for img in image_features])
         if image_to_overwrite.sum() != total_len_img_ftrs:
+            print("value of nb_image_pad: ", nb_image_pad)
+            print("shape of new_token_positions: ", new_token_positions.shape) 
+            print("batch_indices shape: ", batch_indices.shape)
+            print("non_image_indices shape: ", non_image_indices.shape)
+
+            print("new_token_positions: L402", new_token_positions[0])
+
+            print("text to overwrite: ", text_to_overwrite)
+            print("this is image to overwrite shape: l2", image_to_overwrite.shape)
+
+            print("this is image to overwrite: l2", image_to_overwrite)
+ 
             raise ValueError(
                 f"The input provided to the model are wrong. The number of image tokens is {torch.sum(special_image_token_mask)} while"
                 f" the number of image given to the model is {num_images}. This prevents correct indexing and breaks batch generation."
