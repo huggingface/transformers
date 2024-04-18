@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.40.0.dev0"
+__version__ = "4.41.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -327,6 +327,7 @@ _import_structure = {
         "Data2VecTextConfig",
         "Data2VecVisionConfig",
     ],
+    "models.dbrx": ["DbrxConfig"],
     "models.deberta": [
         "DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DebertaConfig",
@@ -517,6 +518,7 @@ _import_structure = {
         "InstructBlipQFormerConfig",
         "InstructBlipVisionConfig",
     ],
+    "models.jamba": ["JambaConfig"],
     "models.jukebox": [
         "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "JukeboxConfig",
@@ -1473,6 +1475,7 @@ else:
             "AlignVisionModel",
         ]
     )
+
     _import_structure["models.altclip"].extend(
         [
             "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1938,6 +1941,13 @@ else:
             "Data2VecVisionForSemanticSegmentation",
             "Data2VecVisionModel",
             "Data2VecVisionPreTrainedModel",
+        ]
+    )
+    _import_structure["models.dbrx"].extend(
+        [
+            "DbrxForCausalLM",
+            "DbrxModel",
+            "DbrxPreTrainedModel",
         ]
     )
     _import_structure["models.deberta"].extend(
@@ -2478,6 +2488,14 @@ else:
             "InstructBlipPreTrainedModel",
             "InstructBlipQFormerModel",
             "InstructBlipVisionModel",
+        ]
+    )
+    _import_structure["models.jamba"].extend(
+        [
+            "JambaForCausalLM",
+            "JambaForSequenceClassification",
+            "JambaModel",
+            "JambaPreTrainedModel",
         ]
     )
     _import_structure["models.jukebox"].extend(
@@ -5257,6 +5275,7 @@ if TYPE_CHECKING:
         Data2VecTextConfig,
         Data2VecVisionConfig,
     )
+    from .models.dbrx import DbrxConfig
     from .models.deberta import (
         DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DebertaConfig,
@@ -5439,6 +5458,7 @@ if TYPE_CHECKING:
         InstructBlipQFormerConfig,
         InstructBlipVisionConfig,
     )
+    from .models.jamba import JambaConfig
     from .models.jukebox import (
         JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP,
         JukeboxConfig,
@@ -6770,6 +6790,13 @@ if TYPE_CHECKING:
             Data2VecVisionModel,
             Data2VecVisionPreTrainedModel,
         )
+
+        # PyTorch model imports
+        from .models.dbrx import (
+            DbrxForCausalLM,
+            DbrxModel,
+            DbrxPreTrainedModel,
+        )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             DebertaForMaskedLM,
@@ -7212,6 +7239,12 @@ if TYPE_CHECKING:
             InstructBlipPreTrainedModel,
             InstructBlipQFormerModel,
             InstructBlipVisionModel,
+        )
+        from .models.jamba import (
+            JambaForCausalLM,
+            JambaForSequenceClassification,
+            JambaModel,
+            JambaPreTrainedModel,
         )
         from .models.jukebox import (
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7852,8 +7885,6 @@ if TYPE_CHECKING:
             SamModel,
             SamPreTrainedModel,
         )
-
-        # PyTorch model imports
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeamlessM4TCodeHifiGan,
