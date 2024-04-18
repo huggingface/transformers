@@ -4817,10 +4817,10 @@ def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module:
         kwargs = {}
         if version.parse(importlib.metadata.version("accelerate")) >= version.parse("0.29.0"):
             kwargs["recursive"] = recursive
-        # recursive have an impact on extract_model_from_parallel only if it is set to True
+        # Need to update to accelerate>0.29.0 if one uses recursive=True
         elif recursive:
-            logger.error(
-                "Using recursive=True in unwrap_model requires a version of accelerate >= 0.29.0. Please install the latest version of accelerate."
+            logger.warning(
+                "Using recursive=True in unwrap_model requires a version of accelerate >= 0.29.0. Please upgrade your version of accelerate."
             )
         return extract_model_from_parallel(model, **kwargs)
 
