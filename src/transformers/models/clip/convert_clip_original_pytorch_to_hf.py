@@ -124,7 +124,7 @@ def convert_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_pa
     copy_vison_model_and_projection(hf_model, pt_model)
     hf_model.logit_scale = pt_model.logit_scale
 
-    # Use a `eos_token` so the example is more meaningful
+    # Use `eos_token` so the example is more meaningful
     input_ids = torch.tensor(
         [
             [config.text_config.bos_token_id]
