@@ -252,7 +252,7 @@ class DbrxConfig(PretrainedConfig):
 
         tie_word_embeddings = kwargs.pop("tie_word_embeddings", False)
         if tie_word_embeddings:
-            raise ValueError("tie_word_embeddings is not supported for Dbrx models.")
+            raise ValueError("tie_word_embeddings is not supported for DBRX models.")
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
