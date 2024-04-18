@@ -81,7 +81,7 @@ class RTDetrModelTester:
         decoder_ffn_dim=64,
         num_feature_levels=3,
         decoder_n_points=4,
-        decoder_layers=1,
+        decoder_layers=2,
         decoder_attention_heads=2,
         decoder_activation_function="relu",
         attention_dropout=0.0,

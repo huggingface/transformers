@@ -281,7 +281,7 @@ class RTDetrObjectDetectionOutput(ModelOutput):
             possible padding). You can use [`~RTDetrImageProcessor.post_process_object_detection`] to retrieve the
             unnormalized (absolute) bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
-            Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+            Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
             `pred_boxes`) for each decoder layer.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -1860,7 +1860,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
                 for value in [enc_topk_logits, enc_topk_bboxes, enc_outputs_class, enc_outputs_coord_logits]
                 if value is not None
             )
-            dn_outputs = tuple(value for value in [denoising_meta_values] if value is not None)
+            dn_outputs = tuple(value if value is not None else None for value in [denoising_meta_values])
             tuple_outputs = decoder_outputs + encoder_outputs + (init_reference_points,) + enc_outputs + dn_outputs
 
             return tuple_outputs
@@ -2157,6 +2157,29 @@ class RTDetrLoss(nn.Module):
             raise ValueError(f"Loss {loss} not supported")
         return loss_map[loss](outputs, targets, indices, num_boxes)
 
+    @staticmethod
+    def get_cdn_matched_indices(dn_meta, targets):
+        dn_positive_idx, dn_num_group = dn_meta["dn_positive_idx"], dn_meta["dn_num_group"]
+        num_gts = [len(t["labels"]) for t in targets]
+        device = targets[0]["labels"].device
+
+        dn_match_indices = []
+        for i, num_gt in enumerate(num_gts):
+            if num_gt > 0:
+                gt_idx = torch.arange(num_gt, dtype=torch.int64, device=device)
+                gt_idx = gt_idx.tile(dn_num_group)
+                assert len(dn_positive_idx[i]) == len(gt_idx)
+                dn_match_indices.append((dn_positive_idx[i], gt_idx))
+            else:
+                dn_match_indices.append(
+                    (
+                        torch.zeros(0, dtype=torch.int64, device=device),
+                        torch.zeros(0, dtype=torch.int64, device=device),
+                    )
+                )
+
+        return dn_match_indices
+
     def forward(self, outputs, targets):
         """
         This performs the loss computation.
@@ -2194,7 +2217,7 @@ class RTDetrLoss(nn.Module):
                         # Intermediate masks losses are too costly to compute, we ignore them.
                         continue
                     l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes)
-                    l_dict = {k + f"_{i}": v for k, v in l_dict.items()}
+                    l_dict = {k + f"_aux_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
         # In case of cdn auxiliary losses. For rtdetr
@@ -2482,13 +2505,12 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
     @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
         # as a dict having both a Tensor and a list.
-        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
+        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
 
     @add_start_docstrings_to_model_forward(RTDETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=RTDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
@@ -2579,7 +2601,9 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             return_dict=return_dict,
         )
 
-        denoising_meta_values = outputs.denoising_meta_values if return_dict else outputs[-1]
+        denoising_meta_values = (
+            outputs.denoising_meta_values if return_dict else outputs[-1] if self.training else None
+        )
 
         outputs_class = outputs.intermediate_logits if return_dict else outputs[2]
         outputs_coord = outputs.intermediate_reference_points if return_dict else outputs[3]
@@ -2603,7 +2627,9 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             if self.config.auxiliary_loss:
                 enc_topk_logits = outputs.enc_topk_logits if return_dict else outputs[-5]
                 enc_topk_bboxes = outputs.enc_topk_bboxes if return_dict else outputs[-4]
-                auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
+                auxiliary_outputs = self._set_aux_loss(
+                    outputs_class[:, :-1].transpose(0, 1), outputs_coord[:, :-1].transpose(0, 1)
+                )
                 outputs_loss["auxiliary_outputs"] = auxiliary_outputs
                 outputs_loss["auxiliary_outputs"].extend(self._set_aux_loss([enc_topk_logits], [enc_topk_bboxes]))
                 if self.training and denoising_meta_values is not None:
@@ -2653,5 +2679,4 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             enc_topk_bboxes=outputs.enc_topk_bboxes,
             enc_outputs_class=outputs.enc_outputs_class,
             enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
-            denoising_meta_values=outputs.denoising_meta_values,
-        )
+            denoising_meta_values=outputs.denoising
