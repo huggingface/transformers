@@ -735,9 +735,7 @@ class DbrxExpertGLU(nn.Module):
         self.v1 = nn.Parameter(torch.empty(moe_num_experts * ffn_hidden_size, hidden_size))
         self.w2 = nn.Parameter(torch.empty(moe_num_experts * ffn_hidden_size, hidden_size))
 
-        act_fn_name = ffn_act_fn.pop("name", "silu")
-        if len(ffn_act_fn) != 0:
-            raise ValueError(f"FFN activation function has unhandled kwargs {ffn_act_fn=}")
+        act_fn_name = ffn_act_fn.get("name", "silu")
         self.activation_fn = ACT2FN[act_fn_name]
 
     def forward(
