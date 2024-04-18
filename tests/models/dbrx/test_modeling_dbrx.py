@@ -347,7 +347,7 @@ class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "Rocketknight1/dbrx-tiny-random"
+        model_name = "eitanturok/dbrx-tiny"
         model = DbrxModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
