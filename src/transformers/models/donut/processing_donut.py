@@ -149,7 +149,9 @@ class DonutProcessor(ProcessorMixin):
                 end_token = end_token.group()
                 start_token_escaped = re.escape(start_token)
                 end_token_escaped = re.escape(end_token)
-                content = re.search(f"{start_token_escaped}(.*?){end_token_escaped}", tokens, re.IGNORECASE)
+                content = re.search(
+                    f"{start_token_escaped}(.*?){end_token_escaped}", tokens, re.IGNORECASE | re.DOTALL
+                )
                 if content is not None:
                     content = content.group(1).strip()
                     if r"<s_" in content and r"</s_" in content:  # non-leaf node
