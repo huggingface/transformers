@@ -648,11 +648,7 @@ DBRX_ATTENTION_CLASSES = {
 
 
 class DbrxNormAttentionNorm(nn.Module):
-    def __init__(
-        self,
-        config: DbrxConfig,
-        block_idx: Optional[int] = None,
-    ):
+    def __init__(self, config: DbrxConfig, block_idx: Optional[int] = None):
         super().__init__()
         self.block_idx = block_idx
         self.resid_pdrop = config.resid_pdrop
