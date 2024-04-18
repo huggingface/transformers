@@ -285,11 +285,6 @@ class AttentionMaskConverter:
                     # For query_length == 1, causal attention and bi-directional attention are the same.
                     ignore_causal_mask = True
 
-                # Unfortunately, for query_length > 1 and key_value_length != query_length, we cannot generally ignore the attention mask, as SDPA causal mask generation
-                # may be wrong. We will set `is_causal=False` in SDPA and rely on Transformers attention_mask instead, hence not setting it to None here.
-                # Reference: https://github.com/pytorch/pytorch/issues/108108
-                # TODO: maybe revisit this with https://github.com/pytorch/pytorch/pull/114823 in PyTorch 2.3.
-
         return ignore_causal_mask
 
 
