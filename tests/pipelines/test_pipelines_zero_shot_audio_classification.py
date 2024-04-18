@@ -59,8 +59,8 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
         self.assertEqual(
             nested_simplify(output),
             [
-                {"score": 0.999, "label": "Sound of a dog"},
-                {"score": 0.001, "label": "Sound of vaccum cleaner"},
+                {"score": 1.0, "label": "Sound of a dog"},
+                {"score": 0.0, "label": "Sound of vaccum cleaner"},
             ],
         )
 
@@ -69,8 +69,8 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
             nested_simplify(output),
             [
                 [
-                    {"score": 0.999, "label": "Sound of a dog"},
-                    {"score": 0.001, "label": "Sound of vaccum cleaner"},
+                    {"score": 1.0, "label": "Sound of a dog"},
+                    {"score": 0.0, "label": "Sound of vaccum cleaner"},
                 ],
             ]
             * 5,
@@ -82,8 +82,8 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
             nested_simplify(output),
             [
                 [
-                    {"score": 0.999, "label": "Sound of a dog"},
-                    {"score": 0.001, "label": "Sound of vaccum cleaner"},
+                    {"score": 1.0, "label": "Sound of a dog"},
+                    {"score": 0.0, "label": "Sound of vaccum cleaner"},
                 ],
             ]
             * 5,
