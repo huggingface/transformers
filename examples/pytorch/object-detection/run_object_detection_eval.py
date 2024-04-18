@@ -106,58 +106,58 @@ def convert_to_absolute_coordinates(boxes: torch.Tensor, image_size: torch.Tenso
 
  # Define our compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
 # predictions and label_ids field) and has to return a dictionary string to float.
-@torch.no_grad()
-def compute_metrics(eval_pred):
-    pass
+# @torch.no_grad()
+# def compute_metrics(eval_pred):
+#     pass
 
-trainer = Trainer(
-    model=model,
-    compute_metrics=compute_metrics,
-    tokenizer=image_processor,
-)
+# trainer = Trainer(
+#     model=model,
+#     compute_metrics=compute_metrics,
+#     tokenizer=image_processor,
+# )
 
-trainer.evaluate(eval_dataset=eval_dataset)
+# trainer.evaluate(eval_dataset=eval_dataset)
 
-# for batch in dataloader:
+for batch in dataloader:
 
-#     with torch.no_grad():
-#         # model predict boxes in YOLO format (center_x, center_y, width, height) 
-#         # with coordinates *normalized* to [0..1] (relative coordinates)
-#         output = model(batch["pixel_values"].cpu())
+    with torch.no_grad():
+        # model predict boxes in YOLO format (center_x, center_y, width, height) 
+        # with coordinates *normalized* to [0..1] (relative coordinates)
+        output = model(batch["pixel_values"].cpu())
     
-#     # For metric computation we need to collect ground truth and predicted boxes in the same format
+    # For metric computation we need to collect ground truth and predicted boxes in the same format
     
-#     # 1. Collect predicted boxes, classes, scores
-#     # image_processor convert boxes from YOLO format to Pascal VOC format (x_min, y_min, x_max, y_max) 
-#     # in coordinate system of an image (absolute coordinates).
-#     image_size = torch.stack([example["size"] for example in batch["labels"]], dim=0)
-#     predictions = image_processor.post_process_object_detection(output, threshold=0.0, target_sizes=image_size)
+    # 1. Collect predicted boxes, classes, scores
+    # image_processor convert boxes from YOLO format to Pascal VOC format (x_min, y_min, x_max, y_max) 
+    # in coordinate system of an image (absolute coordinates).
+    image_size = torch.stack([example["size"] for example in batch["labels"]], dim=0)
+    predictions = image_processor.post_process_object_detection(output, threshold=0.1, target_sizes=image_size)
 
-#     # 2. Collect ground truth boxes in the same format for metric computation
-#     target = []
-#     for label in batch["labels"]:
-#         boxes = center_to_corners_format(label["boxes"])
-#         boxes = convert_to_absolute_coordinates(boxes, label["size"])
-#         labels = label["class_labels"]
-#         target.append({"boxes": boxes.cpu(), "labels": labels.cpu()})
+    # 2. Collect ground truth boxes in the same format for metric computation
+    target = []
+    for label in batch["labels"]:
+        boxes = center_to_corners_format(label["boxes"])
+        boxes = convert_to_absolute_coordinates(boxes, label["size"])
+        labels = label["class_labels"]
+        target.append({"boxes": boxes.cpu(), "labels": labels.cpu()})
 
-#     mAP.update(predictions, target)
+    mAP.update(predictions, target)
 
-# categories = dataset["train"].features["objects"].feature["category"].names
-# id2label = {index: x for index, x in enumerate(categories)}
+categories = dataset["train"].features["objects"].feature["category"].names
+id2label = {index: x for index, x in enumerate(categories)}
 
-# results = mAP.compute()
-# classes = results.pop("classes")
-# map_per_class = results.pop("map_per_class")
-# mar_100_per_class = results.pop("mar_100_per_class")
-# for class_id, class_map, class_mar in zip(classes, map_per_class, mar_100_per_class):
-#     class_name = id2label[class_id.item()]
-#     results[f"map_{class_name}"] = class_map
-#     results[f"mar_100_{class_name}"] = class_mar
-# results = {k: round(v.item(), 4) for k, v in results.items()}
+results = mAP.compute()
+classes = results.pop("classes")
+map_per_class = results.pop("map_per_class")
+mar_100_per_class = results.pop("mar_100_per_class")
+for class_id, class_map, class_mar in zip(classes, map_per_class, mar_100_per_class):
+    class_name = id2label[class_id.item()]
+    results[f"map_{class_name}"] = class_map
+    results[f"mar_100_{class_name}"] = class_mar
+results = {k: round(v.item(), 4) for k, v in results.items()}
 
-# from pprint import pprint
-# pprint(results)
+from pprint import pprint
+pprint(results)
 
 # def get_annotations_in_coco_format(dataset):
 #     """_summary_
