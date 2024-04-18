@@ -15,6 +15,7 @@
 """
 Callbacks to use with the Trainer class and customize the training loop.
 """
+import copy
 import dataclasses
 import json
 from dataclasses import dataclass
@@ -189,8 +190,6 @@ class TrainerCallback:
             The model being trained.
         tokenizer ([`PreTrainedTokenizer`]):
             The tokenizer used for encoding the data.
-        image_processor ([`BaseImageProcessor`]):
-            The image processor used for encoding the images.
         optimizer (`torch.optim.Optimizer`):
             The optimizer used for the training steps.
         lr_scheduler (`torch.optim.lr_scheduler.LambdaLR`):
@@ -198,7 +197,7 @@ class TrainerCallback:
         train_dataloader (`torch.utils.data.DataLoader`, *optional*):
             The current dataloader used for training.
         eval_dataloader (`torch.utils.data.DataLoader`, *optional*):
-            The current dataloader used for training.
+            The current dataloader used for evaluation.
         metrics (`Dict[str, float]`):
             The metrics computed by the last evaluation phase.
 
@@ -309,13 +308,12 @@ class TrainerCallback:
 class CallbackHandler(TrainerCallback):
     """Internal class that just calls the list of callbacks in order."""
 
-    def __init__(self, callbacks, model, tokenizer, image_processor, optimizer, lr_scheduler):
+    def __init__(self, callbacks, model, tokenizer, optimizer, lr_scheduler):
         self.callbacks = []
         for cb in callbacks:
             self.add_callback(cb)
         self.model = model
         self.tokenizer = tokenizer
-        self.image_processor = image_processor
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
         self.train_dataloader = None
@@ -420,7 +418,6 @@ class CallbackHandler(TrainerCallback):
                 control,
                 model=self.model,
                 tokenizer=self.tokenizer,
-                image_processor=self.image_processor,
                 optimizer=self.optimizer,
                 lr_scheduler=self.lr_scheduler,
                 train_dataloader=self.train_dataloader,
@@ -524,7 +521,12 @@ class ProgressCallback(TrainerCallback):
 
     def on_log(self, args, state, control, logs=None, **kwargs):
         if state.is_world_process_zero and self.training_bar is not None:
+            # avoid modifying the logs object as it is shared between callbacks
+            logs = copy.deepcopy(logs)
             _ = logs.pop("total_flos", None)
+            # round numbers so that it looks better in console
+            if "epoch" in logs:
+                logs["epoch"] = round(logs["epoch"], 2)
             self.training_bar.write(str(logs))
 
     def on_train_end(self, args, state, control, **kwargs):

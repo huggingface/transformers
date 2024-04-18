@@ -372,6 +372,7 @@ class ExamplesTests(TestCasePlus):
             --predict_with_generate
             --source_lang en_XX
             --target_lang ro_RO
+            --max_source_length 512
         """.split()
 
         with patch.object(sys, "argv", testargs):

@@ -502,7 +502,12 @@ def get_all_doctest_files() -> List[str]:
     """
     py_files = [str(x.relative_to(PATH_TO_REPO)) for x in PATH_TO_REPO.glob("**/*.py")]
     md_files = [str(x.relative_to(PATH_TO_REPO)) for x in PATH_TO_REPO.glob("**/*.md")]
+
     test_files_to_run = py_files + md_files
+    # change to use "/" as path separator
+    test_files_to_run = ["/".join(Path(x).parts) for x in test_files_to_run]
+    # don't run doctest for files in `src/transformers/models/deprecated`
+    test_files_to_run = [x for x in test_files_to_run if "models/deprecated" not in x]
 
     # only include files in `src` or `docs/source/en/`
     test_files_to_run = [x for x in test_files_to_run if x.startswith(("src/", "docs/source/en/"))]
@@ -958,10 +963,25 @@ def create_module_to_test_map(
         model_tests = {Path(t).parts[2] for t in tests if t.startswith("tests/models/")}
         return len(model_tests) > num_model_tests // 2
 
-    def filter_tests(tests):
-        return [t for t in tests if not t.startswith("tests/models/") or Path(t).parts[2] in IMPORTANT_MODELS]
+    # for each module (if specified in the argument `module`) of the form `models/my_model` (i.e. starting with it),
+    # we always keep the tests (those are already in the argument `tests`) which are in `tests/models/my_model`.
+    # This is to avoid them being excluded when a module has many impacted tests: the directly related test files should
+    # always be included!
+    def filter_tests(tests, module=""):
+        return [
+            t
+            for t in tests
+            if not t.startswith("tests/models/")
+            or Path(t).parts[2] in IMPORTANT_MODELS
+            # at this point, `t` is of the form `tests/models/my_model`, and we check if `models/my_model`
+            # (i.e. `parts[1:3]`) is in `module`.
+            or "/".join(Path(t).parts[1:3]) in module
+        ]
 
-    return {module: (filter_tests(tests) if has_many_models(tests) else tests) for module, tests in test_map.items()}
+    return {
+        module: (filter_tests(tests, module=module) if has_many_models(tests) else tests)
+        for module, tests in test_map.items()
+    }
 
 
 def check_imports_all_exist():
