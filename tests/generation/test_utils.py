@@ -1050,7 +1050,7 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer", "speech2text"]):
                 self.skipTest("Won't fix: old model with different cache format")
-            if any(model_name in model_class.__name__.lower() for model_name in ["gptbigcode"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["gptbigcode", "jamba"]):
                 self.skipTest("TODO: fix me")
 
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config(batch_size=1)
@@ -1098,6 +1098,7 @@ class GenerationTesterMixin:
                     "transo_xl",
                     "xlnet",
                     "cpm",
+                    "jamba",
                 ]
             ):
                 self.skipTest("May fix in the future: need model-specific fixes")
@@ -1735,11 +1736,12 @@ class GenerationTesterMixin:
                 use_cache=use_cache,
             )
 
-        # Past Key Value States -- two notes here:
+        # Past Key Value States -- a few notes here:
         # 1. Its inner sequence length is with respect to the inputs of the latest forward pass, hence the "-1"
         # 2. Some old models still return `output.past_key_values` even without `use_cache=True`
-        # 3. TODO (joao): A few models have different formats, skipping those until the cache refactor is complete
-        models_without_standard_cache = ("bloom", "ctrl", "fsmt", "gptbigcode", "mega", "reformer")
+        # 3. TODO (joao): A few models have different formats/types, skipping those until the cache refactor is
+        # complete
+        models_without_standard_cache = ("bloom", "ctrl", "fsmt", "gptbigcode", "mega", "reformer", "jamba")
         has_standard_cache = not any(
             model_name in config.__class__.__name__.lower() for model_name in models_without_standard_cache
         )

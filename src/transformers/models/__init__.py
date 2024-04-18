@@ -115,6 +115,7 @@ from . import (
     imagegpt,
     informer,
     instructblip,
+    jamba,
     jukebox,
     kosmos2,
     layoutlm,
