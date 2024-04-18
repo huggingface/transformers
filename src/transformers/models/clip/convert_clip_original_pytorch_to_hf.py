@@ -125,7 +125,14 @@ def convert_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_pa
     hf_model.logit_scale = pt_model.logit_scale
 
     # Use a `eos_token` so the example is more meaningful
-    input_ids = torch.tensor([[config.text_config.bos_token_id] + list(range(3, 77)) + [config.text_config.eos_token_id] + [config.text_config.pad_token_id]])
+    input_ids = torch.tensor(
+        [
+            [config.text_config.bos_token_id]
+            + list(range(3, 77))
+            + [config.text_config.eos_token_id]
+            + [config.text_config.pad_token_id]
+        ]
+    )
     pixel_values = torch.randn(1, 3, 224, 224)
 
     hf_outputs = hf_model(input_ids=input_ids, pixel_values=pixel_values, return_dict=True)
