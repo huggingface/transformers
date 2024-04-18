@@ -182,7 +182,7 @@ Here we will run the script on the *Turkish* Common Voice dataset for demonstrat
 		--per_device_train_batch_size="16" \
 		--learning_rate="3e-4" \
 		--warmup_steps="500" \
-		--evaluation_strategy="steps" \
+		--eval_strategy="steps" \
 		--save_steps="400" \
 		--eval_steps="400" \
 		--logging_steps="400" \
@@ -209,7 +209,7 @@ Here we will run the script on the *Turkish* Common Voice dataset for demonstrat
 		--per_device_train_batch_size="16" \
 		--learning_rate="3e-4" \
 		--warmup_steps="500" \
-		--evaluation_strategy="steps" \
+		--eval_strategy="steps" \
 		--save_steps="400" \
 		--eval_steps="400" \
 		--logging_steps="400" \
