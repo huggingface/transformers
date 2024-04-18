@@ -702,7 +702,8 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
         attention_mask = kwargs.get("attention_mask", None)
 
         if attention_mask is not None and position_ids is None:
-            position_ids = tf.math.cumsum(attention_mask, axis=-1, exclusive=True)
+            position_ids = tf.cumsum(tf.cast(attention_mask, tf.int64), axis=-1) - 1
+            position_ids = tf.where(attention_mask == 0, 1, position_ids)
             if past_key_values:
                 position_ids = tf.expand_dims(position_ids[:, -1], -1)
 

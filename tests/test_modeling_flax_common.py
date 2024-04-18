@@ -289,11 +289,6 @@ class FlaxModelTesterMixin:
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
                 pt_inputs = {k: torch.tensor(v.tolist(), device=torch_device) for k, v in prepared_inputs_dict.items()}
 
-                # Flax and torch calculate position ids differently, which is noticed only when attn mask
-                # does not follow expected pattern where zeros are only on one side (left or right)
-                pt_inputs["attention_mask"] = torch.ones_like(pt_inputs["input_ids"])
-                prepared_inputs_dict["attention_mask"] = jnp.ones_like(prepared_inputs_dict["input_ids"])
-
                 # load corresponding PyTorch class
                 pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
                 pt_model_class = getattr(transformers, pt_model_class_name)

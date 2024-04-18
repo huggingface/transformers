@@ -504,7 +504,7 @@ class FlaxGemmaPreTrainedModel(FlaxPreTrainedModel):
             if past_key_values is not None:
                 raise ValueError("Make sure to provide `position_ids` when passing `past_key_values`.")
 
-            position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
+            position_ids = self.get_position_ids_from_attention_mask(attention_mask, batch_size, sequence_length)
 
         if attention_mask is None:
             attention_mask = jnp.ones((batch_size, sequence_length))
@@ -747,10 +747,8 @@ class FlaxGemmaForCausalLM(FlaxGemmaPreTrainedModel):
         # Thus we can create a single static attention_mask here, which is more efficient for compilation
         extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
         if attention_mask is not None:
-            position_ids = attention_mask.cumsum(axis=-1) - 1
             extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, attention_mask, (0, 0))
-        else:
-            position_ids = jnp.broadcast_to(jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length))
+        position_ids = self.get_position_ids_from_attention_mask(attention_mask, batch_size, seq_length)
 
         return {
             "past_key_values": past_key_values,

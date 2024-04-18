@@ -1248,6 +1248,18 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         cls._auto_class = auto_class
 
+    def get_position_ids_from_attention_mask(self, attention_mask, batch_size, seq_length):
+        """
+        Tries to infer position ids given attention mask and past kv cache length. All instances when
+        `position_ids=None` should call this method.
+        """
+        if attention_mask is not None:
+            position_ids = jnp.cumsum(attention_mask, axis=-1) - 1
+            position_ids = jnp.where(attention_mask == 0, 1, position_ids)
+        else:
+            position_ids = jnp.broadcast_to(jnp.arange(seq_length)[None, :], (batch_size, seq_length))
+        return position_ids
+
 
 # To update the docstring, we need to copy the method, otherwise we change the original docstring.
 FlaxPreTrainedModel.push_to_hub = copy_func(FlaxPreTrainedModel.push_to_hub)

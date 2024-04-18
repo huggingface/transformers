@@ -600,11 +600,6 @@ class TFModelTesterMixin:
             k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs_dict.items()
         }
 
-        # TF and torch calculate position ids differently, which is noticed only when attn mask
-        # does not follow expected pattern where zeros are only on one side (left or right)
-        pt_inputs_dict["attention_mask"] = torch.ones_like(pt_inputs_dict["input_ids"])
-        tf_inputs_dict["attention_mask"] = tf.ones_like(tf_inputs_dict["input_ids"])
-
         # send pytorch model to the correct device
         pt_model.to(torch_device)
 

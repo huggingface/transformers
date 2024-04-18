@@ -413,8 +413,10 @@ class CTRLModel(CTRLPreTrainedModel):
         else:
             past_length = past_key_values[0][0].size(-2)
         if position_ids is None:
-            position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0)
+            device = input_ids.device if input_ids is not None else inputs_embeds.device
+            position_ids = self.get_position_ids_from_attention_mask(
+                attention_mask, past_length, seq_length=input_shape[1], device=device
+            )
 
         # Attention mask.
         if attention_mask is not None:
@@ -525,6 +527,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, use_cache=None, **kwargs):
         # only last tokens for inputs_ids if past is defined in kwargs
+        past_length = 0
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2]
 
@@ -536,6 +539,16 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
                 remove_prefix_length = input_ids.shape[1] - 1
 
             input_ids = input_ids[:, remove_prefix_length:]
+
+        attention_mask = kwargs.get("attention_mask", None)
+        position_ids = kwargs.get("position_ids", None)
+
+        if position_ids is None:
+            position_ids = self.get_position_ids_from_attention_mask(
+                attention_mask, past_length, seq_length=input_ids.shape[1], device=input_ids.device
+            )
+        else:
+            position_ids = position_ids[:, -input_ids.shape[1] :]
 
         return {"input_ids": input_ids, "past_key_values": past_key_values, "use_cache": use_cache}
 
