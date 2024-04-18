@@ -105,10 +105,11 @@ XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 
 if is_accelerate_available():
-    from accelerate import Accelerator, dispatch_model, infer_auto_device_map, init_empty_weights
+    from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
     from accelerate.hooks import add_hook_to_module
     from accelerate.utils import (
         check_tied_parameters_on_same_device,
+        extract_model_from_parallel,
         find_tied_parameters,
         get_balanced_memory,
         get_max_memory,
@@ -2406,7 +2407,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # Only save the model itself if we are using distributed training
-        model_to_save = unwrap_model(self) if not is_accelerate_available() else Accelerator().unwrap_model(self)
+        model_to_save = unwrap_model(self)
 
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
@@ -4805,14 +4806,27 @@ class SequenceSummary(nn.Module):
         return output
 
 
-def unwrap_model(model: nn.Module) -> nn.Module:
+def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module:
     """
     Recursively unwraps a model from potential containers (as used in distributed training).
 
     Args:
         model (`torch.nn.Module`): The model to unwrap.
     """
+    # Use accelerate implementation if available.
+    if is_accelerate_available():
+        kwargs = {}
+        if version.parse(importlib.metadata.version("accelerate")) >= version.parse("0.29.0"):
+            kwargs["recursive"] = recursive
+        # recursive have an impact on extract_model_from_parallel only if it is set to True
+        elif recursive:
+            logger.error(
+                "Using recursive=True in unwrap_model requires a version of accelerate >= 0.29.0. Please install the latest version of accelerate."
+            )
+        return extract_model_from_parallel(model, **kwargs)
+
     # since there could be multiple levels of wrapping, unwrap recursively
+    # Add check for compiled module here and mimic logic in accelerate
     if hasattr(model, "module"):
         return unwrap_model(model.module)
     else:
