@@ -44,6 +44,7 @@ with open(CohereConverter.diff_file, 'r') as file, open("result.py", "w+") as mo
                 class_def = inspect.getsource(eval(class_name))
                 matches = pattern.finditer(class_def)
                 for match in matches:
+                        # TODO handle call to super!
                         full_function = match.group()
                         function_set[full_function.split("(")[0]] = full_function
 
