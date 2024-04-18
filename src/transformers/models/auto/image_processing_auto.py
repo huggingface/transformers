@@ -71,6 +71,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("grounding-dino", "GroundingDinoImageProcessor"),
         ("groupvit", "CLIPImageProcessor"),
         ("idefics", "IdeficsImageProcessor"),
+        ("idefics2", "Idefics2ImageProcessor"),
         ("imagegpt", "ImageGPTImageProcessor"),
         ("instructblip", "BlipImageProcessor"),
         ("kosmos-2", "CLIPImageProcessor"),
