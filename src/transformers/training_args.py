@@ -515,7 +515,7 @@ class TrainingArguments:
                     ensure they are the same across all ranks after initialization
                 - cpu_ram_efficient_loading (`bool`, *optional*, defaults to `False`)
                     If `True`, only the first process loads the pretrained model checkpoint while all other processes
-                    have empty weights.  When this setting is `True`, `sync_module_states` also must to be `True`,
+                    have empty weights.  When this setting as `True`, `sync_module_states` also must to be `True`,
                     otherwise all the processes except the main process would have random weights leading to unexpected
                     behaviour during training.
                 - activation_checkpointing (`bool`, *optional*, defaults to `False`):
