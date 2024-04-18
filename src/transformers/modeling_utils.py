@@ -4813,6 +4813,7 @@ def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module:
     Args:
         model (`torch.nn.Module`): The model to unwrap.
     """
+    # Use accelerate implementation if available (should always be the case when using torch)
     if is_accelerate_available():
         kwargs = {}
         if version.parse(importlib.metadata.version("accelerate")) >= version.parse("0.29.0"):
