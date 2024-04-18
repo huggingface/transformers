@@ -4812,6 +4812,9 @@ def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module:
 
     Args:
         model (`torch.nn.Module`): The model to unwrap.
+        recursive (`bool`, *optional*, defaults to `False`):
+            Whether to recursively extract all cases of `module.module` from `model` as well as unwrap child sublayers
+            recursively, not just the top-level distributed containers.
     """
     # Use accelerate implementation if available (should always be the case when using torch)
     if is_accelerate_available():
