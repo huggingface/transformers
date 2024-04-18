@@ -254,9 +254,9 @@ def fuse_awq_modules(model, quantization_config):
     # `None` attention mask to the fused attention modules as now the attention mask is dropped by our models and dealt
     # by the `AttentionMaskConverter` module.
     if len(fused_attention_modules) > 0:
-        fused_attention_parent_modules = set(
+        fused_attention_parent_modules = {
             fused_attention_module.split(".")[0] for fused_attention_module in fused_attention_modules
-        )
+        }
         for module_name, module in model.named_modules():
             if any(
                 module_name in fused_attention_parent_module
