@@ -2679,4 +2679,5 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             enc_topk_bboxes=outputs.enc_topk_bboxes,
             enc_outputs_class=outputs.enc_outputs_class,
             enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
-            denoising_meta_values=outputs.denoising
+            denoising_meta_values=outputs.denoising_meta_values,
+        )
