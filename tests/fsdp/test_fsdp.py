@@ -308,6 +308,6 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             --logging_steps {logging_steps}
             --save_strategy epoch
             --do_eval
-            --evaluation_strategy epoch
+            --eval_strategy epoch
             --report_to none
         """

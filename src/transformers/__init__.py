@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.40.0.dev0"
+__version__ = "4.41.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -327,6 +327,7 @@ _import_structure = {
         "Data2VecTextConfig",
         "Data2VecVisionConfig",
     ],
+    "models.dbrx": ["DbrxConfig"],
     "models.deberta": [
         "DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DebertaConfig",
@@ -507,6 +508,7 @@ _import_structure = {
         "IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "IdeficsConfig",
     ],
+    "models.idefics2": ["Idefics2Config"],
     "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
     "models.informer": ["INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "InformerConfig"],
     "models.instructblip": [
@@ -516,6 +518,7 @@ _import_structure = {
         "InstructBlipQFormerConfig",
         "InstructBlipVisionConfig",
     ],
+    "models.jamba": ["JambaConfig"],
     "models.jukebox": [
         "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "JukeboxConfig",
@@ -662,6 +665,7 @@ _import_structure = {
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
     ],
+    "models.olmo": ["OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP", "OlmoConfig"],
     "models.oneformer": [
         "ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "OneFormerConfig",
@@ -1335,6 +1339,7 @@ else:
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
+    _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
@@ -1470,6 +1475,7 @@ else:
             "AlignVisionModel",
         ]
     )
+
     _import_structure["models.altclip"].extend(
         [
             "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1935,6 +1941,13 @@ else:
             "Data2VecVisionForSemanticSegmentation",
             "Data2VecVisionModel",
             "Data2VecVisionPreTrainedModel",
+        ]
+    )
+    _import_structure["models.dbrx"].extend(
+        [
+            "DbrxForCausalLM",
+            "DbrxModel",
+            "DbrxPreTrainedModel",
         ]
     )
     _import_structure["models.deberta"].extend(
@@ -2441,6 +2454,15 @@ else:
             "IdeficsProcessor",
         ]
     )
+    _import_structure["models.idefics2"].extend(
+        [
+            "IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Idefics2ForConditionalGeneration",
+            "Idefics2Model",
+            "Idefics2PreTrainedModel",
+            "Idefics2Processor",
+        ]
+    )
     _import_structure["models.imagegpt"].extend(
         [
             "IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2466,6 +2488,14 @@ else:
             "InstructBlipPreTrainedModel",
             "InstructBlipQFormerModel",
             "InstructBlipVisionModel",
+        ]
+    )
+    _import_structure["models.jamba"].extend(
+        [
+            "JambaForCausalLM",
+            "JambaForSequenceClassification",
+            "JambaModel",
+            "JambaPreTrainedModel",
         ]
     )
     _import_structure["models.jukebox"].extend(
@@ -2891,6 +2921,13 @@ else:
             "NystromformerLayer",
             "NystromformerModel",
             "NystromformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.olmo"].extend(
+        [
+            "OlmoForCausalLM",
+            "OlmoModel",
+            "OlmoPreTrainedModel",
         ]
     )
     _import_structure["models.oneformer"].extend(
@@ -5238,6 +5275,7 @@ if TYPE_CHECKING:
         Data2VecTextConfig,
         Data2VecVisionConfig,
     )
+    from .models.dbrx import DbrxConfig
     from .models.deberta import (
         DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DebertaConfig,
@@ -5410,6 +5448,7 @@ if TYPE_CHECKING:
         IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         IdeficsConfig,
     )
+    from .models.idefics2 import Idefics2Config
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
     from .models.informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
     from .models.instructblip import (
@@ -5419,6 +5458,7 @@ if TYPE_CHECKING:
         InstructBlipQFormerConfig,
         InstructBlipVisionConfig,
     )
+    from .models.jamba import JambaConfig
     from .models.jukebox import (
         JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP,
         JukeboxConfig,
@@ -5564,6 +5604,7 @@ if TYPE_CHECKING:
         NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         NystromformerConfig,
     )
+    from .models.olmo import OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP, OlmoConfig
     from .models.oneformer import (
         ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OneFormerConfig,
@@ -6210,6 +6251,7 @@ if TYPE_CHECKING:
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.grounding_dino import GroundingDinoImageProcessor
         from .models.idefics import IdeficsImageProcessor
+        from .models.idefics2 import Idefics2ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.layoutlmv2 import (
             LayoutLMv2FeatureExtractor,
@@ -6748,6 +6790,13 @@ if TYPE_CHECKING:
             Data2VecVisionModel,
             Data2VecVisionPreTrainedModel,
         )
+
+        # PyTorch model imports
+        from .models.dbrx import (
+            DbrxForCausalLM,
+            DbrxModel,
+            DbrxPreTrainedModel,
+        )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             DebertaForMaskedLM,
@@ -7163,6 +7212,13 @@ if TYPE_CHECKING:
             IdeficsPreTrainedModel,
             IdeficsProcessor,
         )
+        from .models.idefics2 import (
+            IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Idefics2ForConditionalGeneration,
+            Idefics2Model,
+            Idefics2PreTrainedModel,
+            Idefics2Processor,
+        )
         from .models.imagegpt import (
             IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ImageGPTForCausalImageModeling,
@@ -7183,6 +7239,12 @@ if TYPE_CHECKING:
             InstructBlipPreTrainedModel,
             InstructBlipQFormerModel,
             InstructBlipVisionModel,
+        )
+        from .models.jamba import (
+            JambaForCausalLM,
+            JambaForSequenceClassification,
+            JambaModel,
+            JambaPreTrainedModel,
         )
         from .models.jukebox import (
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7530,6 +7592,11 @@ if TYPE_CHECKING:
             NystromformerModel,
             NystromformerPreTrainedModel,
         )
+        from .models.olmo import (
+            OlmoForCausalLM,
+            OlmoModel,
+            OlmoPreTrainedModel,
+        )
         from .models.oneformer import (
             ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             OneFormerForUniversalSegmentation,
@@ -7818,8 +7885,6 @@ if TYPE_CHECKING:
             SamModel,
             SamPreTrainedModel,
         )
-
-        # PyTorch model imports
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeamlessM4TCodeHifiGan,

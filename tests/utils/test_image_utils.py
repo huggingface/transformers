@@ -16,11 +16,13 @@
 import os
 import tempfile
 import unittest
+from io import BytesIO
+from typing import Optional
 
-import datasets
 import numpy as np
 import pytest
-from huggingface_hub.file_download import http_get
+import requests
+from huggingface_hub.file_download import hf_hub_url, http_get
 from requests import ConnectTimeout, ReadTimeout
 
 from tests.pipelines.test_pipelines_document_question_answering import INVOICE_URL
@@ -37,6 +39,11 @@ if is_vision_available():
 
     from transformers import ImageFeatureExtractionMixin
     from transformers.image_utils import get_image_size, infer_channel_dimension_format, load_image
+
+
+def get_image_from_hub_dataset(dataset_id: str, filename: str, revision: Optional[str] = None) -> "PIL.Image.Image":
+    url = hf_hub_url(dataset_id, filename, repo_type="dataset", revision=revision)
+    return PIL.Image.open(BytesIO(requests.get(url).content))
 
 
 def get_random_image(height, width):
@@ -540,9 +547,11 @@ class LoadImageTester(unittest.TestCase):
     def test_load_img_rgba(self):
         # we use revision="refs/pr/1" until the PR is merged
         # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
+        img = get_image_from_hub_dataset(
+            "hf-internal-testing/fixtures_image_utils", "0-test-lena.png", revision="refs/pr/1"
+        )
 
-        img = load_image(dataset[0]["image"])  # img with mode RGBA
+        img = load_image(img)  # img with mode RGBA
         img_arr = np.array(img)
 
         self.assertEqual(
@@ -553,9 +562,11 @@ class LoadImageTester(unittest.TestCase):
     def test_load_img_la(self):
         # we use revision="refs/pr/1" until the PR is merged
         # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
+        img = get_image_from_hub_dataset(
+            "hf-internal-testing/fixtures_image_utils", "1-test-parrots.png", revision="refs/pr/1"
+        )
 
-        img = load_image(dataset[1]["image"])  # img with mode LA
+        img = load_image(img)  # img with mode LA
         img_arr = np.array(img)
 
         self.assertEqual(
@@ -566,9 +577,11 @@ class LoadImageTester(unittest.TestCase):
     def test_load_img_l(self):
         # we use revision="refs/pr/1" until the PR is merged
         # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
+        img = get_image_from_hub_dataset(
+            "hf-internal-testing/fixtures_image_utils", "2-test-tree.png", revision="refs/pr/1"
+        )
 
-        img = load_image(dataset[2]["image"])  # img with mode L
+        img = load_image(img)  # img with mode L
         img_arr = np.array(img)
 
         self.assertEqual(
@@ -579,9 +592,10 @@ class LoadImageTester(unittest.TestCase):
     def test_load_img_exif_transpose(self):
         # we use revision="refs/pr/1" until the PR is merged
         # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
 
-        img_without_exif_transpose = dataset[3]["image"]
+        img_without_exif_transpose = get_image_from_hub_dataset(
+            "hf-internal-testing/fixtures_image_utils", "3-test-cat-rotated.jpg", revision="refs/pr/1"
+        )
         img_arr_without_exif_transpose = np.array(img_without_exif_transpose)
 
         self.assertEqual(
@@ -589,7 +603,7 @@ class LoadImageTester(unittest.TestCase):
             (333, 500, 3),
         )
 
-        img_with_exif_transpose = load_image(dataset[3]["image"])
+        img_with_exif_transpose = load_image(img_without_exif_transpose)
         img_arr_with_exif_transpose = np.array(img_with_exif_transpose)
 
         self.assertEqual(
