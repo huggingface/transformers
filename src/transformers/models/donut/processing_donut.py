@@ -18,12 +18,8 @@ Processor class for Donut.
 import re
 import warnings
 from contextlib import contextmanager
-from typing import Dict, List, Optional, Union
-
-from transformers.tokenization_utils_base import PreTokenizedInput, TextInput, TruncationStrategy
 
 from ...processing_utils import ProcessorMixin
-from ...utils import PaddingStrategy, TensorType
 
 
 class DonutProcessor(ProcessorMixin):
@@ -66,48 +62,44 @@ class DonutProcessor(ProcessorMixin):
         self.current_processor = self.image_processor
 
         self.processing_kwargs = {
-            'common_kwargs':{
-                'return_tensors': 'pt'
-                },
-            'text_kwargs': {
-                'text_pair': None,
-                'text_target': None,
-                'text_pair_target': None,
-                'add_special_tokens': True,
-                'padding': 'max_length',
-                'truncation': True,
-                'max_length': 512,
-                'stride': 0,
-                'is_split_into_words': False,
-                'pad_to_multiple_of': None,
-                'return_token_type_ids': True,
-                'return_attention_mask': True,
-                'return_overflowing_tokens': False,
-                'return_special_tokens_mask': False,
-                'return_offsets_mapping': False,
-                'return_length': False,
-                'verbose': True
+            "common_kwargs": {"return_tensors": "pt"},
+            "text_kwargs": {
+                "text_pair": None,
+                "text_target": None,
+                "text_pair_target": None,
+                "add_special_tokens": True,
+                "padding": "max_length",
+                "truncation": True,
+                "max_length": 512,
+                "stride": 0,
+                "is_split_into_words": False,
+                "pad_to_multiple_of": None,
+                "return_token_type_ids": True,
+                "return_attention_mask": True,
+                "return_overflowing_tokens": False,
+                "return_special_tokens_mask": False,
+                "return_offsets_mapping": False,
+                "return_length": False,
+                "verbose": True,
             },
-            'images_kwargs': {
-                'do_crop_margin': False,
-                'do_resize': True,
-                'size': {'height': 256, 'width': 256},
-                'resample': 'bilinear',
-                'do_thumbnail': False,
-                'do_align_long_axis': False,
-                'do_pad': False,
-                'do_rescale': False,
-                'rescale_factor': 1.0,
-                'do_normalize': True,
-                'image_mean': [0.485, 0.456, 0.406],
-                'image_std': [0.229, 0.224, 0.225],
-                'data_format': 'channels_first',
-                'input_data_format': None
+            "images_kwargs": {
+                "do_crop_margin": False,
+                "do_resize": True,
+                "size": {"height": 256, "width": 256},
+                "resample": "bilinear",
+                "do_thumbnail": False,
+                "do_align_long_axis": False,
+                "do_pad": False,
+                "do_rescale": False,
+                "rescale_factor": 1.0,
+                "do_normalize": True,
+                "image_mean": [0.485, 0.456, 0.406],
+                "image_std": [0.229, 0.224, 0.225],
+                "data_format": "channels_first",
+                "input_data_format": None,
             },
-            'audio_kwargs': {
-            },
-            'videos_kwargs': {
-            },
+            "audio_kwargs": {},
+            "videos_kwargs": {},
         }
 
         self._in_target_context_manager = False
@@ -117,8 +109,8 @@ class DonutProcessor(ProcessorMixin):
         text=None,
         images=None,
         audio=None,
-        videos=None, # end of supported modalities in call
-        **kwargs
+        videos=None,  # end of supported modalities in call
+        **kwargs,
     ):
         """
         When used in normal mode, this method forwards all its arguments to AutoImageProcessor's
@@ -128,7 +120,11 @@ class DonutProcessor(ProcessorMixin):
         """
         # For backward compatibility
         if self._in_target_context_manager:
-            image_kwargs = {**self.processing_kwargs.get('images_kwargs', {}), **self.processing_kwargs.get('common_kwargs'), **kwargs}
+            image_kwargs = {
+                **self.processing_kwargs.get("images_kwargs", {}),
+                **self.processing_kwargs.get("common_kwargs"),
+                **kwargs,
+            }
             return self.current_processor(
                 images,
                 **image_kwargs,
@@ -138,14 +134,21 @@ class DonutProcessor(ProcessorMixin):
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
         if images is not None:
-            image_kwargs = {**self.processing_kwargs.get('images_kwargs', {}), **self.processing_kwargs.get('common_kwargs'), **kwargs}
+            image_kwargs = {
+                **self.processing_kwargs.get("images_kwargs", {}),
+                **self.processing_kwargs.get("common_kwargs"),
+                **kwargs,
+            }
             inputs = self.image_processor(
                 images,
                 **image_kwargs,
-
             )
         if text is not None:
-            text_kwargs = {**self.processing_kwargs.get('text_kwargs', {}), **self.processing_kwargs.get('common_kwargs'), **kwargs}
+            text_kwargs = {
+                **self.processing_kwargs.get("text_kwargs", {}),
+                **self.processing_kwargs.get("common_kwargs"),
+                **kwargs,
+            }
 
             encodings = self.tokenizer(
                 text,
