@@ -1399,14 +1399,14 @@ class TrainingArguments:
 
         if self.evaluation_strategy is not None:
             warnings.warn(
-                "`evaluation_strategy` is deprecated and will be removed in version 4.41 of 🤗 Transformers. Use `eval_strategy` instead",
+                "`evaluation_strategy` is deprecated and will be removed in version 4.46 of 🤗 Transformers. Use `eval_strategy` instead",
                 FutureWarning,
             )
             self.eval_strategy = self.evaluation_strategy
 
         if isinstance(self.eval_strategy, EvaluationStrategy):
             warnings.warn(
-                "using `EvaluationStrategy` for `evaluation_strategy` is deprecated and will be removed in version 5"
+                "using `EvaluationStrategy` for `eval_strategy` is deprecated and will be removed in version 5"
                 " of 🤗 Transformers. Use `IntervalStrategy` instead",
                 FutureWarning,
             )
