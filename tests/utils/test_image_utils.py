@@ -21,6 +21,7 @@ import datasets
 import numpy as np
 import pytest
 from huggingface_hub.file_download import http_get
+from packaging import version
 from requests import ConnectTimeout, ReadTimeout
 
 from tests.pipelines.test_pipelines_document_question_answering import INVOICE_URL
@@ -586,7 +587,7 @@ class LoadImageTester(unittest.TestCase):
 
         self.assertEqual(
             img_arr_without_exif_transpose.shape,
-            (333, 500, 3),
+            (500, 333, 3) if version.parse(datasets.__version__) > version.parse("2.18.0") else (333, 500, 3),
         )
 
         img_with_exif_transpose = load_image(dataset[3]["image"])
