@@ -421,6 +421,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
         self._valid_processor_keys = [
             "images",
             "annotations",
+            "return_segmentation_masks",
             "masks_path",
             "do_resize",
             "size",
