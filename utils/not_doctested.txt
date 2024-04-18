@@ -165,6 +165,7 @@ docs/source/en/model_doc/megatron-bert.md
 docs/source/en/model_doc/megatron_gpt2.md
 docs/source/en/model_doc/mgp-str.md
 docs/source/en/model_doc/mistral.md
+docs/source/en/model_doc/mixtral.md
 docs/source/en/model_doc/mluke.md
 docs/source/en/model_doc/mms.md
 docs/source/en/model_doc/mobilebert.md
@@ -630,6 +631,8 @@ src/transformers/models/instructblip/configuration_instructblip.py
 src/transformers/models/instructblip/convert_instructblip_original_to_pytorch.py
 src/transformers/models/instructblip/modeling_instructblip.py
 src/transformers/models/instructblip/processing_instructblip.py
+src/transformers/models/jamba/configuration_jamba.py
+src/transformers/models/jamba/modeling_jamba.py
 src/transformers/models/jukebox/configuration_jukebox.py
 src/transformers/models/jukebox/convert_jukebox.py
 src/transformers/models/jukebox/modeling_jukebox.py

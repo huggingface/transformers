@@ -20,6 +20,7 @@
 
 __version__ = "4.40.0.dev0"
 
+
 from typing import TYPE_CHECKING
 
 # Check the dependencies satisfy the minimal versions required.
@@ -518,6 +519,7 @@ _import_structure = {
         "InstructBlipQFormerConfig",
         "InstructBlipVisionConfig",
     ],
+    "models.jamba": ["JambaConfig"],
     "models.jukebox": [
         "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "JukeboxConfig",
@@ -664,6 +666,7 @@ _import_structure = {
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
     ],
+    "models.olmo": ["OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP", "OlmoConfig"],
     "models.oneformer": [
         "ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "OneFormerConfig",
@@ -1473,6 +1476,7 @@ else:
             "AlignVisionModel",
         ]
     )
+
     _import_structure["models.altclip"].extend(
         [
             "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2487,6 +2491,14 @@ else:
             "InstructBlipVisionModel",
         ]
     )
+    _import_structure["models.jamba"].extend(
+        [
+            "JambaForCausalLM",
+            "JambaForSequenceClassification",
+            "JambaModel",
+            "JambaPreTrainedModel",
+        ]
+    )
     _import_structure["models.jukebox"].extend(
         [
             "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2910,6 +2922,13 @@ else:
             "NystromformerLayer",
             "NystromformerModel",
             "NystromformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.olmo"].extend(
+        [
+            "OlmoForCausalLM",
+            "OlmoModel",
+            "OlmoPreTrainedModel",
         ]
     )
     _import_structure["models.oneformer"].extend(
@@ -5440,6 +5459,7 @@ if TYPE_CHECKING:
         InstructBlipQFormerConfig,
         InstructBlipVisionConfig,
     )
+    from .models.jamba import JambaConfig
     from .models.jukebox import (
         JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP,
         JukeboxConfig,
@@ -5585,6 +5605,7 @@ if TYPE_CHECKING:
         NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         NystromformerConfig,
     )
+    from .models.olmo import OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP, OlmoConfig
     from .models.oneformer import (
         ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OneFormerConfig,
@@ -7220,6 +7241,12 @@ if TYPE_CHECKING:
             InstructBlipQFormerModel,
             InstructBlipVisionModel,
         )
+        from .models.jamba import (
+            JambaForCausalLM,
+            JambaForSequenceClassification,
+            JambaModel,
+            JambaPreTrainedModel,
+        )
         from .models.jukebox import (
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
             JukeboxModel,
@@ -7566,6 +7593,11 @@ if TYPE_CHECKING:
             NystromformerModel,
             NystromformerPreTrainedModel,
         )
+        from .models.olmo import (
+            OlmoForCausalLM,
+            OlmoModel,
+            OlmoPreTrainedModel,
+        )
         from .models.oneformer import (
             ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             OneFormerForUniversalSegmentation,
@@ -7854,8 +7886,6 @@ if TYPE_CHECKING:
             SamModel,
             SamPreTrainedModel,
         )
-
-        # PyTorch model imports
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeamlessM4TCodeHifiGan,
