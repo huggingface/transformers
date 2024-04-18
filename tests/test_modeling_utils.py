@@ -427,6 +427,25 @@ class ModelUtilsTest(TestCasePlus):
         model = AutoModel.from_pretrained(TINY_BERT_FOR_TOKEN_CLASSIFICATION, torch_dtype="auto")
         self.assertEqual(model.dtype, torch.float32)
 
+    def test_model_from_pretrained_attn_implementation(self):
+        # test that the model can be instantiated with attn_implementation of either
+        # 1. explicit from_pretrained's attn_implementation argument
+        # 2. explicit from_pretrained's attn_implementation argument with a config argument
+        attn_implementation_available = ["eager"]
+        if is_torch_sdpa_available():
+            attn_implementation_available.append("sdpa")
+
+        if is_flash_attn_2_available():
+            attn_implementation_available.append("flash_attention_2")
+
+        for requested_attn_implementation in attn_implementation_available:
+            model = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, attn_implementation=requested_attn_implementation)
+            self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
+
+            config = AutoConfig.from_pretrained(TINY_MISTRAL)
+            model = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, config=config, attn_implementation=requested_attn_implementation)
+            self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
+
     def test_no_super_init_config_and_model(self):
         config = NoSuperInitConfig(attribute=32)
         model = NoSuperInitModel(config)
