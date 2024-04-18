@@ -4813,7 +4813,6 @@ def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module:
     Args:
         model (`torch.nn.Module`): The model to unwrap.
     """
-    # Use accelerate implementation if available.
     if is_accelerate_available():
         kwargs = {}
         if version.parse(importlib.metadata.version("accelerate")) >= version.parse("0.29.0"):
@@ -4826,7 +4825,6 @@ def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module:
         return extract_model_from_parallel(model, **kwargs)
 
     # since there could be multiple levels of wrapping, unwrap recursively
-    # Add check for compiled module here and mimic logic in accelerate
     if hasattr(model, "module"):
         return unwrap_model(model.module)
     else:
