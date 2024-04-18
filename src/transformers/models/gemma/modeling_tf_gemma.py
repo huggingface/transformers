@@ -16,7 +16,7 @@
 """ TensorFlow Gemma model."""
 import math
 import warnings
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -28,11 +28,8 @@ from ...modeling_tf_outputs import (
 )
 from ...modeling_tf_utils import (
     TFPreTrainedModel,
-    TFCausalLanguageModelingLoss,
-    TFSequenceClassificationLoss,
     get_initializer,
     unpack_inputs,
-    keras_serializable,
 )
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
@@ -593,7 +590,6 @@ class TFGemmaMainLayer(tf.keras.layers.Layer):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = None
         for decoder_layer in self.decoder_layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -611,7 +607,7 @@ class TFGemmaMainLayer(tf.keras.layers.Layer):
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
+                layer_outputs[2 if output_attentions else 1]
 
             if output_attentions:
                 all_self_attns = all_self_attns + (layer_outputs[1],)
@@ -639,7 +635,6 @@ class TFGemmaMainLayer(tf.keras.layers.Layer):
     def _update_causal_mask(self, attention_mask, input_tensor):
         batch_size, seq_length = shape_list(input_tensor)[:2]
         dtype = input_tensor.dtype
-        device = input_tensor.device
 
         # support going beyond cached `max_position_embedding`
         if seq_length > self.config.max_position_embeddings:

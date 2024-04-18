@@ -13,16 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Testing suite for the TF Gemma model. """
-import tempfile
 import unittest
 
-import pytest
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_tf_available
 from transformers.testing_utils import (
-    require_tf,
     require_read_token,
+    require_tf,
     slow,
 )
 
@@ -35,7 +33,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFGemmaForCausalLM, TFGemmaForSequenceClassification, TFGemmaModel
-    from transformers.modeling_tf_utils import keras
 
 
 class GemmaModelTester:
