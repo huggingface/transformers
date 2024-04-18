@@ -368,50 +368,12 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
         or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
     )
 
-<<<<<<< HEAD
-    ignore_causal_mask = False
-
-    if attention_mask is None:
-        if (
-            not is_tracing
-            and (query_length == 1 or key_value_length == query_length)
-            and (sliding_window is None or key_value_length < sliding_window)
-        ):
-            ignore_causal_mask = True
-    elif sliding_window is None or key_value_length < sliding_window:
-        # 4d mask is passed through
-        if len(attention_mask.shape) == 4:
-            expected_shape = (input_shape[0], 1, input_shape[1], key_value_length)
-            if tuple(attention_mask.shape) != expected_shape:
-                raise ValueError(
-                    f"Incorrect 4D attention_mask shape: {tuple(attention_mask.shape)}; expected: {expected_shape}."
-                )
-            else:
-                # if the 4D mask has correct shape - invert it and fill with negative infinity
-                inverted_mask = 1.0 - attention_mask.to(inputs_embeds.dtype)
-                attention_mask = inverted_mask.masked_fill(
-                    inverted_mask.to(torch.bool), torch.finfo(inputs_embeds.dtype).min
-                )
-                return attention_mask
-
-        elif not is_tracing and torch.all(attention_mask == 1):
-            if query_length == 1:
-                # For query_length == 1, causal attention and bi-directional attention are the same.
-                ignore_causal_mask = True
-            elif key_value_length == query_length:
-                ignore_causal_mask = True
-
-            # Unfortunately, for query_length > 1 and key_value_length != query_length, we cannot generally ignore the attention mask, as SDPA causal mask generation
-            # may be wrong. We will set `is_causal=False` in SDPA and rely on Transformers attention_mask instead, hence not setting it to None here.
-            # Reference: https://github.com/pytorch/pytorch/issues/108108
-=======
     ignore_causal_mask = AttentionMaskConverter._ignore_causal_mask_sdpa(
         attention_mask=attention_mask,
         inputs_embeds=inputs_embeds,
         past_key_values_length=past_key_values_length,
         sliding_window=sliding_window,
     )
->>>>>>> parent of acab997bef... Revert "Re-enable SDPA's FA2 path (#30070)" (#30314)
 
     if ignore_causal_mask:
         expanded_4d_mask = None

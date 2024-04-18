@@ -248,19 +248,15 @@ def fuse_awq_modules(model, quantization_config):
         )
 
         if attention_has_been_fused:
-            fused_attention_modules.append(name)
+            fused_attention_modules.append(name.split(".")[0])
 
     # For AWQ fused + Llama we need to set `config._attn_implementation` = "custom" to avoid unexpected behavior and pass
     # `None` attention mask to the fused attention modules as now the attention mask is dropped by our models and dealt
     # by the `AttentionMaskConverter` module.
     if len(fused_attention_modules) > 0:
-        fused_attention_parent_modules = {
-            fused_attention_module.split(".")[0] for fused_attention_module in fused_attention_modules
-        }
         for module_name, module in model.named_modules():
             if any(
-                module_name in fused_attention_parent_module
-                for fused_attention_parent_module in fused_attention_parent_modules
+                module_name in fused_attention_modules for fused_attention_parent_module in fused_attention_modules
             ):
                 if hasattr(module, "config") and hasattr(module.config, "_attn_implementation"):
                     module.config._attn_implementation = "custom"
