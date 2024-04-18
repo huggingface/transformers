@@ -64,46 +64,61 @@ class DonutProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
+
+        self.processing_kwargs = {
+            'common_kwargs':{
+                'return_tensors': 'pt'
+                },
+            'text_kwargs': {
+                'text_pair': None,
+                'text_target': None,
+                'text_pair_target': None,
+                'add_special_tokens': True,
+                'padding': 'max_length',
+                'truncation': True,
+                'max_length': 512,
+                'stride': 0,
+                'is_split_into_words': False,
+                'pad_to_multiple_of': None,
+                'return_token_type_ids': True,
+                'return_attention_mask': True,
+                'return_overflowing_tokens': False,
+                'return_special_tokens_mask': False,
+                'return_offsets_mapping': False,
+                'return_length': False,
+                'verbose': True
+            },
+            'images_kwargs': {
+                'do_crop_margin': False,
+                'do_resize': True,
+                'size': {'height': 256, 'width': 256},
+                'resample': 'bilinear',
+                'do_thumbnail': False,
+                'do_align_long_axis': False,
+                'do_pad': False,
+                'do_rescale': False,
+                'rescale_factor': 1.0,
+                'do_normalize': True,
+                'image_mean': [0.485, 0.456, 0.406],
+                'image_std': [0.229, 0.224, 0.225],
+                'data_format': 'channels_first',
+                'input_data_format': None
+            },
+            'audio_kwargs': {
+            },
+            'videos_kwargs': {
+            },
+        }
+
         self._in_target_context_manager = False
 
     def __call__(
         self,
         text=None,
         images=None,
-        do_crop_margin: bool = None,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        resample: "PILImageResampling" = None,  # noqa: F821
-        do_thumbnail: bool = None,
-        do_align_long_axis: bool = None,
-        do_pad: bool = None,
-        do_rescale: bool = None,
-        rescale_factor: Union[int, float] = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        data_format: Optional["ChannelDimension"] = "channels_first",  # noqa: F821
-        input_data_format: Optional[Union[str, "ChannelDimension"]] = None,  # noqa: F821
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
-        text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        text_pair_target: Optional[
-            Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
-        ] = None,
-        add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        stride: int = 0,
-        is_split_into_words: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
-        return_length: bool = False,
-        verbose: bool = True,
+        audio=None,
+        videos=None, # end of supported modalities in call
+        **kwargs
     ):
         """
         When used in normal mode, this method forwards all its arguments to AutoImageProcessor's
@@ -113,68 +128,28 @@ class DonutProcessor(ProcessorMixin):
         """
         # For backward compatibility
         if self._in_target_context_manager:
+            image_kwargs = {**self.processing_kwargs.get('images_kwargs', {}), **self.processing_kwargs.get('common_kwargs'), **kwargs}
             return self.current_processor(
                 images,
-                do_crop_margin=do_crop_margin,
-                do_resize=do_resize,
-                size=size,
-                resample=resample,
-                do_thumbnail=do_thumbnail,
-                do_align_long_axis=do_align_long_axis,
-                do_pad=do_pad,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_normalize=do_normalize,
-                image_mean=image_mean,
-                image_std=image_std,
-                return_tensors=return_tensors,
-                data_format=data_format,
-                input_data_format=input_data_format,
+                **image_kwargs,
             )
 
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
         if images is not None:
+            image_kwargs = {**self.processing_kwargs.get('images_kwargs', {}), **self.processing_kwargs.get('common_kwargs'), **kwargs}
             inputs = self.image_processor(
                 images,
-                do_crop_margin=do_crop_margin,
-                do_resize=do_resize,
-                size=size,
-                resample=resample,
-                do_thumbnail=do_thumbnail,
-                do_align_long_axis=do_align_long_axis,
-                do_pad=do_pad,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_normalize=do_normalize,
-                image_mean=image_mean,
-                image_std=image_std,
-                return_tensors=return_tensors,
-                data_format=data_format,
-                input_data_format=input_data_format,
+                **image_kwargs,
+
             )
         if text is not None:
+            text_kwargs = {**self.processing_kwargs.get('text_kwargs', {}), **self.processing_kwargs.get('common_kwargs'), **kwargs}
+
             encodings = self.tokenizer(
                 text,
-                text_pair=text_pair,
-                text_target=text_target,
-                text_pair_target=text_pair_target,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                is_split_into_words=is_split_into_words,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_tensors=return_tensors,
-                return_token_type_ids=return_token_type_ids,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_length=return_length,
-                verbose=verbose,
+                **text_kwargs,
             )
 
         if text is None:
