@@ -1473,7 +1473,6 @@ else:
             "AlignVisionModel",
         ]
     )
-
     _import_structure["models.altclip"].extend(
         [
             "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4645,7 +4644,9 @@ try:
     if not is_torchaudio_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
-    from .utils import dummy_torchaudio_objects
+    from .utils import (
+        dummy_torchaudio_objects,	
+    )
 
     _import_structure["utils.dummy_torchaudio_objects"] = [
         name for name in dir(dummy_torchaudio_objects) if not name.startswith("_")
