@@ -25,10 +25,7 @@ from typing import Optional
 import albumentations as A
 import numpy as np
 import torch
-from albumentations.pytorch import ToTensorV2
 from datasets import load_dataset
-from huggingface_hub import hf_hub_download
-from torch import nn
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from torch.utils.data import DataLoader
 
@@ -44,10 +41,11 @@ from transformers import (
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-from transformers.data.data_collator import torch_default_data_collator
 from transformers import DetrForObjectDetection, DetrImageProcessor
 from typing import List, Tuple
 from transformers.image_transforms import center_to_corners_format
+from typing import Optional, Mapping
+from transformers.trainer import EvalPrediction
 
 """Finetuning any 🤗 Transformers model supported by AutoModelForObjectDetection for object detection leveraging the Trainer API."""
 
@@ -68,12 +66,12 @@ def format_image_annotations_as_coco(image_id: str, category: List[int], area: L
         category (List[int]): list of categories/class labels corresponding to provided bounding boxes
         area (List[float]): list of corresponding areas to provided bounding boxes
         bbox (List[Tuple[float]]): list of bounding boxes provided in COCO format 
-            ([center_x, center_y, width, height] in absoulute coordinates)
+            ([center_x, center_y, width, height] in absolute coordinates)
 
     Returns:
         dict: {
             "image_id": image id,
-            "annotations": list of formated annotations
+            "annotations": list of formatted annotations
         }
     """
     annotations = []
@@ -127,14 +125,71 @@ def collate_fn(batch):
     }
 
 
-def convert_boxes_to_absolute_coordinates(boxes: torch.Tensor, image_size: torch.Tensor) -> torch.Tensor:
-    """Image size: [height, width] tensor"""
-    height, width = image_size
-    scale_factor = torch.stack([width, height, width, height])
-    # convert shape for multiplication: (4,) -> (1, 4)
-    scale_factor = scale_factor.unsqueeze(0).to(boxes.device)  
-    boxes = boxes * scale_factor
-    return boxes
+@torch.no_grad()
+def compute_metrics(
+    evaluation_results: EvalPrediction,
+    threshold: float =0.0,
+    box_format: str = "cxcywh",
+    id2label: Optional[Mapping[int, str]] = None,
+) -> Mapping[str, float]:
+    """Compute mean average mAP and mAR metrics for object detection task
+
+    Args:
+        evaluation_results (EvalPrediction): Predictions and targets from evaluation.
+        threshold (float, optional): Threshold to filter predicted boxes by confidence. Defaults to 0.0.
+        box_format (str, optional): Model predicted bbox format. Defaults to "cxcywh".
+        id2label (Optional[dict], optional): Mapping from class id to class name. Defaults to None.
+
+    Returns:
+        Mapping[str, float]: Metrics in a form of dictionary {<metric_name>: <metric_value>}
+    """
+
+    predictions, targets = evaluation_results.predictions, evaluation_results.label_ids
+
+    # for metric computation we need to provide:
+    #  - predictions in a form of list of dictionaries with keys "boxes", "scores", "labels"
+    #  - targets in a form of list of dictionaries with keys "boxes", "labels"
+
+    # collect predictions in the required format for metric computation
+    post_processed_predictions = []
+    for batch in predictions:
+        # batch logits: (batch_size, num_classes + 1)
+        # batch boxes: (batch_size, num_queries, 4)
+        losses_dict, batch_logits, batch_boxes, _, _ = batch
+        batch_logits, batch_boxes = torch.tensor(batch_logits), torch.tensor(batch_boxes)
+        for logits, boxes in zip(batch_logits, batch_boxes):
+            probs = torch.softmax(logits, dim=-1)
+            # remove the last class which is the "no-object" class and filter by confidence
+            scores, labels = probs[..., :-1].max(dim=-1)
+            keep = scores > threshold
+            boxes, scores, labels = boxes[keep], scores[keep], labels[keep]
+            post_processed_predictions.append({"boxes": boxes, "scores": scores, "labels": labels})
+
+    # collect targets in the required format for metric computation
+    post_processed_targets = []
+    for batch in targets:
+        for image_target in batch:
+            boxes = torch.tensor(image_target["boxes"])
+            labels = torch.tensor(image_target["class_labels"])
+            post_processed_targets.append({"boxes": boxes, "labels": labels})
+    
+    # compute metrics
+    metric = MeanAveragePrecision(box_format=box_format, class_metrics=True)
+    metric.update(post_processed_predictions, post_processed_targets)
+    metrics = metric.compute()
+
+    # replace list of per class metrics with separate metric for each class
+    classes = metrics.pop("classes")
+    map_per_class = metrics.pop("map_per_class")
+    mar_100_per_class = metrics.pop("mar_100_per_class")
+    for class_id, class_map, class_mar in zip(classes, map_per_class, mar_100_per_class):
+        class_name = id2label[class_id.item()] if id2label is not None else class_id.item()
+        metrics[f"map_{class_name}"] = class_map
+        metrics[f"mar_100_{class_name}"] = class_mar
+
+    metrics = {k: round(v.item(), 4) for k, v in metrics.items()}
+
+    return metrics
 
 
 @dataclass
@@ -145,7 +200,7 @@ class DataTrainingArguments:
     them on the command line.
     """
 
-    dataset_name: Optional[str] = field(
+    dataset_name: str = field(
         default="cppe-5",
         metadata={
             "help": "Name of a dataset from the hub (could be your own, possibly private dataset hosted on the hub)."
@@ -181,12 +236,6 @@ class DataTrainingArguments:
             )
         },
     )
-
-    def __post_init__(self):
-        if self.dataset_name is None and (self.train_dir is None and self.validation_dir is None):
-            raise ValueError(
-                "You must specify either a dataset name from the hub or a train and/or validation directory."
-            )
 
 
 @dataclass
@@ -309,12 +358,12 @@ def main():
 
     dataset = load_dataset(data_args.dataset_name, cache_dir=model_args.cache_dir)
 
-    if data_args.dataset_name == "cppe-5":
-        # Remove of bad annotated images, this is dataset specific option
-        # Some image have annotation boxes outside of the image, remove them for simplicity
-        remove_idx = [590, 821, 822, 875, 876, 878, 879]
-        keep = [i for i in range(len(dataset["train"])) if i not in remove_idx]
-        dataset["train"] = dataset["train"].select(keep)
+    # if data_args.dataset_name == "cppe-5":
+    #     # Remove bad annotated images, this is dataset specific option
+    #     # Some images have boxes outside of the image, remove them for simplicity
+    #     remove_idx = [590, 821, 822, 875, 876, 878, 879]
+    #     keep = [i for i in range(len(dataset["train"])) if i not in remove_idx]
+    #     dataset["train"] = dataset["train"].select(keep)
 
     # If we don't have a validation split, split off a percentage of train as validation
     data_args.train_val_split = None if "valid" in dataset.keys() else data_args.train_val_split
@@ -366,7 +415,7 @@ def main():
             A.RandomBrightnessContrast(p=0.5),
             A.HueSaturationValue(p=0.1),
         ],
-        bbox_params=A.BboxParams(format="coco", label_fields=["category"]),
+        bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True, min_area=25),
     )
     valid_augmentation_transform = A.Compose(
         [
@@ -388,12 +437,8 @@ def main():
     # Model training and evaluation with Trainer API
     # ------------------------------------------------------------------------------------------------
 
-    @torch.no_grad()
-    def compute_metrics(evaluation_results):
-        predictions, targets = evaluation_results
-        return {"dummy": 1.0}
+    eval_compute_metrics = partial(compute_metrics, id2label=id2label, threshold=0.0)
 
-    training_args.include_inputs_for_metrics = False
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -401,7 +446,7 @@ def main():
         eval_dataset=dataset["valid"] if training_args.do_eval else None,
         tokenizer=image_processor,
         data_collator=collate_fn,
-        compute_metrics=compute_metrics,
+        compute_metrics=eval_compute_metrics,
     )
 
     # Training
@@ -417,54 +462,22 @@ def main():
         trainer.save_metrics("train", train_result.metrics)
         trainer.save_state()
 
-    # ------------------------------------------------------------------------------------------------
-    # Model evaluation
-    # ------------------------------------------------------------------------------------------------
+    # Final evaluation
+    if training_args.do_eval:
+        metrics = trainer.evaluate(eval_dataset=dataset["test"], metric_key_prefix="test")
+        trainer.log_metrics("test", metrics)
+        trainer.save_metrics("test", metrics)
 
-    dataloader = DataLoader(dataset["test"], batch_size=4, shuffle=False, collate_fn=collate_fn)
-    mAP = MeanAveragePrecision(box_format="xyxy", class_metrics=True)
-
-    model = model.cpu().eval()
-
-    for batch in dataloader:
-        with torch.no_grad():
-            # model predict boxes in YOLO format (center_x, center_y, width, height) 
-            # with coordinates *noramlized* to [0..1] (relative coordinates)
-            output = model(batch["pixel_values"].cpu())
-        
-        # For metric computation we need to collect ground truth and predicted boxes in the same format
-        
-        # 1. Collect predicted boxes, classes, scores
-        # image_processor convert boxes from YOLO format to Pascal VOC format 
-        # ([x_min, y_min, x_max, y_max] in absolute coordinates)
-        image_size = torch.stack([example["size"] for example in batch["labels"]], dim=0)
-        predictions = image_processor.post_process_object_detection(output, threshold=0.0, target_sizes=image_size)
-
-        # 2. Collect ground truth boxes in the same format for metric computation
-        target = []
-        for label in batch["labels"]:
-            boxes = center_to_corners_format(label["boxes"])
-            boxes = convert_boxes_to_absolute_coordinates(boxes, label["size"])
-            labels = label["class_labels"]
-            target.append({"boxes": boxes.cpu(), "labels": labels.cpu()})
-
-        mAP.update(predictions, target)
-
-    # compute and post-process metrics
-    metrics = mAP.compute()
-    classes = metrics.pop("classes")
-    map_per_class = metrics.pop("map_per_class")
-    mar_100_per_class = metrics.pop("mar_100_per_class")
-    for class_id, class_map, class_mar in zip(classes, map_per_class, mar_100_per_class):
-        class_name = id2label[class_id.item()]
-        metrics[f"map_{class_name}"] = class_map
-        metrics[f"mar_100_{class_name}"] = class_mar
-    metrics = {f"eval_{k}": round(v.item(), 4) for k, v in metrics.items()}
-
-    # save metrics
-    trainer.log_metrics("eval", train_result.metrics)
-    trainer.save_metrics("eval", train_result.metrics)
-
+    # Write model card and (optionally) push to hub
+    kwargs = {
+        "finetuned_from": model_args.model_name_or_path,
+        "dataset": data_args.dataset_name,
+        "tags": ["object-detection", "vision"],
+    }
+    if training_args.push_to_hub:
+        trainer.push_to_hub(**kwargs)
+    else:
+        trainer.create_model_card(**kwargs)
 
 
 if __name__ == "__main__":
