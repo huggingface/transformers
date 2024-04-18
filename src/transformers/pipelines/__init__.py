@@ -367,8 +367,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("google/vit-base-patch16-224", "29e7a1e183"),
-                "tf": ("google/vit-base-patch16-224", "29e7a1e183"),
+                "pt": ("google/vit-base-patch16-224", "3f49326"),
+                "tf": ("google/vit-base-patch16-224", "3f49326"),
             }
         },
         "type": "image",

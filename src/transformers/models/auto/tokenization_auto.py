@@ -203,6 +203,13 @@ else:
             ("idefics", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("idefics2", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("instructblip", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "jamba",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("jukebox", ("JukeboxTokenizer", None)),
             (
                 "kosmos-2",
@@ -307,6 +314,7 @@ else:
                     "AlbertTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("olmo", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("oneformer", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "openai-gpt",

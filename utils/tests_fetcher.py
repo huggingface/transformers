@@ -507,7 +507,7 @@ def get_all_doctest_files() -> List[str]:
     # change to use "/" as path separator
     test_files_to_run = ["/".join(Path(x).parts) for x in test_files_to_run]
     # don't run doctest for files in `src/transformers/models/deprecated`
-    test_files_to_run = [x for x in test_files_to_run if "models/deprecated" not in test_files_to_run]
+    test_files_to_run = [x for x in test_files_to_run if "models/deprecated" not in x]
 
     # only include files in `src` or `docs/source/en/`
     test_files_to_run = [x for x in test_files_to_run if x.startswith(("src/", "docs/source/en/"))]
