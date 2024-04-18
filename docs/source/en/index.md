@@ -107,6 +107,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                   [Data2VecAudio](model_doc/data2vec)                    |       ✅        |         ❌         |      ❌      |
 |                    [Data2VecText](model_doc/data2vec)                    |       ✅        |         ❌         |      ❌      |
 |                   [Data2VecVision](model_doc/data2vec)                   |       ✅        |         ✅         |      ❌      |
+|                          [DBRX](model_doc/dbrx)                          |       ✅        |         ❌         |      ❌      |
 |                       [DeBERTa](model_doc/deberta)                       |       ✅        |         ✅         |      ❌      |
 |                    [DeBERTa-v2](model_doc/deberta-v2)                    |       ✅        |         ✅         |      ❌      |
 |          [Decision Transformer](model_doc/decision_transformer)          |       ✅        |         ❌         |      ❌      |
