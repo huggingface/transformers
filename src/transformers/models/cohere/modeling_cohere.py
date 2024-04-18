@@ -590,12 +590,15 @@ class CohereSdpaAttention(CohereAttention):
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
+        # In case we are not compiling, we may set `causal_mask` to None, which is required to dispatch to SDPA's Flash Attention 2 backend, rather
+        # relying on the `is_causal` argument.
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
+            is_causal=causal_mask is None and q_len > 1,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -908,9 +911,7 @@ class CohereModel(CoherePreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_seen_tokens + inputs_embeds.shape[1]
-        )
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_seen_tokens)
 
         # embed positions
         hidden_states = inputs_embeds
@@ -1014,9 +1015,9 @@ class CohereModel(CoherePreTrainedModel):
                     offset = 0
                 mask_shape = attention_mask.shape
                 mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
-                causal_mask[: mask_shape[0], : mask_shape[1], offset : mask_shape[2] + offset, : mask_shape[3]] = (
-                    mask_slice
-                )
+                causal_mask[
+                    : mask_shape[0], : mask_shape[1], offset : mask_shape[2] + offset, : mask_shape[3]
+                ] = mask_slice
 
         if (
             self.config._attn_implementation == "sdpa"
