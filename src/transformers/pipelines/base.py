@@ -888,11 +888,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             if self.model.can_generate():
                 self.model.generation_config.update(**task_specific_params.get(task))
 
-        self.call_count = 0
-        self._batch_size = kwargs.pop("batch_size", None)
-        self._num_workers = kwargs.pop("num_workers", None)
-        self._preprocess_params, self._forward_params, self._postprocess_params = self._sanitize_parameters(**kwargs)
-
         # Pipelines calling `generate`: if the tokenizer has a pad token but the model doesn't, set it in the
         # forward params so that `generate` is aware of the pad token.
         if (
@@ -901,7 +896,12 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             and self.tokenizer.pad_token_id is not None
             and self.model.generation_config.pad_token_id is None
         ):
-            self._forward_params["pad_token_id"] = self.tokenizer.pad_token_id
+            kwargs["pad_token_id"] = self.tokenizer.pad_token_id
+
+        self.call_count = 0
+        self._batch_size = kwargs.pop("batch_size", None)
+        self._num_workers = kwargs.pop("num_workers", None)
+        self._preprocess_params, self._forward_params, self._postprocess_params = self._sanitize_parameters(**kwargs)
 
         if self.image_processor is None and self.feature_extractor is not None:
             if isinstance(self.feature_extractor, BaseImageProcessor):
