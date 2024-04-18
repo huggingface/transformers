@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tests for the Wav2Vec2Phoneme tokenizer."""
+
 import json
 import os
 import unittest

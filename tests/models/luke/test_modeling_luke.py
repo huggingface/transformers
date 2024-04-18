@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch LUKE model. """
+"""Testing suite for the PyTorch LUKE model."""
+
 import unittest
 
 from transformers import LukeConfig, is_torch_available
