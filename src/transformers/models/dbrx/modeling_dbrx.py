@@ -335,9 +335,6 @@ class DbrxFlashAttention2(DbrxAttention):
     """
 
     def __init__(self, *args: Any, **kwargs: Any):
-        if not is_flash_attn_2_available():
-            raise ImportError("Flash Attention 2 is not available. Please install it with `pip install flash-attn`.")
-
         super().__init__(*args, **kwargs)
 
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
