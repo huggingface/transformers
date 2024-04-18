@@ -46,12 +46,16 @@ class SentencePieceUnigramTokenizer(BaseTokenizer):
         )
         tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
-                pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space),
+                pre_tokenizers.Metaspace(
+                    replacement=replacement, add_prefix_space="always" if add_prefix_space else "never"
+                ),
                 pre_tokenizers.Digits(individual_digits=True),
                 pre_tokenizers.Punctuation(),
             ]
         )
-        tokenizer.decoder = decoders.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
+        tokenizer.decoder = decoders.Metaspace(
+            replacement=replacement, add_prefix_space="always" if add_prefix_space else "never"
+        )
 
         tokenizer.post_processor = TemplateProcessing(
             single=f"$A {self.special_tokens['eos']['token']}",
