@@ -611,7 +611,7 @@ class JetMoeRMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-# copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding
 class JetMoeRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
