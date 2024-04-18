@@ -4645,7 +4645,7 @@ try:
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from .utils import (
-        dummy_torchaudio_objects,	
+        dummy_torchaudio_objects,
     )
 
     _import_structure["utils.dummy_torchaudio_objects"] = [
