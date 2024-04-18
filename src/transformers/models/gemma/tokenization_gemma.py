@@ -77,8 +77,6 @@ class GemmaTokenizer(PreTrainedTokenizer):
             extra spaces.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Gemma should be used.
-        spaces_between_special_tokens (`bool`, *optional*, defaults to `False`):
-            Whether or not to add spaces between special tokens.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -96,7 +94,6 @@ class GemmaTokenizer(PreTrainedTokenizer):
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
         use_default_system_prompt=False,
-        spaces_between_special_tokens=False,
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -123,7 +120,6 @@ class GemmaTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             use_default_system_prompt=use_default_system_prompt,
-            spaces_between_special_tokens=spaces_between_special_tokens,
             **kwargs,
         )
 

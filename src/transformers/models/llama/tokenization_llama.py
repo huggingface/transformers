@@ -95,8 +95,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
             extra spaces.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used.
-        spaces_between_special_tokens (`bool`, *optional*, defaults to `False`):
-            Whether or not to add spaces between special tokens.
         legacy (`bool`, *optional*):
             Whether or not the `legacy` behavior of the tokenizer should be used. Legacy is before the merge of #24622
             and #25224 which includes fixes to properly handle tokens that appear after special tokens. A simple
@@ -140,7 +138,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
         use_default_system_prompt=False,
-        spaces_between_special_tokens=False,
         legacy=None,
         add_prefix_space=True,
         **kwargs,
@@ -179,7 +176,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             use_default_system_prompt=use_default_system_prompt,
-            spaces_between_special_tokens=spaces_between_special_tokens,
             legacy=legacy,
             add_prefix_space=add_prefix_space,
             **kwargs,
