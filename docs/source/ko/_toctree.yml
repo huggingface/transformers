@@ -29,7 +29,8 @@
     title: 대규모 언어 모델로 생성하기
   title: 튜토리얼
 - sections:
-  - sections:
+  - isExpanded: false
+    sections:
       - local: tasks/sequence_classification
         title: 텍스트 분류
       - local: tasks/token_classification
@@ -47,15 +48,15 @@
       - local: tasks/multiple_choice
         title: 객관식 문제(Multiple Choice)
     title: 자연어처리
-    isExpanded: false
-  - sections:
+  - isExpanded: false
+    sections:
       - local: tasks/audio_classification
         title: 오디오 분류
       - local: tasks/asr
         title: 자동 음성 인식
     title: 오디오
-    isExpanded: false
-  - sections:
+  - isExpanded: false
+    sections:
       - local: tasks/image_classification
         title: 이미지 분류
       - local: tasks/semantic_segmentation
@@ -70,83 +71,114 @@
         title: 제로샷(zero-shot) 이미지 분류
       - local: tasks/monocular_depth_estimation
         title: 단일 영상 기반 깊이 추정
+      - local: in_translation
+        title: (번역중) Image-to-Image
+      - local: in_translation
+        title: (번역중) Image Feature Extraction
+      - local: in_translation
+        title: (번역중) Mask Generation
+      - local: in_translation
+        title: (번역중) Knowledge Distillation for Computer Vision
     title: 컴퓨터 비전
-    isExpanded: false
-  - sections:
+  - isExpanded: false
+    sections:
       - local: tasks/image_captioning
         title: 이미지 캡셔닝
       - local: tasks/document_question_answering
         title: 문서 질의 응답(Document Question Answering)
       - local: tasks/visual_question_answering
         title: 시각적 질의응답 (Visual Question Answering)
+      - local: in_translation
+        title: (번역중) Text to speech
     title: 멀티모달
-    isExpanded: false
-  title: 태스크 가이드
-- sections:
-    - local: fast_tokenizers
-      title: 🤗 Tokenizers 라이브러리에서 토크나이저 사용하기
-    - local: multilingual
-      title: 다국어 모델 추론하기
+  - isExpanded: false
+    sections:
     - local: generation_strategies
       title: 텍스트 생성 전략 사용자 정의
-    - local: create_a_model
-      title: 모델별 API 사용하기
-    - local: custom_models
-      title: 사용자 정의 모델 공유하기
-    - local: sagemaker
-      title: Amazon SageMaker에서 학습 실행하기
-    - local: serialization
-      title: ONNX로 내보내기
-    - local: tflite
-      title: TFLite로 내보내기
-    - local: torchscript
-      title: TorchScript로 내보내기
+    title: 생성
+  - isExpanded: false
+    sections:
     - local: in_translation
-      title: (번역중) Benchmarks
+      title: (번역중) Image tasks with IDEFICS
     - local: in_translation
-      title: (번역중) Notebooks with examples
-    - local: community
-      title: 커뮤니티 리소스
-    - local: custom_tools
-      title: 사용자 정의 도구와 프롬프트
-    - local: troubleshooting
-      title: 문제 해결
+      title: (번역중) LLM prompting guide
+    title: (번역중) 프롬프팅
+  title: 태스크 가이드
+- sections:
+  - local: fast_tokenizers
+    title: 🤗 Tokenizers 라이브러리에서 토크나이저 사용하기
+  - local: multilingual
+    title: 다국어 모델 추론하기
+  - local: create_a_model
+    title: 모델별 API 사용하기
+  - local: custom_models
+    title: 사용자 정의 모델 공유하기
+  - local: in_translation
+    title: (번역중) Templates for chat models
+  - local: in_translation
+    title: (번역중) Trainer
+  - local: sagemaker
+    title: Amazon SageMaker에서 학습 실행하기
+  - local: serialization
+    title: ONNX로 내보내기
+  - local: tflite
+    title: TFLite로 내보내기
+  - local: torchscript
+    title: TorchScript로 내보내기
+  - local: in_translation
+    title: (번역중) Benchmarks
+  - local: in_translation
+    title: (번역중) Notebooks with examples
+  - local: community
+    title: 커뮤니티 리소스
+  - local: custom_tools
+    title: 사용자 정의 도구와 프롬프트
+  - local: troubleshooting
+    title: 문제 해결
+  - local: in_translation
+    title: (번역중) Contribute new quantization method
   title: (번역중) 개발자 가이드
 - sections:
-    - local: performance
-      title: 성능 및 확장성
+  - local: performance
+    title: 성능 및 확장성
+  - local: in_translation
+    title: (번역중) Quantization
+  - sections:
     - local: in_translation
       title: (번역중) Training on one GPU
     - local: perf_train_gpu_many
       title: 다중 GPU에서 훈련 진행하기
+    - local: in_translation
+      title: (번역중) Fully Sharded Data Parallel
+    - local: in_translation
+      title: (번역중) DeepSpeed
     - local: perf_train_cpu
       title: CPU에서 훈련
     - local: perf_train_cpu_many
       title: 다중 CPU에서 훈련하기
-    - local: in_translation
-      title: (번역중) Training on TPUs
     - local: perf_train_tpu_tf
       title: TensorFlow로 TPU에서 훈련하기
     - local: in_translation
-      title: (번역중) Training on Specialized Hardware
+      title: (번역중) PyTorch training on Apple silicon
+    - local: perf_hardware
+      title: 훈련용 사용자 맞춤형 하드웨어
+    - local: hpo_train
+      title: Trainer API를 사용한 하이퍼파라미터 탐색
+    title: (번역중) 효율적인 학습 기술들
+  - sections:
     - local: perf_infer_cpu
       title: CPU로 추론하기
     - local: perf_infer_gpu_one
       title: 하나의 GPU를 활용한 추론
-    - local: perf_infer_gpu_many
-      title: 다중 GPU에서 추론
-    - local: in_translation
-      title: (번역중) Inference on Specialized Hardware
-    - local: perf_hardware
-      title: 훈련용 사용자 맞춤형 하드웨어
-    - local: big_models
-      title: 대형 모델을 인스턴스화
-    - local: debugging
-      title: 디버깅
-    - local: hpo_train
-      title: Trainer API를 사용한 하이퍼파라미터 탐색
-    - local: tf_xla
-      title: TensorFlow 모델을 위한 XLA 통합
+    title: 추론 최적화하기
+  - local: big_models
+    title: 대형 모델을 인스턴스화
+  - local: debugging
+    title: 디버깅
+  - local: tf_xla
+    title: TensorFlow 모델을 위한 XLA 통합
+  - local: in_translation
+    title: (번역중) Optimize inference using `torch.compile()`
   title: (번역중) 성능 및 확장성
 - sections:
     - local: contributing
@@ -162,7 +194,6 @@
     - local: pr_checks
       title: Pull Request에 대한 검사
   title: (번역중) 기여하기
-
 - sections:
   - local: philosophy
     title: 이념과 목표
@@ -188,11 +219,17 @@
     title: 추론 웹 서버를 위한 파이프라인
   - local: model_memory_anatomy
     title: 모델 학습 해부하기
+  - local: in_translation
+    title: (번역중) Getting the most out of LLMs
   title: (번역중) 개념 가이드
 - sections:
   - sections:
     - local: in_translation
+      title: (번역중) Agents and Tools
+    - local: in_translation
       title: (번역중) Auto Classes
+    - local: in_translation
+      title: (번역중) Backbones
     - local: in_translation
       title: (번역중) Callbacks
     - local: in_translation
@@ -224,7 +261,7 @@
     - local: in_translation
       title: (번역중) Trainer
     - local: in_translation
-      title: (번역중) DeepSpeed Integration
+      title: (번역중) DeepSpeed
     - local: in_translation
       title: (번역중) Feature Extractor
     - local: in_translation

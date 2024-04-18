@@ -165,6 +165,7 @@ docs/source/en/model_doc/megatron-bert.md
 docs/source/en/model_doc/megatron_gpt2.md
 docs/source/en/model_doc/mgp-str.md
 docs/source/en/model_doc/mistral.md
+docs/source/en/model_doc/mixtral.md
 docs/source/en/model_doc/mluke.md
 docs/source/en/model_doc/mms.md
 docs/source/en/model_doc/mobilebert.md
@@ -630,6 +631,8 @@ src/transformers/models/instructblip/configuration_instructblip.py
 src/transformers/models/instructblip/convert_instructblip_original_to_pytorch.py
 src/transformers/models/instructblip/modeling_instructblip.py
 src/transformers/models/instructblip/processing_instructblip.py
+src/transformers/models/jamba/configuration_jamba.py
+src/transformers/models/jamba/modeling_jamba.py
 src/transformers/models/jukebox/configuration_jukebox.py
 src/transformers/models/jukebox/convert_jukebox.py
 src/transformers/models/jukebox/modeling_jukebox.py
@@ -768,6 +771,7 @@ src/transformers/models/rag/modeling_tf_rag.py
 src/transformers/models/rag/retrieval_rag.py
 src/transformers/models/realm/modeling_realm.py
 src/transformers/models/realm/retrieval_realm.py
+src/transformers/models/recurrent_gemma/modeling_recurrent_gemma.py
 src/transformers/models/reformer/convert_reformer_trax_checkpoint_to_pytorch.py
 src/transformers/models/regnet/configuration_regnet.py
 src/transformers/models/regnet/convert_regnet_seer_10b_to_pytorch.py
