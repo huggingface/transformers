@@ -37,11 +37,7 @@ from .configuration_dbrx import DbrxConfig
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import (
-        index_first_axis,
-        pad_input,  # noqa
-        unpad_input,
-    )
+    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 logger = logging.get_logger(__name__)
 
@@ -224,11 +220,7 @@ def _get_unpad_data(attention_mask):
 class DbrxAttention(nn.Module):
     """Multi-head self attention."""
 
-    def __init__(
-        self,
-        config: DbrxConfig,
-        block_idx: Optional[int] = None,
-    ):
+    def __init__(self, config: DbrxConfig, block_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.hidden_size = config.d_model
@@ -1250,7 +1242,7 @@ class DbrxForCausalLM(DbrxPreTrainedModel):
         >> from transformers import AutoTokenizer, DbrxForCausalLM
 
         >> model = DbrxForCausalLM.from_pretrained("databricks/dbrx-instruct")
-        >> tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct", trust_remote_code=True)
+        >> tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct")
 
         >> prompt = "Hey, are you conscious? Can you talk to me?"
         >> inputs = tokenizer(prompt, return_tensors="pt")
