@@ -448,7 +448,7 @@ agent.toolbox.update_tool()
 ### Leverage gradio-tools
 
 [gradio-tools](https://github.com/freddyaboulton/gradio-tools) is a powerful library that allows using Hugging
-Face Spaces as tools. It supports many existing Spaces as well as custom Spaces to be designed with it.
+Face Spaces as tools. It supports many existing Spaces as well as custom Spaces.
 
 We offer support for `gradio_tools` by using the `Tool.from_gradio` method. For example, we want to take
 advantage of the `StableDiffusionPromptGeneratorTool` tool offered in the `gradio-tools` toolkit so as to
