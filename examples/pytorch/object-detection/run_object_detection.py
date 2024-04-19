@@ -40,7 +40,7 @@ from transformers.image_processing_utils import BatchFeature
 from transformers.image_transforms import center_to_corners_format
 from transformers.trainer import EvalPrediction
 from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version
+from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
@@ -343,7 +343,7 @@ def main():
 
     # # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    # send_example_telemetry("run_object_detection", model_args, data_args)
+    send_example_telemetry("run_object_detection", model_args, data_args)
 
     # Setup logging
     logging.basicConfig(
@@ -391,13 +391,6 @@ def main():
     # ------------------------------------------------------------------------------------------------
 
     dataset = load_dataset(data_args.dataset_name, cache_dir=model_args.cache_dir)
-
-    # if data_args.dataset_name == "cppe-5":
-    #     # Remove bad annotated images, this is dataset specific option
-    #     # Some images have boxes outside of the image, remove them for simplicity
-    #     remove_idx = [590, 821, 822, 875, 876, 878, 879]
-    #     keep = [i for i in range(len(dataset["train"])) if i not in remove_idx]
-    #     dataset["train"] = dataset["train"].select(keep)
 
     # If we don't have a validation split, split off a percentage of train as validation
     data_args.train_val_split = None if "valid" in dataset.keys() else data_args.train_val_split
