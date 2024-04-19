@@ -1838,7 +1838,7 @@ class TrainingArguments:
             if str(sync_module_states).lower() == "false" and str(cpu_ram_efficient_loading).lower() == "true":
                 # In this case, all the processes except the main process would have random weights leading
                 # to unexpected behaviour during training, thus throwing error here to prevent it.
-                raise ValueError("`sync_module_states` must be `\"True\"` if `cpu_ram_efficient_loading` is `\"True\"`")
+                raise ValueError('`sync_module_states` must be `"True"` if `cpu_ram_efficient_loading` is `"True"`')
 
             os.environ[f"{prefix}SYNC_MODULE_STATES"] = sync_module_states
             os.environ[f"{prefix}CPU_RAM_EFFICIENT_LOADING"] = cpu_ram_efficient_loading
