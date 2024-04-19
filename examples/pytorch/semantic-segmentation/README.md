@@ -118,7 +118,7 @@ python run_semantic_segmentation.py \
     --per_device_eval_batch_size 8 \
     --logging_strategy steps \
     --logging_steps 100 \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --save_strategy epoch \
     --seed 1337
 ```

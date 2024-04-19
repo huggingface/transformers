@@ -232,7 +232,7 @@ A este punto, solo faltan tres pasos:
 ```py
 >>> training_args = TrainingArguments(
 ...     output_dir="./results",
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     learning_rate=2e-5,
 ...     weight_decay=0.01,
 ... )
@@ -338,7 +338,7 @@ A este punto, solo faltan tres pasos:
 ```py
 >>> training_args = TrainingArguments(
 ...     output_dir="./results",
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     learning_rate=2e-5,
 ...     num_train_epochs=3,
 ...     weight_decay=0.01,
