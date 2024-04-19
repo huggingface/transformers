@@ -108,7 +108,6 @@ def decoder_config_from_checkpoint(checkpoint: str) -> MusicgenDecoderConfig:
             f"for the stereo checkpoints, or a custom checkpoint with the checkpoint size as a suffix, got {checkpoint}."
         )
 
-
     if "stereo" in checkpoint:
         audio_channels = 2
         num_codebooks = 8
