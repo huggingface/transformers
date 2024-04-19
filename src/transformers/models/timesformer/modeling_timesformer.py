@@ -472,6 +472,7 @@ class TimesformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "timesformer"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["TimesformerLayer"]
 
     def _init_weights(self, module):
         if isinstance(module, (nn.Linear, nn.Conv2d)):
