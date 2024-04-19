@@ -436,13 +436,8 @@ this generates the following audio.
 | <audio controls><source src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/damo.wav" type="audio/wav"/> |
 
 
-<Tip>
-
-The agent's prompt will reflect the new tool description. But beware when adding tools to an agent that already works well!
-It can result in your tool being selected way more than others or for other
-tools to be selected instead of the one you have defined.
-
-</Tip>
+> [!WARNING]
+> Beware when adding tools to an agent that already works well because it can bias selection towards your tool or select another tool other than the one already defined.
 
 
 Replacing existing tools can be done simply by updating the agent's toolbox using method `agent.toolbox.update_tool()`.
