@@ -302,7 +302,7 @@ At this point, only three steps remain:
 >>> training_args = TrainingArguments(
 ...     output_dir="my_awesome_food_model",
 ...     remove_unused_columns=False,
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     save_strategy="epoch",
 ...     learning_rate=5e-5,
 ...     per_device_train_batch_size=16,

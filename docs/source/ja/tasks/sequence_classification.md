@@ -324,7 +324,7 @@ pip install -q datasets transformers evaluate
 ...     per_device_train_batch_size=2,
 ...     per_device_eval_batch_size=2,
 ...     save_total_limit=3,
-...     evaluation_strategy="steps",
+...     eval_strategy="steps",
 ...     save_strategy="steps",
 ...     save_steps=20,
 ...     eval_steps=20,

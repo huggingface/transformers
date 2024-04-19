@@ -362,7 +362,11 @@ template for your tokenizer is by checking the `tokenizer.default_chat_template`
 This is something we do purely for backward compatibility reasons, to avoid breaking any existing workflows. Even when
 the class template is appropriate for your model, we strongly recommend overriding the default template by
 setting the `chat_template` attribute explicitly to make it clear to users that your model has been correctly configured
-for chat, and to future-proof in case the default templates are ever altered or deprecated.
+for chat.
+
+Now that actual chat templates have been adopted more widely, default templates have been deprecated and will be
+removed in a future release. We strongly recommend setting the `chat_template` attribute for any tokenizers that
+still depend on them!
 
 ### What template should I use?
 
@@ -374,8 +378,8 @@ best performance for inference or fine-tuning when you precisely match the token
 
 If you're training a model from scratch, or fine-tuning a base language model for chat, on the other hand,
 you have a lot of freedom to choose an appropriate template! LLMs are smart enough to learn to handle lots of different
-input formats. Our default template for models that don't have a class-specific template follows the 
-`ChatML` format, and this is a good, flexible choice for many use-cases. It looks like this:
+input formats. One popular choice is the `ChatML` format, and this is a good, flexible choice for many use-cases. 
+It looks like this:
 
 ```
 {% for message in messages %}

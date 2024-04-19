@@ -399,7 +399,7 @@ In this case the `output_dir` will also be the name of the repo where your model
 ...     num_train_epochs=20,
 ...     save_steps=200,
 ...     logging_steps=50,
-...     evaluation_strategy="steps",
+...     eval_strategy="steps",
 ...     learning_rate=5e-5,
 ...     save_total_limit=2,
 ...     remove_unused_columns=False,
