@@ -21,12 +21,12 @@ from enum import Enum
 from ast import literal_eval
 from dataclasses import dataclass
 from typing import Dict, Union, List, Optional
-from huggingface_hub import hf_hub_download, list_spaces
+from huggingface_hub import hf_hub_download, list_spaces, InferenceClient
 from math import sqrt
 
 from ..utils import is_offline_mode, logging
-from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, get_tool_description_with_args, load_tool, supports_remote, OPENAI_TOOL_DESCRIPTION_TEMPLATE,DEFAULT_TOOL_DESCRIPTION_TEMPLATE
-from .prompts import DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT
+from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, get_tool_description_with_args, load_tool, supports_remote, OPENAI_TOOL_DESCRIPTION_TEMPLATE, DEFAULT_TOOL_DESCRIPTION_TEMPLATE
+from .prompts import DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_CODE_SYSTEM_PROMPT
 from .python_interpreter import evaluate_python_code
 from PIL import Image
 
@@ -76,8 +76,9 @@ class FinalAnswerTool(Tool):
     inputs = {"answer": {"type": str, "description": "The final answer to the problem"}}
     output_type = str
 
-    def __call__(self):
-        pass
+    def __call__(self, args):
+        return args
+
 
 class MessageRole(str, Enum):
     USER = "user"
@@ -168,10 +169,18 @@ def parse_json_blob(json_blob: str):
     try:
         first_accolade_index =  json_blob.find("{")
         last_accolade_index = [a.start() for a in list(re.finditer('}', json_blob))][-1]
-        json_blob = json_blob[first_accolade_index:last_accolade_index+1].replace("\\", "")
+        json_blob = json_blob[first_accolade_index:last_accolade_index+1]
         return json.loads(json_blob)
     except Exception as e:
         raise ValueError(f"The JSON blob you used is invalid: due to the following error: {e}. Make sure to correct its formatting.")
+
+def parse_code_blob(code_blob: str):
+    try:
+        pattern = r'```(?:py)?\n(.*?)```' 
+        match = re.search(pattern, code_blob, re.DOTALL)
+        return match.group(1)
+    except Exception as e:
+        raise ValueError(f"The code blob you used is invalid: due to the following error: {e}. This means that the regex pattern {pattern} was not respected. Make sure to correct its formatting.")
 
 
 def parse_json_tool_call(json_blob: str):
@@ -326,11 +335,12 @@ llama_role_conversions = {
     MessageRole.TOOL_RESPONSE: MessageRole.USER,
 }
 
-class LLMEngine:
-    def __init__(self, client):
-        self.client = client
 
-    def call(self, messages: List[Dict[str, str]], stop=["Output:"]) -> str:
+class HfEngine:
+    def __init__(self, repo_id: str = "meta-llama/Meta-Llama-3-70B-Instruct"):
+        self.client = InferenceClient(model=repo_id, timeout=120)
+
+    def call(self, messages: List[Dict[str, str]], stop=["Output:", "assistant"]) -> str:
         # Get clean message list
         messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
 
@@ -368,6 +378,7 @@ class Agent:
         self.log = logger
         self.tool_parser = tool_parser
 
+        print(tools)
         self._toolbox = Toolbox(tools, add_base_tools=add_base_tools)
 
         self.system_prompt = format_prompt(self._toolbox, self.system_prompt_template, self.tool_description_template)
@@ -402,7 +413,7 @@ class Agent:
         for step_log in self.logs[1:]:
             thought_message = {
                 "role": MessageRole.ASSISTANT,
-                "content": "Thought: " + step_log["llm_output"] + "\n"
+                "content": step_log["llm_output"] + "\n"
             }
             memory.append(thought_message)
 
@@ -420,7 +431,6 @@ class Agent:
 
     def show_message_history(self):
         self.log.info('\n'.join(self.messages))
-
 
 
     def extract_action(self, llm_output: str, split_token: str) -> str:
@@ -467,7 +477,7 @@ class Agent:
 
         except Exception as e:
             raise AgentExecutionError(
-                f"Error in tool call execution: {e}.\nYour input was probably incorrect.\n"
+                f"Error in tool call execution: {e}.\nYou provided an incorrect input to the tool.\n"
                 f"As a reminder, this tool's description is the following:\n{get_tool_description_with_args(self.toolbox.tools[tool_name])}"
             )
     
@@ -652,6 +662,8 @@ class ReactAgent(Agent):
                 '<<additional_args>>',
                 f"You have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: {str(self.state)}."
             )
+        else:
+            self.system_prompt = self.system_prompt.replace('<<additional_args>>', '')
 
         self.log.info("=====New task=====")
         self.log.debug("System prompt is as follows:")
@@ -679,6 +691,25 @@ class ReactAgent(Agent):
         return final_answer
     
 
+class ReactJSONAgent(ReactAgent):
+    def __init__(
+        self, 
+        llm_engine, 
+        system_prompt=DEFAULT_REACT_SYSTEM_PROMPT, 
+        tool_description_template=None,
+        max_iterations=5,
+        llm_engine_grammar=None,
+        **kwargs
+    ):
+        super().__init__(
+            llm_engine, 
+            system_prompt=system_prompt,
+            tool_description_template=tool_description_template if tool_description_template else self.default_tool_description_template,
+            max_iterations=max_iterations,
+            llm_engine_grammar=llm_engine_grammar,
+            **kwargs
+        )
+
     def step(self):
         """
         Runs agent step with the current prompt (task + state).
@@ -696,10 +727,11 @@ class ReactAgent(Agent):
         self.log.info("=====Calling LLM with these messages:=====")
         self.log.info(agent_memory)
 
+
         if self.llm_engine_grammar:
-            llm_output = self.llm_engine(self.prompt, stop=["Observation:"], grammar=self.llm_engine_grammar)
+            llm_output = self.llm_engine(self.prompt, stop=["Observation:", "assistant"], grammar=self.llm_engine_grammar)
         else:
-            llm_output = self.llm_engine(self.prompt, stop=["Observation:"])
+            llm_output = self.llm_engine(self.prompt, stop=["Observation:", "assistant"])
         self.log.debug("=====Output message of the LLM:=====")
         self.log.debug(llm_output)
         self.logs[-1]["llm_output"] = llm_output
@@ -749,4 +781,95 @@ class ReactAgent(Agent):
             
             self.log.info(updated_information)
             self.logs[-1]["observation"] = updated_information
+            return None
+        
+
+class ReactCodeAgent(ReactAgent):
+    """
+    A class for an agent that solves the given task step by step, using the ReAct framework.
+    While the objective is not reached, the agent will perform a cycle of thinking and acting.
+    Contrary to the standard ReAct Agent, this agent can execute a whole blob of code, thus performing many actions at a time.
+    """
+    def __init__(
+            self, 
+            llm_engine, 
+            system_prompt=DEFAULT_REACT_CODE_SYSTEM_PROMPT, 
+            tool_description_template=None,
+            max_iterations=5,
+            llm_engine_grammar=None,
+            **kwargs
+        ):
+        
+        super().__init__(
+            llm_engine, 
+            system_prompt=system_prompt,
+            tool_description_template=tool_description_template if tool_description_template else self.default_tool_description_template,
+            max_iterations=max_iterations,
+            llm_engine_grammar = llm_engine_grammar,
+            **kwargs
+        )
+    
+
+    def step(self):
+        """
+        Runs agent step with the current prompt (task + state).
+        """
+        agent_memory = self.get_inner_memory_from_logs()
+        self.logs[-1]["agent_memory"] = agent_memory.copy()
+
+        self.prompt = agent_memory
+
+        self.log.debug("=====New step=====")
+
+        # Add new step in logs
+        self.logs.append({})
+
+        self.log.info("=====Calling LLM with these messages:=====")
+        self.log.info(agent_memory)
+
+
+        if self.llm_engine_grammar:
+            llm_output = self.llm_engine(self.prompt, stop=["Observation:", "assistant", "<end_code>"], grammar=self.llm_engine_grammar)
+        else:
+            llm_output = self.llm_engine(self.prompt, stop=["Observation:", "assistant", "<end_code>"])
+        self.log.debug("=====Output message of the LLM:=====")
+        self.log.debug(llm_output)
+        self.logs[-1]["llm_output"] = llm_output
+
+        # Parse
+        self.log.debug("=====Extracting action=====")
+        rationale, code_action = self.extract_action(
+            llm_output=llm_output,
+            split_token="Code:"
+        )
+        
+        self.logs[-1]["rationale"] = rationale
+        self.logs[-1]["tool_call"] = {
+            "tool_name": 'code interpreter',
+            "tool_arguments": code_action
+        }
+    
+        # Execute
+        try: 
+            code_action = parse_code_blob(code_action)
+        except Exception as e:
+            error_msg = f"Error in code parsing: {e}. Be sure to provide correct code"
+            self.log.error(error_msg)
+            raise AgentParsingError(error_msg)
+        
+        # Execute
+        try:
+            self.log.info("\n\n==Executing the code below:==")
+            self.log.info(code_action)
+            available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools} 
+            result = evaluate_python_code(code_action, available_tools, state=self.state)
+            self.logs[-1]["observation"] = result
+        except Exception as e:
+            error_msg = f"Error in execution: {e}. Be sure to provide correct code."
+            self.log.error(error_msg, exc_info=1)
+            raise AgentExecutionError(error_msg)
+        for line in code_action.split('\n'):
+            if line[:len('final_answer')] == 'final_answer':
+                return result
+        else:
             return None

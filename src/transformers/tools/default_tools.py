@@ -39,6 +39,8 @@ class CalculatorTool(Tool):
         self.numexpr = numexpr
 
     def __call__(self, expression):
+        if type(expression) != str:
+            expression = expression['expression']
         local_dict = {"pi": math.pi, "e": math.e}
         output = str(
             self.numexpr.evaluate(

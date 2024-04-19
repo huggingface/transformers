@@ -480,10 +480,9 @@ def get_tool_description_with_args(
     tool: Tool, description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE
 ) -> str:
     compiled_template = compile_jinja_template(description_template)
-    rendered = compiled_template.render(
+    return compiled_template.render(
         tool=tool,  # **self.special_tokens_map
     )
-    return rendered
 
 
 @lru_cache

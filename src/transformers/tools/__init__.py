@@ -67,7 +67,7 @@ if TYPE_CHECKING:
         from .text_to_speech import TextToSpeechTool
         from .translation import TranslationTool
         from .default_tools import CalculatorTool, PythonEvaluatorTool
-        from .agents import ReactAgent, CodeAgent
+        from .agents import ReactJSONAgent, CodeAgent, ReactCodeAgent
 else:
     import sys
 
