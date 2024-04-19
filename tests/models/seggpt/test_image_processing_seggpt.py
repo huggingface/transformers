@@ -148,7 +148,7 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         mask_binary = prepare_mask()
         mask_rgb = mask_binary.convert("RGB")
 
-        inputs_binary = image_processor(images=None, prompt_masks=mask_binary, return_tensors="pt")
+        inputs_binary = image_processor(images=None, segmentation_maps=mask_binary, return_tensors="pt")
         inputs_rgb = image_processor(images=None, prompt_masks=mask_rgb, return_tensors="pt")
 
         self.assertTrue((inputs_binary["prompt_masks"] == inputs_rgb["prompt_masks"]).all().item())
@@ -244,9 +244,9 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_pt_2d = torch.ones((image_size, image_size))
         image_pil_2d = Image.fromarray(image_np_2d)
 
-        inputs_np_2d = image_processor(images=None, prompt_masks=image_np_2d, return_tensors="pt")
-        inputs_pt_2d = image_processor(images=None, prompt_masks=image_pt_2d, return_tensors="pt")
-        inputs_pil_2d = image_processor(images=None, prompt_masks=image_pil_2d, return_tensors="pt")
+        inputs_np_2d = image_processor(images=None, segmentation_maps=image_np_2d, return_tensors="pt")
+        inputs_pt_2d = image_processor(images=None, segmentation_maps=image_pt_2d, return_tensors="pt")
+        inputs_pil_2d = image_processor(images=None, segmentation_maps=image_pil_2d, return_tensors="pt")
 
         self.assertTrue((inputs_np_2d["prompt_masks"] == inputs_pt_2d["prompt_masks"]).all().item())
         self.assertTrue((inputs_np_2d["prompt_masks"] == inputs_pil_2d["prompt_masks"]).all().item())
@@ -272,8 +272,8 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_np_2d_batched = np.ones((2, image_size, image_size))
         image_pt_2d_batched = torch.ones((2, image_size, image_size))
 
-        inputs_np_2d_batched = image_processor(images=None, prompt_masks=image_np_2d_batched, return_tensors="pt")
-        inputs_pt_2d_batched = image_processor(images=None, prompt_masks=image_pt_2d_batched, return_tensors="pt")
+        inputs_np_2d_batched = image_processor(images=None, segmentation_maps=image_np_2d_batched, return_tensors="pt")
+        inputs_pt_2d_batched = image_processor(images=None, segmentation_maps=image_pt_2d_batched, return_tensors="pt")
 
         self.assertTrue((inputs_np_2d_batched["prompt_masks"] == inputs_pt_2d_batched["prompt_masks"]).all().item())
         self.assertEqual(list(inputs_np_2d_batched["prompt_masks"].shape), expected_batched_shape)
