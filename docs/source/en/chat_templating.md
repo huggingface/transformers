@@ -362,7 +362,11 @@ template for your tokenizer is by checking the `tokenizer.default_chat_template`
 This is something we do purely for backward compatibility reasons, to avoid breaking any existing workflows. Even when
 the class template is appropriate for your model, we strongly recommend overriding the default template by
 setting the `chat_template` attribute explicitly to make it clear to users that your model has been correctly configured
-for chat, and to future-proof in case the default templates are ever altered or deprecated.
+for chat.
+
+Now that actual chat templates have been adopted more widely, default templates have been deprecated and will be
+removed in a future release. We strongly recommend setting the `chat_template` attribute for any tokenizers that
+still depend on them!
 
 ### What template should I use?
 
