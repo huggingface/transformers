@@ -930,16 +930,15 @@ class ModelUtilsTest(TestCasePlus):
             presaved_output = offloaded_model(input_tokens)[0]
             presaved_memory = psutil.virtual_memory().used
             offloaded_model.save_pretrained(
-                tmp_dir, max_shard_size="500KB"
+                tmp_dir, max_shard_size="200KB"
             )  # model is 1.6MB, max shard size is allocated to cpu by default
             postsaved_memory = psutil.virtual_memory().used
             saved_model = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map=device_map)
             postsaved_output = saved_model(input_tokens)[0]
 
-        print(presaved_memory, postsaved_memory)
         self.assertTrue(
-            postsaved_memory - presaved_memory < 6e5
-        )  # shard size (2e5) plus buffer, will fail if shard is too large
+            postsaved_memory - presaved_memory < 7e5
+        )  # shard size (2e5) plus buffer (~4e5), will fail if shard is too large
         self.assertTrue(torch.allclose(cpu_output, presaved_output, atol=1e-4))
         self.assertTrue(torch.allclose(presaved_output, postsaved_output))
 
