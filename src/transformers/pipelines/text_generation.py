@@ -37,10 +37,10 @@ class Chat:
 class TextGenerationPipeline(Pipeline):
     """
     Language generation pipeline using any `ModelWithLMHead`. This pipeline predicts the words that will follow a
-    specified text prompt. It can also accept one or more chats. Each chat takes the form of a list of dicts,
-    where each dict contains "role" and "content" keys.
+    specified text prompt. When the underlying model is a conversational model, it can also accept one or more chats.
+    Each chat takes the form of a list of dicts, where each dict contains "role" and "content" keys.
 
-    Example:
+    Examples:
 
     ```python
     >>> from transformers import pipeline
@@ -49,6 +49,19 @@ class TextGenerationPipeline(Pipeline):
     >>> generator("I can't believe you did such a ", do_sample=False)
     [{'generated_text': "I can't believe you did such a icky thing to me. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I"}]
 
+    >>> # These parameters will return suggestions, and only the newly created text making it easier for prompting suggestions.
+    >>> outputs = generator("My tart needs some", num_return_sequences=4, return_full_text=False)
+    ```
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> generator = pipeline(model="HuggingFaceH4/zephyr-7b-beta")
+    >>> generator([{"role": "user", "content": "What is the capital of France? Answer in one word."}], do_sample=False, max_new_tokens=2)
+    [{'generated_text': [{'role': 'user', 'content': 'What is the capital of France? Answer in one word.'}, {'role': 'assistant', 'content': 'Paris'}]}]
+    ```
+
+    ```python
     >>> # These parameters will return suggestions, and only the newly created text making it easier for prompting suggestions.
     >>> outputs = generator("My tart needs some", num_return_sequences=4, return_full_text=False)
     ```
@@ -62,8 +75,9 @@ class TextGenerationPipeline(Pipeline):
     `"text-generation"`.
 
     The models that this pipeline can use are models that have been trained with an autoregressive language modeling
-    objective, which includes the uni-directional models in the library (e.g. openai-community/gpt2). See the list of available models
-    on [huggingface.co/models](https://huggingface.co/models?filter=text-generation).
+    objective. See the list of available [text completion models](https://huggingface.co/models?filter=text-generation)
+    and the list of [conversational models](https://huggingface.co/models?other=conversational)
+    on [huggingface.co/models].
     """
 
     # Prefix text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
@@ -194,8 +208,11 @@ class TextGenerationPipeline(Pipeline):
         Complete the prompt(s) given as inputs.
 
         Args:
-            text_inputs (`str` or `List[str]`):
-                One or several prompts (or one list of prompts) to complete.
+            text_inputs (`str`, `List[str]`, List[Dict[str, str]], `List[List[Dict[str, str]]]`
+                One or several prompts (or one list of prompts) to complete. If strings or a list of string are
+                passed, this pipeline will continue each prompt. Alternatively, a "chat", in the form of a list
+                of dicts with "role" and "content" keys, can be passed, or a list of such chats. When chats are passed,
+                the model's chat template will be used to format them before passing them to the model.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the tensors of predictions (as token indices) in the outputs. If set to
                 `True`, the decoded text is not returned.
@@ -222,7 +239,7 @@ class TextGenerationPipeline(Pipeline):
                 corresponding to your framework [here](./model#generative-models)).
 
         Return:
-            A list or a list of list of `dict`: Returns one of the following dictionaries (cannot return a combination
+            A list or a list of lists of `dict`: Returns one of the following dictionaries (cannot return a combination
             of both `generated_text` and `generated_token_ids`):
 
             - **generated_text** (`str`, present when `return_text=True`) -- The generated text.
