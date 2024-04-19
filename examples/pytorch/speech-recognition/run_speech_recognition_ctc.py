@@ -28,7 +28,6 @@ from typing import Dict, List, Optional, Union
 
 import datasets
 import evaluate
-import numpy as np
 import torch
 from datasets import DatasetDict, load_dataset
 
