@@ -58,13 +58,9 @@ class TextGenerationPipeline(Pipeline):
     >>> from transformers import pipeline
 
     >>> generator = pipeline(model="HuggingFaceH4/zephyr-7b-beta")
+    >>> # Zephyr-beta is a conversational model, so let's pass it a chat instead of a single message
     >>> generator([{"role": "user", "content": "What is the capital of France? Answer in one word."}], do_sample=False, max_new_tokens=2)
     [{'generated_text': [{'role': 'user', 'content': 'What is the capital of France? Answer in one word.'}, {'role': 'assistant', 'content': 'Paris'}]}]
-    ```
-
-    ```python
-    >>> # These parameters will return suggestions, and only the newly created text making it easier for prompting suggestions.
-    >>> outputs = generator("My tart needs some", num_return_sequences=4, return_full_text=False)
     ```
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial). You can pass text
