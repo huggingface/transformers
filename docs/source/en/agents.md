@@ -411,11 +411,9 @@ And the output:
 
 ### Manage agent toolbox
 
-If you have alread initialized an agent, it can be heavy to have to reinitialize it from scratch with your desired set of tools.
+If you have already initialized an agent, it is inconvenient to reinitialize it from scratch with a tool you want to use. With Transformers, you can manage an agent's toolbox by adding or replacing a tool.
 
-So you can also directly add a new tool to the toolbox of an existing agent, or even replace an existing tool.
-
-Let's try to add our `model_download_tool` to an existing agent that we initialized with only the base tools:
+Let's add the `model_download_tool` to an existing agent initialized with only the default toolbox.
 
 ```python
 from transformers import CodeAgent
