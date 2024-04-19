@@ -23,6 +23,7 @@ jobs:
   run_doctests:
     name: " "
     strategy:
+      max-parallel: 8  # 8 jobs at a time
       fail-fast: false
       matrix:
         split_keys: ${{ fromJson(inputs.split_keys) }}

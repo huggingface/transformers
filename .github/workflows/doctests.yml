@@ -52,6 +52,7 @@ jobs:
     name: "Call doctest jobs"
     needs: setup
     strategy:
+      max-parallel: 1  # 1 split at a time (in `doctest_job.yml`, we set `8` to run 8 jobs at the same time)
       fail-fast: false
       matrix:
         split_keys: ${{ fromJson(needs.setup.outputs.split_keys) }}
