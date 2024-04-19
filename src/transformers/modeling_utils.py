@@ -2623,8 +2623,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 safe_save_file(shard, os.path.join(save_directory, shard_file), metadata={"format": "pt"})
             else:
                 save_function(shard, os.path.join(save_directory, shard_file))
-            del shard
-            gc.collect()
 
         if index is None:
             path_to_weights = os.path.join(save_directory, weights_name)
