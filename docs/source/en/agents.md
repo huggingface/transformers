@@ -450,11 +450,9 @@ agent.toolbox.update_tool()
 [gradio-tools](https://github.com/freddyaboulton/gradio-tools) is a powerful library that allows using Hugging
 Face Spaces as tools. It supports many existing Spaces as well as custom Spaces.
 
-We offer support for `gradio_tools` by using the `Tool.from_gradio` method. For example, we want to take
-advantage of the `StableDiffusionPromptGeneratorTool` tool offered in the `gradio-tools` toolkit so as to
-improve our prompts and generate better images.
+Transformers supports `gradio_tools` with the [`Tool.from_gradio`] method. For example, let's use the [`StableDiffusionPromptGeneratorTool`](https://github.com/freddyaboulton/gradio-tools/blob/main/gradio_tools/tools/prompt_generator.py) from `gradio-tools` toolkit for improving prompts to generate better images.
 
-We first import the tool from `gradio_tools` and instantiate it:
+Import and instantiate the tool:
 
 ```python
 from gradio_tools import StableDiffusionPromptGeneratorTool
