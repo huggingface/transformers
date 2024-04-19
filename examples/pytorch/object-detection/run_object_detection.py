@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,21 +13,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
-import json
 import logging
 import os
 import sys
 import warnings
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Optional
+from typing import Any, List, Mapping, Optional, Tuple, Union
 
 import albumentations as A
 import numpy as np
 import torch
 from datasets import load_dataset
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
-from torch.utils.data import DataLoader
 
 import transformers
 from transformers import (
@@ -38,34 +36,39 @@ from transformers import (
     Trainer,
     TrainingArguments,
 )
-from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, send_example_telemetry
-from transformers.utils.versions import require_version
-from transformers import DetrForObjectDetection, DetrImageProcessor
-from typing import List, Tuple
+from transformers.image_processing_utils import BatchFeature
 from transformers.image_transforms import center_to_corners_format
-from typing import Optional, Mapping
 from transformers.trainer import EvalPrediction
+from transformers.trainer_utils import get_last_checkpoint
+from transformers.utils import check_min_version
+from transformers.utils.versions import require_version
+
 
 """Finetuning any 🤗 Transformers model supported by AutoModelForObjectDetection for object detection leveraging the Trainer API."""
-
-os.environ["WANDB_PROJECT"] = "detr-resnet50-cppe5-finetuning"
 
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.40.0.dev0")
-require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/semantic-segmentation/requirements.txt")
+require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/object-detection/requirements.txt")
 
 
-def format_image_annotations_as_coco(image_id: str, category: List[int], area: List[float], bbox: List[Tuple[float]]) -> dict:
+@dataclass
+class ModelOutput:
+    logits: torch.Tensor
+    pred_boxes: torch.Tensor
+
+
+def format_image_annotations_as_coco(
+    image_id: str, category: List[int], area: List[float], bbox: List[Tuple[float]]
+) -> dict:
     """Format one image annotations to COCO format
 
     Args:
         image_id (str): image id. e.g. "0001"
         category (List[int]): list of categories/class labels corresponding to provided bounding boxes
         area (List[float]): list of corresponding areas to provided bounding boxes
-        bbox (List[Tuple[float]]): list of bounding boxes provided in COCO format 
+        bbox (List[Tuple[float]]): list of bounding boxes provided in COCO format
             ([center_x, center_y, width, height] in absolute coordinates)
 
     Returns:
@@ -91,19 +94,40 @@ def format_image_annotations_as_coco(image_id: str, category: List[int], area: L
     }
 
 
-def augment_and_transform_batch(examples, transform, image_processor):
+def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: Tuple[int, int]) -> torch.Tensor:
+    """
+    Convert bounding boxes from YOLO format (x_center, y_center, width, height) in range [0, 1]
+    to Pascal VOC format (x_min, y_min, x_max, y_max) in absolute coordinates.
+
+    Args:
+        boxes (torch.Tensor): Bounding boxes in YOLO format
+        image_size (Tuple[int, int]): Image size in format (height, width)
+
+    Returns:
+        torch.Tensor: Bounding boxes in Pascal VOC format (x_min, y_min, x_max, y_max)
+    """
+    # convert center to corners format
+    boxes = center_to_corners_format(boxes)
+
+    # convert to absolute coordinates
+    height, width = image_size
+    boxes = boxes * torch.tensor([[width, height, width, height]])
+
+    return boxes
+
+
+def augment_and_transform_batch(
+    examples: Mapping[str, Any], transform: A.Compose, image_processor: AutoImageProcessor
+) -> BatchFeature:
+    """Apply augmentations and format annotations in COCO format for object detection task"""
 
     images = []
     annotations = []
-    for image_id, image, objects in zip(
-        examples["image_id"], examples["image"], examples["objects"]
-    ):
+    for image_id, image, objects in zip(examples["image_id"], examples["image"], examples["objects"]):
         image = np.array(image.convert("RGB"))
 
         # apply augmentations
-        output = transform(
-            image=image, bboxes=objects["bbox"], category=objects["category"]
-        )
+        output = transform(image=image, bboxes=objects["bbox"], category=objects["category"])
         images.append(output["image"])
 
         # format annotations in COCO format
@@ -114,30 +138,32 @@ def augment_and_transform_batch(examples, transform, image_processor):
 
     # Apply the image processor transformations: resizing, rescaling, normalization
     result = image_processor(images=images, annotations=annotations, return_tensors="pt")
+
     return result
 
 
-def collate_fn(batch):
-    return {
-        "pixel_values": torch.stack([x["pixel_values"] for x in batch]),
-        "pixel_mask": torch.stack([x["pixel_mask"] for x in batch]),
-        "labels": [x["labels"] for x in batch],
-    }
+def collate_fn(batch: List[BatchFeature]) -> Mapping[str, Union[torch.Tensor, List[Any]]]:
+    data = {}
+    data["pixel_values"] = torch.stack([x["pixel_values"] for x in batch])
+    data["labels"] = [x["labels"] for x in batch]
+    if "pixel_mask" in batch[0]:
+        data["pixel_mask"] = torch.stack([x["pixel_mask"] for x in batch])
+    return data
 
 
 @torch.no_grad()
 def compute_metrics(
     evaluation_results: EvalPrediction,
-    threshold: float =0.0,
-    box_format: str = "cxcywh",
+    image_processor: AutoImageProcessor,
+    threshold: float = 0.0,
     id2label: Optional[Mapping[int, str]] = None,
 ) -> Mapping[str, float]:
-    """Compute mean average mAP and mAR metrics for object detection task
+    """
+    Compute mean average mAP, mAR and their variants for the object detection task
 
     Args:
         evaluation_results (EvalPrediction): Predictions and targets from evaluation.
         threshold (float, optional): Threshold to filter predicted boxes by confidence. Defaults to 0.0.
-        box_format (str, optional): Model predicted bbox format. Defaults to "cxcywh".
         id2label (Optional[dict], optional): Mapping from class id to class name. Defaults to None.
 
     Returns:
@@ -146,39 +172,44 @@ def compute_metrics(
 
     predictions, targets = evaluation_results.predictions, evaluation_results.label_ids
 
-    # for metric computation we need to provide:
-    #  - predictions in a form of list of dictionaries with keys "boxes", "scores", "labels"
+    # For metric computation we need to provide:
     #  - targets in a form of list of dictionaries with keys "boxes", "labels"
+    #  - predictions in a form of list of dictionaries with keys "boxes", "scores", "labels"
 
-    # collect predictions in the required format for metric computation
-    post_processed_predictions = []
-    for batch in predictions:
-        # batch logits: (batch_size, num_classes + 1)
-        # batch boxes: (batch_size, num_queries, 4)
-        losses_dict, batch_logits, batch_boxes, _, _ = batch
-        batch_logits, batch_boxes = torch.tensor(batch_logits), torch.tensor(batch_boxes)
-        for logits, boxes in zip(batch_logits, batch_boxes):
-            probs = torch.softmax(logits, dim=-1)
-            # remove the last class which is the "no-object" class and filter by confidence
-            scores, labels = probs[..., :-1].max(dim=-1)
-            keep = scores > threshold
-            boxes, scores, labels = boxes[keep], scores[keep], labels[keep]
-            post_processed_predictions.append({"boxes": boxes, "scores": scores, "labels": labels})
-
-    # collect targets in the required format for metric computation
+    image_sizes = []
     post_processed_targets = []
+    post_processed_predictions = []
+
+    # Collect targets in the required format for metric computation
     for batch in targets:
+        # collect image sizes, we will need them for predictions post processing
+        batch_image_sizes = torch.tensor([x["size"] for x in batch])
+        image_sizes.append(batch_image_sizes)
+        # collect targets in the required format for metric computation
+        # boxes were converted to YOLO format needed for model training
+        # here we will convert them to Pascal VOC format (x_min, y_min, x_max, y_max)
         for image_target in batch:
             boxes = torch.tensor(image_target["boxes"])
+            boxes = convert_bbox_yolo_to_pascal(boxes, image_target["size"])
             labels = torch.tensor(image_target["class_labels"])
             post_processed_targets.append({"boxes": boxes, "labels": labels})
-    
-    # compute metrics
-    metric = MeanAveragePrecision(box_format=box_format, class_metrics=True)
+
+    # Collect predictions in the required format for metric computation,
+    # model produce boxes in YOLO format, then image_processor convert them to Pascal VOC format
+    for batch, target_sizes in zip(predictions, image_sizes):
+        batch_logits, batch_boxes = batch[1], batch[2]
+        output = ModelOutput(logits=torch.tensor(batch_logits), pred_boxes=torch.tensor(batch_boxes))
+        post_processed_output = image_processor.post_process_object_detection(
+            output, threshold=threshold, target_sizes=target_sizes
+        )
+        post_processed_predictions.extend(post_processed_output)
+
+    # Compute metrics
+    metric = MeanAveragePrecision(box_format="xyxy", class_metrics=True)
     metric.update(post_processed_predictions, post_processed_targets)
     metrics = metric.compute()
 
-    # replace list of per class metrics with separate metric for each class
+    # Replace list of per class metrics with separate metric for each class
     classes = metrics.pop("classes")
     map_per_class = metrics.pop("map_per_class")
     mar_100_per_class = metrics.pop("mar_100_per_class")
@@ -212,12 +243,8 @@ class DataTrainingArguments:
     train_val_split: Optional[float] = field(
         default=0.15, metadata={"help": "Percent to split off of train for validation."}
     )
-    shortest_edge: Optional[int] = field(
-        default=800, metadata={"help": "Processing image maximum shortest edge size"}
-    )
-    longest_edge: Optional[int] = field(
-        default=1333, metadata={"help": "Processing image maximum longest edge size"}
-    )
+    shortest_edge: Optional[int] = field(default=800, metadata={"help": "Processing image maximum shortest edge size"})
+    longest_edge: Optional[int] = field(default=1333, metadata={"help": "Processing image maximum longest edge size"})
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
@@ -259,7 +286,12 @@ class ModelArguments:
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
     image_processor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
-    ignore_mismatched_sizes: bool = field(default=False, metadata={"help": "Whether or not to raise an error if some of the weights from the checkpoint do not have the same size as the weights of the model (if for instance, you are instantiating a model with 10 labels from a checkpoint with 3 labels)."})
+    ignore_mismatched_sizes: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether or not to raise an error if some of the weights from the checkpoint do not have the same size as the weights of the model (if for instance, you are instantiating a model with 10 labels from a checkpoint with 3 labels)."
+        },
+    )
     token: str = field(
         default=None,
         metadata={
@@ -311,7 +343,7 @@ def main():
 
     # # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    # send_example_telemetry("run_object_dection", model_args, data_args)
+    # send_example_telemetry("run_object_detection", model_args, data_args)
 
     # Setup logging
     logging.basicConfig(
@@ -338,17 +370,19 @@ def main():
     logger.info(f"Training/evaluation parameters {training_args}")
 
     # Detecting last checkpoint.
-    last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
-        last_checkpoint = get_last_checkpoint(training_args.output_dir)
-        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+    checkpoint = None
+    if training_args.resume_from_checkpoint is not None:
+        checkpoint = training_args.resume_from_checkpoint
+    elif os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+        checkpoint = get_last_checkpoint(training_args.output_dir)
+        if checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
                 f"Output directory ({training_args.output_dir}) already exists and is not empty. "
                 "Use --overwrite_output_dir to overcome."
             )
-        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
+        elif checkpoint is not None and training_args.resume_from_checkpoint is None:
             logger.info(
-                f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
+                f"Checkpoint detected, resuming training at {checkpoint}. To avoid this behavior, change "
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
 
@@ -374,7 +408,7 @@ def main():
 
     # Get dataset categories and prepare mappings for label_name <-> label_id
     categories = dataset["train"].features["objects"].feature["category"].names
-    id2label = {index: x for index, x in enumerate(categories)}
+    id2label = dict(enumerate(categories))
     label2id = {v: k for k, v in id2label.items()}
 
     # ------------------------------------------------------------------------------------------------
@@ -391,18 +425,18 @@ def main():
         model_args.config_name or model_args.model_name_or_path,
         label2id=label2id,
         id2label=id2label,
-        **common_pretrained_args
+        **common_pretrained_args,
     )
     model = AutoModelForObjectDetection.from_pretrained(
         model_args.model_name_or_path,
         config=config,
         ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
-        **common_pretrained_args
+        **common_pretrained_args,
     )
-    image_processor = DetrImageProcessor.from_pretrained(
+    image_processor = AutoImageProcessor.from_pretrained(
         model_args.image_processor_name or model_args.model_name_or_path,
         size={"longest_edge": data_args.longest_edge, "shortest_edge": data_args.shortest_edge},
-        **common_pretrained_args
+        **common_pretrained_args,
     )
 
     # ------------------------------------------------------------------------------------------------
@@ -420,14 +454,18 @@ def main():
     valid_augmentation_transform = A.Compose(
         [
             # empty transform, but you can add something here, e.g. resizing/padding
-            A.NoOp(), 
+            A.NoOp(),
         ],
-        bbox_params=A.BboxParams(format="coco", label_fields=["category"]),
+        bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True),
     )
 
     # Make transform functions for batch and apply for dataset splits
-    train_transform_batch = partial(augment_and_transform_batch, transform=train_augmentation_transform, image_processor=image_processor)
-    valid_transform_batch = partial(augment_and_transform_batch, transform=valid_augmentation_transform, image_processor=image_processor)
+    train_transform_batch = partial(
+        augment_and_transform_batch, transform=train_augmentation_transform, image_processor=image_processor
+    )
+    valid_transform_batch = partial(
+        augment_and_transform_batch, transform=valid_augmentation_transform, image_processor=image_processor
+    )
 
     dataset["train"] = dataset["train"].with_transform(train_transform_batch)
     dataset["valid"] = dataset["valid"].with_transform(valid_transform_batch)
@@ -437,7 +475,7 @@ def main():
     # Model training and evaluation with Trainer API
     # ------------------------------------------------------------------------------------------------
 
-    eval_compute_metrics = partial(compute_metrics, id2label=id2label, threshold=0.0)
+    eval_compute_metrics = partial(compute_metrics, image_processor=image_processor, id2label=id2label, threshold=0.0)
 
     trainer = Trainer(
         model=model,
@@ -451,11 +489,6 @@ def main():
 
     # Training
     if training_args.do_train:
-        checkpoint = None
-        if training_args.resume_from_checkpoint is not None:
-            checkpoint = training_args.resume_from_checkpoint
-        elif last_checkpoint is not None:
-            checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()
         trainer.log_metrics("train", train_result.metrics)
