@@ -438,17 +438,32 @@ class ModelUtilsTest(TestCasePlus):
         if is_flash_attn_2_available():
             attn_implementation_available.append("flash_attention_2")
 
+        mistral_attention_classes = {
+            "eager": "MistralAttention",
+            "sdpa": "MistralSdpaAttention",
+            "flash_attention_2": "MistralFlashAttention2",
+        }
         for requested_attn_implementation in attn_implementation_available:
             model = AutoModelForCausalLM.from_pretrained(
                 TINY_MISTRAL, attn_implementation=requested_attn_implementation
             )
             self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
+            for module in model.modules():
+                if "Attention" in module.__class__.__name__:
+                    self.assertEqual(
+                        module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
+                    )
 
             config = AutoConfig.from_pretrained(TINY_MISTRAL)
             model = AutoModelForCausalLM.from_pretrained(
                 TINY_MISTRAL, config=config, attn_implementation=requested_attn_implementation
             )
             self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
+            for module in model.modules():
+                if "Attention" in module.__class__.__name__:
+                    self.assertEqual(
+                        module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
+                    )
 
     def test_no_super_init_config_and_model(self):
         config = NoSuperInitConfig(attribute=32)
