@@ -42,6 +42,14 @@ _import_structure = {
         "set_hf_deepspeed_config",
         "unset_hf_deepspeed_config",
     ],
+    "ggml": [
+        "GGUF_CONFIG_MAPPING",
+        "GGUF_TENSOR_MAPPING",
+        "GGUF_TOKENIZER_MAPPING",
+        "_gguf_parse_value",
+        "load_dequant_gguf_tensor",
+        "load_gguf",
+    ],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
         "AzureMLCallback",
@@ -110,6 +118,14 @@ if TYPE_CHECKING:
         is_deepspeed_zero3_enabled,
         set_hf_deepspeed_config,
         unset_hf_deepspeed_config,
+    )
+    from .ggml import (
+        GGUF_CONFIG_MAPPING,
+        GGUF_TENSOR_MAPPING,
+        GGUF_TOKENIZER_MAPPING,
+        _gguf_parse_value,
+        load_dequant_gguf_tensor,
+        load_gguf,
     )
     from .integration_utils import (
         INTEGRATION_TO_CALLBACK,
