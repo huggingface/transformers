@@ -281,7 +281,7 @@ def convert_segmentation_map_to_binary_masks(
     all_labels = np.unique(segmentation_map)
 
     # Drop background label if applicable
-    if ignore_index is not None:
+    if ignore_index is not None and len(all_labels) > 1:
         all_labels = all_labels[all_labels != ignore_index]
 
     # Generate a binary mask for each object instance
