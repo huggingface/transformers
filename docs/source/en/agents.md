@@ -501,7 +501,7 @@ Before finally generating the image:
 > [!WARNING]
 > gradio-tools require *textual* inputs and outputs even when working with different modalities like image and audio objects. Image and audio inputs and outputs are currently incompatible.
 
-### Import tools from LangChain
+### LangChain tools
 
 To import a tool from LangChain, use the `from_langchain()` method.
 
