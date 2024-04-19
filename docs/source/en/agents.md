@@ -439,17 +439,10 @@ agent.run(
 > Beware when adding tools to an agent that already works well because it can bias selection towards your tool or select another tool other than the one already defined.
 
 
-Replacing existing tools can be done simply by updating the agent's toolbox using method `agent.toolbox.update_tool()`.
+Use the `agent.toolbox.update_tool()` method to replace an existing tool in the agent's toolbox. This is useful if your new tool is a one-to-one replacement of the existing tool because the agent already knows how to perform that specific task. Just make sure the new tool follows the same API as the replaced tool or adapt the system prompt template to ensure all examples using the replaced tool are updated.
 
-
-<Tip>
-
-Overwriting existing tools can be beneficial if we want to use a custom tool exactly for the same task as an existing tool 
-because the agent is well-versed in using the specific task. Beware that the custom tool should follow the exact same API 
-as the overwritten tool in this case, or you should adapt the prompt template to make sure all examples using that
-tool are updated.
-
-</Tip>
+```py
+agent.toolbox.update_tool()
 
 
 ### Leverage gradio-tools
