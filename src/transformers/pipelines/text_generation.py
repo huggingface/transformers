@@ -37,7 +37,8 @@ class Chat:
 class TextGenerationPipeline(Pipeline):
     """
     Language generation pipeline using any `ModelWithLMHead`. This pipeline predicts the words that will follow a
-    specified text prompt. When the underlying model is a conversational model, it can also accept one or more chats.
+    specified text prompt. When the underlying model is a conversational model, it can also accept one or more chats,
+    in which case the pipeline will operate in chat mode and will continue the chat(s) by adding its response(s).
     Each chat takes the form of a list of dicts, where each dict contains "role" and "content" keys.
 
     Examples:
