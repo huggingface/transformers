@@ -62,7 +62,7 @@ def incremental_to_binary_attention_mask(incremental_mask, return_tensors, num_c
 
 # copied from m4.training.packing
 def image_attention_mask_for_packed_input_ids(input_ids, tokenizer, return_tensors):
-    image_token_id = tokenizer.additional_special_tokens_ids[0]
+    image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
     eod_token_id = tokenizer.eos_token_id
     batch_size = input_ids.size(0) if return_tensors == "pt" else tf.shape(input_ids)[0]
     if return_tensors == "pt":
