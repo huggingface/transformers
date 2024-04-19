@@ -13,7 +13,7 @@ rendered properly in your Markdown viewer.
 
 Large language models (LLMs) have pushed text generation applications, such as chat and code completion models, to the next level by producing text that displays a high level of understanding and fluency. But what makes LLMs so powerful - namely their size - also presents challenges for inference.
 
-Basic inference is slow because LLMs have to be called repeatedly to generate the next token. As the input sequence increases as generation progresses, it takes longer and longer for the LLM to process it. LLMs also have billions of parameters, making it a challenge to store and handle all those weights in memory. However, with a few optimization techniques, you can boost your inference speed and reduce memory usage.
+Basic inference is slow because LLMs have to be called repeatedly to generate the next token. The input sequence increases as generation progresses, which takes longer and longer for the LLM to process. LLMs also have billions of parameters, making it a challenge to store and handle all those weights in memory.
 
 This guide will show you how to use the optimization techniques available in Transformers to accelerate LLM inference.
 
@@ -22,7 +22,7 @@ This guide will show you how to use the optimization techniques available in Tra
 
 ## Static kv-cache and torch.compile
 
-During decoding, a LLM computes the key-value (kv) values for each input token and since it is autoregressive, it computes the same kv values each time since the generated output becomes part of the input now. This is not very efficient because you're recomputing the same kv values each time.
+During decoding, a LLM computes the key-value (kv) values for each input token and since it is autoregressive, it computes the same kv values each time because the generated output becomes part of the input now. This is not very efficient because you're recomputing the same kv values each time.
 
 To optimize this, you can use a kv-cache to store the past values instead of recomputing them each time. However, since the kv-cache grows with each generation step and is dynamic, it prevents you from taking advantage of [torch.compile](./perf_torch_compile), a powerful optimization tool that fuses PyTorch code into fast and optimized kernels.
 
@@ -69,9 +69,9 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 <hfoption id="setup_cache">
 
 > [!WARNING]
-> The `_setup_cache` method is an internal method and still under development, so keep in mind this will likely change in the future.
+> The `_setup_cache` method is an internal and private method that is still under development, so keep in mind this will likely change in the future.
 
-The `_setup_cache` method doesn't support [`GenerationMixin.generate`] yet, so this method is a bit more involved. You'll need to write your own function to decode the next token given the current token and position and cache position of previously generated tokens.
+The `_setup_cache` method doesn't support [`~GenerationMixin.generate`] yet, so this method is a bit more involved. You'll need to write your own function to decode the next token given the current token and position and cache position of previously generated tokens.
 
 ```py
 from transformers import LlamaTokenizer, LlamaForCausalLM, StaticCache, logging
@@ -98,11 +98,13 @@ def decode_one_tokens(model, cur_token, input_pos, cache_position):
     return new_token
 ```
 
-The are two important things you must do to enable static kv-cache and torch.compile with the `_setup_cache` method:
+There are a few important things you must do to enable static kv-cache and torch.compile with the `_setup_cache` method:
 
 1. Access the model's `_setup_cache` method and pass it the [`StaticCache`] class. This is a more flexible method because it allows you to configure parameters like the maximum batch size and sequence length.
 
 2. Call torch.compile on the model to compile the forward pass with the static kv-cache.
+
+3. Set `enable_math=True` in the [torch.backends.cuda.sdp_kernel](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) context manager to enable the native PyTorch C++ implementation of scaled dot product attention to speed up inference even more.
 
 ```py
 batch_size, seq_length = inputs["input_ids"].shape
@@ -264,12 +266,12 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ### PyTorch scaled dot product attention
 
-Scaled dot product attention (SDPA) is automatically enabled in PyTorch 2.0 and it supports FlashAttention, xFormers, and a C++ PyTorch implementation. SDPA chooses the most performant attention algorithm if you're using a CUDA backend. For other backends, SDPA defaults to the C++ PyTorch implementation.
+Scaled dot product attention (SDPA) is automatically enabled in PyTorch 2.0 and it supports FlashAttention, xFormers, and PyTorch's C++ implementation. SDPA chooses the most performant attention algorithm if you're using a CUDA backend. For other backends, SDPA defaults to the PyTorch C++ implementation.
 
 > [!TIP]
 > SDPA supports FlashAttention-2 as long as you have the latest PyTorch version installed.
 
-Use the `torch.backends.cuda.sdp_kernel` context manager to explicitly enable or disable any of the three attention algorithms. For example, set `enable_flash=True` to enable FlashAttention.
+Use the [torch.backends.cuda.sdp_kernel](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) context manager to explicitly enable or disable any of the three attention algorithms. For example, set `enable_flash=True` to enable FlashAttention.
 
 ```py
 import torch
@@ -300,7 +302,7 @@ Use the Model Memory Calculator below to estimate and compare how much memory is
 	height="450"
 ></iframe>
 
-To load Mistral-7B-v0.1 in half-precision, set the `torch_dtype` parameter in the [`~transformers.AutoModelForCausalLM.from_pretrained`] method to `torch.bfloat16`. This only costs 13.74GB of memory.
+To load Mistral-7B-v0.1 in half-precision, set the `torch_dtype` parameter in the [`~transformers.AutoModelForCausalLM.from_pretrained`] method to `torch.bfloat16`. This requires 13.74GB of memory.
 
 ```py
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -311,7 +313,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-To load a quantized model (8-bit or 4-bit) for inference, try [bitsandbytes](https://hf.co/docs/bitsandbytes) and set the `load_in_4bit` or `load_in_8bit` parameters to `True`. Loading the model in 8-bits only costs 6.87 GB of memory.
+To load a quantized model (8-bit or 4-bit) for inference, try [bitsandbytes](https://hf.co/docs/bitsandbytes) and set the `load_in_4bit` or `load_in_8bit` parameters to `True`. Loading the model in 8-bits only requires 6.87 GB of memory.
 
 ```py
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
