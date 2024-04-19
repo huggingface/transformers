@@ -428,6 +428,7 @@ class SwiftFormerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "swiftformer"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["SwiftFormerEncoderBlock"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
