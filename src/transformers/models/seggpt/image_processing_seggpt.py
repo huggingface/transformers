@@ -27,9 +27,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     infer_channel_dimension_format,
-    is_batched,
     is_scaled_image,
-    is_valid_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -41,59 +39,10 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    import PIL.Image
+    pass
 
 
 logger = logging.get_logger(__name__)
-
-
-def make_list_of_masks(images: ImageInput) -> List[ImageInput]:
-    """
-    Ensure that the input is a list of images. If the input is a single image, it is converted to a list of length 1.
-    If the input is a batch of images, it is converted to a list of images. Input can be either 2D or 3D.
-
-    Args:
-        images (`ImageInput`):
-            Image of images to turn into a list of images.
-    """
-    # In the context of SegGPT we can get PIL, numpy or torch
-    # Since SegGPT can get prompt masks with zero channels (semantic maps) or 3 channels (RGB) we need to handle both
-    # The only complexity comes with torch and numpy as we have the following cases:
-    # - semantic map with 2 dimensions (H, W): torch.Tensor, numpy.ndarray
-    # - batched semantic map with 3 dimensions (B, H, W): torch.Tensor, numpy.ndarray
-    # - RGB image with 3 dimensions (C, H, W) if channel first: torch.Tensor, numpy.ndarray
-    # - batched RGB image with 4 dimensions (B, C, H, W) if channel first: torch.Tensor, numpy.ndarray
-    # If the input is then 3 dimensional there is ambiguity between batched semantic map and a single RGB image in the case where batch size is 3
-    # We can differentiate because semantic maps
-
-    if is_batched(images):
-        return images
-
-    # Either the input is a single image, in which case we create a list of length 1
-    if isinstance(images, PIL.Image.Image):
-        # PIL images are never batched
-        return [images]
-
-    if is_valid_image(images):
-        if images.ndim == 2:
-            # Singe semantic map
-            images = [images]
-        elif images.ndim == 3:
-            # Either single RGB or batched semantic map
-            # Assuming that if first or last dimension is 3 (Channel first or last) it is RGB
-            images = [images] if (images.shape[0] == 3 or images.shape[-1] == 3) else list(images)
-        elif images.ndim == 4:
-            # Batched RGB
-            images = list(images)
-        else:
-            raise ValueError(
-                f"Invalid image shape. Expected either 2, 3 or 4 dimensions, but got" f" {images.ndim} dimensions."
-            )
-        return images
-    raise ValueError(
-        "Invalid image type. Expected either PIL.Image.Image, numpy.ndarray, torch.Tensor, tf.Tensor or "
-        f"jax.ndarray, but got {type(images)}."
-    )
 
 
 # See https://arxiv.org/pdf/2212.02499.pdf  at 3.1 Redefining Output Spaces as "Images" - Semantic Segmentation from PAINTER paper
