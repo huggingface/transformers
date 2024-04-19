@@ -896,7 +896,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             and self.tokenizer.pad_token_id is not None
             and self.model.generation_config.pad_token_id is None
         ):
-            kwargs["pad_token_id"] = self.tokenizer.pad_token_id
+            self.model.generation_config.pad_token_id = self.tokenizer.pad_token_id
 
         self.call_count = 0
         self._batch_size = kwargs.pop("batch_size", None)
