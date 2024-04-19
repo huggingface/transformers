@@ -505,13 +505,8 @@ Before finally generating the image:
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rabbit.png">
 
-<Tip warning={true}>
-
-gradio-tools requires *textual* inputs and outputs, even when working with different modalities. This implementation
-works with image and audio objects. The two are currently incompatible, but will rapidly become compatible as we
-work to improve the support.
-
-</Tip>
+> [!WARNING]
+> gradio-tools require *textual* inputs and outputs even when working with different modalities like image and audio objects. Image and audio inputs and outputs are currently incompatible.
 
 ### Import tools from LangChain
 
