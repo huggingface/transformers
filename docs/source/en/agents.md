@@ -469,7 +469,7 @@ from gradio_tools import StableDiffusionPromptGeneratorTool
 gradio_tool = StableDiffusionPromptGeneratorTool()
 ```
 
-We pass that instance to the `Tool.from_gradio` method:
+Pass the tool to the `Tool.from_gradio` method:
 
 ```python
 from transformers import Tool
