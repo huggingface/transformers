@@ -1834,27 +1834,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         jinja_env.globals["raise_exception"] = raise_exception
         return jinja_env.from_string(chat_template)
 
-    @property
-    def default_chat_template(self):
-        """
-        This template formats inputs in the standard ChatML format. See
-        https://github.com/openai/openai-python/blob/main/chatml.md
-        """
-        logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using a default chat template "
-            "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
-        )
-        return (
-            "{% for message in messages %}"
-            "{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}"
-            "{% endfor %}"
-            "{% if add_generation_prompt %}"
-            "{{ '<|im_start|>assistant\n' }}"
-            "{% endif %}"
-        )
-
     @classmethod
     def from_pretrained(
         cls,
