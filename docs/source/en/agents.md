@@ -510,8 +510,7 @@ Before finally generating the image:
 
 ### Import tools from LangChain
 
-You can also use method `from_langchain`to quickly initialize a tool from a LangChain tool.
-This goes as follows: 
+To import a tool from LangChain, use the `from_langchain()` method.
 
 ```python
 # Load langchain tool
