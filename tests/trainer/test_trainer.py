@@ -739,7 +739,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         eval_dataset = RegressionDataset(length=64)
         args = TrainingArguments(
             "./regression",
-            evaluation_strategy="epoch",
+            eval_strategy="epoch",
             metric_for_best_model="eval_loss",
         )
         model = RegressionModel()
@@ -771,7 +771,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         args = TrainingArguments(
             "./regression",
             lr_scheduler_type="reduce_lr_on_plateau",
-            evaluation_strategy="epoch",
+            eval_strategy="epoch",
             metric_for_best_model="eval_loss",
             num_train_epochs=10,
             learning_rate=0.2,
@@ -2209,7 +2209,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 output_dir=tmpdir,
                 learning_rate=0.1,
                 eval_steps=5,
-                evaluation_strategy="steps",
+                eval_strategy="steps",
                 save_steps=5,
                 load_best_model_at_end=True,
             )
@@ -2225,7 +2225,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 output_dir=tmpdir,
                 learning_rate=0.1,
                 eval_steps=5,
-                evaluation_strategy="steps",
+                eval_strategy="steps",
                 save_steps=5,
                 load_best_model_at_end=True,
                 metric_for_best_model="accuracy",
@@ -2242,7 +2242,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 b=2.5,
                 output_dir=tmpdir,
                 learning_rate=0.1,
-                evaluation_strategy="epoch",
+                eval_strategy="epoch",
                 save_strategy="epoch",
                 load_best_model_at_end=True,
                 metric_for_best_model="accuracy",
@@ -2261,7 +2261,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 output_dir=tmpdir,
                 learning_rate=0.1,
                 eval_steps=5,
-                evaluation_strategy="steps",
+                eval_strategy="steps",
                 save_steps=5,
                 load_best_model_at_end=True,
                 pretrained=False,
@@ -2282,7 +2282,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     output_dir=tmpdir,
                     learning_rate=0.1,
                     eval_steps=5,
-                    evaluation_strategy="steps",
+                    eval_strategy="steps",
                     save_steps=5,
                     load_best_model_at_end=True,
                     save_safetensors=save_safetensors,
@@ -2436,7 +2436,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 gradient_accumulation_steps=1,
                 per_device_train_batch_size=16,
                 load_best_model_at_end=True,
-                evaluation_strategy=IntervalStrategy.EPOCH,
+                eval_strategy=IntervalStrategy.EPOCH,
                 save_strategy=IntervalStrategy.EPOCH,
                 compute_metrics=AlmostAccuracy(),
                 metric_for_best_model="accuracy",
@@ -2452,7 +2452,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 num_train_epochs=20,
                 gradient_accumulation_steps=1,
                 per_device_train_batch_size=16,
-                evaluation_strategy=IntervalStrategy.EPOCH,
+                eval_strategy=IntervalStrategy.EPOCH,
                 compute_metrics=AlmostAccuracy(),
                 metric_for_best_model="accuracy",
             )
@@ -2498,7 +2498,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # With best model at end
             trainer = get_regression_trainer(
-                output_dir=tmp_dir, evaluation_strategy="steps", load_best_model_at_end=True, save_total_limit=2
+                output_dir=tmp_dir, eval_strategy="steps", load_best_model_at_end=True, save_total_limit=2
             )
             trainer.state.best_model_checkpoint = os.path.join(tmp_dir, "checkpoint-5")
             self.check_checkpoint_deletion(trainer, tmp_dir, [5, 25])
@@ -2506,7 +2506,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # Edge case: we don't always honor save_total_limit=1 if load_best_model_at_end=True to be able to resume
             # from checkpoint
             trainer = get_regression_trainer(
-                output_dir=tmp_dir, evaluation_strategy="steps", load_best_model_at_end=True, save_total_limit=1
+                output_dir=tmp_dir, eval_strategy="steps", load_best_model_at_end=True, save_total_limit=1
             )
             trainer.state.best_model_checkpoint = os.path.join(tmp_dir, "checkpoint-25")
             self.check_checkpoint_deletion(trainer, tmp_dir, [25])
@@ -3342,7 +3342,7 @@ class TrainerHyperParameterOptunaIntegrationTest(unittest.TestCase):
                 output_dir=tmp_dir,
                 learning_rate=0.1,
                 logging_steps=1,
-                evaluation_strategy=IntervalStrategy.EPOCH,
+                eval_strategy=IntervalStrategy.EPOCH,
                 save_strategy=IntervalStrategy.EPOCH,
                 num_train_epochs=4,
                 disable_tqdm=True,
@@ -3391,7 +3391,7 @@ class TrainerHyperParameterMultiObjectOptunaIntegrationTest(unittest.TestCase):
                 output_dir=tmp_dir,
                 learning_rate=0.1,
                 logging_steps=1,
-                evaluation_strategy=IntervalStrategy.EPOCH,
+                eval_strategy=IntervalStrategy.EPOCH,
                 save_strategy=IntervalStrategy.EPOCH,
                 num_train_epochs=10,
                 disable_tqdm=True,
@@ -3449,7 +3449,7 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
                 output_dir=tmp_dir,
                 learning_rate=0.1,
                 logging_steps=1,
-                evaluation_strategy=IntervalStrategy.EPOCH,
+                eval_strategy=IntervalStrategy.EPOCH,
                 save_strategy=IntervalStrategy.EPOCH,
                 num_train_epochs=4,
                 disable_tqdm=True,
@@ -3512,7 +3512,7 @@ class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):
                 output_dir=tmp_dir,
                 learning_rate=0.1,
                 logging_steps=1,
-                evaluation_strategy=IntervalStrategy.EPOCH,
+                eval_strategy=IntervalStrategy.EPOCH,
                 save_strategy=IntervalStrategy.EPOCH,
                 num_train_epochs=4,
                 disable_tqdm=True,
@@ -3932,7 +3932,7 @@ class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
                 output_dir=tmp_dir,
                 learning_rate=0.1,
                 logging_steps=1,
-                evaluation_strategy=IntervalStrategy.EPOCH,
+                eval_strategy=IntervalStrategy.EPOCH,
                 save_strategy=IntervalStrategy.EPOCH,
                 num_train_epochs=4,
                 disable_tqdm=True,
