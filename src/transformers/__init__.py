@@ -1052,6 +1052,8 @@ _import_structure = {
     ],
     "tools": [
         "Agent",
+        "ReactJSONAgent",
+        "ReactCodeAgent",
         "ReactAgent",
         "CodeAgent",
         "PipelineTool",

@@ -58,7 +58,7 @@ The definition of LLM Agents is quite broad: all systems that use LLMs as their 
 When trying to accomplish a task, an agent can be either programmed to:
 
 - devise a series of actions/tool calls and run them all at once, like our `CodeAgent`
-- or plan and execute them one by one to wait for the outcome of the each action before launching the next one, thus following a Reflexion ⇒ Action ⇒ Perception cycle. Our `ReactAgent` implements this latter framework.
+- or plan and execute them one by one to wait for the outcome of the each action before launching the next one, thus following a Reflexion ⇒ Action ⇒ Perception cycle. Our `ReactJSONAgent` implements this latter framework.
 
 ![Framework of a React Agent](Doc%20agents%20ac753b9a3b934eaba22f659ba994c4bd/Untitled.png)
 
@@ -184,7 +184,7 @@ Every [`~Agent.run`] operation is independent, so you can run it several times i
 
 ## Implementation of agents
 
-### ReactAgent
+### ReactJSONAgent
 
 This is the go-to agent to solve reasoning tasks, since the ReAct framework makes it really efficient to think on the basis of its previous observations.
 
@@ -295,10 +295,10 @@ This could be improved: for instance by adding explanations of the output format
 For maximum flexibility, you can overwrite the whole prompt template as explained above by passing your custom prompt as an argument:
 
 ```python
-from transformers import ReactAgent
+from transformers import ReactJSONAgent
 from transformers.tools import CalculatorTool
 
-agent = ReactAgent(llm_engine, tools = [CalculatorTool()], system_prompt="{your_custom_prompt}")
+agent = ReactJSONAgent(llm_engine, tools = [CalculatorTool()], system_prompt="{your_custom_prompt}")
 ```
 
 <Tip warning={true}>
@@ -543,12 +543,12 @@ Before finally generating the image:
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rabbit.png">
 
-This also works with its sibling `ReactAgent`:
+This also works with its sibling `ReactJSONAgent`:
 
 ```python
-from transformers import ReactAgent
+from transformers import ReactJSONAgent
 
-agent = ReactAgent(llm_engine, tools=[tool], add_base_tools=True)
+agent = ReactJSONAgent(llm_engine, tools=[tool], add_base_tools=True)
 
 agent.run("Improve this prompt, then generate an image of it.", prompt="A rabbit wearing a space suit")
 ```
