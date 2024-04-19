@@ -28,13 +28,8 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import load_backbone
+from ..deprecated._archive_maps import VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 from .configuration_vitmatte import VitMatteConfig
-
-
-VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "hustvl/vitmatte-small-composition-1k",
-    # See all VitMatte models at https://huggingface.co/models?filter=vitmatte
-]
 
 
 # General docstring

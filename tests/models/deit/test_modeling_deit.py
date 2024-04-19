@@ -19,7 +19,6 @@ import unittest
 import warnings
 
 from transformers import DeiTConfig
-from transformers.models.auto import get_values
 from transformers.testing_utils import (
     require_accelerate,
     require_torch,
@@ -41,15 +40,16 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        MODEL_MAPPING,
         DeiTForImageClassification,
         DeiTForImageClassificationWithTeacher,
         DeiTForMaskedImageModeling,
         DeiTModel,
     )
-    from transformers.models.deit.modeling_deit import DEIT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.auto.modeling_auto import (
+        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+        MODEL_MAPPING_NAMES,
+    )
 
 
 if is_vision_available():
@@ -269,7 +269,7 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             # DeiTForImageClassificationWithTeacher supports inference-only
             if (
-                model_class in get_values(MODEL_MAPPING)
+                model_class.__name__ in MODEL_MAPPING_NAMES.values()
                 or model_class.__name__ == "DeiTForImageClassificationWithTeacher"
             ):
                 continue
@@ -289,7 +289,7 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in get_values(MODEL_MAPPING) or not model_class.supports_gradient_checkpointing:
+            if model_class.__name__ in MODEL_MAPPING_NAMES.values() or not model_class.supports_gradient_checkpointing:
                 continue
             # DeiTForImageClassificationWithTeacher supports inference-only
             if model_class.__name__ == "DeiTForImageClassificationWithTeacher":
@@ -325,10 +325,10 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             if (
-                model_class
+                model_class.__name__
                 not in [
-                    *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
-                    *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+                    *MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values(),
+                    *MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES.values(),
                 ]
                 or model_class.__name__ == "DeiTForImageClassificationWithTeacher"
             ):
@@ -366,9 +366,9 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DEIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DeiTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/deit-base-distilled-patch16-224"
+        model = DeiTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

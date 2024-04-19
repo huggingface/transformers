@@ -1216,12 +1216,12 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @slow
     def test_whisper_longform(self):
         # fmt: off
-        EXPECTED_RESULT = """ Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct dennies. set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile."""
+        EXPECTED_RESULT = " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on Saturday, Rusty Cargo, container down by the Wharf, and challenge toothless drifters to the godless bughouse lets of tournament that is my segment. MUSIC Meanwhile!"
         # fmt: on
 
         processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-        model = model.to("cuda")
+        model = model.to(torch_device)
 
         pipe = pipeline(
             "automatic-speech-recognition",
@@ -1229,7 +1229,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             tokenizer=processor.tokenizer,
             feature_extractor=processor.feature_extractor,
             max_new_tokens=128,
-            device="cuda:0",
+            device=torch_device,
         )
 
         ds = load_dataset("distil-whisper/meanwhile", "default")["test"]
@@ -1246,7 +1246,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         pipe = pipeline(
             "automatic-speech-recognition",
             model="facebook/seamless-m4t-v2-large",
-            device="cuda:0",
+            device=torch_device,
         )
 
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

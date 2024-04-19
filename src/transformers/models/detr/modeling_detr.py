@@ -60,10 +60,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DetrConfig"
 _CHECKPOINT_FOR_DOC = "facebook/detr-resnet-50"
 
-DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/detr-resnet-50",
-    # See all DETR models at https://huggingface.co/models?filter=detr
-]
+
+from ..deprecated._archive_maps import DETR_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -2210,9 +2208,10 @@ class DetrLoss(nn.Module):
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         world_size = 1
-        if PartialState._shared_state != {}:
-            num_boxes = reduce(num_boxes)
-            world_size = PartialState().num_processes
+        if is_accelerate_available():
+            if PartialState._shared_state != {}:
+                num_boxes = reduce(num_boxes)
+                world_size = PartialState().num_processes
         num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
 
         # Compute all the requested losses

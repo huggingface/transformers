@@ -54,6 +54,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_tokenizers
 @require_pandas
 class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "FacebookAI/xlm-roberta-base"
     tokenizer_class = LayoutXLMTokenizer
     rust_tokenizer_class = LayoutXLMTokenizerFast
     test_rust_tokenizer = True
@@ -105,6 +106,10 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_text = "UNwant\u00E9d,running"
         output_text = "unwanted, running"
         return input_text, output_text
+
+    @unittest.skip("Chat template tests don't play well with table/layout models.")
+    def test_chat_template_batched(self):
+        pass
 
     # override test in `test_tokenization_common.py` because of the required input format of the `__call__`` method of
     # this tokenizer

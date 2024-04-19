@@ -43,6 +43,16 @@ def import_protobuf(error_message=""):
         raise ImportError(PROTOBUF_IMPORT_ERROR.format(error_message))
 
 
+def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
+    if add_prefix_space:
+        prepend_scheme = "always"
+        if hasattr(original_tokenizer, "legacy") and not original_tokenizer.legacy:
+            prepend_scheme = "first"
+    else:
+        prepend_scheme = "never"
+    return prepend_scheme
+
+
 class SentencePieceExtractor:
     """
     Extractor implementation for SentencePiece trained models. https://github.com/google/sentencepiece
@@ -597,18 +607,15 @@ class SpmConverter(Converter):
             return normalizers.Sequence([normalizers.Precompiled(precompiled_charsmap)] + _normalizers)
 
     def pre_tokenizer(self, replacement, add_prefix_space):
-        prepend_scheme = "always"
-        if hasattr(self.original_tokenizer, "legacy") and not self.original_tokenizer.legacy:
-            prepend_scheme = "first"
-        return pre_tokenizers.Metaspace(
-            replacement=replacement, add_prefix_space=add_prefix_space, prepend_scheme=prepend_scheme
-        )
+        prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
+        return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme)
 
     def post_processor(self):
         return None
 
     def decoder(self, replacement, add_prefix_space):
-        return decoders.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
+        prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
+        return decoders.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme)
 
     def converted(self) -> Tokenizer:
         tokenizer = self.tokenizer(self.proto)
@@ -722,7 +729,8 @@ class DebertaV2Converter(SpmConverter):
         list_pretokenizers = []
         if self.original_tokenizer.split_by_punct:
             list_pretokenizers.append(pre_tokenizers.Punctuation(behavior="isolated"))
-        list_pretokenizers.append(pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space))
+        prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
+        list_pretokenizers.append(pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme))
         return pre_tokenizers.Sequence(list_pretokenizers)
 
     def normalizer(self, proto):
@@ -1007,10 +1015,11 @@ class PegasusConverter(SpmConverter):
         return proto.trainer_spec.unk_id + self.original_tokenizer.offset
 
     def pre_tokenizer(self, replacement, add_prefix_space):
+        prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
         return pre_tokenizers.Sequence(
             [
                 pre_tokenizers.WhitespaceSplit(),
-                pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space),
+                pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme),
             ]
         )
 
@@ -1029,6 +1038,17 @@ class T5Converter(SpmConverter):
         vocab += [(f"<extra_id_{i}>", 0.0) for i in range(num_extra_ids - 1, -1, -1)]
         return vocab
 
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single=["$A", "</s>"],
+            pair=["$A", "</s>", "$B", "</s>"],
+            special_tokens=[
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
+            ],
+        )
+
+
+class UdopConverter(SpmConverter):
     def post_processor(self):
         return processors.TemplateProcessing(
             single=["$A", "</s>"],
@@ -1308,7 +1328,10 @@ class GemmaConvert(SpmConverter):
             raise Exception(
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
             )
-
+        user_defined_symbols = [
+            AddedToken(token, normalized=False, special=False) for token in proto.trainer_spec.user_defined_symbols
+        ]
+        tokenizer.add_tokens(user_defined_symbols)
         return tokenizer
 
 
@@ -1317,9 +1340,9 @@ class LlamaConverter(SpmConverter):
 
     def vocab(self, proto):
         vocab = [
-            ("<unk>", 0.0),
-            ("<s>", 0.0),
-            ("</s>", 0.0),
+            (self.original_tokenizer.convert_ids_to_tokens(0), 0.0),
+            (self.original_tokenizer.convert_ids_to_tokens(1), 0.0),
+            (self.original_tokenizer.convert_ids_to_tokens(2), 0.0),
         ]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
         return vocab
@@ -1357,9 +1380,9 @@ class LlamaConverter(SpmConverter):
             )
             tokenizer.add_special_tokens(
                 [
-                    AddedToken("<unk>", normalized=False, special=True),
-                    AddedToken("<s>", normalized=False, special=True),
-                    AddedToken("</s>", normalized=False, special=True),
+                    AddedToken(self.original_tokenizer.convert_ids_to_tokens(0), normalized=False, special=True),
+                    AddedToken(self.original_tokenizer.convert_ids_to_tokens(1), normalized=False, special=True),
+                    AddedToken(self.original_tokenizer.convert_ids_to_tokens(2), normalized=False, special=True),
                 ]
             )
         else:
@@ -1471,6 +1494,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "SeamlessM4TTokenizer": SeamlessM4TConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
+    "UdopTokenizer": UdopConverter,
     "WhisperTokenizer": WhisperConverter,
     "XLMRobertaTokenizer": XLMRobertaConverter,
     "XLNetTokenizer": XLNetConverter,

@@ -56,7 +56,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.39.0.dev0")
+check_min_version("4.41.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-classification/requirements.txt")
 
@@ -509,7 +509,7 @@ def main():
                 collate_fn=collate_fn,
             ).with_options(dataset_options)
         else:
-            optimizer = None
+            optimizer = "sgd"  # Just write anything because we won't be using it
 
         if training_args.do_eval:
             eval_dataset = model.prepare_tf_dataset(

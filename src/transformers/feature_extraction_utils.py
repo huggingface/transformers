@@ -453,6 +453,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
+        subfolder = kwargs.pop("subfolder", None)
         token = kwargs.pop("token", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
@@ -502,6 +503,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                     proxies=proxies,
                     resume_download=resume_download,
                     local_files_only=local_files_only,
+                    subfolder=subfolder,
                     token=token,
                     user_agent=user_agent,
                     revision=revision,
@@ -564,16 +566,16 @@ class FeatureExtractionMixin(PushToHubMixin):
         """
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
-        feature_extractor = cls(**feature_extractor_dict)
-
         # Update feature_extractor with kwargs if needed
         to_remove = []
         for key, value in kwargs.items():
-            if hasattr(feature_extractor, key):
-                setattr(feature_extractor, key, value)
+            if key in feature_extractor_dict:
+                feature_extractor_dict[key] = value
                 to_remove.append(key)
         for key in to_remove:
             kwargs.pop(key, None)
+
+        feature_extractor = cls(**feature_extractor_dict)
 
         logger.info(f"Feature extractor {feature_extractor}")
         if return_unused_kwargs:

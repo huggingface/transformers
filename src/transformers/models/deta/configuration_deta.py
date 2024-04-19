@@ -22,9 +22,8 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-DETA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ut/deta": "https://huggingface.co/ut/deta/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class DetaConfig(PretrainedConfig):

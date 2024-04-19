@@ -97,6 +97,10 @@ The script leverages the [🤗 Trainer API](https://huggingface.co/docs/transfor
 
 Here we show how to fine-tune a [SegFormer](https://huggingface.co/nvidia/mit-b0) model on the [segments/sidewalk-semantic](https://huggingface.co/datasets/segments/sidewalk-semantic) dataset:
 
+In order to use `segments/sidewalk-semantic`: 
+ - Log in to Hugging Face with `huggingface-cli login` (token can be accessed [here](https://huggingface.co/settings/tokens)).
+ - Accept terms of use for `sidewalk-semantic` on [dataset page](https://huggingface.co/datasets/segments/sidewalk-semantic).
+
 ```bash
 python run_semantic_segmentation.py \
     --model_name_or_path nvidia/mit-b0 \
@@ -105,7 +109,6 @@ python run_semantic_segmentation.py \
     --remove_unused_columns False \
     --do_train \
     --do_eval \
-    --evaluation_strategy steps \
     --push_to_hub \
     --push_to_hub_model_id segformer-finetuned-sidewalk-10k-steps \
     --max_steps 10000 \
@@ -115,7 +118,7 @@ python run_semantic_segmentation.py \
     --per_device_eval_batch_size 8 \
     --logging_strategy steps \
     --logging_steps 100 \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --save_strategy epoch \
     --seed 1337
 ```

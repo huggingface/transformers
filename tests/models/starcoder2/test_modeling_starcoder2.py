@@ -461,7 +461,7 @@ class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
-    def test_flash_attn_2_inference_padding_right(self):
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest("Starcoder2 flash attention does not support right padding")
 
 
@@ -473,7 +473,7 @@ class Starcoder2IntegrationTest(unittest.TestCase):
             "Hello my name is Younes and I am a student at the University of Liverpool. I am currently studying for my MSc in Computer Science. I am interested in the field of Machine Learning and I am currently working on",
             "def hello_world():\n\treturn 'Hello World!'\n\n@app.route('/hello/<name>')\ndef hello_name(name):\n\treturn 'Hello %s!' % name\n\n@app",
         ]
-        model_id = "bigcode/starcoder2-7b_16k"
+        model_id = "bigcode/starcoder2-7b"
 
         model = Starcoder2ForCausalLM.from_pretrained(
             model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa"
@@ -493,7 +493,7 @@ class Starcoder2IntegrationTest(unittest.TestCase):
             "Hello my name is Younes and I am a student at the University of Liverpool. I am currently studying for my MSc in Computer Science. I am interested in the field of Machine Learning and I am currently working on",
             "def hello_world():\n\treturn 'Hello World!'\n\n@app.route('/hello/<name>')\ndef hello_name(name):\n\treturn 'Hello %s!' % name\n\n@app",
         ]
-        model_id = "bigcode/starcoder2-7b_16k"
+        model_id = "bigcode/starcoder2-7b"
 
         model = Starcoder2ForCausalLM.from_pretrained(
             model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="eager"
@@ -514,7 +514,7 @@ class Starcoder2IntegrationTest(unittest.TestCase):
             "Hello my name is Younes and I am a student at the University of Liverpool. I am currently studying for my MSc in Computer Science. I am interested in the field of Machine Learning and I am currently working on",
             "def hello_world():\n\treturn 'Hello World!'\n\n@app.route('/hello/<name>')\ndef hello_name(name):\n\treturn 'Hello %s!' % name\n\n@app",
         ]
-        model_id = "bigcode/starcoder2-7b_16k"
+        model_id = "bigcode/starcoder2-7b"
 
         model = Starcoder2ForCausalLM.from_pretrained(
             model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2"
@@ -535,7 +535,7 @@ class Starcoder2IntegrationTest(unittest.TestCase):
             'Hello my name is Younes and I am a student at the University of Maryland. I am currently working on a project that is related to the topic of "How to make a game". I am currently working on a project',
             'def hello_world():\n\treturn "Hello World"\n\n@app.route(\'/hello/<name>\')\ndef hello_name(name):\n\treturn "Hello " + name\n\n@app.route',
         ]
-        model_id = "bigcode/starcoder2-7b_16k"
+        model_id = "bigcode/starcoder2-7b"
 
         model = Starcoder2ForCausalLM.from_pretrained(model_id, load_in_4bit=True)
         tokenizer = AutoTokenizer.from_pretrained(model_id)

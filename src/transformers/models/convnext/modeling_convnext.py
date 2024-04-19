@@ -54,10 +54,8 @@ _EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
 _IMAGE_CLASS_CHECKPOINT = "facebook/convnext-tiny-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/convnext-tiny-224",
-    # See all ConvNext models at https://huggingface.co/models?filter=convnext
-]
+
+from ..deprecated._archive_maps import CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -282,6 +280,7 @@ class ConvNextPreTrainedModel(PreTrainedModel):
     config_class = ConvNextConfig
     base_model_prefix = "convnext"
     main_input_name = "pixel_values"
+    _no_split_modules = ["ConvNextLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

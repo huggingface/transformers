@@ -94,41 +94,63 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="slaney",
         )
 
-    def _np_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
+    def _np_extract_fbank_features(self, waveform_batch: np.array, device: str) -> np.ndarray:
         """
         Compute the log-mel spectrogram of the provided audio, gives similar results to Whisper's original torch
         implementation with 1e-5 tolerance.
         """
-        log_spec = spectrogram(
-            waveform,
-            window_function(self.n_fft, "hann"),
-            frame_length=self.n_fft,
-            hop_length=self.hop_length,
-            power=2.0,
-            mel_filters=self.mel_filters,
-            log_mel="log10",
-        )
-        log_spec = log_spec[:, :-1]
-        log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
-        log_spec = (log_spec + 4.0) / 4.0
-        return log_spec
+        if device != "cpu":
+            raise ValueError(
+                f"Got device `{device}` for feature extraction, but feature extraction on CUDA accelerator "
+                "devices requires torch, which is not installed. Either set `device='cpu'`, or "
+                "install torch according to the official instructions: https://pytorch.org/get-started/locally/"
+            )
+        log_spec_batch = []
+        for waveform in waveform_batch:
+            log_spec = spectrogram(
+                waveform,
+                window_function(self.n_fft, "hann"),
+                frame_length=self.n_fft,
+                hop_length=self.hop_length,
+                power=2.0,
+                mel_filters=self.mel_filters,
+                log_mel="log10",
+            )
+            log_spec = log_spec[:, :-1]
+            log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
+            log_spec = (log_spec + 4.0) / 4.0
+            log_spec_batch.append(log_spec)
+        log_spec_batch = np.array(log_spec_batch)
+        return log_spec_batch
 
-    def _torch_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
+    def _torch_extract_fbank_features(self, waveform: np.array, device: str = "cpu") -> np.ndarray:
         """
-        Compute the log-mel spectrogram of the provided audio using the PyTorch STFT implementation.
+        Compute the log-mel spectrogram of the audio using PyTorch's GPU-accelerated STFT implementation with batching,
+        yielding results similar to cpu computing with 1e-5 tolerance.
         """
         waveform = torch.from_numpy(waveform).type(torch.float32)
 
         window = torch.hann_window(self.n_fft)
+        if device != "cpu":
+            waveform = waveform.to(device)
+            window = window.to(device)
         stft = torch.stft(waveform, self.n_fft, self.hop_length, window=window, return_complex=True)
         magnitudes = stft[..., :-1].abs() ** 2
 
         mel_filters = torch.from_numpy(self.mel_filters).type(torch.float32)
+        if device != "cpu":
+            mel_filters = mel_filters.to(device)
         mel_spec = mel_filters.T @ magnitudes
 
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
-        log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
+        if waveform.dim() == 2:
+            max_val = log_spec.max(dim=2, keepdim=True)[0].max(dim=1, keepdim=True)[0]
+            log_spec = torch.maximum(log_spec, max_val - 8.0)
+        else:
+            log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
+        if device != "cpu":
+            log_spec = log_spec.detach().cpu()
         return log_spec.numpy()
 
     @staticmethod
@@ -165,6 +187,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,
         do_normalize: Optional[bool] = None,
+        device: Optional[str] = "cpu",
         **kwargs,
     ) -> BatchFeature:
         """
@@ -211,6 +234,9 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             do_normalize (`bool`, *optional*, defaults to `False`):
                 Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
                 improve the performance of the model.
+            device (`str`, *optional*, defaults to `'cpu'`):
+                Specifies the device for computation of the log-mel spectrogram of audio signals in the
+                `_torch_extract_fbank_features` method. (e.g., "cpu", "cuda")
         """
 
         if sampling_rate is not None:
@@ -272,7 +298,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         extract_fbank_features = (
             self._torch_extract_fbank_features if is_torch_available() else self._np_extract_fbank_features
         )
-        input_features = [extract_fbank_features(waveform) for waveform in input_features[0]]
+        input_features = extract_fbank_features(input_features[0], device)
 
         if isinstance(input_features[0], List):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]

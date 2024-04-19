@@ -57,9 +57,9 @@ class CircleCIJob:
     install_steps: List[str] = None
     marker: Optional[str] = None
     parallelism: Optional[int] = 1
-    pytest_num_workers: int = 8
+    pytest_num_workers: int = 12
     pytest_options: Dict[str, Any] = None
-    resource_class: Optional[str] = "xlarge"
+    resource_class: Optional[str] = "2xlarge"
     tests_to_run: Optional[List[str]] = None
     working_directory: str = "~/transformers"
     # This should be only used for doctest job!
@@ -317,7 +317,7 @@ torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
     ],
     parallelism=1,
-    pytest_num_workers=6,
+    pytest_num_workers=12,
 )
 
 
@@ -353,7 +353,7 @@ pipelines_torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
     ],
     marker="is_pipeline_test",
-    pytest_num_workers=6,
+    pytest_num_workers=12,
 )
 
 
@@ -475,6 +475,7 @@ exotic_models_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager 'git+https://github.com/facebookresearch/detectron2.git'",
         "sudo apt install tesseract-ocr",
         "pip install -U --upgrade-strategy eager pytesseract",
+        "pip install --upgrade-strategy eager sentencepiece",
         "pip install -U --upgrade-strategy eager natten==0.15.1+torch210cpu -f https://shi-labs.com/natten/wheels",
         "pip install -U --upgrade-strategy eager python-Levenshtein",
         "pip install -U --upgrade-strategy eager opencv-python",
@@ -485,6 +486,7 @@ exotic_models_job = CircleCIJob(
         "tests/models/*layoutlmv*",
         "tests/models/*nat",
         "tests/models/deta",
+        "tests/models/udop",
         "tests/models/nougat",
     ],
     pytest_num_workers=1,

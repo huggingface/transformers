@@ -52,10 +52,7 @@ _IMAGE_CLASS_CHECKPOINT = "MBZUAI/swiftformer-xs"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "MBZUAI/swiftformer-xs",
-    # See all SwiftFormer models at https://huggingface.co/models?filter=swiftformer
-]
+from ..deprecated._archive_maps import SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class SwiftFormerPatchEmbedding(nn.Module):
@@ -431,6 +428,7 @@ class SwiftFormerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "swiftformer"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["SwiftFormerEncoderBlock"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""

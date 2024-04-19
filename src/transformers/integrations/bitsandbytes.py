@@ -1,6 +1,7 @@
 import importlib.metadata
 import warnings
 from copy import deepcopy
+from inspect import signature
 
 from packaging import version
 
@@ -155,7 +156,10 @@ def _replace_with_bnb_linear(
 
         if (isinstance(module, nn.Linear) or isinstance(module, Conv1D)) and name not in modules_to_not_convert:
             # Check if the current key is not in the `modules_to_not_convert`
-            if not any(key in ".".join(current_key_name) for key in modules_to_not_convert):
+            current_key_name_str = ".".join(current_key_name)
+            if not any(
+                (key + "." in current_key_name_str) or (key == current_key_name_str) for key in modules_to_not_convert
+            ):
                 with init_empty_weights():
                     if isinstance(module, Conv1D):
                         in_features, out_features = module.weight.shape
@@ -179,6 +183,11 @@ def _replace_with_bnb_linear(
                         ):
                             pass
                         else:
+                            extra_kwargs = (
+                                {"quant_storage": quantization_config.bnb_4bit_quant_storage}
+                                if "quant_storage" in list(signature(bnb.nn.Linear4bit).parameters)
+                                else {}
+                            )
                             model._modules[name] = bnb.nn.Linear4bit(
                                 in_features,
                                 out_features,
@@ -186,6 +195,7 @@ def _replace_with_bnb_linear(
                                 quantization_config.bnb_4bit_compute_dtype,
                                 compress_statistics=quantization_config.bnb_4bit_use_double_quant,
                                 quant_type=quantization_config.bnb_4bit_quant_type,
+                                **extra_kwargs,
                             )
                             has_been_replaced = True
                     # Store the module class in case we need to transpose the weight later

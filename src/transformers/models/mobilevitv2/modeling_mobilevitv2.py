@@ -57,10 +57,7 @@ _IMAGE_CLASS_CHECKPOINT = "apple/mobilevitv2-1.0-imagenet1k-256"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "apple/mobilevitv2-1.0-imagenet1k-256"
-    # See all MobileViTV2 models at https://huggingface.co/models?filter=mobilevitv2
-]
+from ..deprecated._archive_maps import MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.mobilevit.modeling_mobilevit.make_divisible
@@ -609,6 +606,7 @@ class MobileViTV2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "mobilevitv2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["MobileViTV2Layer"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""

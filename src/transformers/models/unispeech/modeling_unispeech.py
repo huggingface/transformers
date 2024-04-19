@@ -56,11 +56,8 @@ _EXPECTED_OUTPUT_SHAPE = [1, 292, 1024]
 _CTC_EXPECTED_OUTPUT = "'mister quilter is the apposl of the midle classes and weare glad to welcom his gosepl'"
 _CTC_EXPECTED_LOSS = 17.17
 
-UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/unispeech-large-1500h-cv",
-    "microsoft/unispeech-large-multi-lingual-1500h-cv",
-    # See all UniSpeech models at https://huggingface.co/models?filter=unispeech
-]
+
+from ..deprecated._archive_maps import UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -1093,7 +1090,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
         self.feature_projection = UniSpeechFeatureProjection(config)
 
         if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
-            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+            self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
 
         if config.do_stable_layer_norm:
             self.encoder = UniSpeechEncoderStableLayerNorm(config)

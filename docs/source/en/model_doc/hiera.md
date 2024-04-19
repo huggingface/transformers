@@ -26,14 +26,28 @@ The abstract from the paper is the following:
 
 *Modern hierarchical vision transformers have added several vision-specific components in the pursuit of supervised classification performance. While these components lead to effective accuracies and attractive FLOP counts, the added complexity actually makes these transformers slower than their vanilla ViT counterparts. In this paper, we argue that this additional bulk is unnecessary. By pretraining with a strong visual pretext task (MAE), we can strip out all the bells-and-whistles from a state-of-the-art multi-stage vision transformer without losing accuracy. In the process, we create Hiera, an extremely simple hierarchical vision transformer that is more accurate than previous models while being significantly faster both at inference and during training. We evaluate Hiera on a variety of tasks for image and video recognition. Our code and models are available at https://github.com/facebookresearch/hiera.*
 
-This model was contributed by [namangarg110](https://huggingface.co/namangarg110). The original code can be found
-[here](https://github.com/facebookresearch/hiera). The pre-trained checkpoints can be found on the
-[Hugging Face Hub](https://huggingface.co/models?sort=downloads&search=namangarg110%2Fhiera).
+This model was contributed by [EduardoPacheco](https://huggingface.co/EduardoPacheco). The original code can be found
+[here](https://github.com/facebookresearch/hiera).
+
 
 ## HieraConfig
 
 [[autodoc]] HieraConfig
 
 ## HieraModel
+
 [[autodoc]] HieraModel
     - forward
+
+## HieraForPreTraining
+
+[[autodoc]] HieraForPreTraining
+    - forward
+  
+## HieraForImageClassification
+
+[[autodoc]] HieraForImageClassification
+    - forward
+
+</pt>
+<tf>
