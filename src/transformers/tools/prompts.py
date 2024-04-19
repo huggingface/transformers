@@ -160,15 +160,15 @@ Observation: the result of the action
 
 ALWAYS provide a 'Thought:' and an 'Action:' sequence. You MUST provide at least the 'Action:' sequence to move forward.
 You can use the result of the previous action as input for the next action.
-The observation will always be a string: it can represent a file, like "imag_1.jpg".
+The observation will always be a string: it can represent a file, like "image_1.png".
 Then you can use it as input for the next action. You can do it for instance as follows:
 
-Observation: "image_1.jpg"
+Observation: "image_1.png"
 Thought: I need to transform the image that I received in the previous observation to make it green.
 Action:
 {
   "action": "image_transformer",
-  "action_input": {"image": "image_1.jpg"}
+  "action_input": {"image": "image_1.png"}
 }
 
 To provide the final answer to the task, use an action blob with "action": "final_answer" tool. It is the only way to complete the task, else you will be stuck on a loop. So your final output should look like this:
@@ -178,7 +178,7 @@ Action:
   "action_input": {"answer": "insert your final answer here"}
 }
 
-Now begin! You have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: <<additional_args>>
+Now begin! <<additional_args>>
 """
 
 
