@@ -1841,10 +1841,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         https://github.com/openai/openai-python/blob/main/chatml.md
         """
         logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using a default chat template "
-            "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+            "No chat template is set for this tokenizer, falling back to a ChatML template. "
+            "This is very error-prone, because most models are not trained with a ChatML template!"
+            "Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
+            "point any code depending on them will stop working. We recommend setting a valid chat template before "
+            "then to ensure that this model continues working without issues."
         )
         return (
             "{% for message in messages %}"
