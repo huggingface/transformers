@@ -470,8 +470,7 @@ from transformers import Tool
 tool = Tool.from_gradio(gradio_tool)
 ```
 
-Now we can manage it exactly as we would a usual custom tool. We leverage it to improve our prompt
-` a rabbit wearing a space suit`:
+Now you can use it just like any other tool. For example, let's improve the prompt  `a rabbit wearing a space suit`.
 
 ```python
 from transformers import CodeAgent
