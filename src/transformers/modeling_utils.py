@@ -4828,12 +4828,12 @@ def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module:
             else:
                 kwargs["recursive"] = recursive
         return extract_model_from_parallel(model, **kwargs)
-
-    # since there could be multiple levels of wrapping, unwrap recursively
-    if hasattr(model, "module"):
-        return unwrap_model(model.module)
     else:
-        return model
+        # since there could be multiple levels of wrapping, unwrap recursively
+        if hasattr(model, "module"):
+            return unwrap_model(model.module)
+        else:
+            return model
 
 
 def expand_device_map(device_map, param_names, start_prefix):
