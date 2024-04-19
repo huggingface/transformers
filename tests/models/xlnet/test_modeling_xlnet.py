@@ -646,7 +646,8 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     seq_len = 1
                 else:
                     # for first item dummy PAD token is appended so need one more
-                    seq_len = (min_length + 1) if idx == 0 else min_length
+                    # else offset+dummy_token when using cache
+                    seq_len = (min_length + 1) if idx == 0 else 3
 
                 expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
                 self.assertEqual(layer_hidden_states.shape, expected_shape)
@@ -665,8 +666,11 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 tgt_len = min_length
 
                 # for first item dummy PAD token is appended so need one more
+                # every token after consists of offset+dummy_token length when using cache
                 if idx == 0:
                     tgt_len += 1
+                else:
+                    tgt_len = 3
 
                 src_len = min_length + idx + 1
 
