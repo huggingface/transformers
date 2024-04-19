@@ -52,12 +52,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "IdeficsConfig"
 
-TF_IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "HuggingFaceM4/idefics-9b",
-    "HuggingFaceM4/idefics-80b",
-    # See all Idefics models at https://huggingface.co/models?filter=idefics
-]
-
 
 @dataclass
 class TFIdeficsBaseModelOutputWithPast(ModelOutput):
@@ -561,14 +555,14 @@ class TFIdeficsEmbedding(tf.keras.layers.Layer):
             seq_len = shape_list(x)[2]
         return self._compute_cos_sin(seq_len=seq_len)
 
-
+# Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return tf.concat((-x2, x1), axis=-1)
 
-
+# Copied from transformers.models.llama.modeling_flax_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     cos = tf.gather(cos, position_ids)  # [seq_len, dim] -> [batch_size, 1, seq_len, head_dim]
     sin = tf.gather(sin, position_ids)
@@ -1097,24 +1091,6 @@ class TFIdeficsPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["TFIdeficsDecoderLayer", "TFIdeficsGatedCrossAttentionLayer"]
-
-    def _init_weights(self, module):
-        # important: this ported version of Idefics isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the m4 code
-        # base should be used for training from scratch and it contains the correct code.
-        std = self.config.initializer_range
-        if isinstance(module, tf.keras.layers.Dense):
-            module.kernel = tf.random.normal(shape=module.kernel.shape, mean=0.0, stddev=std)
-            if module.bias is not None:
-                module.bias = tf.zeros_like(module.bias)
-        elif isinstance(module, tf.keras.layers.Embedding):
-            module.embeddings = tf.random.normal(shape=module.embeddings.shape, mean=0.0, stddev=std)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        # TODO: Alazar, should below be TFIdeficsModel instead?
-        if isinstance(module, TFIdeficsMainLayer):
-            module.gradient_checkpointing = value
-
 
 LLAMA_INPUTS_DOCSTRING = r"""
     Args:
