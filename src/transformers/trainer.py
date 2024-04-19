@@ -1687,6 +1687,7 @@ class Trainer:
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
                     )
                     model.config.use_cache = False
+
                 # Apply gradient checkpointing to auto-wrapped sub-modules if specified
                 def auto_wrapper_callable(m, *args, **kwargs):
                     target_cls = FSDP if not self.is_fsdp_xla_v2_enabled else FSDPv2
