@@ -2113,9 +2113,9 @@ class MBartForCausalLM(MBartPreTrainedModel):
                 remove_prefix_length = input_ids.shape[1] - 1
 
             input_ids = input_ids[:, remove_prefix_length:]
-
+        # first step, decoder_cached_states are empty
         return {
-            "input_ids": input_ids,
+            "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
             "attention_mask": attention_mask,
             "past_key_values": past_key_values,
             "use_cache": use_cache,
