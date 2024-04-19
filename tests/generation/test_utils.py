@@ -1118,8 +1118,9 @@ class GenerationTesterMixin:
             )
             self.assertListEqual(low_output.tolist(), high_output.tolist())
 
+    @parameterized.expand([("random",), ("same",)])
     @is_flaky()  # Read NOTE (1) below. If there are API issues, all attempts will fail.
-    def test_assisted_decoding_matches_greedy_search(self):
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         # This test ensures that the assisted generation does not introduce output changes over greedy search.
         # NOTE (1): The sentence above is true most of the time, there is a tiny difference in the logits due to matmul
         # shape differences -- and it may result in a different output. The input shape difference happens in the
@@ -1178,64 +1179,12 @@ class GenerationTesterMixin:
             }
             output_greedy = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 
-            assistant_model = model
+            if assistant_type == "random":
+                assistant_model = model_class(config).to(torch_device).eval()
+            else:
+                assistant_model = model
             assistant_model.generation_config.num_assistant_tokens = 2  # see b)
             assistant_model.generation_config.num_assistant_tokens_schedule = "constant"  # see b)
-            generation_kwargs.update({"assistant_model": assistant_model})
-            output_assisted = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
-
-            # The two outputs must match and their shape must be as expected
-            self.assertListEqual(output_greedy.sequences.tolist(), output_assisted.sequences.tolist())
-            for output in (output_greedy, output_assisted):
-                self._check_outputs(output, input_ids, model.config, use_cache=True)
-
-    @is_flaky()
-    def test_assisted_decoding_matches_greedy_search_random_assistant(self):
-        # same as the test above, but this time not all candidates are accepted
-        for model_class in self.all_generative_model_classes:
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
-                self.skipTest("Won't fix: old model with different cache format")
-            if any(
-                model_name in model_class.__name__.lower()
-                for model_name in [
-                    "bigbirdpegasus",
-                    "led",
-                    "mega",
-                    "speech2text",
-                    "git",
-                    "prophetnet",
-                    "seamlessm4t",
-                    "clvp",
-                ]
-            ):
-                self.skipTest("May fix in the future: need model-specific fixes")
-
-            config, input_ids, attention_mask, _ = self._get_input_ids_and_config(batch_size=1)
-
-            # NOTE: assisted generation only works with cache on at the moment.
-            if not hasattr(config, "use_cache"):
-                self.skipTest("This model doesn't support caching")
-
-            config.use_cache = True
-            config.is_decoder = True
-            model = model_class(config).to(torch_device).eval()
-
-            generation_kwargs = {
-                "eos_token_id": -1,
-                "max_new_tokens": 5,
-                "num_beams": 1,
-                "do_sample": False,
-                "output_scores": True,
-                "output_logits": True,
-                "output_hidden_states": True,
-                "output_attentions": True,
-                "return_dict_in_generate": True,
-            }
-            output_greedy = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
-
-            # initialize another model from random weights, prob causing none of the candidates to be accepted
-            assistant_model = model_class(config).to(torch_device).eval()
-            assistant_model.generation_config.num_assistant_tokens = 2
             generation_kwargs.update({"assistant_model": assistant_model})
             output_assisted = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 

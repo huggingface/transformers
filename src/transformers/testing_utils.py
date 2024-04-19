@@ -2157,6 +2157,7 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
                         time.sleep(wait_before_retry)
                     retry_count += 1
 
+            print(test_func_ref)
             return test_func_ref(*args, **kwargs)
 
         return wrapper

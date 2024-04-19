@@ -1282,6 +1282,7 @@ class GenerationMixin:
         return generation_config, model_kwargs
 
     def _get_initial_cache_position(self, input_ids, model_kwargs):
+        """Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length"""
         past_length = 0
         if "past_key_values" in model_kwargs:
             if isinstance(model_kwargs["past_key_values"], Cache):
@@ -2033,7 +2034,6 @@ class GenerationMixin:
 
         # keep track of which sequences are already finished
         batch_size = input_ids.shape[0]
-        this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
@@ -3111,7 +3111,6 @@ class GenerationMixin:
         num_beams = beam_scorer.num_beams
 
         batch_beam_size, cur_len = input_ids.shape
-        this_peer_finished = False
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         if num_beams * batch_size != batch_beam_size:
@@ -3516,7 +3515,6 @@ class GenerationMixin:
         num_beams = beam_scorer.num_beams
 
         batch_beam_size, cur_len = input_ids.shape
-        this_peer_finished = False
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         # init attention / hidden states / scores tuples
@@ -3875,7 +3873,6 @@ class GenerationMixin:
         device = input_ids.device
 
         batch_beam_size, cur_len = input_ids.shape
-        this_peer_finished = False
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         if return_dict_in_generate and output_scores:
@@ -4292,7 +4289,6 @@ class GenerationMixin:
         num_beams = constrained_beam_scorer.num_beams
 
         batch_beam_size, cur_len = input_ids.shape
-        this_peer_finished = False
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         if num_beams * batch_size != batch_beam_size:
