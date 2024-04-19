@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.40.0.dev0"
+__version__ = "4.41.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -327,6 +327,7 @@ _import_structure = {
         "Data2VecTextConfig",
         "Data2VecVisionConfig",
     ],
+    "models.dbrx": ["DbrxConfig"],
     "models.deberta": [
         "DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DebertaConfig",
@@ -488,9 +489,11 @@ _import_structure = {
         "GPTSanJapaneseConfig",
         "GPTSanJapaneseTokenizer",
     ],
-    "models.graphormer": [
-        "GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "GraphormerConfig",
+    "models.graphormer": ["GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "GraphormerConfig"],
+    "models.grounding_dino": [
+        "GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "GroundingDinoConfig",
+        "GroundingDinoProcessor",
     ],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -505,6 +508,7 @@ _import_structure = {
         "IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "IdeficsConfig",
     ],
+    "models.idefics2": ["Idefics2Config"],
     "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
     "models.informer": ["INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "InformerConfig"],
     "models.instructblip": [
@@ -514,6 +518,7 @@ _import_structure = {
         "InstructBlipQFormerConfig",
         "InstructBlipVisionConfig",
     ],
+    "models.jamba": ["JambaConfig"],
     "models.jukebox": [
         "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "JukeboxConfig",
@@ -660,6 +665,7 @@ _import_structure = {
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
     ],
+    "models.olmo": ["OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP", "OlmoConfig"],
     "models.oneformer": [
         "ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "OneFormerConfig",
@@ -726,12 +732,16 @@ _import_structure = {
         "ProphetNetTokenizer",
     ],
     "models.pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtConfig"],
-    "models.pvt_v2": ["PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtV2Config"],
+    "models.pvt_v2": ["PvtV2Config"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
     "models.qwen2": [
         "QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Qwen2Config",
         "Qwen2Tokenizer",
+    ],
+    "models.qwen2_moe": [
+        "QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Qwen2MoeConfig",
     ],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.realm": [
@@ -739,6 +749,7 @@ _import_structure = {
         "RealmConfig",
         "RealmTokenizer",
     ],
+    "models.recurrent_gemma": ["RecurrentGemmaConfig"],
     "models.reformer": ["REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ReformerConfig"],
     "models.regnet": ["REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "RegNetConfig"],
     "models.rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
@@ -1083,6 +1094,7 @@ _import_structure = {
         "add_end_docstrings",
         "add_start_docstrings",
         "is_apex_available",
+        "is_av_available",
         "is_bitsandbytes_available",
         "is_datasets_available",
         "is_decord_available",
@@ -1104,6 +1116,7 @@ _import_structure = {
         "is_timm_available",
         "is_tokenizers_available",
         "is_torch_available",
+        "is_torch_mlu_available",
         "is_torch_neuroncore_available",
         "is_torch_npu_available",
         "is_torch_tpu_available",
@@ -1324,7 +1337,9 @@ else:
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
+    _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
+    _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
@@ -1460,6 +1475,7 @@ else:
             "AlignVisionModel",
         ]
     )
+
     _import_structure["models.altclip"].extend(
         [
             "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1927,6 +1943,13 @@ else:
             "Data2VecVisionPreTrainedModel",
         ]
     )
+    _import_structure["models.dbrx"].extend(
+        [
+            "DbrxForCausalLM",
+            "DbrxModel",
+            "DbrxPreTrainedModel",
+        ]
+    )
     _import_structure["models.deberta"].extend(
         [
             "DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2384,6 +2407,14 @@ else:
             "GraphormerPreTrainedModel",
         ]
     )
+    _import_structure["models.grounding_dino"].extend(
+        [
+            "GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GroundingDinoForObjectDetection",
+            "GroundingDinoModel",
+            "GroundingDinoPreTrainedModel",
+        ]
+    )
     _import_structure["models.groupvit"].extend(
         [
             "GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2423,6 +2454,15 @@ else:
             "IdeficsProcessor",
         ]
     )
+    _import_structure["models.idefics2"].extend(
+        [
+            "IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Idefics2ForConditionalGeneration",
+            "Idefics2Model",
+            "Idefics2PreTrainedModel",
+            "Idefics2Processor",
+        ]
+    )
     _import_structure["models.imagegpt"].extend(
         [
             "IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2448,6 +2488,14 @@ else:
             "InstructBlipPreTrainedModel",
             "InstructBlipQFormerModel",
             "InstructBlipVisionModel",
+        ]
+    )
+    _import_structure["models.jamba"].extend(
+        [
+            "JambaForCausalLM",
+            "JambaForSequenceClassification",
+            "JambaModel",
+            "JambaPreTrainedModel",
         ]
     )
     _import_structure["models.jukebox"].extend(
@@ -2875,6 +2923,13 @@ else:
             "NystromformerPreTrainedModel",
         ]
     )
+    _import_structure["models.olmo"].extend(
+        [
+            "OlmoForCausalLM",
+            "OlmoModel",
+            "OlmoPreTrainedModel",
+        ]
+    )
     _import_structure["models.oneformer"].extend(
         [
             "ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3050,7 +3105,6 @@ else:
     )
     _import_structure["models.pvt_v2"].extend(
         [
-            "PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "PvtV2Backbone",
             "PvtV2ForImageClassification",
             "PvtV2Model",
@@ -3081,6 +3135,14 @@ else:
             "Qwen2PreTrainedModel",
         ]
     )
+    _import_structure["models.qwen2_moe"].extend(
+        [
+            "Qwen2MoeForCausalLM",
+            "Qwen2MoeForSequenceClassification",
+            "Qwen2MoeModel",
+            "Qwen2MoePreTrainedModel",
+        ]
+    )
     _import_structure["models.rag"].extend(
         [
             "RagModel",
@@ -3100,6 +3162,13 @@ else:
             "RealmRetriever",
             "RealmScorer",
             "load_tf_weights_in_realm",
+        ]
+    )
+    _import_structure["models.recurrent_gemma"].extend(
+        [
+            "RecurrentGemmaForCausalLM",
+            "RecurrentGemmaModel",
+            "RecurrentGemmaPreTrainedModel",
         ]
     )
     _import_structure["models.reformer"].extend(
@@ -4448,6 +4517,14 @@ else:
             "TFSpeech2TextPreTrainedModel",
         ]
     )
+    _import_structure["models.swiftformer"].extend(
+        [
+            "TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFSwiftFormerForImageClassification",
+            "TFSwiftFormerModel",
+            "TFSwiftFormerPreTrainedModel",
+        ]
+    )
     _import_structure["models.swin"].extend(
         [
             "TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5206,6 +5283,7 @@ if TYPE_CHECKING:
         Data2VecTextConfig,
         Data2VecVisionConfig,
     )
+    from .models.dbrx import DbrxConfig
     from .models.deberta import (
         DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DebertaConfig,
@@ -5359,9 +5437,11 @@ if TYPE_CHECKING:
         GPTSanJapaneseConfig,
         GPTSanJapaneseTokenizer,
     )
-    from .models.graphormer import (
-        GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        GraphormerConfig,
+    from .models.graphormer import GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, GraphormerConfig
+    from .models.grounding_dino import (
+        GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GroundingDinoConfig,
+        GroundingDinoProcessor,
     )
     from .models.groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5376,6 +5456,7 @@ if TYPE_CHECKING:
         IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         IdeficsConfig,
     )
+    from .models.idefics2 import Idefics2Config
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
     from .models.informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
     from .models.instructblip import (
@@ -5385,6 +5466,7 @@ if TYPE_CHECKING:
         InstructBlipQFormerConfig,
         InstructBlipVisionConfig,
     )
+    from .models.jamba import JambaConfig
     from .models.jukebox import (
         JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP,
         JukeboxConfig,
@@ -5530,6 +5612,7 @@ if TYPE_CHECKING:
         NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         NystromformerConfig,
     )
+    from .models.olmo import OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP, OlmoConfig
     from .models.oneformer import (
         ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OneFormerConfig,
@@ -5602,15 +5685,17 @@ if TYPE_CHECKING:
         ProphetNetTokenizer,
     )
     from .models.pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig
-    from .models.pvt_v2 import PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtV2Config
+    from .models.pvt_v2 import PvtV2Config
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
     from .models.qwen2 import QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2Config, Qwen2Tokenizer
+    from .models.qwen2_moe import QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2MoeConfig
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.realm import (
         REALM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         RealmConfig,
         RealmTokenizer,
     )
+    from .models.recurrent_gemma import RecurrentGemmaConfig
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
     from .models.regnet import REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP, RegNetConfig
     from .models.rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
@@ -5952,6 +6037,7 @@ if TYPE_CHECKING:
         add_end_docstrings,
         add_start_docstrings,
         is_apex_available,
+        is_av_available,
         is_bitsandbytes_available,
         is_datasets_available,
         is_decord_available,
@@ -5973,6 +6059,7 @@ if TYPE_CHECKING:
         is_timm_available,
         is_tokenizers_available,
         is_torch_available,
+        is_torch_mlu_available,
         is_torch_neuroncore_available,
         is_torch_npu_available,
         is_torch_tpu_available,
@@ -6170,7 +6257,9 @@ if TYPE_CHECKING:
         )
         from .models.fuyu import FuyuImageProcessor, FuyuProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
+        from .models.grounding_dino import GroundingDinoImageProcessor
         from .models.idefics import IdeficsImageProcessor
+        from .models.idefics2 import Idefics2ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.layoutlmv2 import (
             LayoutLMv2FeatureExtractor,
@@ -6709,6 +6798,13 @@ if TYPE_CHECKING:
             Data2VecVisionModel,
             Data2VecVisionPreTrainedModel,
         )
+
+        # PyTorch model imports
+        from .models.dbrx import (
+            DbrxForCausalLM,
+            DbrxModel,
+            DbrxPreTrainedModel,
+        )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             DebertaForMaskedLM,
@@ -7087,6 +7183,12 @@ if TYPE_CHECKING:
             GraphormerModel,
             GraphormerPreTrainedModel,
         )
+        from .models.grounding_dino import (
+            GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GroundingDinoForObjectDetection,
+            GroundingDinoModel,
+            GroundingDinoPreTrainedModel,
+        )
         from .models.groupvit import (
             GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             GroupViTModel,
@@ -7118,6 +7220,13 @@ if TYPE_CHECKING:
             IdeficsPreTrainedModel,
             IdeficsProcessor,
         )
+        from .models.idefics2 import (
+            IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Idefics2ForConditionalGeneration,
+            Idefics2Model,
+            Idefics2PreTrainedModel,
+            Idefics2Processor,
+        )
         from .models.imagegpt import (
             IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ImageGPTForCausalImageModeling,
@@ -7138,6 +7247,12 @@ if TYPE_CHECKING:
             InstructBlipPreTrainedModel,
             InstructBlipQFormerModel,
             InstructBlipVisionModel,
+        )
+        from .models.jamba import (
+            JambaForCausalLM,
+            JambaForSequenceClassification,
+            JambaModel,
+            JambaPreTrainedModel,
         )
         from .models.jukebox import (
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7485,6 +7600,11 @@ if TYPE_CHECKING:
             NystromformerModel,
             NystromformerPreTrainedModel,
         )
+        from .models.olmo import (
+            OlmoForCausalLM,
+            OlmoModel,
+            OlmoPreTrainedModel,
+        )
         from .models.oneformer import (
             ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             OneFormerForUniversalSegmentation,
@@ -7623,7 +7743,6 @@ if TYPE_CHECKING:
             PvtPreTrainedModel,
         )
         from .models.pvt_v2 import (
-            PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
             PvtV2Backbone,
             PvtV2ForImageClassification,
             PvtV2Model,
@@ -7649,6 +7768,12 @@ if TYPE_CHECKING:
             Qwen2Model,
             Qwen2PreTrainedModel,
         )
+        from .models.qwen2_moe import (
+            Qwen2MoeForCausalLM,
+            Qwen2MoeForSequenceClassification,
+            Qwen2MoeModel,
+            Qwen2MoePreTrainedModel,
+        )
         from .models.rag import (
             RagModel,
             RagPreTrainedModel,
@@ -7665,6 +7790,11 @@ if TYPE_CHECKING:
             RealmRetriever,
             RealmScorer,
             load_tf_weights_in_realm,
+        )
+        from .models.recurrent_gemma import (
+            RecurrentGemmaForCausalLM,
+            RecurrentGemmaModel,
+            RecurrentGemmaPreTrainedModel,
         )
         from .models.reformer import (
             REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7763,8 +7893,6 @@ if TYPE_CHECKING:
             SamModel,
             SamPreTrainedModel,
         )
-
-        # PyTorch model imports
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeamlessM4TCodeHifiGan,
@@ -8780,6 +8908,12 @@ if TYPE_CHECKING:
             TFSpeech2TextForConditionalGeneration,
             TFSpeech2TextModel,
             TFSpeech2TextPreTrainedModel,
+        )
+        from .models.swiftformer import (
+            TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSwiftFormerForImageClassification,
+            TFSwiftFormerModel,
+            TFSwiftFormerPreTrainedModel,
         )
         from .models.swin import (
             TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,

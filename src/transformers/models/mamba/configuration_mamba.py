@@ -22,9 +22,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "state-spaces/mamba-2.8b": "https://huggingface.co/state-spaces/mamba-2.8b/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class MambaConfig(PretrainedConfig):
@@ -68,7 +67,7 @@ class MambaConfig(PretrainedConfig):
         residual_in_fp32 (`bool`, *optional*, defaults to `True`):
             Whether or not residuals should be in `float32`. If set to `False` residuals will keep the same `dtype` as the rest of the model
         time_step_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
-            Rank of the the discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
+            Rank of the discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
         time_step_scale (`float`, *optional*, defaults to 1.0):
             Scale used used to scale `dt_proj.bias`.
         time_step_min (`float`, *optional*, defaults to 0.001):

@@ -76,10 +76,10 @@ def _get_unpad_data(attention_mask):
 
 
 class CohereLayerNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-5, bias=False):
+    def __init__(self, hidden_size=None, eps=1e-5, bias=False):
+        """The hidden size can be a tuple or an int. The tuple is used for QKNorm to normalize across head_dim"""
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.bias = nn.Parameter(torch.zeros(hidden_size)) if bias else None
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
@@ -89,8 +89,6 @@ class CohereLayerNorm(nn.Module):
         variance = (hidden_states - mean).pow(2).mean(-1, keepdim=True)
         hidden_states = (hidden_states - mean) * torch.rsqrt(variance + self.variance_epsilon)
         hidden_states = self.weight.to(torch.float32) * hidden_states
-        if self.bias is not None:
-            hidden_states = hidden_states + self.bias.to(torch.float32)
         return hidden_states.to(input_dtype)
 
 
@@ -122,7 +120,7 @@ class CohereRotaryEmbedding(nn.Module):
             emb = torch.repeat_interleave(freqs, 2, dim=-1)
             cos = emb.cos()
             sin = emb.sin()
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        return cos, sin
 
 
 def rotate_half(x):
@@ -133,7 +131,6 @@ def rotate_half(x):
     return rot_x
 
 
-# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -154,11 +151,14 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
+    dtype = q.dtype
+    q = q.float()
+    k = k.float()
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
+    return q_embed.to(dtype=dtype), k_embed.to(dtype=dtype)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaMLP Llama->Cohere
@@ -192,7 +192,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaAttention Llama->Cohere
 class CohereAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -216,11 +215,19 @@ class CohereAttention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
+        self.use_qk_norm = config.use_qk_norm
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
+            )
+
+        if self.use_qk_norm:
+            # When sharding the model using Tensor Parallelism, need to be careful to use n_local_heads
+            self.q_norm = CohereLayerNorm(hidden_size=(self.num_heads, self.head_dim), eps=config.layer_norm_eps)
+            self.k_norm = CohereLayerNorm(
+                hidden_size=(self.num_key_value_heads, self.head_dim), eps=config.layer_norm_eps
             )
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
@@ -255,8 +262,14 @@ class CohereAttention(nn.Module):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim)
+        if self.use_qk_norm:
+            query_states = self.q_norm(query_states)
+            key_states = self.k_norm(key_states)
+
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         past_key_value = getattr(self, "past_key_value", past_key_value)
@@ -335,11 +348,14 @@ class CohereFlashAttention2(CohereAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        # Flash attention requires the input to have the shape
-        # batch_size x seq_length x head_dim x hidden_dim
-        # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim)
+        if self.use_qk_norm:
+            query_states = self.q_norm(query_states)
+            key_states = self.k_norm(key_states)
+
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         cos, sin = self.rotary_emb(value_states, position_ids)
@@ -505,7 +521,7 @@ class CohereSdpaAttention(CohereAttention):
     SDPA API.
     """
 
-    # Adapted from CohereAttention.forward
+    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -538,8 +554,14 @@ class CohereSdpaAttention(CohereAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim)
+        if self.use_qk_norm:
+            query_states = self.q_norm(query_states)
+            key_states = self.k_norm(key_states)
+
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         cos, sin = self.rotary_emb(value_states, position_ids)
@@ -568,12 +590,15 @@ class CohereSdpaAttention(CohereAttention):
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
+        # In case we are not compiling, we may set `causal_mask` to None, which is required to dispatch to SDPA's Flash Attention 2 backend, rather
+        # relying on the `is_causal` argument.
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
+            is_causal=causal_mask is None and q_len > 1,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -599,7 +624,7 @@ class CohereDecoderLayer(nn.Module):
         self.self_attn = COHERE_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = CohereMLP(config)
-        self.input_layernorm = CohereLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.input_layernorm = CohereLayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -822,7 +847,7 @@ class CohereModel(CoherePreTrainedModel):
         self.layers = nn.ModuleList(
             [CohereDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = CohereLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm = CohereLayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -886,7 +911,7 @@ class CohereModel(CoherePreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_seen_tokens)
 
         # embed positions
         hidden_states = inputs_embeds
@@ -950,24 +975,41 @@ class CohereModel(CoherePreTrainedModel):
             attentions=all_self_attns,
         )
 
-    # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
-    # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
-    # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
-    # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
-    def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
+    def _update_causal_mask(
+        self,
+        attention_mask: torch.Tensor,
+        input_tensor: torch.Tensor,
+        cache_position: torch.Tensor,
+        past_seen_tokens: int,
+    ):
+        # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
+        # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
+        # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
+        # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
+
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
 
+        if self.config._attn_implementation == "sdpa":
+            # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument,
+            # in order to dispatch on Flash Attention 2.
+            if AttentionMaskConverter._ignore_causal_mask_sdpa(
+                attention_mask, inputs_embeds=input_tensor, past_key_values_length=past_seen_tokens
+            ):
+                return None
+
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        if hasattr(self.layers[0].self_attn, "past_key_value"):  # static cache
+        if hasattr(getattr(self.layers[0], "self_attn", {}), "past_key_value"):  # static cache
             target_length = self.config.max_position_embeddings
         else:  # dynamic cache
             target_length = (
-                attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else cache_position[-1] + 1
+                attention_mask.shape[-1]
+                if isinstance(attention_mask, torch.Tensor)
+                else past_seen_tokens + sequence_length + 1
             )
 
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
@@ -1139,7 +1181,7 @@ class CohereForCausalLM(CoherePreTrainedModel):
         # TODO joao: standardize interface for the different Cache classes and remove of this if
         has_static_cache = False
         if past_key_values is None:
-            past_key_values = getattr(self.model.layers[0].self_attn, "past_key_value", None)
+            past_key_values = getattr(getattr(self.model.layers[0], "self_attn", {}), "past_key_value", None)
             has_static_cache = past_key_values is not None
 
         past_length = 0

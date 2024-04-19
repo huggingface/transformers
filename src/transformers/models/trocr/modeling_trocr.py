@@ -37,10 +37,7 @@ _CONFIG_FOR_DOC = "TrOCRConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/trocr-base-handwritten"
 
 
-TROCR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/trocr-base-handwritten",
-    # See all TrOCR models at https://huggingface.co/models?filter=trocr
-]
+from ..deprecated._archive_maps import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->TrOCR
@@ -410,6 +407,7 @@ class TrOCRPreTrainedModel(PreTrainedModel):
     config_class = TrOCRConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["TrOCRDecoderLayer"]
 
     def _init_weights(self, module):
         std = self.config.init_std

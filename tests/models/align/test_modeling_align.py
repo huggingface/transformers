@@ -51,7 +51,6 @@ if is_torch_available():
         AlignTextModel,
         AlignVisionModel,
     )
-    from transformers.models.align.modeling_align import ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -238,9 +237,9 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = AlignVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "kakaobrain/align-base"
+        model = AlignVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class AlignTextModelTester:
@@ -390,9 +389,9 @@ class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = AlignTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "kakaobrain/align-base"
+        model = AlignTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class AlignModelTester:
@@ -599,9 +598,9 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = AlignModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "kakaobrain/align-base"
+        model = AlignModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

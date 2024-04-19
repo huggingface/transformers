@@ -76,7 +76,7 @@ python run_speech_recognition_ctc.py \
 	--gradient_accumulation_steps="2" \
 	--learning_rate="3e-4" \
 	--warmup_steps="500" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--length_column_name="input_length" \
 	--save_steps="400" \
@@ -111,7 +111,7 @@ torchrun \
 	--per_device_train_batch_size="4" \
 	--learning_rate="3e-4" \
 	--warmup_steps="500" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--length_column_name="input_length" \
 	--save_steps="400" \
@@ -162,7 +162,7 @@ However, the `--shuffle_buffer_size` argument controls how many examples we can 
 	--gradient_accumulation_steps="2" \
 	--learning_rate="5e-4" \
 	--warmup_steps="500" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--save_steps="500" \
 	--eval_steps="500" \
@@ -293,7 +293,7 @@ python run_speech_recognition_ctc.py \
 	--per_device_train_batch_size="32" \
 	--learning_rate="1e-3" \
 	--warmup_steps="100" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--length_column_name="input_length" \
 	--save_steps="200" \
@@ -330,7 +330,7 @@ python run_speech_recognition_ctc.py \
 	--per_device_train_batch_size="32" \
 	--learning_rate="1e-3" \
 	--warmup_steps="100" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--length_column_name="input_length" \
 	--save_steps="200" \
@@ -378,7 +378,7 @@ python run_speech_recognition_seq2seq.py \
 	--logging_steps="25" \
 	--learning_rate="1e-5" \
 	--warmup_steps="500" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--eval_steps="1000" \
 	--save_strategy="steps" \
 	--save_steps="1000" \
@@ -419,7 +419,7 @@ torchrun \
 	--logging_steps="25" \
 	--learning_rate="1e-5" \
 	--warmup_steps="500" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--eval_steps="1000" \
 	--save_strategy="steps" \
 	--save_steps="1000" \
@@ -547,7 +547,7 @@ python run_speech_recognition_seq2seq.py \
 	--gradient_accumulation_steps="8" \
 	--learning_rate="3e-4" \
 	--warmup_steps="400" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="text" \
 	--save_steps="400" \
 	--eval_steps="400" \
@@ -589,7 +589,7 @@ torchrun \
 	--gradient_accumulation_steps="1" \
 	--learning_rate="3e-4" \
 	--warmup_steps="400" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="text" \
 	--save_steps="400" \
 	--eval_steps="400" \

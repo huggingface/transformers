@@ -21,10 +21,8 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 logger = logging.get_logger(__name__)
 
-NAT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "shi-labs/nat-mini-in1k-224": "https://huggingface.co/shi-labs/nat-mini-in1k-224/resolve/main/config.json",
-    # See all Nat models at https://huggingface.co/models?filter=nat
-}
+
+from ..deprecated._archive_maps import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class NatConfig(BackboneConfigMixin, PretrainedConfig):

@@ -32,7 +32,6 @@ if is_tf_available():
 
     from transformers.modeling_tf_utils import keras
     from transformers.models.esm.modeling_tf_esm import (
-        TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFEsmForMaskedLM,
         TFEsmForSequenceClassification,
         TFEsmForTokenClassification,
@@ -253,9 +252,9 @@ class TFEsmModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFEsmModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/esm2_t6_8M_UR50D"
+        model = TFEsmModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip("Protein models do not support embedding resizing.")
     def test_resize_token_embeddings(self):

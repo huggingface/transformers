@@ -165,6 +165,7 @@ docs/source/en/model_doc/megatron-bert.md
 docs/source/en/model_doc/megatron_gpt2.md
 docs/source/en/model_doc/mgp-str.md
 docs/source/en/model_doc/mistral.md
+docs/source/en/model_doc/mixtral.md
 docs/source/en/model_doc/mluke.md
 docs/source/en/model_doc/mms.md
 docs/source/en/model_doc/mobilebert.md
@@ -201,6 +202,7 @@ docs/source/en/model_doc/prophetnet.md
 docs/source/en/model_doc/pvt.md
 docs/source/en/model_doc/qdqbert.md
 docs/source/en/model_doc/qwen2.md
+docs/source/en/model_doc/qwen2_moe.md
 docs/source/en/model_doc/rag.md
 docs/source/en/model_doc/realm.md
 docs/source/en/model_doc/reformer.md
@@ -629,6 +631,8 @@ src/transformers/models/instructblip/configuration_instructblip.py
 src/transformers/models/instructblip/convert_instructblip_original_to_pytorch.py
 src/transformers/models/instructblip/modeling_instructblip.py
 src/transformers/models/instructblip/processing_instructblip.py
+src/transformers/models/jamba/configuration_jamba.py
+src/transformers/models/jamba/modeling_jamba.py
 src/transformers/models/jukebox/configuration_jukebox.py
 src/transformers/models/jukebox/convert_jukebox.py
 src/transformers/models/jukebox/modeling_jukebox.py
@@ -759,12 +763,15 @@ src/transformers/models/qwen2/configuration_qwen2.py
 src/transformers/models/qwen2/modeling_qwen2.py
 src/transformers/models/qwen2/tokenization_qwen2.py
 src/transformers/models/qwen2/tokenization_qwen2_fast.py
+src/transformers/models/qwen2_moe/configuration_qwen2_moe.py
+src/transformers/models/qwen2_moe/modeling_qwen2_moe.py
 src/transformers/models/rag/configuration_rag.py
 src/transformers/models/rag/modeling_rag.py
 src/transformers/models/rag/modeling_tf_rag.py
 src/transformers/models/rag/retrieval_rag.py
 src/transformers/models/realm/modeling_realm.py
 src/transformers/models/realm/retrieval_realm.py
+src/transformers/models/recurrent_gemma/modeling_recurrent_gemma.py
 src/transformers/models/reformer/convert_reformer_trax_checkpoint_to_pytorch.py
 src/transformers/models/regnet/configuration_regnet.py
 src/transformers/models/regnet/convert_regnet_seer_10b_to_pytorch.py

@@ -20,6 +20,7 @@ import os
 import os.path
 import sys
 import tempfile
+import threading
 import unittest
 import unittest.mock as mock
 import uuid
@@ -85,7 +86,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         AutoModelForCausalLM,
         AutoTokenizer,
         BertConfig,
@@ -101,7 +101,7 @@ if is_torch_available():
         _prepare_4d_attention_mask,
         _prepare_4d_causal_attention_mask,
     )
-    from transformers.modeling_utils import shard_checkpoint
+    from transformers.modeling_utils import _find_disjoint, _find_identical, shard_checkpoint
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
@@ -217,29 +217,29 @@ def check_models_equal(model1, model2):
 class ModelUtilsTest(TestCasePlus):
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            config = BertConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, PretrainedConfig)
+        model_name = "google-bert/bert-base-uncased"
+        config = BertConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, PretrainedConfig)
 
-            model = BertModel.from_pretrained(model_name)
-            model, loading_info = BertModel.from_pretrained(model_name, output_loading_info=True)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, PreTrainedModel)
+        model = BertModel.from_pretrained(model_name)
+        model, loading_info = BertModel.from_pretrained(model_name, output_loading_info=True)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, PreTrainedModel)
 
-            self.assertEqual(len(loading_info["missing_keys"]), 0)
-            self.assertEqual(len(loading_info["unexpected_keys"]), 8)
-            self.assertEqual(len(loading_info["mismatched_keys"]), 0)
-            self.assertEqual(len(loading_info["error_msgs"]), 0)
+        self.assertEqual(len(loading_info["missing_keys"]), 0)
+        self.assertEqual(len(loading_info["unexpected_keys"]), 8)
+        self.assertEqual(len(loading_info["mismatched_keys"]), 0)
+        self.assertEqual(len(loading_info["error_msgs"]), 0)
 
-            config = BertConfig.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
+        config = BertConfig.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
 
-            # Not sure this is the intended behavior. TODO fix Lysandre & Thom
-            config.name_or_path = model_name
+        # Not sure this is the intended behavior. TODO fix Lysandre & Thom
+        config.name_or_path = model_name
 
-            model = BertModel.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
-            self.assertEqual(model.config.output_hidden_states, True)
-            self.assertEqual(model.config, config)
+        model = BertModel.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
+        self.assertEqual(model.config.output_hidden_states, True)
+        self.assertEqual(model.config, config)
 
     def test_model_from_pretrained_subfolder(self):
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -253,6 +253,26 @@ class ModelUtilsTest(TestCasePlus):
                 _ = BertModel.from_pretrained(tmp_dir)
 
             model_loaded = BertModel.from_pretrained(tmp_dir, subfolder=subfolder)
+
+        self.assertTrue(check_models_equal(model, model_loaded))
+
+    def test_model_manually_shared_disjointed_tensors_optimum(self):
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+        model = BertModel(config)
+
+        # Let's fuse qkv
+        attn = model.encoder.layer[0].attention.self
+        q = attn.query.weight
+        k = attn.key.weight
+        v = attn.value.weight
+        # Force some shared storage
+        qkv = torch.stack([q, k, v], dim=0)
+        attn.query.weight = torch.nn.Parameter(qkv[0])
+        attn.key.weight = torch.nn.Parameter(qkv[1])
+        attn.value.weight = torch.nn.Parameter(qkv[2])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            model_loaded = BertModel.from_pretrained(tmp_dir)
 
         self.assertTrue(check_models_equal(model, model_loaded))
 
@@ -406,6 +426,44 @@ class ModelUtilsTest(TestCasePlus):
         # test model whose first param is not of a floating type, but int
         model = AutoModel.from_pretrained(TINY_BERT_FOR_TOKEN_CLASSIFICATION, torch_dtype="auto")
         self.assertEqual(model.dtype, torch.float32)
+
+    def test_model_from_pretrained_attn_implementation(self):
+        # test that the model can be instantiated with attn_implementation of either
+        # 1. explicit from_pretrained's attn_implementation argument
+        # 2. explicit from_pretrained's attn_implementation argument with a config argument
+        attn_implementation_available = ["eager"]
+        if is_torch_sdpa_available():
+            attn_implementation_available.append("sdpa")
+
+        if is_flash_attn_2_available():
+            attn_implementation_available.append("flash_attention_2")
+
+        mistral_attention_classes = {
+            "eager": "MistralAttention",
+            "sdpa": "MistralSdpaAttention",
+            "flash_attention_2": "MistralFlashAttention2",
+        }
+        for requested_attn_implementation in attn_implementation_available:
+            model = AutoModelForCausalLM.from_pretrained(
+                TINY_MISTRAL, attn_implementation=requested_attn_implementation
+            )
+            self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
+            for module in model.modules():
+                if "Attention" in module.__class__.__name__:
+                    self.assertEqual(
+                        module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
+                    )
+
+            config = AutoConfig.from_pretrained(TINY_MISTRAL)
+            model = AutoModelForCausalLM.from_pretrained(
+                TINY_MISTRAL, config=config, attn_implementation=requested_attn_implementation
+            )
+            self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
+            for module in model.modules():
+                if "Attention" in module.__class__.__name__:
+                    self.assertEqual(
+                        module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
+                    )
 
     def test_no_super_init_config_and_model(self):
         config = NoSuperInitConfig(attribute=32)
@@ -756,7 +814,7 @@ class ModelUtilsTest(TestCasePlus):
 
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         inputs = tokenizer("Hello, my name is", return_tensors="pt")
-        output = model.generate(inputs["input_ids"].to(0))
+        output = model.generate(inputs["input_ids"].to(f"{torch_device}:0"))
 
         text_output = tokenizer.decode(output[0].tolist())
         self.assertEqual(text_output, "Hello, my name is John. I'm a writer, and I'm a writer. I'm")
@@ -1429,7 +1487,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             bot_opened_pr_title = None
 
             for discussion in discussions:
-                if discussion.author == "SFconvertBot":
+                if discussion.author == "SFconvertbot":
                     bot_opened_pr = True
                     bot_opened_pr_title = discussion.title
 
@@ -1451,6 +1509,51 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         # Try to convert the model on that revision should raise
         with self.assertRaises(EnvironmentError):
             BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token, revision="new-branch")
+
+    def test_absence_of_safetensors_triggers_conversion(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        # Push a model on `main`
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+
+        # Download the model that doesn't have safetensors
+        BertModel.from_pretrained(self.repo_name, token=self.token)
+
+        for thread in threading.enumerate():
+            if thread.name == "Thread-autoconversion":
+                thread.join(timeout=10)
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+
+            bot_opened_pr = None
+            bot_opened_pr_title = None
+
+            for discussion in discussions:
+                if discussion.author == "SFconvertbot":
+                    bot_opened_pr = True
+                    bot_opened_pr_title = discussion.title
+
+            self.assertTrue(bot_opened_pr)
+            self.assertEqual(bot_opened_pr_title, "Adding `safetensors` variant of this model")
+
+    @mock.patch("transformers.safetensors_conversion.spawn_conversion")
+    def test_absence_of_safetensors_triggers_conversion_failed(self, spawn_conversion_mock):
+        spawn_conversion_mock.side_effect = HTTPError()
+
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        # Push a model on `main`
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+
+        # The auto conversion is mocked to always raise; ensure that it doesn't raise in the main thread
+        BertModel.from_pretrained(self.repo_name, token=self.token)
 
 
 @require_torch
@@ -2177,3 +2280,40 @@ class Mask4DTestHard(unittest.TestCase):
         ]
 
         self.assertEqual(decoded_0, decoded_1b)
+
+
+@require_torch
+class TestTensorSharing(TestCasePlus):
+    def test_disjoint(self):
+        main = torch.zeros(10)
+        a = main[:5]
+        b = main[5:]
+        state_dict = {"a": a, "b": b}
+
+        shared_names, disjoint_names = _find_disjoint([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [])
+        self.assertEqual(disjoint_names, ["a", "b"])
+
+        a = main[::2]
+        b = main[1::2]
+        state_dict = {"a": a, "b": b}
+
+        shared_names, disjoint_names = _find_disjoint([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [{"a", "b"}])
+        self.assertEqual(disjoint_names, [])
+
+    def test_identical(self):
+        a = torch.zeros(10)
+        b = a
+        state_dict = {"a": a, "b": b}
+
+        shared_names, identical_names = _find_identical([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [])
+        self.assertEqual(identical_names, [{"a", "b"}])
+
+        b = a[:5]
+        state_dict = {"a": a, "b": b}
+
+        shared_names, identical_names = _find_identical([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [{"a", "b"}])
+        self.assertEqual(identical_names, [])

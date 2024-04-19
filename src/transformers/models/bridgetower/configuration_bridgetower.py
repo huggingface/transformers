@@ -23,12 +23,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "BridgeTower/bridgetower-base": "https://huggingface.co/BridgeTower/bridgetower-base/blob/main/config.json",
-    "BridgeTower/bridgetower-base-itm-mlm": (
-        "https://huggingface.co/BridgeTower/bridgetower-base-itm-mlm/blob/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class BridgeTowerVisionConfig(PretrainedConfig):

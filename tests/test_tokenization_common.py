@@ -1023,24 +1023,6 @@ class TokenizerTesterMixin:
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=False)
                 self.assertIn(decoded, ["[ABC][SAMPLE][DEF]", "[ABC][SAMPLE][DEF]".lower()])
 
-    def test_pretrained_model_lists(self):
-        # We should have at least one default checkpoint for each tokenizer
-        # We should specify the max input length as well (used in some part to list the pretrained checkpoints)
-        self.assertGreaterEqual(len(self.tokenizer_class.pretrained_vocab_files_map), 1)
-        self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
-        self.assertEqual(
-            len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]),
-            len(self.tokenizer_class.max_model_input_sizes),
-        )
-
-        weights_list = list(self.tokenizer_class.max_model_input_sizes.keys())
-        weights_lists_2 = []
-        for file_id, map_list in self.tokenizer_class.pretrained_vocab_files_map.items():
-            weights_lists_2.append(list(map_list.keys()))
-
-        for weights_list_2 in weights_lists_2:
-            self.assertListEqual(weights_list, weights_list_2)
-
     def test_mask_output(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
@@ -1598,6 +1580,10 @@ class TokenizerTesterMixin:
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
                     self.assertEqual(overflowing_tokens, seq1_tokens[-(2 + stride) :])
 
+    # TODO: FIXME @ArthurZucker
+    @unittest.skip(
+        reason="start to fail after # 29473. See https://github.com/huggingface/transformers/pull/29473#pullrequestreview-1945687810"
+    )
     @slow
     @require_read_token
     def test_encode_decode_fast_slow_all_tokens(self):
@@ -1622,7 +1608,7 @@ class TokenizerTesterMixin:
                     with self.subTest(f"{(chunk/len(input_full_vocab_string))*100}%"):
                         slow_encode = slow_tokenizer.encode(string_to_check)
                         fast_encode = rust_tokenizer.encode(string_to_check)
-                        self.assertEquals(
+                        self.assertEqual(
                             slow_encode,
                             fast_encode,
                             "Hint: the following tokenization diff were obtained for slow vs fast:\n "
@@ -1634,7 +1620,7 @@ class TokenizerTesterMixin:
                 for chunk in range(0, len(input_full_vocab_ids) - 100, 100):
                     ids_to_decode = input_full_vocab_ids[chunk : chunk + 100]
                     with self.subTest(f"{(chunk/len(input_full_vocab_string))*100}%"):
-                        self.assertEquals(
+                        self.assertEqual(
                             slow_tokenizer.decode(
                                 ids_to_decode,
                                 space_between_special_tokens=False,

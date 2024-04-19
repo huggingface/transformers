@@ -38,10 +38,8 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "VipLlavaConfig"
 
-VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "llava-hf/vip-llava-7b-hf",
-    # See all VipLlava models at https://huggingface.co/models?filter=vipllava
-]
+
+from ..deprecated._archive_maps import VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -443,10 +441,10 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
                 if past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
                     # Retrieve the first layer to inspect the logits and mask out the hidden states
                     # that are set to 0
-                    first_layer_past_key_value = past_key_values[0][0][:, 0, :, :]
+                    first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
 
                     # Sum all dimensions of head_dim (-1) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
-                    batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-1) == 0)
+                    batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
 
                     target_length = input_ids.shape[1]
                     past_length = first_layer_past_key_value.shape[-1]
