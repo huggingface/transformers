@@ -211,7 +211,7 @@ Hugging Face 계정에 로그인하면 모델을 업로드하고 커뮤니티에
 ```py
 >>> training_args = Seq2SeqTrainingArguments(
 ...     output_dir="my_awesome_billsum_model",
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     learning_rate=2e-5,
 ...     per_device_train_batch_size=16,
 ...     per_device_eval_batch_size=16,

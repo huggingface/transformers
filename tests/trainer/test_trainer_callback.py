@@ -133,12 +133,12 @@ class TrainerCallbackTest(unittest.TestCase):
                 expected_events += ["on_step_begin", "on_step_end"]
                 if step % trainer.args.logging_steps == 0:
                     expected_events.append("on_log")
-                if trainer.args.evaluation_strategy == IntervalStrategy.STEPS and step % trainer.args.eval_steps == 0:
+                if trainer.args.eval_strategy == IntervalStrategy.STEPS and step % trainer.args.eval_steps == 0:
                     expected_events += evaluation_events.copy()
                 if step % trainer.args.save_steps == 0:
                     expected_events.append("on_save")
             expected_events.append("on_epoch_end")
-            if trainer.args.evaluation_strategy == IntervalStrategy.EPOCH:
+            if trainer.args.eval_strategy == IntervalStrategy.EPOCH:
                 expected_events += evaluation_events.copy()
         expected_events += ["on_log", "on_train_end"]
         return expected_events
@@ -215,12 +215,12 @@ class TrainerCallbackTest(unittest.TestCase):
         events = trainer.callback_handler.callbacks[-2].events
         self.assertEqual(events, self.get_expected_events(trainer))
 
-        trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], eval_steps=5, evaluation_strategy="steps")
+        trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], eval_steps=5, eval_strategy="steps")
         trainer.train()
         events = trainer.callback_handler.callbacks[-2].events
         self.assertEqual(events, self.get_expected_events(trainer))
 
-        trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], evaluation_strategy="epoch")
+        trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], eval_strategy="epoch")
         trainer.train()
         events = trainer.callback_handler.callbacks[-2].events
         self.assertEqual(events, self.get_expected_events(trainer))
@@ -231,7 +231,7 @@ class TrainerCallbackTest(unittest.TestCase):
             logging_steps=3,
             save_steps=10,
             eval_steps=5,
-            evaluation_strategy="steps",
+            eval_strategy="steps",
         )
         trainer.train()
         events = trainer.callback_handler.callbacks[-2].events

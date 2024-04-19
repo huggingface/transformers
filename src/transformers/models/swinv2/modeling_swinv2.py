@@ -939,6 +939,7 @@ class Swinv2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "swinv2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["Swinv2Stage"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

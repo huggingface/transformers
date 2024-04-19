@@ -282,9 +282,39 @@ def update_metadata(token: str, commit_sha: str):
     )
     tags_dataset = Dataset.from_pandas(tags_table)
 
+    hub_frameworks_json = hf_hub_download(
+        repo_id="huggingface/transformers-metadata",
+        filename="frameworks.json",
+        repo_type="dataset",
+        token=token,
+    )
+    with open(hub_frameworks_json) as f:
+        hub_frameworks_json = f.read()
+
+    hub_pipeline_tags_json = hf_hub_download(
+        repo_id="huggingface/transformers-metadata",
+        filename="pipeline_tags.json",
+        repo_type="dataset",
+        token=token,
+    )
+    with open(hub_pipeline_tags_json) as f:
+        hub_pipeline_tags_json = f.read()
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         frameworks_dataset.to_json(os.path.join(tmp_dir, "frameworks.json"))
         tags_dataset.to_json(os.path.join(tmp_dir, "pipeline_tags.json"))
+
+        with open(os.path.join(tmp_dir, "frameworks.json")) as f:
+            frameworks_json = f.read()
+        with open(os.path.join(tmp_dir, "pipeline_tags.json")) as f:
+            pipeline_tags_json = f.read()
+
+        frameworks_equal = hub_frameworks_json == frameworks_json
+        hub_pipeline_tags_equal = hub_pipeline_tags_json == pipeline_tags_json
+
+        if frameworks_equal and hub_pipeline_tags_equal:
+            print("No updates on the Hub, not pushing the metadata files.")
+            return
 
         if commit_sha is not None:
             commit_message = (

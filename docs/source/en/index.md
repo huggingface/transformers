@@ -107,6 +107,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                   [Data2VecAudio](model_doc/data2vec)                    |       ✅        |         ❌         |      ❌      |
 |                    [Data2VecText](model_doc/data2vec)                    |       ✅        |         ❌         |      ❌      |
 |                   [Data2VecVision](model_doc/data2vec)                   |       ✅        |         ✅         |      ❌      |
+|                          [DBRX](model_doc/dbrx)                          |       ✅        |         ❌         |      ❌      |
 |                       [DeBERTa](model_doc/deberta)                       |       ✅        |         ✅         |      ❌      |
 |                    [DeBERTa-v2](model_doc/deberta-v2)                    |       ✅        |         ✅         |      ❌      |
 |          [Decision Transformer](model_doc/decision_transformer)          |       ✅        |         ❌         |      ❌      |
@@ -164,6 +165,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                      [ImageGPT](model_doc/imagegpt)                      |       ✅        |         ❌         |      ❌      |
 |                      [Informer](model_doc/informer)                      |       ✅        |         ❌         |      ❌      |
 |                  [InstructBLIP](model_doc/instructblip)                  |       ✅        |         ❌         |      ❌      |
+|                         [Jamba](model_doc/jamba)                         |       ✅        |         ❌         |      ❌      |
 |                       [Jukebox](model_doc/jukebox)                       |       ✅        |         ❌         |      ❌      |
 |                      [KOSMOS-2](model_doc/kosmos-2)                      |       ✅        |         ❌         |      ❌      |
 |                      [LayoutLM](model_doc/layoutlm)                      |       ✅        |         ✅         |      ❌      |
