@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
+import torch.nn.functional as F
 
 from .configuration_utils import PretrainedConfig
 from .utils import logging
@@ -129,24 +130,74 @@ class DynamicCache(Cache):
             layer_idx (`int`):
                 The index of the layer to cache the states for.
             cache_kwargs (`Dict[str, Any]`, `optional`):
-                Additional arguments for the cache subclass. No additional arguments are used in `DynamicCache`.
+                Additional arguments for the cache subclass. Uses `cache_position` argument if present.
 
         Return:
             A tuple containing the updated key and value states.
         """
-        # Update the number of seen tokens
-        if layer_idx == 0:
-            self._seen_tokens += key_states.shape[-2]
 
-        # Update the cache
-        if len(self.key_cache) <= layer_idx:
+        if (cache_kwargs is not None) and ("cache_position" in cache_kwargs) and (len(self.key_cache) > layer_idx):
+            # updating based on `cache_position`
+            cache_position = cache_kwargs["cache_position"]
+            pad_size = cache_position.max().item() + 1 - self.key_cache[layer_idx].shape[-2]
+            if pad_size > 0:
+                self.key_cache[layer_idx] = F.pad(input=self.key_cache[layer_idx], pad=(0, 0, 0, pad_size), mode="constant", value=0)
+                self.value_cache[layer_idx] = F.pad(input=self.value_cache[layer_idx], pad=(0, 0, 0, pad_size), mode="constant", value=0)
+            self.key_cache[layer_idx][:, :, cache_position, :] = key_states
+            self.value_cache[layer_idx][:, :, cache_position, :] = value_states
+
+            # Update the number of seen tokens
+            if layer_idx == 0 and pad_size > 0:
+                self._seen_tokens += pad_size
+
+        elif len(self.key_cache) <= layer_idx:
+            # called from from_legacy_cache() - assumes empty cache
+            cache_position = torch.arange(key_states.shape[-2])
             self.key_cache.append(key_states)
             self.value_cache.append(value_states)
+
+            # Update the number of seen tokens
+            if layer_idx == 0:
+                self._seen_tokens += key_states.shape[-2]
+
         else:
-            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
-            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+            # simply expanding the cache by number of extra positions
+
+            # Update the number of seen tokens
+            if layer_idx == 0:
+                self._seen_tokens += key_states.shape[-2]
+
+            # Update the cache
+            if len(self.key_cache) <= layer_idx:
+                self.key_cache.append(key_states)
+                self.value_cache.append(value_states)
+            else:
+                self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
+                self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
+    def reorder_cache_tokens(self, source_token_idxs: torch.tensor, dest_token_idxs: torch.tensor = None):
+        """Applies indices mask to KV cache or truncates it"""
+        # TODO: support dest indices - they are ignored for now...
+
+        cache_shape = self.key_cache[0].shape
+
+        if source_token_idxs.dtype == torch.bool:
+            source_token_idxs = torch.where(source_token_idxs)[0]
+
+        left_edge = dest_token_idxs.min() if dest_token_idxs is not None else 0
+
+        if source_token_idxs.max() >= cache_shape[-2]:  # source includes elements outside of cache
+            source_token_idxs = source_token_idxs[source_token_idxs < cache_shape[-2]]
+            dest_token_idxs = torch.arange(left_edge, left_edge + source_token_idxs.shape[-1], device=self.device)
+
+        if dest_token_idxs is None:  # assumed that destination starts from cache beginning
+            dest_token_idxs = torch.arange(source_token_idxs.shape[-1], device=self.device)
+
+        for layer_cache_k, layer_cache_v in zip(self.key_cache, self.value_cache):
+            layer_cache_k = torch.cat([layer_cache_k[:, :, :left_edge, :], layer_cache_k[:, :, source_token_idxs, :]], dim=-2)
+            layer_cache_v = torch.cat([layer_cache_v[:, :, :left_edge, :], layer_cache_v[:, :, source_token_idxs, :]], dim=-2)
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
