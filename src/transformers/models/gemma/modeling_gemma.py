@@ -993,13 +993,10 @@ class GemmaModel(GemmaPreTrainedModel):
             )
 
         if attention_mask is not None and attention_mask.dim() == 4:
-            # we can pass both the full 4D mask (i.e. [..., full_len, full_len]) and a 4D mask with the same shape
-            # as the causal mask (i.e. [..., seq_len, full_len])
-            mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
-            offset = cache_position[0]
-            if attention_mask.shape[-2] == offset + sequence_length:
-                mask_slice = mask_slice[..., offset:, :]
-            causal_mask = mask_slice
+            # in this case we assume that the mask comes already in inverted form and requires no inversion or slicing
+            if attention_mask.max() != 0:
+                raise ValueError("Custom 4D attention mask should be passed in inverted form with max==0`")
+            causal_mask = attention_mask
         else:
             if hasattr(self.layers[0].self_attn, "past_key_value"):  # static cache
                 target_length = self.config.max_position_embeddings

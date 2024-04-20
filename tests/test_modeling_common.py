@@ -4219,9 +4219,11 @@ class ModelTesterMixin:
                     ]
                 ]
             ],
-            device=torch_device,
-            dtype=torch.int64,
         )
+        # inverting the attention mask
+        mask_dtype = torch.float32
+        min_dtype = torch.finfo(mask_dtype).min
+        mask_shared_prefix = (mask_shared_prefix.eq(0.0)).to(dtype=mask_dtype, device=torch_device) * min_dtype
 
         # Creating a position_ids tensor. note the repeating figures in the end.
         position_ids_shared_prefix = torch.tensor([[0, 1, 2, 3, 3, 3]], device=torch_device, dtype=torch.int64)
@@ -4245,7 +4247,6 @@ class ModelTesterMixin:
                 mask_shared_prefix,
                 position_ids_shared_prefix,
             ) = self._get_custom_4d_mask_test_data()
-            causal_mask_shared_prefix = (1 - mask_shared_prefix).to(model.dtype) * torch.finfo(model.dtype).min
 
             input_embeds = model.model.embed_tokens(input_ids)
             model_output = model.model.layers[0].self_attn.forward(input_embeds, position_ids=position_ids)[0]
@@ -4254,7 +4255,7 @@ class ModelTesterMixin:
             input_embeds_shared_prefix = model.model.embed_tokens(input_ids_shared_prefix)
             model_output_shared_prefix = model.model.layers[0].self_attn.forward(
                 input_embeds_shared_prefix,
-                attention_mask=causal_mask_shared_prefix,
+                attention_mask=mask_shared_prefix,
                 position_ids=position_ids_shared_prefix,
             )[0]
             # model_output_shared_prefix.shape == torch.Size([1, 6, ...])

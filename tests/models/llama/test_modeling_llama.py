@@ -867,12 +867,17 @@ class Mask4DTestHard(unittest.TestCase):
                 ]
             ],
             device=torch_device,
-            dtype=torch.int64,
         )
 
         position_ids = torch.arange(input_ids.shape[1]).tile(input_ids.shape[0], 1).to(torch_device)
-        # equivalent: position_ids_1 = torch.tensor([[0, 1, 2, 3, 4, 5, 3, 4, 5, 3, 4, 5]]).to(device)
-        position_ids_shared_prefix = (mask_shared_prefix.sum(dim=-1) - 1).reshape(1, -1)  # same but nicer
+
+        # building custom positions ids based on custom mask
+        position_ids_shared_prefix = (mask_shared_prefix.sum(dim=-1) - 1).reshape(1, -1)
+        # effectively: position_ids_shared_prefix = torch.tensor([[0, 1, 2, 3, 4, 5, 3, 4, 5, 3, 4, 5]]).to(device)
+
+        # inverting the mask
+        min_dtype = torch.finfo(self.model_dtype).min
+        mask_shared_prefix = (mask_shared_prefix.eq(0.0)).to(dtype=self.model_dtype) * min_dtype
 
         return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
 
@@ -892,7 +897,7 @@ class Mask4DTestHard(unittest.TestCase):
 
         # single forward run with 4D custom mask
         logits_shared_prefix = self.model.forward(
-            input_ids_shared_prefix, attention_mask=mask_shared_prefix.bool(), position_ids=position_ids_shared_prefix
+            input_ids_shared_prefix, attention_mask=mask_shared_prefix, position_ids=position_ids_shared_prefix
         ).logits
         logits_shared_prefix_last = logits_shared_prefix[
             0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
@@ -902,8 +907,7 @@ class Mask4DTestHard(unittest.TestCase):
         self.assertEqual(decoded, decoded_shared_prefix)
 
     def test_partial_stacked_causal_mask(self):
-        # Same as the test above, but the input is passed in two groups. It tests that we can pass partial 4D attention
-        # masks
+        # Same as the test above, but the input is passed in two groups. It tests that we can pass partial 4D attention masks
 
         (
             input_ids,
@@ -925,7 +929,7 @@ class Mask4DTestHard(unittest.TestCase):
         position_ids_1a = position_ids_shared_prefix[:, :part_a]
         mask_1a = mask_shared_prefix[:, :, :part_a, :part_a]
 
-        outs_1a = self.model.forward(input_1a, attention_mask=mask_1a.bool(), position_ids=position_ids_1a)
+        outs_1a = self.model.forward(input_1a, attention_mask=mask_1a, position_ids=position_ids_1a)
         past_key_values_a = outs_1a["past_key_values"]
 
         # Case 1: we pass a 4D attention mask regarding the current sequence length (i.e. [..., seq_len, full_len])
@@ -933,7 +937,7 @@ class Mask4DTestHard(unittest.TestCase):
         position_ids_1b = position_ids_shared_prefix[:, part_a:]
         mask_1b = mask_shared_prefix[:, :, part_a:, :]
         outs_1b = self.model.forward(
-            input_1b, attention_mask=mask_1b.bool(), position_ids=position_ids_1b, past_key_values=past_key_values_a
+            input_1b, attention_mask=mask_1b, position_ids=position_ids_1b, past_key_values=past_key_values_a
         )
         decoded_1b = [
             self.tokenizer.decode(t)
@@ -942,21 +946,6 @@ class Mask4DTestHard(unittest.TestCase):
             ]
         ]
         self.assertEqual(decoded, decoded_1b)
-
-        # Case 2: we pass a 4D attention mask regarding the full sequence length (i.e. [..., full_len, full_len])
-        input_1c = input_ids_shared_prefix[:, part_a:]
-        position_ids_1c = position_ids_shared_prefix[:, part_a:]
-        mask_1c = mask_shared_prefix
-        outs_1c = self.model.forward(
-            input_1c, attention_mask=mask_1c.bool(), position_ids=position_ids_1c, past_key_values=past_key_values_a
-        )
-        decoded_1c = [
-            self.tokenizer.decode(t)
-            for t in outs_1c.logits.argmax(-1)[
-                0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1] - part_a
-            ]
-        ]
-        self.assertEqual(decoded, decoded_1c)
 
     def test_stacked_causal_mask_static_cache(self):
         """same as above but with StaticCache"""
@@ -978,10 +967,10 @@ class Mask4DTestHard(unittest.TestCase):
         self.model._setup_cache(StaticCache, 1, max_cache_len=max_cache_len)
 
         padded_attention_mask = torch.nn.functional.pad(
-            input=mask_shared_prefix.bool(),
+            input=mask_shared_prefix,
             pad=(0, max_cache_len - mask_shared_prefix.shape[-1]),
             mode="constant",
-            value=False,
+            value=torch.finfo(self.model_dtype).min,
         )
 
         # single forward run with 4D custom mask
@@ -1000,7 +989,7 @@ class Mask4DTestHard(unittest.TestCase):
 
     def test_partial_stacked_causal_mask_static_cache(self):
         # Same as the test above, but the input is passed in two groups. It tests that we can pass partial 4D attention masks
-
+        # we pass a 4D attention mask shaped [..., seq_len, full_static_cache_len])
         (
             input_ids,
             position_ids,
@@ -1018,7 +1007,7 @@ class Mask4DTestHard(unittest.TestCase):
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
         self.model._setup_cache(StaticCache, 1, max_cache_len=max_cache_len)
 
-        # 2 forward runs with custom 4D masks
+        # forward run for the first part of input
         part_a = 3  # split point
 
         input_1a = input_ids_shared_prefix[:, :part_a]
@@ -1026,17 +1015,20 @@ class Mask4DTestHard(unittest.TestCase):
         mask_1a = mask_shared_prefix[:, :, :part_a, :part_a]
 
         padded_mask_1a = torch.nn.functional.pad(
-            input=mask_1a, pad=(0, max_cache_len - mask_1a.shape[-1]), mode="constant", value=0
+            input=mask_1a,
+            pad=(0, max_cache_len - mask_1a.shape[-1]),
+            mode="constant",
+            value=torch.finfo(self.model_dtype).min,
         )
 
         _ = self.model.forward(
             input_1a,
-            attention_mask=padded_mask_1a.bool(),
+            attention_mask=padded_mask_1a,
             position_ids=position_ids_1a,
             cache_position=torch.arange(part_a, device=torch_device),
         )
 
-        # Case 1: we pass a 4D attention mask regarding the current sequence length (i.e. [..., seq_len, full_static_cache_len])
+        # forward run for the second part of input
         input_1b = input_ids_shared_prefix[:, part_a:]
         position_ids_1b = position_ids_shared_prefix[:, part_a:]
         mask_1b = mask_shared_prefix[:, :, part_a:, :]
@@ -1047,7 +1039,7 @@ class Mask4DTestHard(unittest.TestCase):
 
         outs_1b = self.model.forward(
             input_1b,
-            attention_mask=padded_mask_1b.bool(),
+            attention_mask=padded_mask_1b,
             position_ids=position_ids_1b,
             cache_position=torch.arange(part_a, input_ids_shared_prefix.shape[-1], device=torch_device),
         )
