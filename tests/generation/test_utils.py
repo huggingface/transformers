@@ -3078,6 +3078,7 @@ class TokenHealingTestCase(unittest.TestCase):
                 'An example ["like this"] and another example ["',
             ),
             ("url", 'The link is <a href="http:', 'The link is <a href="http://'),
+            # aggressive_healing: "http" shouldn't be replaced with "https"
             ("aggressive_healing", 'The link is <a href="http', 'The link is <a href="http'),
             ("trailing_whitespace", "I read a book about ", "I read a book about"),
             ("nothing_to_heal", "I read a book about", "I read a book about"),
