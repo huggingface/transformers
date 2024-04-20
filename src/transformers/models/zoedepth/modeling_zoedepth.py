@@ -1012,8 +1012,7 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         bottleneck = out[1]
         feature_blocks = out[2:]
 
-        x_d0 = self.conv2(bottleneck)
-        x = x_d0
+        x = self.conv2(bottleneck)
 
         # Predict which path to take
         embedding = self.patch_transformer(x)[:, 0, :]  # batch_size, hidden_size
@@ -1129,8 +1128,7 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
         bottleneck = out[1]
         feature_blocks = out[2:]
 
-        x_d0 = self.conv2(bottleneck)
-        x = x_d0
+        x = self.conv2(bottleneck)
         _, seed_bin_centers = self.seed_bin_regressor(x)
 
         if self.bin_centers_type == "normed" or self.bin_centers_type == "hybrid2":
