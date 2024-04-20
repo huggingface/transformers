@@ -106,15 +106,15 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
 
     >>> tokenizer = GPTSanJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
     >>> tokenizer([["武田信玄", "は、"], ["織田信長", "の配下の、"]], padding=True)["input_ids"]
-    [[35993, 8640, 25948, 35998, 30647, 35675, 35999, 35999], [35993, 10382, 9868, 35998, 30646, 9459, 30646, 35675]]
+    [[35993, 35998, 8640, 25948, 35993, 35998, 30647, 35675, 35999, 35999], [35993, 35998, 10382, 9868, 35993, 35998, 30646, 9459, 30646, 35675]]
 
     >>> # Mask for Prefix-LM inputs
     >>> tokenizer([["武田信玄", "は、"], ["織田信長", "の配下の、"]], padding=True)["token_type_ids"]
-    [[1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 0, 0, 0, 0, 0]]
+    [[1, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
 
     >>> # Mask for padding
     >>> tokenizer([["武田信玄", "は、"], ["織田信長", "の配下の、"]], padding=True)["attention_mask"]
-    [[1, 1, 1, 1, 1, 1, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1]]
+    [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]
     ```
 
     Args:
@@ -247,10 +247,11 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         information.
         """
         logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using the default template "
-            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+            "No chat template is set for this tokenizer, falling back to a default class-level template. "
+            "This is very error-prone, because models are often trained with templates different from the class "
+            "default! Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
+            "point any code depending on them will stop working. We recommend setting a valid chat template before "
+            "then to ensure that this model continues working without issues."
         )
         return (
             "{% for message in messages %}"

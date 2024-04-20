@@ -103,13 +103,12 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     return output
 
 
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Swiftformer
 class SwiftFormerDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, config: SwiftFormerConfig) -> None:
         super().__init__()
-        self.drop_prob = drop_prob
+        self.drop_prob = config.drop_path_rate
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return drop_path(hidden_states, self.drop_prob, self.training)
@@ -169,7 +168,7 @@ class SwiftFormerConvEncoder(nn.Module):
         self.point_wise_conv1 = nn.Conv2d(dim, hidden_dim, kernel_size=1)
         self.act = nn.GELU()
         self.point_wise_conv2 = nn.Conv2d(hidden_dim, dim, kernel_size=1)
-        self.drop_path = nn.Identity()
+        self.drop_path = nn.Dropout(p=config.drop_conv_encoder_rate)
         self.layer_scale = nn.Parameter(torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=True)
 
     def forward(self, x):
@@ -200,7 +199,7 @@ class SwiftFormerMlp(nn.Module):
         act_layer = ACT2CLS[config.hidden_act]
         self.act = act_layer()
         self.fc2 = nn.Conv2d(hidden_features, in_features, 1)
-        self.drop = nn.Dropout(p=0.0)
+        self.drop = nn.Dropout(p=config.drop_mlp_rate)
 
     def forward(self, x):
         x = self.norm1(x)
@@ -302,7 +301,7 @@ class SwiftFormerEncoderBlock(nn.Module):
         self.local_representation = SwiftFormerLocalRepresentation(config, dim=dim)
         self.attn = SwiftFormerEfficientAdditiveAttention(config, dim=dim)
         self.linear = SwiftFormerMlp(config, in_features=dim)
-        self.drop_path = SwiftFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = SwiftFormerDropPath(config) if drop_path > 0.0 else nn.Identity()
         self.use_layer_scale = use_layer_scale
         if use_layer_scale:
             self.layer_scale_1 = nn.Parameter(
@@ -315,21 +314,13 @@ class SwiftFormerEncoderBlock(nn.Module):
     def forward(self, x):
         x = self.local_representation(x)
         batch_size, channels, height, width = x.shape
+        res = self.attn(x.permute(0, 2, 3, 1).reshape(batch_size, height * width, channels))
+        res = res.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
         if self.use_layer_scale:
-            x = x + self.drop_path(
-                self.layer_scale_1
-                * self.attn(x.permute(0, 2, 3, 1).reshape(batch_size, height * width, channels))
-                .reshape(batch_size, height, width, channels)
-                .permute(0, 3, 1, 2)
-            )
+            x = x + self.drop_path(self.layer_scale_1 * res)
             x = x + self.drop_path(self.layer_scale_2 * self.linear(x))
-
         else:
-            x = x + self.drop_path(
-                self.attn(x.permute(0, 2, 3, 1).reshape(batch_size, height * width, channels))
-                .reshape(batch_size, height, width, channels)
-                .permute(0, 3, 1, 2)
-            )
+            x = x + self.drop_path(res)
             x = x + self.drop_path(self.linear(x))
         return x
 
@@ -428,6 +419,7 @@ class SwiftFormerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "swiftformer"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["SwiftFormerEncoderBlock"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""

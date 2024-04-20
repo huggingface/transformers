@@ -58,12 +58,12 @@ from . import __version__
 from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
+from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
-from .image_processing_utils import BaseImageProcessor
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
-from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
+from .modeling_utils import PreTrainedModel, load_sharded_checkpoint
 from .models.auto.modeling_auto import (
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
@@ -82,6 +82,7 @@ from .trainer_callback import (
 )
 from .trainer_pt_utils import (
     DistributedTensorGatherer,
+    EvalLoopContainer,
     IterableDatasetShard,
     LabelSmoother,
     LayerWiseDummyOptimizer,
@@ -136,6 +137,7 @@ from .utils import (
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    XLA_FSDPV2_MIN_VERSION,
     PushInProgress,
     PushToHubMixin,
     can_return_loss,
@@ -179,8 +181,14 @@ if is_datasets_available():
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
     import torch_xla.debug.metrics as met
-    import torch_xla.distributed.spmd as xs
-    import torch_xla.runtime as xr
+    from torch_xla import __version__ as XLA_VERSION
+
+    IS_XLA_FSDPV2_POST_2_2 = version.parse(XLA_VERSION) >= version.parse(XLA_FSDPV2_MIN_VERSION)
+    if IS_XLA_FSDPV2_POST_2_2:
+        import torch_xla.distributed.spmd as xs
+        import torch_xla.runtime as xr
+else:
+    IS_XLA_FSDPV2_POST_2_2 = False
 
 
 if is_sagemaker_mp_enabled():
@@ -250,6 +258,8 @@ def _get_fsdp_ckpt_kwargs():
 if TYPE_CHECKING:
     import optuna
 
+    if is_datasets_available():
+        import datasets
 
 logger = logging.get_logger(__name__)
 
@@ -287,7 +297,7 @@ class Trainer:
             The function to use to form a batch from a list of elements of `train_dataset` or `eval_dataset`. Will
             default to [`default_data_collator`] if no `tokenizer` is provided, an instance of
             [`DataCollatorWithPadding`] otherwise.
-        train_dataset (`torch.utils.data.Dataset` or `torch.utils.data.IterableDataset`, *optional*):
+        train_dataset (Union[`torch.utils.data.Dataset`, `torch.utils.data.IterableDataset`, `datasets.Dataset`], *optional*):
             The dataset to use for training. If it is a [`~datasets.Dataset`], columns not accepted by the
             `model.forward()` method are automatically removed.
 
@@ -296,7 +306,7 @@ class Trainer:
             `torch.Generator` for the randomization that must be identical on all processes (and the Trainer will
             manually set the seed of this `generator` at each epoch) or have a `set_epoch()` method that internally
             sets the seed of the RNGs used.
-        eval_dataset (Union[`torch.utils.data.Dataset`, Dict[str, `torch.utils.data.Dataset`]), *optional*):
+        eval_dataset (Union[`torch.utils.data.Dataset`, Dict[str, `torch.utils.data.Dataset`, `datasets.Dataset`]), *optional*):
              The dataset to use for evaluation. If it is a [`~datasets.Dataset`], columns not accepted by the
              `model.forward()` method are automatically removed. If it is a dictionary, it will evaluate on each
              dataset prepending the dictionary key to the metric name.
@@ -304,9 +314,6 @@ class Trainer:
             The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs to the
             maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
             interrupted training or reuse the fine-tuned model.
-        image_processor ([`BaseImageProcessor`], *optional*):
-            The image processor used to preprocess the data. If provided, it will be saved along the model to make it easier
-            to rerun an interrupted training or reuse the fine-tuned model.
         model_init (`Callable[[], PreTrainedModel]`, *optional*):
             A function that instantiates the model to be used. If provided, each call to [`~Trainer.train`] will start
             from a new instance of the model as given by this function.
@@ -358,10 +365,9 @@ class Trainer:
         model: Union[PreTrainedModel, nn.Module] = None,
         args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
-        train_dataset: Optional[Union[Dataset, IterableDataset]] = None,
-        eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
+        train_dataset: Optional[Union[Dataset, IterableDataset, "datasets.Dataset"]] = None,
+        eval_dataset: Optional[Union[Dataset, Dict[str, Dataset], "datasets.Dataset"]] = None,
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
-        image_processor: Optional["BaseImageProcessor"] = None,
         model_init: Optional[Callable[[], PreTrainedModel]] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         callbacks: Optional[List[TrainerCallback]] = None,
@@ -490,12 +496,15 @@ class Trainer:
         ):
             self.place_model_on_device = False
 
-        default_collator = DataCollatorWithPadding(tokenizer) if tokenizer is not None else default_data_collator
+        default_collator = (
+            DataCollatorWithPadding(tokenizer)
+            if tokenizer is not None and isinstance(tokenizer, (PreTrainedTokenizerBase, SequenceFeatureExtractor))
+            else default_data_collator
+        )
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
-        self.image_processor = image_processor
 
         # Bnb Quantized models doesn't support `.to` operation.
         if (
@@ -547,7 +556,7 @@ class Trainer:
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
         callbacks = default_callbacks if callbacks is None else default_callbacks + callbacks
         self.callback_handler = CallbackHandler(
-            callbacks, self.model, self.tokenizer, self.image_processor, self.optimizer, self.lr_scheduler
+            callbacks, self.model, self.tokenizer, self.optimizer, self.lr_scheduler
         )
         self.add_callback(PrinterCallback if self.args.disable_tqdm else DEFAULT_PROGRESS_CALLBACK)
 
@@ -564,8 +573,8 @@ class Trainer:
         if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
             raise ValueError("The `data_collator` should be a simple callable (function, class with `__call__`).")
 
-        if args.max_steps > 0:
-            logger.info("max_steps is given, it will override any value given in num_train_epochs")
+        if args.max_steps > 0 and args.num_train_epochs > 0:
+            logger.warning("max_steps is given, it will override any value given in num_train_epochs")
 
         if train_dataset is not None and not has_length(train_dataset) and args.max_steps <= 0:
             raise ValueError(
@@ -663,6 +672,8 @@ class Trainer:
 
         self.is_fsdp_xla_v2_enabled = args.fsdp_config.get("xla_fsdp_v2", False)
         if self.is_fsdp_xla_v2_enabled:
+            if not IS_XLA_FSDPV2_POST_2_2:
+                raise ValueError("FSDPv2 requires `torch_xla` 2.2 or higher.")
             # Prepare the SPMD mesh that is going to be used by the data loader and the FSDPv2 wrapper.
             # Tensor axis is just a placeholder where it will not be used in FSDPv2.
             num_devices = xr.global_runtime_device_count()
@@ -673,7 +684,7 @@ class Trainer:
         Activates the neftune as presented in this code: https://github.com/neelsjain/NEFTune and paper:
         https://arxiv.org/abs/2310.05914
         """
-        unwrapped_model = unwrap_model(model)
+        unwrapped_model = self.accelerator.unwrap_model(model)
 
         if _is_peft_model(unwrapped_model):
             embeddings = unwrapped_model.base_model.model.get_input_embeddings()
@@ -694,7 +705,7 @@ class Trainer:
         if not hasattr(self, "neftune_hook_handle"):
             raise ValueError("Neftune is not activated make sure to call `trainer._activate_neftune()` first")
 
-        unwrapped_model = unwrap_model(model)
+        unwrapped_model = self.accelerator.unwrap_model(model)
 
         if _is_peft_model(unwrapped_model):
             embeddings = unwrapped_model.base_model.model.get_input_embeddings()
@@ -1606,7 +1617,7 @@ class Trainer:
             return smp.DistributedModel(model, backward_passes_per_step=self.args.gradient_accumulation_steps)
 
         # train/eval could be run multiple-times - if already wrapped, don't re-wrap it again
-        if unwrap_model(model) is not model:
+        if self.accelerator.unwrap_model(model) is not model:
             return model
 
         # Mixed precision training with apex (torch < 1.6)
@@ -3038,7 +3049,7 @@ class Trainer:
                 The values to log.
         """
         if self.state.epoch is not None:
-            logs["epoch"] = round(self.state.epoch, 2)
+            logs["epoch"] = self.state.epoch
         if self.args.include_num_input_tokens_seen:
             logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
 
@@ -3154,7 +3165,7 @@ class Trainer:
             self._past = outputs[self.args.past_index]
 
         if labels is not None:
-            unwrapped_model = unwrap_model(model)
+            unwrapped_model = self.accelerator.unwrap_model(model)
             if _is_peft_model(unwrapped_model):
                 model_name = unwrapped_model.base_model.model._get_name()
             else:
@@ -3261,8 +3272,8 @@ class Trainer:
         supported_classes = (PushToHubMixin,)
         xm.rendezvous("saving_checkpoint")
         if not isinstance(model, supported_classes):
-            if isinstance(unwrap_model(model), supported_classes):
-                unwrap_model(model).save_pretrained(
+            if isinstance(self.accelerator.unwrap_model(model), supported_classes):
+                self.accelerator.unwrap_model(model).save_pretrained(
                     output_dir,
                     is_main_process=self.args.should_save,
                     state_dict=model.state_dict(),
@@ -3282,8 +3293,6 @@ class Trainer:
             )
         if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
-        if self.image_processor is not None and self.args.should_save:
-            self.image_processor.save_pretrained(output_dir)
 
         # We moved the model from TPU -> CPU for saving the weights.
         # Now we should move it back to subsequent compute still works.
@@ -3302,8 +3311,8 @@ class Trainer:
             if state_dict is None:
                 state_dict = self.model.state_dict()
 
-            if isinstance(unwrap_model(self.model), supported_classes):
-                unwrap_model(self.model).save_pretrained(
+            if isinstance(self.accelerator.unwrap_model(self.model), supported_classes):
+                self.accelerator.unwrap_model(self.model).save_pretrained(
                     output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors
                 )
             else:
@@ -3321,8 +3330,6 @@ class Trainer:
 
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
-        if self.image_processor is not None:
-            self.image_processor.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
@@ -3621,20 +3628,14 @@ class Trainer:
             self._past = None
 
         # Initialize containers
-        # losses/preds/labels on GPU/TPU (accumulated for eval_accumulation_steps)
-        losses_host = None
-        preds_host = None
-        labels_host = None
-        inputs_host = None
+        all_losses = EvalLoopContainer(self.args.eval_do_concat_batches, padding_index=-100)
+        all_preds = EvalLoopContainer(self.args.eval_do_concat_batches, padding_index=-100)
+        all_labels = EvalLoopContainer(self.args.eval_do_concat_batches, padding_index=-100)
+        all_inputs = EvalLoopContainer(self.args.eval_do_concat_batches, padding_index=-100)
 
-        # losses/preds/labels on CPU (final containers)
-        all_losses = None
-        all_preds = None
-        all_labels = None
-        all_inputs = None
         # Will be useful when we have an iterable dataset so don't know its length.
-
         observed_num_examples = 0
+
         # Main evaluation loop
         for step, inputs in enumerate(dataloader):
             # Update the observed num examples
@@ -3653,56 +3654,33 @@ class Trainer:
             if is_torch_xla_available():
                 xm.mark_step()
 
-            # Update containers on host
+            # Update containers
             if loss is not None:
                 losses = self.gather_function((loss.repeat(batch_size)))
-                losses_host = losses if losses_host is None else nested_concat(losses_host, losses, padding_index=-100)
-            if labels is not None:
-                labels = self.accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
+                all_losses.add(losses)
             if inputs_decode is not None:
                 inputs_decode = self.accelerator.pad_across_processes(inputs_decode, dim=1, pad_index=-100)
                 inputs_decode = self.gather_function((inputs_decode))
-                inputs_host = (
-                    inputs_decode
-                    if inputs_host is None
-                    else nested_concat(inputs_host, inputs_decode, padding_index=-100)
-                )
+                all_inputs.add(inputs_decode)
             if logits is not None:
                 logits = self.accelerator.pad_across_processes(logits, dim=1, pad_index=-100)
                 if self.preprocess_logits_for_metrics is not None:
                     logits = self.preprocess_logits_for_metrics(logits, labels)
                 logits = self.gather_function((logits))
-                preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
-
+                all_preds.add(logits)
             if labels is not None:
+                labels = self.accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
                 labels = self.gather_function((labels))
-                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
+                all_labels.add(labels)
 
             self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
             if args.eval_accumulation_steps is not None and (step + 1) % args.eval_accumulation_steps == 0:
-                if losses_host is not None:
-                    losses = nested_numpify(losses_host)
-                    all_losses = losses if all_losses is None else np.concatenate((all_losses, losses), axis=0)
-                if preds_host is not None:
-                    logits = nested_numpify(preds_host)
-                    all_preds = logits if all_preds is None else nested_concat(all_preds, logits, padding_index=-100)
-                if inputs_host is not None:
-                    inputs_decode = nested_numpify(inputs_host)
-                    all_inputs = (
-                        inputs_decode
-                        if all_inputs is None
-                        else nested_concat(all_inputs, inputs_decode, padding_index=-100)
-                    )
-                if labels_host is not None:
-                    labels = nested_numpify(labels_host)
-                    all_labels = (
-                        labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
-                    )
-
-                # Set back to None to begin a new accumulation
-                losses_host, preds_host, inputs_host, labels_host = None, None, None, None
+                all_losses.to_cpu_and_numpy()
+                all_preds.to_cpu_and_numpy()
+                all_labels.to_cpu_and_numpy()
+                all_inputs.to_cpu_and_numpy()
 
         # After all calls to `.gather_function`, reset to `gather_for_metrics`:
         self.gather_function = self.accelerator.gather_for_metrics
@@ -3711,20 +3689,10 @@ class Trainer:
             delattr(self, "_past")
 
         # Gather all remaining tensors and put them back on the CPU
-        if losses_host is not None:
-            losses = nested_numpify(losses_host)
-            all_losses = losses if all_losses is None else np.concatenate((all_losses, losses), axis=0)
-        if preds_host is not None:
-            logits = nested_numpify(preds_host)
-            all_preds = logits if all_preds is None else nested_concat(all_preds, logits, padding_index=-100)
-        if inputs_host is not None:
-            inputs_decode = nested_numpify(inputs_host)
-            all_inputs = (
-                inputs_decode if all_inputs is None else nested_concat(all_inputs, inputs_decode, padding_index=-100)
-            )
-        if labels_host is not None:
-            labels = nested_numpify(labels_host)
-            all_labels = labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
+        all_losses = all_losses.get_arrays()
+        all_preds = all_preds.get_arrays()
+        all_labels = all_labels.get_arrays()
+        all_inputs = all_inputs.get_arrays()
 
         # Number of samples
         if has_length(eval_dataset):
@@ -3755,7 +3723,9 @@ class Trainer:
         # To be JSON-serializable, we need to remove numpy types or zero-d tensors
         metrics = denumpify_detensorize(metrics)
 
-        if all_losses is not None:
+        if isinstance(all_losses, list) and all_losses:
+            metrics[f"{metric_key_prefix}_loss"] = np.concatenate(all_losses).mean().item()
+        elif isinstance(all_losses, np.ndarray):
             metrics[f"{metric_key_prefix}_loss"] = all_losses.mean().item()
         if hasattr(self, "jit_compilation_time"):
             metrics[f"{metric_key_prefix}_jit_compilation_time"] = self.jit_compilation_time
@@ -3909,7 +3879,7 @@ class Trainer:
         else:
             return 0
 
-    def init_hf_repo(self):
+    def init_hf_repo(self, token: Optional[str] = None):
         """
         Initializes a git repo in `self.args.hub_model_id`.
         """
@@ -3922,7 +3892,8 @@ class Trainer:
         else:
             repo_name = self.args.hub_model_id
 
-        repo_url = create_repo(repo_name, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True)
+        token = token if token is not None else self.args.hub_token
+        repo_url = create_repo(repo_name, token=token, private=self.args.hub_private_repo, exist_ok=True)
         self.hub_model_id = repo_url.repo_id
         self.push_in_progress = None
 
@@ -3998,7 +3969,7 @@ class Trainer:
             f.write(model_card)
 
         if is_peft_library:
-            unwrap_model(self.model).create_or_update_model_card(self.args.output_dir)
+            self.accelerator.unwrap_model(self.model).create_or_update_model_card(self.args.output_dir)
 
     def _push_from_checkpoint(self, checkpoint_folder):
         # Only push from one node.
@@ -4019,9 +3990,6 @@ class Trainer:
         # Saving the tokenizer is fast and we don't know how many files it may have spawned, so we resave it to be sure.
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
-        # Same for the image processor
-        if self.image_processor is not None:
-            self.image_processor.save_pretrained(output_dir)
         # Same for the training arguments
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
 
@@ -4067,15 +4035,23 @@ class Trainer:
             logger.info("Waiting for the current checkpoint push to be finished, this might take a couple of minutes.")
             self.push_in_progress.wait_until_done()
 
-    def push_to_hub(self, commit_message: Optional[str] = "End of training", blocking: bool = True, **kwargs) -> str:
+    def push_to_hub(
+        self,
+        commit_message: Optional[str] = "End of training",
+        blocking: bool = True,
+        token: Optional[str] = None,
+        **kwargs,
+    ) -> str:
         """
-        Upload `self.model` and `self.tokenizer` or `self.image_processor` to the 🤗 model hub on the repo `self.args.hub_model_id`.
+        Upload `self.model` and `self.tokenizer` to the 🤗 model hub on the repo `self.args.hub_model_id`.
 
         Parameters:
             commit_message (`str`, *optional*, defaults to `"End of training"`):
                 Message to commit while pushing.
             blocking (`bool`, *optional*, defaults to `True`):
                 Whether the function should return only when the `git push` has finished.
+            token (`str`, *optional*, defaults to `None`):
+                Token with write permission to overwrite Trainer's original args.
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to [`~Trainer.create_model_card`].
 
@@ -4089,10 +4065,11 @@ class Trainer:
                 model_name = Path(self.args.output_dir).name
             else:
                 model_name = self.args.hub_model_id.split("/")[-1]
+        token = token if token is not None else self.args.hub_token
 
         # In case the user calls this method with args.push_to_hub = False
         if self.hub_model_id is None:
-            self.init_hf_repo()
+            self.init_hf_repo(token=token)
 
         # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
         # self.args.should_save.
@@ -4125,7 +4102,7 @@ class Trainer:
             repo_id=self.hub_model_id,
             folder_path=self.args.output_dir,
             commit_message=commit_message,
-            token=self.args.hub_token,
+            token=token,
             run_as_future=not blocking,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
         )
@@ -4191,6 +4168,7 @@ class Trainer:
         logger.info(f"***** Running {description} *****")
         logger.info(f"  Num examples = {num_examples}")
         logger.info(f"  Batch size = {batch_size}")
+
         losses_host: torch.Tensor = None
         preds_host: Union[torch.Tensor, List[torch.Tensor]] = None
         labels_host: Union[torch.Tensor, List[torch.Tensor]] = None
@@ -4370,8 +4348,9 @@ class Trainer:
                 even_batches=accelerator_config.pop("even_batches"),
                 use_seedable_sampler=accelerator_config.pop("use_seedable_sampler"),
             )
-            # this would have been updated above, no need for it anymore
-            accelerator_config.pop("gradient_accumulation_kwargs")
+        # this would have been updated above, no need for it anymore
+        accelerator_config.pop("gradient_accumulation_kwargs")
+
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
             "gradient_accumulation_plugin": gradient_accumulation_plugin,

@@ -51,7 +51,7 @@ parameters_dict = {
     'train_file': os.path.join(data_dir, 'train.csv'),
     'infer_file': os.path.join(data_dir, 'infer.csv'),
     'eval_file': os.path.join(data_dir, 'eval.csv'),
-    'evaluation_strategy': 'steps',
+    'eval_strategy': 'steps',
     'task_name': 'scitail',
     'label_list': ['entails', 'neutral'],
     'per_device_train_batch_size': 32,

@@ -45,7 +45,7 @@ python run_image_classification.py \
     --per_device_eval_batch_size 8 \
     --logging_strategy steps \
     --logging_steps 10 \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --save_strategy epoch \
     --load_best_model_at_end True \
     --save_total_limit 3 \

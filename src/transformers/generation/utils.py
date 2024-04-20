@@ -598,7 +598,11 @@ class GenerationMixin:
 
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
-                if dict_to_expand[key] is not None and isinstance(dict_to_expand[key], torch.Tensor):
+                if (
+                    key != "cache_position"
+                    and dict_to_expand[key] is not None
+                    and isinstance(dict_to_expand[key], torch.Tensor)
+                ):
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
             return dict_to_expand
 
@@ -1173,6 +1177,56 @@ class GenerationMixin:
                     UserWarning,
                 )
 
+    def _prepare_generated_length(
+        self,
+        generation_config,
+        has_default_max_length,
+        has_default_min_length,
+        model_input_name,
+        input_ids_length,
+        inputs_tensor,
+    ):
+        """Prepared max and min length in generaion configs to avoid clashes between similar attributes"""
+
+        if generation_config.max_new_tokens is not None:
+            if not has_default_max_length and generation_config.max_length is not None:
+                logger.warning(
+                    f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
+                    f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
+                    "Please refer to the documentation for more information. "
+                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
+                )
+            generation_config.max_length = generation_config.max_new_tokens + input_ids_length
+
+        # if both `inputs_embeds` and `input_ids` are passed, we do not correct the length
+        # otherwise we need total length [inputs-embeds-len + new-tokens-len] to not go beyond indicated `max_length``
+        elif (
+            model_input_name == "inputs_embeds"
+            and input_ids_length != inputs_tensor.shape[1]
+            and not self.config.is_encoder_decoder
+        ):
+            generation_config.max_length -= inputs_tensor.shape[1]
+
+        # same for min length
+        if generation_config.min_new_tokens is not None:
+            if not has_default_min_length:
+                logger.warning(
+                    f"Both `min_new_tokens` (={generation_config.min_new_tokens}) and `min_length`(="
+                    f"{generation_config.min_length}) seem to have been set. `min_new_tokens` will take precedence. "
+                    "Please refer to the documentation for more information. "
+                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
+                )
+            generation_config.min_length = generation_config.min_new_tokens + input_ids_length
+
+        elif (
+            model_input_name == "inputs_embeds"
+            and input_ids_length != inputs_tensor.shape[1]
+            and not self.config.is_encoder_decoder
+        ):
+            generation_config.min_length = max(generation_config.min_length - inputs_tensor.shape[1], 0)
+
+        return generation_config
+
     def _prepare_generation_config(
         self, generation_config: GenerationConfig, **kwargs: Dict
     ) -> Tuple[GenerationConfig, Dict]:
@@ -1418,24 +1472,15 @@ class GenerationMixin:
         # 6. Prepare `max_length` depending on other stopping criteria.
         input_ids_length = input_ids.shape[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
-        if generation_config.max_new_tokens is not None:
-            if not has_default_max_length and generation_config.max_length is not None:
-                logger.warning(
-                    f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
-                    f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
-                    "Please refer to the documentation for more information. "
-                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
-                )
-            generation_config.max_length = generation_config.max_new_tokens + input_ids_length
-
-        # otherwise the total length [inputs-embeds-len + new-tokens-len] will go beyond indicated `max_length``
-        elif (
-            model_input_name == "inputs_embeds"
-            and inputs_tensor.shape[:-1] != input_ids.shape
-            and not self.config.is_encoder_decoder
-        ):
-            generation_config.max_length -= inputs_tensor.shape[1]
-            generation_config.min_length = max(generation_config.min_length - inputs_tensor.shape[1], 0)
+        has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length is not None
+        generation_config = self._prepare_generated_length(
+            generation_config=generation_config,
+            has_default_max_length=has_default_max_length,
+            has_default_min_length=has_default_min_length,
+            model_input_name=model_input_name,
+            inputs_tensor=inputs_tensor,
+            input_ids_length=input_ids_length,
+        )
 
         if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
             if generation_config.cache_implementation == "static":
@@ -1511,7 +1556,7 @@ class GenerationMixin:
             )
 
             # 12. run assisted generate
-            result = self.assisted_decoding(
+            result = self._assisted_decoding(
                 input_ids,
                 candidate_generator=candidate_generator,
                 do_sample=generation_config.do_sample,
@@ -2053,7 +2098,8 @@ class GenerationMixin:
 
             # Replicates the new past_key_values to match the `top_k` candidates
             new_key_values = []
-            for layer in model_kwargs["past_key_values"]:
+            past = model_kwargs["past_key_values"]
+            for layer in past:
                 items = []
                 # item is either the key or the value matrix
                 for item in layer:
@@ -2062,7 +2108,13 @@ class GenerationMixin:
                     else:
                         items.append(item.repeat_interleave(top_k, dim=0))
                 new_key_values.append(tuple(items))
-            model_kwargs["past_key_values"] = tuple(new_key_values)
+            if not isinstance(past, DynamicCache):
+                past = tuple(new_key_values)
+            else:
+                for layer_idx in range(len(new_key_values)):
+                    past.key_cache[layer_idx] = new_key_values[layer_idx][0]
+                    past.value_cache[layer_idx] = new_key_values[layer_idx][1]
+            model_kwargs["past_key_values"] = past
 
             if sequential:
                 all_outputs = []
@@ -2137,16 +2189,22 @@ class GenerationMixin:
 
             else:
                 next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
-                new_key_values = ()
+                new_key_values = []
                 for layer in next_past_key_values:
-                    items = ()
+                    items = []
                     # item is either the key or the value matrix
                     for item in layer:
                         item = torch.stack(torch.split(item, top_k, dim=0))  # [B, K, num_head, seq_len, esz]
                         item = item[range(batch_size), selected_idx, ...]  # [B, num_head, seq_len, esz]
-                        items += (item,)
-                    new_key_values += (items,)
-                next_past_key_values = new_key_values
+                        items += [item]
+                    new_key_values += [items]
+
+                if not isinstance(next_past_key_values, DynamicCache):
+                    next_past_key_values = tuple(new_key_values)
+                else:
+                    for layer_idx in range(len(new_key_values)):
+                        next_past_key_values.key_cache[layer_idx] = new_key_values[layer_idx][0]
+                        next_past_key_values.value_cache[layer_idx] = new_key_values[layer_idx][1]
 
             logit_for_next_step = torch.stack(torch.split(logits, top_k))[range(batch_size), selected_idx, :]
 
@@ -3086,6 +3144,7 @@ class GenerationMixin:
                         "transo_xl",
                         "xlnet",
                         "cpm",
+                        "jamba",
                     ]
                 ):
                     raise RuntimeError(
@@ -4604,21 +4663,22 @@ class GenerationMixin:
             # we use this forward pass to also pick the subsequent logits in the original model.
 
             # 2.1. Prepare the model inputs
-            candidate_kwargs = copy.copy(model_kwargs)
-            candidate_kwargs = _prepare_attention_mask(
-                candidate_kwargs, candidate_input_ids.shape[1], self.config.is_encoder_decoder
+            model_kwargs = _prepare_attention_mask(
+                model_kwargs, candidate_input_ids.shape[1], self.config.is_encoder_decoder
             )
-            candidate_kwargs = _prepare_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
-            if "cache_position" in candidate_kwargs:
-                candidate_kwargs["cache_position"] = torch.cat(
+            model_kwargs = _prepare_token_type_ids(model_kwargs, candidate_input_ids.shape[1])
+            if "cache_position" in model_kwargs:
+                model_kwargs["cache_position"] = torch.cat(
                     (
-                        candidate_kwargs["cache_position"],
+                        model_kwargs["cache_position"],
                         torch.arange(cur_len, cur_len + candidate_length, device=input_ids.device, dtype=torch.long),
                     ),
                     dim=0,
                 )
 
-            model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **model_kwargs)
+            if "num_logits_to_keep" in model_inputs:
+                model_inputs["num_logits_to_keep"] = candidate_length + 1
 
             # 2.2. Run a forward pass on the candidate sequence
             outputs = self(
@@ -4944,7 +5004,7 @@ def _split_model_inputs(
     # ModelOutput object.
     # bool should not be split but replicated for each split
     bool_keys = [k for k in keys if isinstance(model_input[k], bool) or k == "cache_position"]
-    keys_to_ignore = ["cache_position", "encoder_outputs"]
+    keys_to_ignore = ["cache_position", "encoder_outputs", "num_logits_to_keep"]
     non_bool_keys = [k for k in keys if not isinstance(model_input[k], bool) and k not in keys_to_ignore]
 
     # we split the tensors and tuples of tensors
@@ -4959,6 +5019,11 @@ def _split_model_inputs(
         encoder_outputs_split = _split_model_inputs(model_input["encoder_outputs"], split_size, full_batch_size)
         data_split_list = [
             {**data_split, "encoder_outputs": encoder_outputs_split[i]} for i, data_split in enumerate(data_split_list)
+        ]
+    # num_logits_to_keep should be replicated for each split, similar to bool values
+    if "num_logits_to_keep" in model_input:
+        data_split_list = [
+            {**data_split, "num_logits_to_keep": model_input["num_logits_to_keep"]} for data_split in data_split_list
         ]
 
     # Convert each dictionary in the list to an object of the inferred class

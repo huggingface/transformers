@@ -490,7 +490,7 @@ python3 xla_spawn.py --num_cores ${NUM_TPUS} run_mlm.py --output_dir="./runs" \
     --do_train \
     --do_eval \
     --logging_steps="500" \
-    --evaluation_strategy="epoch" \
+    --eval_strategy="epoch" \
     --report_to="tensorboard" \
     --save_strategy="no"
 ```
@@ -538,7 +538,7 @@ python3 -m torch.distributed.launch --nproc_per_node ${NUM_GPUS} run_mlm.py \
     --do_train \
     --do_eval \
     --logging_steps="500" \
-    --evaluation_strategy="steps" \
+    --eval_strategy="steps" \
     --report_to="tensorboard" \
     --save_strategy="no"
 ```

@@ -43,6 +43,16 @@ def import_protobuf(error_message=""):
         raise ImportError(PROTOBUF_IMPORT_ERROR.format(error_message))
 
 
+def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
+    if add_prefix_space:
+        prepend_scheme = "always"
+        if hasattr(original_tokenizer, "legacy") and not original_tokenizer.legacy:
+            prepend_scheme = "first"
+    else:
+        prepend_scheme = "never"
+    return prepend_scheme
+
+
 class SentencePieceExtractor:
     """
     Extractor implementation for SentencePiece trained models. https://github.com/google/sentencepiece
@@ -597,18 +607,15 @@ class SpmConverter(Converter):
             return normalizers.Sequence([normalizers.Precompiled(precompiled_charsmap)] + _normalizers)
 
     def pre_tokenizer(self, replacement, add_prefix_space):
-        prepend_scheme = "always"
-        if hasattr(self.original_tokenizer, "legacy") and not self.original_tokenizer.legacy:
-            prepend_scheme = "first"
-        return pre_tokenizers.Metaspace(
-            replacement=replacement, add_prefix_space=add_prefix_space, prepend_scheme=prepend_scheme
-        )
+        prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
+        return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme)
 
     def post_processor(self):
         return None
 
     def decoder(self, replacement, add_prefix_space):
-        return decoders.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
+        prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
+        return decoders.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme)
 
     def converted(self) -> Tokenizer:
         tokenizer = self.tokenizer(self.proto)
@@ -722,7 +729,8 @@ class DebertaV2Converter(SpmConverter):
         list_pretokenizers = []
         if self.original_tokenizer.split_by_punct:
             list_pretokenizers.append(pre_tokenizers.Punctuation(behavior="isolated"))
-        list_pretokenizers.append(pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space))
+        prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
+        list_pretokenizers.append(pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme))
         return pre_tokenizers.Sequence(list_pretokenizers)
 
     def normalizer(self, proto):
@@ -1007,10 +1015,11 @@ class PegasusConverter(SpmConverter):
         return proto.trainer_spec.unk_id + self.original_tokenizer.offset
 
     def pre_tokenizer(self, replacement, add_prefix_space):
+        prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
         return pre_tokenizers.Sequence(
             [
                 pre_tokenizers.WhitespaceSplit(),
-                pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space),
+                pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme),
             ]
         )
 

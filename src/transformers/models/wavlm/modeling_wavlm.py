@@ -1107,7 +1107,7 @@ class WavLMModel(WavLMPreTrainedModel):
 
         # model only needs masking vector if mask prob is > 0.0
         if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
-            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+            self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
 
         if config.do_stable_layer_norm:
             self.encoder = WavLMEncoderStableLayerNorm(config)

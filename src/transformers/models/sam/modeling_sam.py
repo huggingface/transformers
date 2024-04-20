@@ -1074,6 +1074,7 @@ class SamPreTrainedModel(PreTrainedModel):
     config_class = SamConfig
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
+    _no_split_modules = ["SamVisionAttention"]
 
     def _init_weights(self, module):
         std = self.config.initializer_range

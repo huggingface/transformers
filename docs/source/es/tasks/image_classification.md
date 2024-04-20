@@ -143,7 +143,7 @@ Al llegar a este punto, solo quedan tres pasos:
 >>> training_args = TrainingArguments(
 ...     output_dir="./results",
 ...     per_device_train_batch_size=16,
-...     evaluation_strategy="steps",
+...     eval_strategy="steps",
 ...     num_train_epochs=4,
 ...     fp16=True,
 ...     save_steps=100,
@@ -160,7 +160,7 @@ Al llegar a este punto, solo quedan tres pasos:
 ...     data_collator=data_collator,
 ...     train_dataset=food["train"],
 ...     eval_dataset=food["test"],
-...     image_processor=image_processor,
+...     tokenizer=image_processor,
 ... )
 
 >>> trainer.train()

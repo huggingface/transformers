@@ -354,7 +354,7 @@ Most of the training arguments are self-explanatory, but one that is quite impor
 >>> args = TrainingArguments(
 ...     new_model_name,
 ...     remove_unused_columns=False,
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     save_strategy="epoch",
 ...     learning_rate=5e-5,
 ...     per_device_train_batch_size=batch_size,
@@ -407,7 +407,7 @@ Then you just pass all of this along with the datasets to `Trainer`:
 ...     args,
 ...     train_dataset=train_dataset,
 ...     eval_dataset=val_dataset,
-...     image_processor=image_processor,
+...     tokenizer=image_processor,
 ...     compute_metrics=compute_metrics,
 ...     data_collator=collate_fn,
 ... )
