@@ -2443,15 +2443,21 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 break
         return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
 
-    def freeze_encoders(self, freeze_text_encoder=True):
-        if freeze_text_encoder:
-            for param in self.text_encoder.parameters():
-                param.requires_grad = False
-            self.text_encoder._requires_grad = False
-
+    def freeze_audio_encoder(self):
+        """
+        Freeze the audio encoder weights.
+        """
         for param in self.audio_encoder.parameters():
             param.requires_grad = False
         self.audio_encoder._requires_grad = False
+
+    def freeze_text_encoder(self):
+        """
+        Freeze the text encoder weights.
+        """
+        for param in self.text_encoder.parameters():
+            param.requires_grad = False
+        self.text_encoder._requires_grad = False
 
     @torch.no_grad()
     def generate(

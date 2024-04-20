@@ -2551,15 +2551,21 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             " model.decoder.resize_token_embeddings(...))"
         )
 
-    def freeze_encoders(self, freeze_text_encoder=True):
-        if freeze_text_encoder:
-            for param in self.text_encoder.parameters():
-                param.requires_grad = False
-            self.text_encoder._requires_grad = False
-
+    def freeze_audio_encoder(self):
+        """
+        Freeze the audio encoder weights.
+        """
         for param in self.audio_encoder.parameters():
             param.requires_grad = False
         self.audio_encoder._requires_grad = False
+
+    def freeze_text_encoder(self):
+        """
+        Freeze the text encoder weights.
+        """
+        for param in self.text_encoder.parameters():
+            param.requires_grad = False
+        self.text_encoder._requires_grad = False
 
     def _maybe_initialize_input_ids_for_generation(
         self,

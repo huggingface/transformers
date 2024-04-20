@@ -83,7 +83,6 @@ def prepare_musicgen_decoder_inputs_dict(
     encoder_hidden_states=None,
     encoder_attention_mask=None,
     cross_attn_head_mask=None,
-    labels=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.reshape(-1, config.num_codebooks, input_ids.shape[-1])[:, 0, :]
@@ -101,7 +100,6 @@ def prepare_musicgen_decoder_inputs_dict(
         "encoder_attention_mask": encoder_attention_mask,
         "head_mask": head_mask,
         "cross_attn_head_mask": cross_attn_head_mask,
-        "labels": labels,
     }
 
 
@@ -112,7 +110,6 @@ class MusicgenDecoderTester:
         batch_size=4,  # need batch_size != num_hidden_layers
         seq_length=7,
         is_training=True,
-        use_labels=True,
         vocab_size=99,
         hidden_size=16,
         num_hidden_layers=2,
@@ -130,7 +127,6 @@ class MusicgenDecoderTester:
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
-        self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -148,16 +144,11 @@ class MusicgenDecoderTester:
         input_ids = ids_tensor([self.batch_size * self.num_codebooks, self.seq_length], self.vocab_size)
         encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
 
-        labels = None
-        if self.use_labels:
-            labels = ids_tensor([self.batch_size, self.seq_length, self.num_codebooks], self.vocab_size)
-
         config = self.get_config()
         inputs_dict = prepare_musicgen_decoder_inputs_dict(
             config,
             input_ids,
             encoder_hidden_states=encoder_hidden_states,
-            labels=labels,
         )
         return config, inputs_dict
 
@@ -208,8 +199,6 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 dtype=torch.long,
                 device=torch_device,
             )
-        else:
-            inputs_dict.pop("labels", None)
         return inputs_dict
 
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
@@ -990,7 +979,6 @@ class MusicgenTester:
         batch_size=4,  # need batch_size != num_hidden_layers
         seq_length=7,
         is_training=True,
-        use_labels=True,
         vocab_size=99,
         hidden_size=16,
         num_hidden_layers=2,
@@ -1010,7 +998,6 @@ class MusicgenTester:
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
-        self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -1094,8 +1081,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 dtype=torch.long,
                 device=torch_device,
             )
-        else:
-            inputs_dict.pop("labels", None)
         return inputs_dict
 
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
@@ -1114,7 +1099,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
             # The audio encoder weights are not used during the forward pass (only during the generate pass)
             # So we need to freeze it to be able to train.
-            model.freeze_encoders(freeze_text_encoder=False)
+            model.freeze_audio_encoder()
 
             optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
@@ -2292,7 +2277,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config = self.model_tester.get_config()
         for model_class in self.all_model_classes:
             model = model_class(config)
-            model.freeze_encoders(freeze_text_encoder=False)
+            model.freeze_audio_encoder()
 
             audio_encoder_grads = [param.requires_grad for param in model.audio_encoder.parameters()]
             text_encoder_grads = [param.requires_grad for param in model.text_encoder.parameters()]
@@ -2300,12 +2285,13 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             self.assertFalse(all(audio_encoder_grads))
             self.assertTrue(all(text_encoder_grads))
 
-            model.freeze_encoders(freeze_text_encoder=True)
+            model = model_class(config)
+            model.freeze_text_encoder()
 
             audio_encoder_grads = [param.requires_grad for param in model.audio_encoder.parameters()]
             text_encoder_grads = [param.requires_grad for param in model.text_encoder.parameters()]
 
-            self.assertFalse(all(audio_encoder_grads))
+            self.assertTrue(all(audio_encoder_grads))
             self.assertFalse(all(text_encoder_grads))
 
 
