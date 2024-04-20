@@ -126,28 +126,29 @@ class ZoeDepthReassembleStage(nn.Module):
         # shape (batch_size*num_stages, sequence_length + 1, hidden_size)
         hidden_states = torch.cat(hidden_states, dim=0)
 
-        # reshape to (batch_size, num_channels, height, width)
         cls_token, hidden_states = hidden_states[:, 0], hidden_states[:, 1:]
+        # reshape hidden_states to (batch_size*num_stages, num_channels, height, width)
         total_batch_size, sequence_length, num_channels = hidden_states.shape
         hidden_states = hidden_states.reshape(total_batch_size, patch_height, patch_width, num_channels)
         hidden_states = hidden_states.permute(0, 3, 1, 2).contiguous()
 
+        if self.readout_type == "project":
+            # reshape to (batch_size*num_stages, height*width, num_channels)
+            hidden_states = hidden_states.flatten(2).permute((0, 2, 1))
+            readout = cls_token.unsqueeze(dim=1).expand_as(hidden_states)
+            # concatenate the readout token to the hidden states
+            # to get (batch_size*num_stages, height*width, 2*num_channels)
+            hidden_states = torch.cat((hidden_states, readout), -1)
+        elif self.readout_type == "add":
+            hidden_states = hidden_states + cls_token.unsqueeze(-1)
+
         out = []
-        for stage_idx, (hidden_state, cls_token_stage) in enumerate(
-            zip(hidden_states.split(batch_size, dim=0), cls_token.split(batch_size, dim=0))
-        ):
-            feature_shape = hidden_state.shape
+        for stage_idx, hidden_state in enumerate(hidden_states.split(batch_size, dim=0)):
             if self.readout_type == "project":
-                # reshape to (batch_size, height*width, num_channels)
-                hidden_state = hidden_state.flatten(2).permute((0, 2, 1))
-                readout = cls_token_stage.unsqueeze(dim=1).expand_as(hidden_state)
-                # concatenate the readout token to the hidden states and project
-                hidden_state = self.readout_projects[stage_idx](torch.cat((hidden_state, readout), -1))
-                # reshape back to (batch_size, num_channels, height, width)
-                hidden_state = hidden_state.permute(0, 2, 1).reshape(feature_shape)
-            elif self.readout_type == "add":
-                hidden_state = hidden_state.flatten(2) + cls_token_stage.unsqueeze(-1)
-                hidden_state = hidden_state.reshape(feature_shape)
+                hidden_state = self.readout_projects[stage_idx](hidden_state)
+
+            # reshape back to (batch_size, num_channels, height, width)
+            hidden_state = hidden_state.permute(0, 2, 1).reshape(batch_size, -1, patch_height, patch_width)
             hidden_state = self.layers[stage_idx](hidden_state)
             out.append(hidden_state)
 
