@@ -164,6 +164,9 @@ class ZoeDepthConfig(PretrainedConfig):
         if use_multiple_heads and bin_configurations is None:
             raise ValueError("bin_configurations must be specified when use_multiple_heads is True.")
 
+        if attractor_kind not in ["mean", "sum"]:
+            raise ValueError("Attractor_kind must be one of ['mean', 'sum']")
+
         if use_pretrained_backbone:
             raise ValueError("Pretrained backbones are not supported yet.")
 
@@ -171,7 +174,7 @@ class ZoeDepthConfig(PretrainedConfig):
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
         if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `BEiT` backbone.")
             backbone_config = CONFIG_MAPPING["beit"](
                 image_size=384,
                 num_hidden_layers=24,

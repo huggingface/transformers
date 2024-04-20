@@ -53,7 +53,7 @@ def get_resize_output_image_size(
     multiple: int,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> Tuple[int, int]:
-    def constraint_to_multiple_of(val, multiple, min_val=0, max_val=None):
+    def constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
         x = round(val / multiple) * multiple
 
         if max_val is not None and x > max_val:
@@ -82,8 +82,8 @@ def get_resize_output_image_size(
             # fit height
             scale_width = scale_height
 
-    new_height = constraint_to_multiple_of(scale_height * input_height, multiple=multiple)
-    new_width = constraint_to_multiple_of(scale_width * input_width, multiple=multiple)
+    new_height = constrain_to_multiple_of(scale_height * input_height, multiple=multiple)
+    new_width = constrain_to_multiple_of(scale_width * input_width, multiple=multiple)
 
     return (new_height, new_width)
 
@@ -228,7 +228,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
-    def pad(
+    def pad_image(
         self,
         image: np.array,
         mode: PaddingMode = PaddingMode.REFLECT,
@@ -247,12 +247,12 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             image (`np.ndarray`):
                 Image to pad.
             mode (`PaddingMode`):
-            The padding mode to use. Can be one of:
-                - `"constant"`: pads with a constant value.
-                - `"reflect"`: pads with the reflection of the vector mirrored on the first and last values of the
-                  vector along each axis.
-                - `"replicate"`: pads with the replication of the last value on the edge of the array along each axis.
-                - `"symmetric"`: pads with the reflection of the vector mirrored along the edge of the array.
+                The padding mode to use. Can be one of:
+                    - `"constant"`: pads with a constant value.
+                    - `"reflect"`: pads with the reflection of the vector mirrored on the first and last values of the
+                    vector along each axis.
+                    - `"replicate"`: pads with the replication of the last value on the edge of the array along each axis.
+                    - `"symmetric"`: pads with the reflection of the vector mirrored along the edge of the array.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -397,7 +397,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         if do_pad:
-            images = [self.pad(image=image, input_data_format=input_data_format) for image in images]
+            images = [self.pad_image(image=image, input_data_format=input_data_format) for image in images]
 
         if do_rescale:
             images = [

@@ -103,9 +103,7 @@ class ZoeDepthReassembleStage(nn.Module):
 
         self.readout_type = config.readout_type
         self.layers = nn.ModuleList()
-        self._init_reassemble_zoedepth(config)
 
-    def _init_reassemble_zoedepth(self, config):
         for i, factor in zip(range(len(config.neck_hidden_sizes)), config.reassemble_factors):
             self.layers.append(ZoeDepthReassembleLayer(config, channels=config.neck_hidden_sizes[i], factor=factor))
 
@@ -343,12 +341,6 @@ ZOEDEPTH_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`DPTImageProcessor.__call__`]
             for details.
 
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -407,12 +399,9 @@ class ZoeDepthNeck(nn.Module):
             hidden_states = self.reassemble_stage(hidden_states, patch_height, patch_width)
 
         features = [self.convs[i](feature) for i, feature in enumerate(hidden_states)]
-        # we need the last feature of `features`
 
         # fusion blocks
         output = self.fusion_stage(features)
-
-        # we need the last 4 features of `output` as well
 
         return output, features[-1]
 
@@ -481,8 +470,8 @@ class LogBinomial(nn.Module):
         super().__init__()
         self.K = n_classes
         self.act = act
-        self.register_buffer("k_idx", torch.arange(0, n_classes).view(1, -1, 1, 1))
-        self.register_buffer("K_minus_1", torch.Tensor([self.K - 1]).view(1, -1, 1, 1))
+        self.register_buffer("k_idx", torch.arange(0, n_classes).view(1, -1, 1, 1), persistent=False)
+        self.register_buffer("K_minus_1", torch.Tensor([self.K - 1]).view(1, -1, 1, 1), persistent=False)
 
     def forward(self, probabilities, temperature=1.0, eps=1e-4):
         """Compute the log binomial distribution for probabilities.
@@ -902,22 +891,27 @@ class ZoeDepthPatchTransformerEncoder(nn.Module):
         """ViT-like transformer block
 
         Args:
-            in_channels (int): Input channels
-            patch_size (int, optional): patch size. Defaults to 10.
-            embedding_dim (int, optional): Embedding dimension in transformer model. Defaults to 128.
-            num_heads (int, optional): number of attention heads. Defaults to 4.
-            use_class_token (bool, optional): Whether to use extra token at the start for global accumulation (called as "class token"). Defaults to False.
+            in_channels (`int`):
+                Input channels.
+            patch_size (`int`, *optional*, defaults to 10):
+                Patch size.
+            embedding_dim (`int`, *optional*, defaults to 128):
+                Embedding dimension in transformer model.
+            num_heads (`int`, *optional*, defaults to 4):
+                Number of attention heads.
+            use_class_token (`bool`, *optional*, defaults to `False`):
+                Whether to use extra token at the start for global accumulation (called as "class token").
         """
         super().__init__()
-        encoder_layers = nn.TransformerEncoderLayer(embedding_dim, num_heads, dim_feedforward=1024)
-        self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers=4)  # takes shape S,N,E
+        encoder_layers = nn.TransformerEncoderLayer(embedding_dim, num_heads, dim_feedforward=1024, batch_first=True)
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers=4)
         self.use_class_token = use_class_token
 
         self.embedding_convPxP = nn.Conv2d(
             in_channels, embedding_dim, kernel_size=patch_size, stride=patch_size, padding=0
         )
 
-    def positional_encoding_1d(self, sequence_length, batch_size, embedding_dim, device="cpu"):
+    def positional_encoding_1d(self, batch_size, sequence_length, embedding_dim, device="cpu"):
         """Generate positional encodings
 
         Args:
@@ -925,14 +919,14 @@ class ZoeDepthPatchTransformerEncoder(nn.Module):
             embedding_dim (int): Embedding dimension
 
         Returns:
-            torch.Tensor SBE: Positional encodings
+            torch.Tensor: Positional encodings.
         """
         position = torch.arange(0, sequence_length, dtype=torch.float32, device=device).unsqueeze(1)
         index = torch.arange(0, embedding_dim, 2, dtype=torch.float32, device=device).unsqueeze(0)
         div_term = torch.exp(index * (-torch.log(torch.tensor(10000.0, device=device)) / embedding_dim))
         pos_encoding = position * div_term
         pos_encoding = torch.cat([torch.sin(pos_encoding), torch.cos(pos_encoding)], dim=1)
-        pos_encoding = pos_encoding.unsqueeze(1).repeat(1, batch_size, 1)
+        pos_encoding = pos_encoding.unsqueeze(dim=0).repeat(batch_size, 1, 1)
         return pos_encoding
 
     def forward(self, x):
@@ -942,18 +936,17 @@ class ZoeDepthPatchTransformerEncoder(nn.Module):
             x (torch.Tensor - NCHW): Input feature tensor
 
         Returns:
-            torch.Tensor - SNE: Transformer output embeddings. S - sequence length (=HW/patch_size^2), N - batch size, E - embedding dim
+            torch.Tensor - Transformer output embeddings of shape (batch_size, sequence_length, embedding_dim)
         """
         embeddings = self.embedding_convPxP(x).flatten(2)  # .shape = n,c,s = n, embedding_dim, s
         if self.use_class_token:
             # extra special token at start ?
             embeddings = nn.functional.pad(embeddings, (1, 0))
 
-        # change to S,N,E format required by transformer
-        embeddings = embeddings.permute(2, 0, 1)
-        S, N, E = embeddings.shape
-        embeddings = embeddings + self.positional_encoding_1d(S, N, E, device=embeddings.device)
-        x = self.transformer_encoder(embeddings)  # .shape = S, N, E
+        embeddings = embeddings.permute(0, 2, 1)
+        batch_size, sequence_length, embedding_dim = embeddings.shape
+        embeddings = embeddings + self.positional_encoding_1d(batch_size, sequence_length, embedding_dim, device=embeddings.device)
+        x = self.transformer_encoder(embeddings)
         return x
 
 
@@ -1071,7 +1064,7 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         x = x_d0
 
         # Predict which path to take
-        embedding = self.patch_transformer(x)[0]  # batch_size, hidden_size
+        embedding = self.patch_transformer(x)[:,0,:]  # batch_size, hidden_size
         domain_logits = self.mlp_classifier(embedding)  # batch_size, 2
         domain_vote = torch.softmax(domain_logits.sum(dim=0, keepdim=True), dim=-1)  # 1, 2
 

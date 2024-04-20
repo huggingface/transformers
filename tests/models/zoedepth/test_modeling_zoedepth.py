@@ -30,7 +30,6 @@ if is_torch_available():
     import torch
 
     from transformers import ZoeDepthForDepthEstimation
-    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 
 
 if is_vision_available():
@@ -153,17 +152,12 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.config_tester = ConfigTester(self, config_class=ZoeDepthConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
         self.config_tester.create_and_test_config_to_json_string()
         self.config_tester.create_and_test_config_to_json_file()
         self.config_tester.create_and_test_config_from_and_save_pretrained()
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
-
-    # ZoeDepth has no `num_attention_heads` in its config
-    def create_and_test_config_common_properties(self):
-        return
 
     @unittest.skip(reason="ZoeDepth with AutoBackbone does not have a base model and hence no input_embeddings")
     def test_inputs_embeds(self):
@@ -172,43 +166,6 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_for_depth_estimation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_depth_estimation(*config_and_inputs)
-
-    def test_training(self):
-        for model_class in self.all_model_classes:
-            if model_class.__name__ == "ZoeDepthForDepthEstimation":
-                continue
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.return_dict = True
-
-            if model_class.__name__ in MODEL_MAPPING_NAMES.values():
-                continue
-
-            model = model_class(config)
-            model.to(torch_device)
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
-
-    def test_training_gradient_checkpointing(self):
-        for model_class in self.all_model_classes:
-            if model_class.__name__ == "ZoeDepthForDepthEstimation":
-                continue
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.use_cache = False
-            config.return_dict = True
-
-            if model_class.__name__ in MODEL_MAPPING_NAMES.values() or not model_class.supports_gradient_checkpointing:
-                continue
-            model = model_class(config)
-            model.to(torch_device)
-            model.gradient_checkpointing_enable()
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -245,21 +202,25 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @unittest.skip(reason="ZoeDepth does not support training yet")
+    def test_training(self):
+        pass
+
+    @unittest.skip(reason="ZoeDepth does not support training yet")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="ZoeDepth does not support training yet")
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @unittest.skip(reason="ZoeDepth does not support training yet")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "Intel/dpt-large"
+        model_name = "nielsr/zoedepth-nyu"
         model = ZoeDepthForDepthEstimation.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
