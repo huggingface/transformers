@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ZoeDepth model.
-"""
+""" PyTorch ZoeDepth model. """
 
 
 import math
@@ -102,7 +101,7 @@ class ZoeDepthReassembleStage(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.config = config
+        self.readout_type = config.readout_type
         self.layers = nn.ModuleList()
         self._init_reassemble_zoedepth(config)
 
@@ -138,7 +137,7 @@ class ZoeDepthReassembleStage(nn.Module):
             hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
 
             feature_shape = hidden_state.shape
-            if self.config.readout_type == "project":
+            if self.readout_type == "project":
                 # reshape to (batch_size, height*width, num_channels)
                 hidden_state = hidden_state.flatten(2).permute((0, 2, 1))
                 readout = cls_token.unsqueeze(1).expand_as(hidden_state)
@@ -146,7 +145,7 @@ class ZoeDepthReassembleStage(nn.Module):
                 hidden_state = self.readout_projects[i](torch.cat((hidden_state, readout), -1))
                 # reshape back to (batch_size, num_channels, height, width)
                 hidden_state = hidden_state.permute(0, 2, 1).reshape(feature_shape)
-            elif self.config.readout_type == "add":
+            elif self.readout_type == "add":
                 hidden_state = hidden_state.flatten(2) + cls_token.unsqueeze(-1)
                 hidden_state = hidden_state.reshape(feature_shape)
             hidden_state = self.layers[i](hidden_state)

@@ -158,6 +158,12 @@ class ZoeDepthConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
+        if readout_type not in ["ignore", "add", "project"]:
+            raise ValueError("Readout_type must be one of ['ignore', 'add', 'project']")
+
+        if use_multiple_heads and bin_configurations is None:
+            raise ValueError("bin_configurations must be specified when use_multiple_heads is True.")
+
         if use_pretrained_backbone:
             raise ValueError("Pretrained backbones are not supported yet.")
 
@@ -189,8 +195,6 @@ class ZoeDepthConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.use_pretrained_backbone = use_pretrained_backbone
         self.initializer_range = initializer_range
-        if readout_type not in ["ignore", "add", "project"]:
-            raise ValueError("Readout_type must be one of ['ignore', 'add', 'project']")
         self.readout_type = readout_type
         self.reassemble_factors = reassemble_factors
         self.neck_hidden_sizes = neck_hidden_sizes
@@ -213,6 +217,4 @@ class ZoeDepthConfig(PretrainedConfig):
         self.max_temp = max_temp
         self.bin_centers_type = bin_centers_type
         self.use_multiple_heads = use_multiple_heads
-        if use_multiple_heads and bin_configurations is None:
-            raise ValueError("bin_configurations must be specified when use_multiple_heads is True.")
         self.bin_configurations = bin_configurations
