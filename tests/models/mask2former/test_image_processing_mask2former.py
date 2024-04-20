@@ -31,7 +31,10 @@ if is_torch_available():
 
     if is_vision_available():
         from transformers import Mask2FormerImageProcessor
-        from transformers.models.mask2former.image_processing_mask2former import binary_mask_to_rle
+        from transformers.models.mask2former.image_processing_mask2former import (
+            binary_mask_to_rle,
+            convert_segmentation_map_to_binary_masks,
+        )
         from transformers.models.mask2former.modeling_mask2former import Mask2FormerForUniversalSegmentationOutput
 
 if is_vision_available():
@@ -413,6 +416,15 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertEqual(len(rle), 4)
         self.assertEqual(rle[0], 21)
         self.assertEqual(rle[1], 45)
+
+    def test_segmentation_map_to_binary(self):
+        fake_segmentation_mask = np.ones((10, 10), dtype=np.uint8) * 255
+
+        binary_masks, labels = convert_segmentation_map_to_binary_masks(fake_segmentation_mask)
+        expected_masks = np.ones((1, 10, 10), dtype=np.float32)
+        self.assertTrue(np.array_equal(binary_masks, expected_masks))
+        expected_labels = np.array([255], dtype=np.int64)
+        self.assertTrue(np.array_equal(labels, expected_labels))
 
     def test_post_process_semantic_segmentation(self):
         fature_extractor = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
