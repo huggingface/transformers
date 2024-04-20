@@ -1019,9 +1019,7 @@ class MusicgenMelodyTester:
         decoder_input_ids = ids_tensor([self.batch_size * self.num_codebooks, self.seq_length], self.vocab_size)
 
         config = self.get_config()
-        inputs_dict = prepare_musicgen_melody_inputs_dict(
-            config, input_ids, decoder_input_ids=decoder_input_ids
-        )
+        inputs_dict = prepare_musicgen_melody_inputs_dict(config, input_ids, decoder_input_ids=decoder_input_ids)
         return config, inputs_dict
 
     def get_config(self):
@@ -2281,6 +2279,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
             self.assertTrue(all(audio_encoder_grads))
             self.assertFalse(all(text_encoder_grads))
+
 
 # Copied from tests.models.musicgen.test_modeling_musicgen.get_bip_bip
 def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):
