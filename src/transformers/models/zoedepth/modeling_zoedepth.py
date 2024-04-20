@@ -704,6 +704,7 @@ class ZoeDepthAttractorLayer(nn.Module):
         self.kind = kind
         self.memory_efficient = memory_efficient
 
+        # MLP to predict attractor points
         self.conv1 = nn.Conv2d(in_features, mlp_dim, 1, 1, 0)
         self.act1 = nn.ReLU(inplace=True)
         self.conv2 = nn.Conv2d(mlp_dim, n_attractors * 2, 1, 1, 0)  # x2 for linear norm
@@ -711,6 +712,9 @@ class ZoeDepthAttractorLayer(nn.Module):
 
     def forward(self, x, prev_bin, prev_bin_embedding=None, interpolate=True):
         """
+        The forward pass of the attractor layer. This layer predicts the new bin centers based on the previous bin centers
+        and the attractor points (the latter are predicted by the MLP).
+
         Args:
             x (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
                 Feature block.
@@ -842,14 +846,13 @@ class ZoeDepthAttractorLayerUnnormed(nn.Module):
 
         if not self.memory_efficient:
             func = {"mean": torch.mean, "sum": torch.sum}[self.kind]
-            # .shape N, nbins, h, w
+            # shape batch_size, num_bins, height, width
             delta_c = func(dist(attractors.unsqueeze(2) - bin_centers.unsqueeze(1)), dim=1)
         else:
             delta_c = torch.zeros_like(bin_centers, device=bin_centers.device)
             for i in range(self.n_attractors):
-                delta_c += dist(
-                    attractors[:, i, ...].unsqueeze(1) - bin_centers
-                )  # shape batch_size, num_bins, height, width
+                # shape batch_size, num_bins, height, width
+                delta_c += dist(attractors[:, i, ...].unsqueeze(1) - bin_centers)
 
             if self.kind == "mean":
                 delta_c = delta_c / self.n_attractors
@@ -945,7 +948,9 @@ class ZoeDepthPatchTransformerEncoder(nn.Module):
 
         embeddings = embeddings.permute(0, 2, 1)
         batch_size, sequence_length, embedding_dim = embeddings.shape
-        embeddings = embeddings + self.positional_encoding_1d(batch_size, sequence_length, embedding_dim, device=embeddings.device)
+        embeddings = embeddings + self.positional_encoding_1d(
+            batch_size, sequence_length, embedding_dim, device=embeddings.device
+        )
         x = self.transformer_encoder(embeddings)
         return x
 
@@ -1064,7 +1069,7 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         x = x_d0
 
         # Predict which path to take
-        embedding = self.patch_transformer(x)[:,0,:]  # batch_size, hidden_size
+        embedding = self.patch_transformer(x)[:, 0, :]  # batch_size, hidden_size
         domain_logits = self.mlp_classifier(embedding)  # batch_size, 2
         domain_vote = torch.softmax(domain_logits.sum(dim=0, keepdim=True), dim=-1)  # 1, 2
 
