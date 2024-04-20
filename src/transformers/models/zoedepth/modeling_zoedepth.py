@@ -109,7 +109,7 @@ class ZoeDepthReassembleStage(nn.Module):
 
         if config.readout_type == "project":
             self.readout_projects = nn.ModuleList()
-            hidden_size = config.backbone_config.hidden_size
+            hidden_size = config.backbone_hidden_size
             for _ in range(len(config.neck_hidden_sizes)):
                 self.readout_projects.append(
                     nn.Sequential(nn.Linear(2 * hidden_size, hidden_size), ACT2FN[config.hidden_act])
@@ -156,7 +156,7 @@ class ZoeDepthReassembleLayer(nn.Module):
     def __init__(self, config, channels, factor):
         super().__init__()
         # projection
-        hidden_size = config.backbone_config.hidden_size
+        hidden_size = config.backbone_hidden_size
         self.projection = nn.Conv2d(in_channels=hidden_size, out_channels=channels, kernel_size=1)
 
         # up/down sampling depending on factor
@@ -1302,7 +1302,7 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         hidden_states = outputs.feature_maps
 
         _, _, height, width = pixel_values.shape
-        patch_size = self.config.backbone_config.patch_size
+        patch_size = self.backbone.config.patch_size
         patch_height = height // patch_size
         patch_width = width // patch_size
 

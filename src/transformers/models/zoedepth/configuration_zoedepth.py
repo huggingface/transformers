@@ -63,6 +63,8 @@ class ZoeDepthConfig(PretrainedConfig):
             - "project" passes information to the other tokens by concatenating the readout to all other tokens before
               projecting the
             representation to the original feature dimension D using a linear layer followed by a GELU non-linearity.
+        backbone_hidden_size (`int`, *optional*, defaults to 1024):
+            The hidden size of the backbone.
         reassemble_factors (`List[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
             The up/downsampling factors of the reassemble layers.
         neck_hidden_sizes (`List[str]`, *optional*, defaults to `[96, 192, 384, 768]`):
@@ -133,6 +135,7 @@ class ZoeDepthConfig(PretrainedConfig):
         hidden_act="gelu",
         initializer_range=0.02,
         readout_type="project",
+        backbone_hidden_size=1024,
         reassemble_factors=[4, 2, 1, 0.5],
         neck_hidden_sizes=[96, 192, 384, 768],
         fusion_hidden_size=256,
@@ -198,6 +201,7 @@ class ZoeDepthConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.use_pretrained_backbone = use_pretrained_backbone
         self.initializer_range = initializer_range
+        self.backbone_hidden_size = backbone_hidden_size
         self.readout_type = readout_type
         self.reassemble_factors = reassemble_factors
         self.neck_hidden_sizes = neck_hidden_sizes

@@ -56,6 +56,7 @@ class ZoeDepthModelTester:
         out_features=["stage1", "stage2"],
         apply_layernorm=False,
         reshape_hidden_states=False,
+        backbone_hidden_size=4,
         neck_hidden_sizes=[2, 2],
         fusion_hidden_size=6,
         bottleneck_features=6,
@@ -76,6 +77,7 @@ class ZoeDepthModelTester:
         self.use_labels = use_labels
         self.num_labels = num_labels
         self.is_training = is_training
+        self.backbone_hidden_size = backbone_hidden_size
         self.neck_hidden_sizes = neck_hidden_sizes
         self.fusion_hidden_size = fusion_hidden_size
         self.bottleneck_features = bottleneck_features
@@ -98,6 +100,7 @@ class ZoeDepthModelTester:
         return ZoeDepthConfig(
             backbone_config=self.get_backbone_config(),
             backbone=None,
+            backbone_hidden_size=self.backbone_hidden_size,
             neck_hidden_sizes=self.neck_hidden_sizes,
             fusion_hidden_size=self.fusion_hidden_size,
             bottleneck_features=self.bottleneck_features,
