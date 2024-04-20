@@ -31,8 +31,8 @@ from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask_for_sdpa,
 )
 from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
     SequenceClassifierOutputWithPast,
     dataclass,
 )
@@ -58,6 +58,82 @@ _CHECKPOINT_FOR_DOC = "jetmoe"
 _CONFIG_FOR_DOC = "JetMoeConfig"
 
 
+def load_balancing_loss_func(
+    gate_logits: torch.Tensor, num_experts: torch.Tensor = None, top_k=2, attention_mask: Optional[torch.Tensor] = None
+) -> float:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
+    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        gate_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
+            shape [batch_size X sequence_length, num_experts].
+        attention_mask (`torch.Tensor`, None):
+            The attention_mask used in forward function
+            shape [batch_size X sequence_length] if not None.
+        num_experts (`int`, *optional*):
+            Number of experts
+
+    Returns:
+        The auxiliary loss.
+    """
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
+
+    if isinstance(gate_logits, tuple):
+        compute_device = gate_logits[0].device
+        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+
+    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+
+    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+
+    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
+
+    if attention_mask is None:
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.mean(routing_weights, dim=0)
+    else:
+        batch_size, sequence_length = attention_mask.shape
+        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
+        expert_attention_mask = (
+            attention_mask[None, :, :, None, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
+            .reshape(-1, top_k, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
+            expert_attention_mask, dim=0
+        )
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
+        router_per_expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
+            router_per_expert_attention_mask, dim=0
+        )
+
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    return overall_loss * num_experts
+
+
 class JetMoeParallelExperts(nn.Module):
     def __init__(self, num_experts: int, input_size: int, output_size: int) -> None:
         """
@@ -70,7 +146,6 @@ class JetMoeParallelExperts(nn.Module):
         """
         super().__init__()
         self.weight = nn.Parameter(torch.empty(num_experts, output_size, input_size))
-        self.reset_parameters()
         self.num_experts = num_experts
         self.input_size = input_size
         self.output_size = output_size
@@ -79,12 +154,6 @@ class JetMoeParallelExperts(nn.Module):
         return "num_experts={}, input_size={}, output_size={}".format(
             self.num_experts, self.input_size, self.output_size
         )
-
-    def reset_parameters(self) -> None:
-        """
-        Reset the parameters of the model.
-        """
-        nn.init.uniform_(self.weight, -1.0 / self.weight.size(1), 1.0 / self.weight.size(1))
 
     def forward(self, inputs, expert_size):
         """
@@ -106,12 +175,7 @@ class JetMoeParallelExperts(nn.Module):
 
 
 class JetMoeTopKGating(nn.Module):
-    def __init__(
-        self,
-        input_size: int,
-        num_experts: int,
-        top_k: int,
-    ):
+    def __init__(self, input_size: int, num_experts: int, top_k: int):
         """
         Initialize the top-k gating mechanism.
 
@@ -134,28 +198,20 @@ class JetMoeTopKGating(nn.Module):
         """
         return "k={}, num_experts={}".format(self.top_k, self.num_experts)
 
-    def compute_aux_loss(self, probs, logits, gates):
-        """
-        Calculate and return the auxiliary loss based on the accumulated statistics.
+    def compute_topo(self, top_k_indices, top_k_gates):
+        zeros = torch.zeros([top_k_gates.size(0), self.num_experts], dtype=top_k_gates.dtype, device=top_k_gates.device)
+        gates = zeros.scatter(1, top_k_indices, 1)
+        expert_size = gates.long().sum(0)
+        top_k_gates = top_k_gates.flatten()
+        top_k_experts = top_k_indices.flatten()
+        _, index_sorted_experts = top_k_experts.sort(0)
+        batch_index = index_sorted_experts.div(self.top_k, rounding_mode="trunc")
+        batch_gates = top_k_gates[index_sorted_experts]
+        expert_size = expert_size.tolist()
 
-        Args:
-            eps (float): Small epsilon value for numerical stability.
+        return index_sorted_experts, batch_index, batch_gates, expert_size
 
-        Returns:
-            torch.Tensor: The calculated auxiliary loss.
-        """
-        count = logits.size(0)
-        probs = probs.sum(0)
-        freq = (gates > 0).float().sum(0)
-        lsesq = (torch.log(torch.exp(logits).sum(dim=-1)) ** 2).sum()
-
-        switchloss = self.num_experts * (F.normalize(probs, p=1, dim=0) * F.normalize(freq, p=1, dim=0)).sum()
-        zloss = lsesq / count
-        loss = switchloss + 0.1 * zloss
-
-        return loss
-
-    def forward(self, x):
+    def forward(self, x, return_topo=False):
         """
         Compute the top-k gating for the input.
 
@@ -163,33 +219,21 @@ class JetMoeTopKGating(nn.Module):
 
         Args:
             x (torch.Tensor): Input tensor with shape [batch_size, input_size].
-            skip_mask (torch.Tensor): Skip mask tensor (binary) with the same shape as `x`.
-            x: input Tensor with shape [batch_size, input_size]
-            train: a boolean - we only add noise at training time.
-            noise_epsilon: a float
 
         Returns:
             torch.Tensor: Top-k indices.
             torch.Tensor: Top-k gating values.
-            torch.Tensor: Probability values for each expert.
-            gates: a Tensor with shape [batch_size, num_experts]
-            load: a Tensor with shape [num_experts]
+            torch.Tensor: router layer logits.
         """
 
         logits = self.layer(x).float()
         top_k_logits, top_k_indices = logits.topk(self.top_k, dim=1)
         top_k_gates = torch.softmax(top_k_logits, dim=1).type_as(x)
 
-        if self.training:
-            probs = torch.softmax(logits, dim=1)
-            zeros = torch.zeros_like(probs)
-            zeros = zeros.to(top_k_gates.dtype)  # Convert zeros to match top_k_gates dtype
-            gates = zeros.scatter(1, top_k_indices, top_k_gates)
-            self.loss = self.compute_aux_loss(probs, logits, gates)
+        if return_topo:
+            return self.compute_topo(top_k_indices, top_k_gates) + (logits,)
         else:
-            self.loss = 0
-
-        return top_k_indices, top_k_gates
+            return top_k_indices, top_k_gates, logits
 
 
 class JetMoeMoE(nn.Module):
@@ -206,76 +250,28 @@ class JetMoeMoE(nn.Module):
         glu: a boolean - whether to use GLU activation
     """
 
-    def __init__(
-        self,
-        input_size,
-        hidden_size,
-        num_experts,
-        top_k,
-        bias=True,
-        activation=None,
-        glu=True,
-    ):
+    def __init__(self, config: JetMoeConfig):
         super(JetMoeMoE, self).__init__()
 
-        self.num_experts = num_experts
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.glu = glu
-        if bias:
-            self.bias = torch.nn.Parameter(torch.empty(input_size))
+        self.num_experts = config.num_local_experts
+        self.input_size = config.hidden_size
+        self.hidden_size = config.intermediate_size
+        self.top_k = config.num_experts_per_tok
+        self.activation = ACT2FN[config.activation_function]
+        if config.bias:
+            self.bias = torch.nn.Parameter(torch.empty(self.input_size))
             torch.nn.init.zeros_(self.bias)
         else:
             self.bias = None
 
-        self.input_linear = JetMoeParallelExperts(num_experts, input_size, hidden_size * 2 if glu else hidden_size)
-        self.output_linear = JetMoeParallelExperts(num_experts, hidden_size, input_size)
-
-        self.top_k = top_k
-        self.activation = activation
+        self.input_linear = JetMoeParallelExperts(self.num_experts, self.input_size, self.hidden_size * 2)
+        self.output_linear = JetMoeParallelExperts(self.num_experts, self.hidden_size, self.input_size)
 
         self.router = JetMoeTopKGating(
-            input_size=input_size,
-            num_experts=num_experts,
-            top_k=top_k,
+            input_size=self.input_size,
+            num_experts=self.num_experts,
+            top_k=self.top_k,
         )
-
-    def extra_repr(self):
-        return "k={}, e={}".format(self.top_k, self.num_experts)
-
-    def build_topo(self, k: int, num_experts: int, top_k_gates: torch.Tensor, top_k_indices: torch.Tensor):
-        """
-        Compute gating values for the mixture of experts based on probabilities and top-k indices.
-
-        Args:
-            k (`int`): Number of experts to select.
-            num_experts (`int`): Total number of experts.
-            top_k_gates (`torch.Tensor`): Gating values for top-k experts (batch_size x k).
-            top_k_indices (`torch.Tensor`): Indices of top-k experts (batch_size x k).
-
-        Returns:
-            `tuple(torch.Tensor)` containing (respectively) batch-level gating values, batch-level expert indices,
-                expert size for each expert, and sorted indices of top-k experts.
-        """
-        zeros = torch.zeros([top_k_gates.size(0), num_experts], dtype=top_k_gates.dtype, device=top_k_gates.device)
-        gates = zeros.scatter(1, top_k_indices, 1)
-        expert_size = gates.long().sum(0)
-        top_k_gates = top_k_gates.flatten()
-        top_k_experts = top_k_indices.flatten()
-        _, index_sorted_experts = top_k_experts.sort(0)
-        batch_index = index_sorted_experts.div(k, rounding_mode="trunc")
-        batch_gates = top_k_gates[index_sorted_experts]
-        return batch_gates, batch_index, expert_size, index_sorted_experts
-
-    def compute_gate(self, hidden_states):
-        top_k_indices, self.top_k_gates = self.router(hidden_states)
-
-        self.batch_gates, self.batch_index, expert_size, self.index_sorted_experts = self.build_topo(
-            self.top_k, self.num_experts, self.top_k_gates, top_k_indices
-        )
-        self.expert_size = expert_size.tolist()
-
-        return self.router.loss
 
     def batch_forward(self, x):
         """
@@ -286,29 +282,25 @@ class JetMoeMoE(nn.Module):
 
         Returns:
             Tensor: Output tensor.
-            float: Gating loss.
         """
         bsz, length, emb_size = x.size()
         x = x.reshape(-1, emb_size)
-        loss = self.compute_gate(x)
+        _, batch_index, batch_gates, expert_size, router_logits = self.router(x, return_topo=True)
 
-        expert_inputs = x[self.batch_index]
-        h = self.input_linear(expert_inputs, self.expert_size)
-        if self.glu:
-            h, g = h.chunk(2, dim=-1)
-            h = self.activation(h) * g
-        else:
-            h = self.activation(h)
-        expert_outputs = self.output_linear(h, self.expert_size)
+        expert_inputs = x[batch_index]
+        h = self.input_linear(expert_inputs, expert_size)
+        h, g = h.chunk(2, dim=-1)
+        h = self.activation(h) * g
+        expert_outputs = self.output_linear(h, expert_size)
 
-        expert_outputs = expert_outputs * self.batch_gates[:, None]
+        expert_outputs = expert_outputs * batch_gates[:, None]
 
         zeros = torch.zeros((bsz * length, self.input_size), dtype=expert_outputs.dtype, device=expert_outputs.device)
-        y = zeros.index_add(0, self.batch_index, expert_outputs)
+        y = zeros.index_add(0, batch_index, expert_outputs)
         y = y.view(bsz, length, self.input_size)
         if self.bias is not None:
             y = y + self.bias
-        return y, loss
+        return y, router_logits
 
     def single_forward(self, x):
         """
@@ -324,19 +316,15 @@ class JetMoeMoE(nn.Module):
         bsz, length, emb_size = x.size()
 
         x = x.reshape(1, self.input_size)
-        top_k_indices, top_k_gates = self.router(x)
-        loss = self.router.loss
+        top_k_indices, top_k_gates, router_logits = self.router(x, return_topo=False)
 
         y_list = []
         for i in range(self.top_k):
             expert_idx = top_k_indices[0, i]
 
             h = F.linear(x, self.input_linear.weight[expert_idx])
-            if self.glu:
-                h, g = h.chunk(2, dim=-1)
-                h = self.activation(h) * g
-            else:
-                h = self.activation(h)
+            h, g = h.chunk(2, dim=-1)
+            h = self.activation(h) * g
             y = F.linear(h, self.output_linear.weight[expert_idx]) * top_k_gates[0, i]
 
             y_list.append(y)
@@ -345,7 +333,7 @@ class JetMoeMoE(nn.Module):
         y = y.view(bsz, length, self.input_size)
         if self.bias is not None:
             y = y + self.bias
-        return y, loss
+        return y, router_logits
 
     def forward(self, x):
         """
@@ -363,6 +351,43 @@ class JetMoeMoE(nn.Module):
         else:
             return self.batch_forward(x)
 
+
+class JetMoeMoA(nn.Module):
+    """
+    A Sparsely gated mixture of experts layer with 1-layer Feed-Forward networks as experts.
+
+    Args:
+        input_size: integer - size of the input
+        head_size: integer - size of the expert's hidden layer
+        num_experts: an integer - number of experts
+        top_k: an integer - how many experts to use for each batch element
+        bias: a boolean - whether to include bias in linear layers
+        activation: an activation function to apply to expert's outputs
+        glu: a boolean - whether to use GLU activation
+    """
+
+    def __init__(self, config: JetMoeConfig):
+        super(JetMoeMoA, self).__init__()
+
+        self.num_experts = config.num_local_experts
+        self.input_size = config.hidden_size
+        self.hidden_size = config.kv_channels * config.num_key_value_heads
+        self.top_k = config.num_experts_per_tok
+        if config.bias:
+            self.bias = torch.nn.Parameter(torch.empty(self.input_size))
+            torch.nn.init.zeros_(self.bias)
+        else:
+            self.bias = None
+
+        self.input_linear = JetMoeParallelExperts(self.num_experts, self.input_size, self.hidden_size)
+        self.output_linear = JetMoeParallelExperts(self.num_experts, self.hidden_size, self.input_size)
+
+        self.router = JetMoeTopKGating(
+            input_size=self.input_size,
+            num_experts=self.num_experts,
+            top_k=self.top_k,
+        )
+
     def single_map(self, x):
         """
         Map input through the mixture of experts layer.
@@ -372,22 +397,21 @@ class JetMoeMoE(nn.Module):
 
         Returns:
             Tensor: Output tensor.
-            float: Gating loss.
         """
         bsz, length, emb_size = x.size()
 
         x = x.reshape(1, self.input_size)
-        self.top_k_indices, self.top_k_gates = self.router(x)
-        loss = self.router.loss
+        top_k_indices, top_k_gates, router_logits = self.router(x, return_topo=False)
+        self.topo_info = (top_k_indices, top_k_gates)
 
         y_list = []
         for i in range(self.top_k):
-            expert_idx = self.top_k_indices[0, i]
-            y = F.linear(x, self.input_linear.weight[expert_idx])
+            expert_idx = top_k_indices[0, i]
+            y = F.linear(x, input_linear.weight[expert_idx])
             y_list.append(y)
         y = torch.cat(y_list, dim=0)
         y = y.view(bsz, length, self.top_k, -1)
-        return y, loss
+        return y, router_logits
 
     def batch_map(self, x):
         """
@@ -398,21 +422,21 @@ class JetMoeMoE(nn.Module):
 
         Returns:
             Tensor: Output tensor.
-            float: Gating loss.
         """
         bsz, length, emb_size = x.size()
         x = x.reshape(-1, emb_size)
-        loss = self.compute_gate(x)
+        index_sorted_experts, batch_index, batch_gates, expert_size, router_logits = self.router(x, return_topo=True)
+        self.topo_info = (index_sorted_experts, batch_index, batch_gates, expert_size)
 
-        expert_inputs = x[self.batch_index]
-        expert_outputs = self.input_linear(expert_inputs, self.expert_size)
+        expert_inputs = x[batch_index]
+        expert_outputs = self.input_linear(expert_inputs, expert_size)
 
         zeros = torch.zeros(
             (bsz * length * self.top_k, self.hidden_size), dtype=expert_outputs.dtype, device=expert_outputs.device
         )
-        y = zeros.index_add(0, self.index_sorted_experts, expert_outputs)
+        y = zeros.index_add(0, index_sorted_experts, expert_outputs)
         y = y.view(bsz, length, self.top_k, -1)
-        return y, loss
+        return y, router_logits
 
     def map(self, x):
         """
@@ -442,13 +466,14 @@ class JetMoeMoE(nn.Module):
         """
 
         bsz, length, k, emb_size = x.size()
-
         x = x.reshape(k, emb_size)
+
+        top_k_indices, top_k_gates = self.topo_info
 
         y_list = []
         for i in range(self.top_k):
-            expert_idx = self.top_k_indices[0, i]
-            y = F.linear(x[i], self.output_linear.weight[expert_idx]) * self.top_k_gates[0, i]
+            expert_idx = top_k_indices[0, i]
+            y = F.linear(x[i], self.output_linear.weight[expert_idx]) * top_k_gates[0, i]
             y_list.append(y)
         y = sum(y_list)
         y = y.view(bsz, length, self.input_size)
@@ -470,13 +495,15 @@ class JetMoeMoE(nn.Module):
         bsz, length, k, emb_size = x.size()
         x = x.reshape(-1, emb_size)
 
-        expert_inputs = x[self.index_sorted_experts]
-        expert_outputs = self.output_linear(expert_inputs, self.expert_size)
+        index_sorted_experts, batch_index, batch_gates, expert_size = self.topo_info
 
-        expert_outputs = expert_outputs * self.batch_gates[:, None]
+        expert_inputs = x[index_sorted_experts]
+        expert_outputs = self.output_linear(expert_inputs, expert_size)
+
+        expert_outputs = expert_outputs * batch_gates[:, None]
 
         zeros = torch.zeros((bsz * length, self.input_size), dtype=expert_outputs.dtype, device=expert_outputs.device)
-        y = zeros.index_add(0, self.batch_index, expert_outputs)
+        y = zeros.index_add(0, batch_index, expert_outputs)
         y = y.view(bsz, length, self.input_size)
         if self.bias is not None:
             y = y + self.bias
@@ -497,87 +524,6 @@ class JetMoeMoE(nn.Module):
             return self.single_reduce(x)
         else:
             return self.batch_reduce(x)
-
-
-@dataclass
-class JetMoeBaseModelOutputWithPast(BaseModelOutputWithPast):
-    """
-    Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-
-            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
-            hidden_size)` is output.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
-            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
-            encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-            input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        aux_loss: (`torch.FloatTensor`):
-            The auxiliary load balancing loss for MoE layers.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    aux_loss: Optional[torch.FloatTensor] = None
-
-
-@dataclass
-class JetMoeSequenceClassifierOutputWithPast(SequenceClassifierOutputWithPast):
-    """
-    Base class for outputs of sentence classification models.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        aux_loss: (`torch.FloatTensor`):
-            The auxiliary load balancing loss for MoE layers.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    aux_loss: Optional[torch.FloatTensor] = None
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
@@ -714,16 +660,9 @@ class JetMoeAttention(nn.Module):
         self.kv_projection_size = config.kv_channels * config.num_key_value_heads
         self.num_key_value_heads = config.num_key_value_heads
         self.num_heads = config.num_attention_heads
-        assert self.num_heads == self.num_key_value_heads * config.num_experts_per_tok
         self.hidden_size_per_attention_head = config.kv_channels
 
-        self.experts = JetMoeMoE(
-            input_size=config.hidden_size,
-            hidden_size=self.kv_projection_size,
-            num_experts=config.num_local_experts,
-            top_k=config.num_experts_per_tok,
-            glu=False,
-        )
+        self.experts = JetMoeMoA(config)
 
         self.kv_proj = torch.nn.Linear(config.hidden_size, self.kv_projection_size * 2, bias=False)
 
@@ -749,7 +688,7 @@ class JetMoeAttention(nn.Module):
             )
         bsz, q_len, _ = hidden_states.size()
 
-        query_states, aux_loss = self.experts.map(hidden_states)
+        query_states, router_logits = self.experts.map(hidden_states)
         key_states, value_states = self.kv_proj(hidden_states).chunk(2, dim=-1)
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.hidden_size_per_attention_head).transpose(
@@ -821,7 +760,7 @@ class JetMoeAttention(nn.Module):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value, aux_loss
+        return attn_output, attn_weights, past_key_value, router_logits
 
 
 # copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->JetMoe
@@ -859,7 +798,7 @@ class JetMoeSdpaAttention(JetMoeAttention):
 
         bsz, q_len, _ = hidden_states.size()
 
-        query_states, aux_loss = self.experts.map(hidden_states)
+        query_states, router_logits = self.experts.map(hidden_states)
         key_states, value_states = self.kv_proj(hidden_states).chunk(2, dim=-1)
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.hidden_size_per_attention_head).transpose(
@@ -917,7 +856,7 @@ class JetMoeSdpaAttention(JetMoeAttention):
         attn_output = self.experts.reduce(attn_output)
         attn_output = attn_output.view(bsz, q_len, -1)
 
-        return attn_output, None, past_key_value, aux_loss
+        return attn_output, None, past_key_value, router_logits
 
 
 class JetMoeFlashAttention2(JetMoeAttention):
@@ -961,7 +900,7 @@ class JetMoeFlashAttention2(JetMoeAttention):
         B, T, C = hidden_states.size()  # batch size, sequence length, embedding dimensionality (hidden_size)
 
         # calculate query, key, values
-        query_layer, aux_loss = self.experts.map(hidden_states)
+        query_layer, router_logits = self.experts.map(hidden_states)
         key_layer, value_layer = self.kv_proj(hidden_states).chunk(2, dim=-1)
 
         query_layer = query_layer.view(B, T, self.num_heads, self.hidden_size_per_attention_head)  # (B, T, k * nh, hs)
@@ -1036,7 +975,7 @@ class JetMoeFlashAttention2(JetMoeAttention):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value, aux_loss
+        return attn_output, attn_weights, past_key_value, router_logits
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
@@ -1158,15 +1097,7 @@ class JetMoeBlock(nn.Module):
         self.self_attention = JETMOE_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
         self.post_attention_layernorm = JetMoeRMSNorm(config.hidden_size)
 
-        self.mlp = JetMoeMoE(
-            input_size=config.hidden_size,
-            hidden_size=config.intermediate_size,
-            num_experts=config.num_local_experts,
-            activation=ACT2FN[config.activation_function],
-            top_k=config.num_experts_per_tok,
-            bias=config.bias,
-            glu=True,
-        )
+        self.mlp = JetMoeMoE(config)
 
     def forward(
         self,
@@ -1175,6 +1106,7 @@ class JetMoeBlock(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
+        output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         **kwargs,
     ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
@@ -1188,13 +1120,16 @@ class JetMoeBlock(nn.Module):
             head_mask (Optional[torch.FloatTensor]): Head mask.
             use_cache (Optional[bool]): Whether to use cached states.
             output_attentions (Optional[bool]): Whether to output attention weights.
+            output_router_logits (Optional[bool]):
+                Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
+                should not be returned during inference.
 
         Returns:
             Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
             Tuple containing outputs or optional attention weights.
         """
         # Self Attention
-        attn_output, self_attn_weights, present_key_value, att_aux_loss = self.self_attention(
+        attn_output, self_attn_weights, present_key_value, attn_router_logits = self.self_attention(
             hidden_states=self.input_layernorm(hidden_states),
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1204,7 +1139,7 @@ class JetMoeBlock(nn.Module):
         )
 
         hidden_states = hidden_states + attn_output
-        x_mlp, mlp_aux_loss = self.mlp(self.post_attention_layernorm(hidden_states))
+        x_mlp, mlp_router_logits = self.mlp(self.post_attention_layernorm(hidden_states))
         hidden_states = hidden_states + x_mlp
 
         outputs = (hidden_states,)
@@ -1215,7 +1150,8 @@ class JetMoeBlock(nn.Module):
         if use_cache:
             outputs += (present_key_value,)
 
-        outputs += (att_aux_loss + mlp_aux_loss,)
+        if output_router_logits:
+            outputs += (attn_router_logits, mlp_router_logits,)
 
         return outputs
 
@@ -1322,6 +1258,9 @@ JETMOE_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        output_router_logits (`bool`, *optional*):
+            Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
+            should not be returned during inference.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -1370,11 +1309,15 @@ class JetMoeModel(JetMoePreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[Tuple, MoeModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
@@ -1452,9 +1395,9 @@ class JetMoeModel(JetMoePreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
+        all_router_logits = () if output_router_logits else None
         next_decoder_cache = None
 
-        aux_loss = 0
         for decoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -1467,6 +1410,7 @@ class JetMoeModel(JetMoePreTrainedModel):
                     past_key_values,
                     attention_mask,
                     output_attentions,
+                    output_router_logits,
                     use_cache,
                     use_reentrant=False,
                 )
@@ -1477,6 +1421,7 @@ class JetMoeModel(JetMoePreTrainedModel):
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
+                    output_router_logits=output_router_logits,
                     use_cache=use_cache,
                 )
 
@@ -1488,7 +1433,8 @@ class JetMoeModel(JetMoePreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-            aux_loss += layer_outputs[-1]
+            if output_router_logits:
+                all_router_logits += (layer_outputs[-2], layer_outputs[-1])
 
         hidden_states = self.norm(hidden_states)
 
@@ -1502,12 +1448,12 @@ class JetMoeModel(JetMoePreTrainedModel):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
-        return JetMoeBaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
-            aux_loss=aux_loss,
+            router_logits=all_router_logits,
         )
 
 
@@ -1545,7 +1491,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel):
 
     # Ignore copy
     @add_start_docstrings_to_model_forward(JETMOE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1557,8 +1503,9 @@ class JetMoeForCausalLM(JetMoePreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1604,23 +1551,42 @@ class JetMoeForCausalLM(JetMoePreTrainedModel):
             shift_labels = shift_labels.to(shift_logits.device)
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits, shift_labels)
-            if self.model.training:
-                loss += self.aux_loss_coef * outputs.aux_loss.to(loss.device)
+
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits if return_dict else outputs[-1],
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
         if not return_dict:
             output = (logits,) + outputs[1:]
+            if output_router_logits:
+                output = (aux_loss,) + output
             return (loss,) + output if loss is not None else output
 
-        return CausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self, 
+        input_ids, 
+        past_key_values=None, 
+        attention_mask=None, 
+        inputs_embeds=None, 
+        output_router_logits=False,
+        **kwargs
     ):
         # Omit tokens covered by past_key_values
         if past_key_values is not None:
@@ -1672,6 +1638,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
+                "output_router_logits": output_router_logits,
             }
         )
         return model_inputs

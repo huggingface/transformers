@@ -58,6 +58,9 @@ class JetMoeConfig(PretrainedConfig):
             Defines the number of experts in the mixture of experts and mixture of attention heads.
         num_experts_per_tok (`int, *optional*, defaults to 2):
             The number of experts to root per-token.
+        output_router_logits (`bool`, *optional*, defaults to `False`):
+            Whether or not the router logits should be returned by the model. Enabeling this will also
+            allow the model to output the auxiliary loss. 
         aux_loss_coef (`float`, *optional*, defaults to 0.01):
             The coefficient for the auxiliary loss.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -106,6 +109,7 @@ class JetMoeConfig(PretrainedConfig):
         activation_function="silu",
         num_local_experts=8,
         num_experts_per_tok=2,
+        output_router_logits=False,
         aux_loss_coef=0.01,
         use_cache=True,
         bos_token_id=1,
@@ -119,6 +123,8 @@ class JetMoeConfig(PretrainedConfig):
     ):
         if num_experts_per_tok > num_local_experts:
             raise ValueError("`num_experts_per_tok` must be less than or equal to `num_local_experts`")
+        if num_attention_heads != num_key_value_heads * num_experts_per_tok:
+            raise ValueError("`num_attention_heads` must be equal to `num_key_value_heads` * `num_experts_per_tok`")
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -130,6 +136,7 @@ class JetMoeConfig(PretrainedConfig):
         self.activation_function = activation_function
         self.num_local_experts = num_local_experts
         self.num_experts_per_tok = num_experts_per_tok
+        self.output_router_logits = output_router_logits
         self.aux_loss_coef = aux_loss_coef
         self.use_cache = use_cache
         self.initializer_range = initializer_range
