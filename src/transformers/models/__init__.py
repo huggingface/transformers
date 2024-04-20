@@ -63,6 +63,7 @@ from . import (
     deberta,
     deberta_v2,
     decision_transformer,
+    iris,
     deformable_detr,
     deit,
     deprecated,

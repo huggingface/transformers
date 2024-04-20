@@ -341,6 +341,10 @@ _import_structure = {
         "DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DecisionTransformerConfig",
     ],
+    "models.iris": [
+        "DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "IrisConfig",
+    ],
     "models.deformable_detr": [
         "DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DeformableDetrConfig",
@@ -1980,6 +1984,15 @@ else:
             "DecisionTransformerGPT2PreTrainedModel",
             "DecisionTransformerModel",
             "DecisionTransformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.iris"].extend(
+        [
+            "DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "IrisGPT2Model",
+            "IrisGPT2PreTrainedModel",
+            "IrisModel",
+            "IrisPreTrainedModel",
         ]
     )
     _import_structure["models.deformable_detr"].extend(
@@ -5297,6 +5310,10 @@ if TYPE_CHECKING:
         DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DecisionTransformerConfig,
     )
+    from .models.iris import (
+        DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        IrisConfig,
+    )
     from .models.deformable_detr import (
         DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DeformableDetrConfig,
@@ -6830,6 +6847,13 @@ if TYPE_CHECKING:
             DecisionTransformerGPT2PreTrainedModel,
             DecisionTransformerModel,
             DecisionTransformerPreTrainedModel,
+        )
+        from .models.iris import (
+            DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            IrisGPT2Model,
+            IrisGPT2PreTrainedModel,
+            IrisModel,
+            IrisPreTrainedModel,
         )
         from .models.deformable_detr import (
             DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
