@@ -1311,6 +1311,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
             loss = torch.zeros([], device=self.device)
 
             # per codebook cross-entropy
+            # ref: https://github.com/facebookresearch/audiocraft/blob/69fea8b290ad1b4b40d28f92d1dfc0ab01dbab85/audiocraft/solvers/musicgen.py#L242-L243
             # -100 labels are ignored
             labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
 
