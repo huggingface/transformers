@@ -51,6 +51,10 @@ class Cache:
         """Returns the maximum sequence length of the cached states, if there is any."""
         raise NotImplementedError("Make sure to implement `get_max_length` in a subclass.")
 
+    def reorder_cache_tokens(self, source_token_idxs: torch.tensor, dest_token_idxs: torch.tensor = None):
+        """reorders cache along tokens axis, typically for compacting"""
+        raise NotImplementedError("Make sure to implement `reorder_cache_tokens` in a subclass.")
+
     def get_usable_length(self, new_seq_length: int, layer_idx: Optional[int] = 0) -> int:
         """Given the sequence length of the new inputs, returns the usable length of the cache."""
         # Cache without size limit -> all cache is usable
@@ -461,6 +465,37 @@ class StaticCache(Cache):
         v_out[:, :, new_cache_positions] = value_states
 
         return k_out, v_out
+
+    def reorder_cache_tokens(self, source_token_idxs: torch.LongTensor, dest_token_idxs=None):
+        """
+        reorders cache along axis=2 (tokens)
+        accepts int and bool indices
+        if source_token_idx.dtype == torch.bool assumes source_token_idx.shape == self.key_cache.shape[2]
+        sets the rest of .key_cache[0, 0, ...] to zeros to ensure that get_seq_length() works right
+        """
+        if (source_token_idxs.dtype == torch.bool) and (source_token_idxs.shape[-1] < self.key_cache.shape[-2]):
+            source_token_idxs = F.pad(input=source_token_idxs, pad=(0, self.key_cache.shape[-2] - source_token_idxs.shape[-1]), mode="constant", value=False)
+
+        if dest_token_idxs is None:
+            dest_size = source_token_idxs.sum() if source_token_idxs.dtype == torch.bool else source_token_idxs.shape[-1]
+            dest_token_idxs = torch.arange(dest_size)
+
+        self.key_cache[:, :, dest_token_idxs.to(self.key_cache.device), :] = self.key_cache[:, :, source_token_idxs.to(self.key_cache.device), :]
+        self.value_cache[:, :, dest_token_idxs.to(self.value_cache.device), :] = self.value_cache[:, :, source_token_idxs.to(self.value_cache.device), :]
+
+        right_edge = torch.where(dest_token_idxs)[0].max() if dest_token_idxs.dtype == torch.bool else dest_token_idxs.max()
+
+        # setting the rest of the cache to zeros to ensure that get_seq_length() works right
+        self.key_cache[0, 0, right_edge.to(self.key_cache.device) :, :].zero_()
+
+    def resize(self, new_len):
+        """Resets the maximum sequence length of the cached states."""
+        if new_len <= self.key_cache.shape[-2]:
+            self.key_cache = self.key_cache[:, :, :new_len, :]
+            self.value_cache = self.value_cache[:, :, :new_len, :]
+        else:
+            self.key_cache = F.pad(input=self.key_cache, pad=(0, 0, 0, new_len - self.key_cache.shape[-2]), mode="constant", value=0)
+            self.value_cache = F.pad(input=self.value_cache, pad=(0, 0, 0, new_len - self.value_cache.shape[-2]), mode="constant", value=0)
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model. `layer_idx` kept for BC"""
