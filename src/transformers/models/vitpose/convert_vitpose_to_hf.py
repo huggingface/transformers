@@ -142,11 +142,11 @@ def convert_state_dict(orig_state_dict, dim, config):
     return orig_state_dict
 
 
-# We will verify our results on an image of cute cats
+# We will verify our results on a COCO image
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    url = "http://images.cocodataset.org/val2017/000000000139.jpg"
+    image = Image.open(requests.get(url, stream=True).raw)
+    return image
 
 
 name_to_path = {
@@ -179,13 +179,18 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     new_state_dict = convert_state_dict(state_dict, dim=config.hidden_size, config=config)
     model.load_state_dict(new_state_dict)
 
-    # TODO verify image processor
+    # create image processor
     image_processor = ViTPoseImageProcessor()
-    # encoding = image_processor(images=prepare_img(), return_tensors="pt")
-    # pixel_values = encoding["pixel_values"]
+
+    # verify image processor
+    image = prepare_img()
+    boxes = [[[412.8, 157.61, 53.05, 138.01], [384.43, 172.21, 15.12, 35.74]]]
+    pixel_values = image_processor(images=image, boxes=boxes, return_tensors="pt").pixel_values
 
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="vitpose_batch_data.pt", repo_type="dataset")
-    pixel_values = torch.load(filepath, map_location="cpu")["img"]
+    original_pixel_values = torch.load(filepath, map_location="cpu")["img"]
+    assert torch.allclose(pixel_values, original_pixel_values)
+
     img_metas = torch.load(filepath, map_location="cpu")["img_metas"]
 
     print("Shape of pixel values:", pixel_values.shape)

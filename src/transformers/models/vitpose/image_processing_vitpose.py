@@ -22,11 +22,13 @@ import cv2
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_transforms import to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
+    infer_channel_dimension_format,
     is_scaled_image,
     make_list_of_images,
     to_numpy_array,
@@ -298,12 +300,22 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         scale: tuple[float],
         rotation: float,
         size: Dict[str, int],
+        data_format: Optional[ChannelDimension] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.array:
+        data_format = input_data_format if data_format is None else data_format
+
+        print("Data format:", data_format)
+
         size = (size["width"], size["height"])
 
         transformation = get_warp_matrix(rotation, center * 2.0, np.array(size) - 1.0, scale * 200.0)
 
         image = cv2.warpAffine(image, transformation, size, flags=cv2.INTER_LINEAR)
+
+        # move back to input_data_format
+        if data_format is not None:
+            image = to_channel_dimension_format(image, data_format, input_data_format)
 
         return image
 
@@ -319,7 +331,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
+        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> PIL.Image.Image:
@@ -370,21 +382,25 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
             )
 
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
         # transformations (affine transformation + rescaling + normalization)
         new_images = []
         if self.do_affine_transform:
             for image, image_boxes in zip(images, boxes):
                 for box in image_boxes:
                     center, scale = _box2cs(box, (size["width"], size["height"]))
-                    transformed_image = self.affine_transform(image, center, scale, rotation=0, size=size)
+                    transformed_image = self.affine_transform(
+                        image, center, scale, rotation=0, size=size, input_data_format=input_data_format
+                    )
                     new_images.append(transformed_image)
 
         images = new_images
 
         # TODO each image might have a variable number of boxes => padding?
         # create pixel_values of shape (batch_size, num_boxes, num_channels, height, width)
-        for image in images:
-            print(image.shape)
 
         if self.do_rescale:
             images = [
@@ -392,9 +408,17 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                 for image in images
             ]
         if self.do_normalize:
-            images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
+            images = [
+                self.normalize(
+                    image=image, mean=self.image_mean, std=self.image_std, input_data_format=input_data_format
+                )
+                for image in images
+            ]
 
-        # return as BatchFeature
+        images = [
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+        ]
+
         data = {"pixel_values": images}
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
