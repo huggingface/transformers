@@ -119,8 +119,8 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
             be overidden by `keep_aspect_ratio` in `preprocess`.
         ensure_multiple_of (`int`, *optional*, defaults to 32):
-            If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
-            by `ensure_multiple_of` in `preprocess`.
+            If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works both with and without
+            `keep_aspect_ratio` being set to `True`. Can be overidden by `ensure_multiple_of` in `preprocess`.
     """
 
     model_input_names = ["pixel_values"]
@@ -358,8 +358,9 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
                 Whether to keep the aspect ratio of the image. If False, the image will be resized to (size, size). If
                 True, the image will be resized to keep the aspect ratio and the size will be the maximum possible.
             ensure_multiple_of (`int`, *optional*, defaults to `self.ensure_multiple_of`):
-                Ensure that the image size is a multiple of this value.
-            resample (`int`, *optional*, defaults to `self.resample`):
+                If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works both with and without
+                `keep_aspect_ratio` being set to `True`. Can be overidden by `ensure_multiple_of` in `preprocess`.
+                resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
                 has an effect if `do_resize` is set to `True`.
             return_tensors (`str` or `TensorType`, *optional*):
