@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     SemanticSegmenterOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -485,27 +485,6 @@ def ndgrid(*tensors) -> Tuple[torch.Tensor, ...]:
         return torch.meshgrid(*tensors)
 
 
-# Copied from transformers.models.beit.modeling_beit.generate_relative_position_index
-def generate_relative_position_index(window_size: Tuple[int, int]) -> torch.Tensor:
-    num_relative_distance = (2 * window_size[0] - 1) * (2 * window_size[1] - 1) + 3
-    # cls to token & token 2 cls & cls to cls
-    # get pair-wise relative position index for each token inside the window
-    window_area = window_size[0] * window_size[1]
-    coords = torch.stack(ndgrid(torch.arange(window_size[0]), torch.arange(window_size[1])))  # 2, Wh, Ww
-    coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
-    relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
-    relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
-    relative_coords[:, :, 0] += window_size[0] - 1  # shift to start from 0
-    relative_coords[:, :, 1] += window_size[1] - 1
-    relative_coords[:, :, 0] *= 2 * window_size[1] - 1
-    relative_position_index = torch.zeros(size=(window_area + 1,) * 2, dtype=relative_coords.dtype)
-    relative_position_index[1:, 1:] = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
-    relative_position_index[0, 0:] = num_relative_distance - 3
-    relative_position_index[0:, 0] = num_relative_distance - 2
-    relative_position_index[0, 0] = num_relative_distance - 1
-    return relative_position_index
-
-
 # Copied from transformers.models.beit.modeling_beit.BeitRelativePositionBias with Beit->Data2VecVision
 class Data2VecVisionRelativePositionBias(nn.Module):
     def __init__(self, config: Data2VecVisionConfig, window_size: tuple) -> None:
@@ -517,7 +496,57 @@ class Data2VecVisionRelativePositionBias(nn.Module):
         )  # 2*Wh-1 * 2*Ww-1, nH
         # cls to token & token 2 cls & cls to cls
 
+        # # for backwards compatibility purposes, we still set the buffer even though we're not using it
+        relative_position_index = self.generate_relative_position_index_original(window_size)
+        self.register_buffer("relative_position_index", relative_position_index, persistent=False)
         self.relative_position_indices = {}
+
+    def generate_relative_position_index_original(self, window_size: Tuple[int, int]):
+        """
+        This method implements the original way of creating a relative position index, as done in the
+        original implementation.
+        """
+        # get pair-wise relative position index for each token inside the window
+        coords_h = torch.arange(window_size[0])
+        coords_w = torch.arange(window_size[1])
+        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))  # 2, Wh, Ww
+        coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
+        relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
+        relative_coords[:, :, 0] += window_size[0] - 1  # shift to start from 0
+        relative_coords[:, :, 1] += window_size[1] - 1
+        relative_coords[:, :, 0] *= 2 * window_size[1] - 1
+        relative_position_index = torch.zeros(
+            size=(window_size[0] * window_size[1] + 1,) * 2, dtype=relative_coords.dtype
+        )
+        relative_position_index[1:, 1:] = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
+        relative_position_index[0, 0:] = self.num_relative_distance - 3
+        relative_position_index[0:, 0] = self.num_relative_distance - 2
+        relative_position_index[0, 0] = self.num_relative_distance - 1
+        return relative_position_index
+
+    def generate_relative_position_index(self, window_size: Tuple[int, int]) -> torch.Tensor:
+        """
+        This method creates the relative position index, modified to support arbitrary window sizes,
+        as introduced in [MiDaS v3.1](https://arxiv.org/abs/2307.14460).
+        """
+        num_relative_distance = (2 * window_size[0] - 1) * (2 * window_size[1] - 1) + 3
+        # cls to token & token 2 cls & cls to cls
+        # get pair-wise relative position index for each token inside the window
+        window_area = window_size[0] * window_size[1]
+        coords = torch.stack(ndgrid(torch.arange(window_size[0]), torch.arange(window_size[1])))  # 2, Wh, Ww
+        coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
+        relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
+        relative_coords[:, :, 0] += window_size[0] - 1  # shift to start from 0
+        relative_coords[:, :, 1] += window_size[1] - 1
+        relative_coords[:, :, 0] *= 2 * window_size[1] - 1
+        relative_position_index = torch.zeros(size=(window_area + 1,) * 2, dtype=relative_coords.dtype)
+        relative_position_index[1:, 1:] = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
+        relative_position_index[0, 0:] = num_relative_distance - 3
+        relative_position_index[0:, 0] = num_relative_distance - 2
+        relative_position_index[0, 0] = num_relative_distance - 1
+        return relative_position_index
 
     def forward(self, window_size) -> torch.Tensor:
         """
@@ -548,7 +577,7 @@ class Data2VecVisionRelativePositionBias(nn.Module):
 
         key = str(window_size[1]) + "," + str(window_size[0])
         if key not in self.relative_position_indices.keys():
-            self.relative_position_indices[key] = generate_relative_position_index(window_size)
+            self.relative_position_indices[key] = self.generate_relative_position_index(window_size)
 
         relative_position_bias = new_relative_position_bias_table[self.relative_position_indices[key].view(-1)].view(
             window_size[0] * window_size[1] + 1, window_size[0] * window_size[1] + 1, -1
@@ -643,21 +672,6 @@ class Data2VecVisionPreTrainedModel(PreTrainedModel):
     base_model_prefix = "data2vec_vision"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-
-    _keys_to_ignore_on_load_unexpected = [
-        "data2vec_vision.encoder.layer.0.attention.attention.relative_position_bias.relative_position_index",
-        "data2vec_vision.encoder.layer.1.attention.attention.relative_position_bias.relative_position_index",
-        "data2vec_vision.encoder.layer.10.attention.attention.relative_position_bias.relative_position_index",
-        "data2vec_vision.encoder.layer.11.attention.attention.relative_position_bias.relative_position_index",
-        "data2vec_vision.encoder.layer.2.attention.attention.relative_position_bias.relative_position_index",
-        "data2vec_vision.encoder.layer.3.attention.attention.relative_position_bias.relative_position_index",
-        "data2vec_vision.encoder.layer.4.attention.attention.relative_position_bias.relative_position_index",
-        "data2vec_vision.encoder.layer.5.attention.attention.relative_position_bias.relative_position_index",
-        "data2vec_vision.encoder.layer.6.attention.attention.relative_position_bias.relative_position_index",
-        "data2vec_vision.encoder.layer.7.attention.attention.relative_position_bias.relative_position_index",
-        "data2vec_vision.encoder.layer.8.attention.attention.relative_position_bias.relative_position_index",
-        "data2vec_vision.encoder.layer.9.attention.attention.relative_position_bias.relative_position_index",
-    ]
 
     def _init_weights(self, module):
         """Initialize the weights"""

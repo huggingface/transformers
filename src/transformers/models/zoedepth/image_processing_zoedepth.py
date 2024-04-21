@@ -54,7 +54,7 @@ def get_resize_output_image_size(
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> Tuple[int, int]:
     def constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
-        x = round(val / multiple) * multiple
+        x = (np.round(val / multiple) * multiple).astype(int)
 
         if max_val is not None and x > max_val:
             x = math.floor(val / multiple) * multiple
@@ -212,6 +212,8 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         if "height" not in size or "width" not in size:
             raise ValueError(f"The size dictionary must contain the keys 'height' and 'width'. Got {size.keys()}")
 
+        print("Size: ", size)
+
         output_size = get_resize_output_image_size(
             image,
             output_size=(size["height"], size["width"]),
@@ -219,6 +221,33 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             multiple=ensure_multiple_of,
             input_data_format=input_data_format,
         )
+
+        print("Output size: ", output_size)
+
+        # START of a sanity check, let's use nn.functional.interpolate(x, (int(height), int(width)), mode='bilinear', align_corners=True) instead
+        # height, width = output_size
+        # from torch import nn
+        # import torch
+
+        # torch_image = torch.from_numpy(image).unsqueeze(0)
+        # torch_image = torch_image.permute(0, 3, 1, 2)
+        # print(torch_image.shape)
+
+        # resized_image = nn.functional.interpolate(torch_image,
+        #                                           (int(height), int(width)),
+        #                                           mode='bilinear', align_corners=True)
+
+        # # put channels last again
+        # resized_image = resized_image.squeeze().permute(1, 2, 0).numpy()
+
+        # print("Shape of resized_image:", resized_image.shape)
+
+        # print("Mean of resized image:", resized_image.mean())
+
+        # return resized_image
+
+        # END of a sanity check
+
         return resize(
             image,
             size=output_size,
@@ -396,14 +425,18 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
-        if do_pad:
-            images = [self.pad_image(image=image, input_data_format=input_data_format) for image in images]
-
         if do_rescale:
             images = [
                 self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
                 for image in images
             ]
+
+        print("Mean of image after rescaling:")
+        for image in images:
+            print(image.mean())
+
+        if do_pad:
+            images = [self.pad_image(image=image, input_data_format=input_data_format) for image in images]
 
         if do_resize:
             images = [
