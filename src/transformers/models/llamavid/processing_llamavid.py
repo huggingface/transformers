@@ -120,7 +120,9 @@ class LLaMAVIDLlavaProcessor(ProcessorMixin):
         #IMAGE_TOKEN_INDEX = -200
         encoding =encoding = BatchFeature()
         if images is not None:
-            pixel_values =  self.image_processor(images ,  return_tensors = return_tensors)["pixel_values"]
+            
+            pixel_values =  self.image_processor(images ,  return_tensors = return_tensors)
+
         else:
             pixel_values = None
 
@@ -157,7 +159,7 @@ class LLaMAVIDLlavaProcessor(ProcessorMixin):
         qformer_attention_mask= qformer_text_encoding.pop("attention_mask")
 
 
-        return  BatchFeature(data={**text_inputs , "pixel_values" : pixel_values , "qformer_text_encoding":  qformer_input_ids , "qformer_attention_mask" : qformer_attention_mask})
+        return  BatchFeature(data={**text_inputs , **pixel_values , "qformer_text_encoding":  qformer_input_ids , "qformer_attention_mask" : qformer_attention_mask})
     
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama

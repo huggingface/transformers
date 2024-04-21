@@ -1,3 +1,4 @@
+
 # coding=utf-8
 # Copyright 2024 the HuggingFace Inc. team. All rights reserved.
 #
@@ -45,6 +46,7 @@ from .qformer import  BertConfig , BertLMHeadModel
 from ...models.bert.tokenization_bert import BertTokenizer
 from functools import partial
 import torch.nn.functional as F
+import numpy as np
 
 
 
@@ -244,12 +246,17 @@ class LLaMAVIDLlavaVisionEmbeddings(nn.Module):
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
         target_dtype = self.patch_embedding.weight.dtype
+
+
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1).to(target_dtype)
+        
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
+
         embeddings = embeddings + self.position_embedding[:, : embeddings.size(1), :].to(target_dtype)
+
         return embeddings
 
 
@@ -379,6 +386,9 @@ class LLaMAVIDLlavaEncoderLayer(nn.Module):
         """
         residual = hidden_states
 
+        dummp  = hidden_states.reshape(-1, hidden_states.shape[-1]).detach().cpu()
+
+
         hidden_states = self.layer_norm1(hidden_states)
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -386,11 +396,18 @@ class LLaMAVIDLlavaEncoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
         hidden_states = hidden_states + residual
+
+        dummp  = hidden_states.reshape(-1, hidden_states.shape[-1]).detach().cpu()
+
+	
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
 
         hidden_states = hidden_states + residual
+
+        dummp  = hidden_states.reshape(-1, hidden_states.shape[-1]).detach().cpu()
+
 
         outputs = (hidden_states,)
 
@@ -570,11 +587,13 @@ class LLaMAVIDLlavaEncoder(nn.Module):
 
             hidden_states = layer_outputs[0]
 
+
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
+
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
@@ -623,6 +642,7 @@ class LLaMAVIDLlavaVisionModel(LLaMAVIDLlavaPreTrainedModel):
 
         hidden_states = self.embeddings(pixel_values)
 
+
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
@@ -630,8 +650,11 @@ class LLaMAVIDLlavaVisionModel(LLaMAVIDLlavaPreTrainedModel):
             return_dict=return_dict,
         )
 
+
+
+
         last_hidden_state = encoder_outputs[0]
-        #last_hidden_state = self.post_layernorm(last_hidden_state)
+        last_hidden_state = self.post_layernorm(last_hidden_state)
 
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
@@ -642,7 +665,7 @@ class LLaMAVIDLlavaVisionModel(LLaMAVIDLlavaPreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
+            hidden_states=encoder_outputs[0],
             attentions=encoder_outputs.attentions,
         )
 
@@ -696,6 +719,7 @@ class LLaMAVIDLlavaQFormerMultiHeadAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
+
     def forward(
         self,
         hidden_states,
@@ -724,14 +748,17 @@ class LLaMAVIDLlavaQFormerMultiHeadAttention(nn.Module):
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
 
-        mixed_query_layer = self.query(hidden_states)
-
+        mixed_query_layer = self.query(hidden_states)      
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
+
+ 
         past_key_value = (key_layer, value_layer)
 
+ 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             seq_length = hidden_states.size()[1]
@@ -1617,7 +1644,8 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
     
 
     def token_generation(self, text_q, vis_embed, long_video=False):
-   
+        if vis_embed.shape[1]%2 == 1:
+            vis_embed = vis_embed[:, 1:]
         ctx_embed = self.vlm_att_key_projector(vis_embed)
         # Key part 1: calculate context-related embedding
         ctx_embed = text_q @ ctx_embed.transpose(-1,-2) 
@@ -1661,7 +1689,7 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
 
 
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
-        num_images, num_image_patches, embed_dim = image_features[0].shape
+        num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
         # 1. Create a mask to know where special image tokens are
@@ -1932,7 +1960,7 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
 
         if inputs_embeds is None:
             # 1. Extra the input embeddings
-            #inputs_embeds = self.get_input_embeddings()(input_ids)
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
@@ -1958,7 +1986,7 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
                         output_hidden_states=output_hidden_states,
                         return_dict=return_dict,
                     )
-                image_features = vision_outputs[0]
+                image_features = vision_outputs.last_hidden_state
 
                 # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
                 image_attention_mask = torch.ones(image_features.size()[:-1], dtype=torch.long, device=image_features.device)
@@ -1970,6 +1998,8 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
                 if qformer_attention_mask is None:
                     qformer_attention_mask = torch.ones_like(qformer_text_encoding)
                 qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
+                
+
                 query_outputs = self.qformer(
                     input_ids=qformer_text_encoding,
                     attention_mask=qformer_attention_mask,
@@ -1983,8 +2013,9 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
                 query_output = query_outputs[0][:, : query_tokens.size(1), :]
 
                 text_q=  self.vlm_att_projector(query_output)
-                image_features = self.token_generation(text_q, image_features, long_video=long_video)
-
+                image_features = self.token_generation(text_q, vision_outputs.hidden_states, long_video=long_video)
+                
+ 
                 # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
                 #selected_image_feature =  final_token
                 #selected_image_feature = image_features.hidden_states[vision_feature_layer]
@@ -1992,13 +2023,12 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
 
 
                 #image_features = self.multi_modal_projector(selected_image_feature)
-                #inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
-                #    image_features, inputs_embeds, input_ids, attention_mask, labels
-                #)
-
-                _ , attention_mask , past_key_values , inputs_embeds , labels = self.post_process_from_original(
-                    image_features, inputs_embeds, input_ids, attention_mask, labels, long_video, past_key_values
+                inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
+                    image_features, inputs_embeds, input_ids, attention_mask, labels
                 )
+
+
+
 
                 if labels is None:
                     labels = torch.full_like(attention_mask, self.config.ignore_index).to(torch.long)
