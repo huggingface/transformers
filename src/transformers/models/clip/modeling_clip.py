@@ -1373,12 +1373,9 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
-
-        # average pool the patch tokens
-        sequence_output = torch.mean(sequence_output[:, 1:, :], dim=1)
-        # apply classifier
-        logits = self.classifier(sequence_output)
+        pooler_output = outputs[1]
+        # apply classifier on pooled output
+        logits = self.classifier(pooler_output)
 
         loss = None
         if labels is not None:
