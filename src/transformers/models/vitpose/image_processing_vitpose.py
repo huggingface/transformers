@@ -333,7 +333,6 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -409,9 +408,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
             ]
         if self.do_normalize:
             images = [
-                self.normalize(
-                    image=image, mean=self.image_mean, std=self.image_std, input_data_format=input_data_format
-                )
+                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
                 for image in images
             ]
 

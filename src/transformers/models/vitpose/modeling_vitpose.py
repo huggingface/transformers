@@ -615,6 +615,9 @@ class ViTPoseClassicDecoder(nn.Module):
 
         heatmaps = self.conv(hidden_state)
 
+        if flip_pairs is not None:
+            heatmaps = flip_back(heatmaps.detach().cpu().numpy(), flip_pairs)
+
         return heatmaps
 
 

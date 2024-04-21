@@ -298,7 +298,7 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         # TODO not sure this is right
         assert torch.allclose(
             torch.from_numpy(pose_results[1]["keypoints"][0, :3]),
-            torch.tensor([3.9811887e02, 1.8188435e02, 4.5788464e-01]),
+            torch.tensor([3.9807913e02, 1.8182812e02, 8.8235235e-01]),
         )
 
     if pytorch_dump_folder_path is not None:
