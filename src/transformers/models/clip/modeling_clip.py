@@ -1317,7 +1317,7 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
 
 @add_start_docstrings(
     """
-    CLIP vision encoder with an image classification head on top (a linear layer on top of the pooled output) 
+    CLIP vision encoder with an image classification head on top (a linear layer on top of the pooled output)
     e.g. for ImageNet.
     """,
     CLIP_START_DOCSTRING,
