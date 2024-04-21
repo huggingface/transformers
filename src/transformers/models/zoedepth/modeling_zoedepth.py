@@ -1233,6 +1233,8 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         super().__init__(config)
 
         self.backbone = load_backbone(config)
+        # add backbone_hidden_size to config
+        config.backbone_hidden_size = self.backbone.config.hidden_size
         self.neck = ZoeDepthNeck(config)
         self.relative_head = ZoeDepthRelativeDepthEstimationHead(config)
 
