@@ -161,7 +161,7 @@ class TestDeepSpeedWav2Vec2(TestCasePlus):
             --num_train_epochs {str(num_train_epochs)}
             --per_device_train_batch_size 2
             --per_device_eval_batch_size 2
-            --evaluation_strategy steps
+            --eval_strategy steps
             --learning_rate 5e-4
             --warmup_steps 8
             --orthography timit

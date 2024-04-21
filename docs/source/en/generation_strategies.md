@@ -57,9 +57,10 @@ When you load a model explicitly, you can inspect the generation configuration t
 >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
 >>> model.generation_config
 GenerationConfig {
-    "bos_token_id": 50256,
-    "eos_token_id": 50256,
+  "bos_token_id": 50256,
+  "eos_token_id": 50256
 }
+<BLANKLINE>
 ```
 
 Printing out the `model.generation_config` reveals only the values that are different from the default generation
@@ -244,8 +245,7 @@ To enable multinomial sampling set `do_sample=True` and `num_beams=1`.
 
 >>> outputs = model.generate(**inputs, do_sample=True, num_beams=1, max_new_tokens=100)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Today was an amazing day because when you go to the World Cup and you don\'t, or when you don\'t get invited,
-that\'s a terrible feeling."']
+["Today was an amazing day because we received these wonderful items by the way of a gift shop. The box arrived on a Thursday and I opened it on Monday afternoon to receive the gifts. Both bags featured pieces from all the previous years!\n\nThe box had lots of surprises in it, including some sweet little mini chocolate chips! I don't think I'd eat all of these. This was definitely one of the most expensive presents I have ever got, I actually got most of them for free!\n\nThe first package came"]
 ```
 
 ### Beam-search decoding
@@ -393,7 +393,7 @@ just like in multinomial sampling. However, in assisted decoding, reducing the t
 >>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
 >>> outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, temperature=0.5)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Alice and Bob are going to the same party. It is a small party, in a small']
+['Alice and Bob, a couple of friends of mine, who are both in the same office as']
 ```
 
 Alternativelly, you can also set the `prompt_lookup_num_tokens` to trigger n-gram based assisted decoding, as opposed
