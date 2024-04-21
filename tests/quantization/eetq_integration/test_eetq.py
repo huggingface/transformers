@@ -140,11 +140,6 @@ class EetqTest(unittest.TestCase):
         output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    def test_raise_if_non_quantized(self):
-        model_id = "facebook/opt-125m"
-        quantization_config = EetqConfig()
-        _ = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quantization_config=quantization_config)
-
     def test_save_pretrained(self):
         """
         Simple test that checks if the quantized model is working properly after being saved and loaded

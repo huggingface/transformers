@@ -38,9 +38,10 @@ def _replace_with_eetq_linear(
 
     Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
     """
-    for name, module in model.named_children():
-        if current_key_name is None:
-            current_key_name = []
+    if current_key_name is None:
+        current_key_name = []
+    
+    for name, module in model.named_children():    
         current_key_name.append(name)
 
         if (isinstance(module, nn.Linear)) and name not in modules_to_not_convert:
@@ -105,6 +106,7 @@ def replace_with_eetq_linear(
 
     if quantization_config.modules_to_not_convert is not None:
         modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
+    modules_to_not_convert = list(set(modules_to_not_convert))
     model, has_been_replaced = _replace_with_eetq_linear(
         model, modules_to_not_convert, current_key_name, quantization_config, pre_quantized=pre_quantized
     )
