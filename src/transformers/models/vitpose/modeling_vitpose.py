@@ -76,9 +76,6 @@ class ViTPoseEmbeddings(nn.Module):
         batch_size, num_channels, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values)
 
-        print("Shape of embeddings:", embeddings.shape)
-        print("Shape of position embeddings:", self.position_embeddings.shape)
-
         # add positional encoding to each token
         embeddings = embeddings + self.position_embeddings[:, 1:] + self.position_embeddings[:, :1]
 
@@ -111,15 +108,12 @@ class PatchEmbeddings(nn.Module):
         self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size, padding=2)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        print("Shape of pixel values:", pixel_values.shape)
         height, width = pixel_values.shape[-2:]
         if height != self.image_size[0] or width != self.image_size[1]:
             raise ValueError(
                 f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
         x = self.projection(pixel_values)
-
-        print(x.shape)
 
         x = x.flatten(2).transpose(1, 2)
         return x
@@ -600,11 +594,11 @@ class ViTPoseClassicDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.deconv1 = nn.ConvTranspose2d(config.hidden_size, 256, kernel_size=4, stride=2, padding=1)
+        self.deconv1 = nn.ConvTranspose2d(config.hidden_size, 256, kernel_size=4, stride=2, padding=1, bias=False)
         self.batchnorm1 = nn.BatchNorm2d(256)
         self.relu1 = nn.ReLU()
 
-        self.deconv2 = nn.ConvTranspose2d(config.hidden_size, 256, kernel_size=4, stride=2, padding=1)
+        self.deconv2 = nn.ConvTranspose2d(256, 256, kernel_size=4, stride=2, padding=1, bias=False)
         self.batchnorm2 = nn.BatchNorm2d(256)
         self.relu2 = nn.ReLU()
 
@@ -667,9 +661,6 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         sequence_output = (
             sequence_output.permute(0, 2, 1).reshape(batch_size, -1, patch_height, patch_width).contiguous()
         )
-
-        print("Sequence output before head:", sequence_output.shape)
-        print("First values of sequence output before head:", sequence_output[0, 0, :3, :3])
 
         heatmaps = self.head(sequence_output, flip_pairs=flip_pairs)
 

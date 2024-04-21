@@ -70,7 +70,7 @@ def get_config(model_name):
     return config
 
 
-def rename_key(name):
+def rename_key(name, config):
     if "backbone" in name:
         name = name.replace("backbone", "vit")
     if "patch_embed.proj" in name:
@@ -93,17 +93,33 @@ def rename_key(name):
         name = name.replace("mlp.fc2", "output.dense")
     if "last_norm" in name:
         name = name.replace("last_norm", "layernorm")
-    if "final_layer." in name:
-        name = name.replace("final_layer.", "")
-    if "keypoint_head" in name:
-        name = name.replace("keypoint_head", "head.conv")
 
-    # TODO classic decoder weights
+    # keypoint head
+    if "keypoint_head" in name and config.use_simple_decoder:
+        name = name.replace("final_layer.", "")
+        name = name.replace("keypoint_head", "head.conv")
+    elif "keypoint_head" in name and not config.use_simple_decoder:
+        name = name.replace("keypoint_head", "head")
+        name = name.replace("deconv_layers.0.weight", "deconv1.weight")
+        name = name.replace("deconv_layers.1.weight", "batchnorm1.weight")
+        name = name.replace("deconv_layers.1.bias", "batchnorm1.bias")
+        name = name.replace("deconv_layers.1.running_mean", "batchnorm1.running_mean")
+        name = name.replace("deconv_layers.1.running_var", "batchnorm1.running_var")
+        name = name.replace("deconv_layers.1.num_batches_tracked", "batchnorm1.num_batches_tracked")
+        name = name.replace("deconv_layers.3.weight", "deconv2.weight")
+        name = name.replace("deconv_layers.4.weight", "batchnorm2.weight")
+        name = name.replace("deconv_layers.4.bias", "batchnorm2.bias")
+        name = name.replace("deconv_layers.4.running_mean", "batchnorm2.running_mean")
+        name = name.replace("deconv_layers.4.running_var", "batchnorm2.running_var")
+        name = name.replace("deconv_layers.4.num_batches_tracked", "batchnorm2.num_batches_tracked")
+
+        name = name.replace("final_layer.weight", "conv.weight")
+        name = name.replace("final_layer.bias", "conv.bias")
 
     return name
 
 
-def convert_state_dict(orig_state_dict, dim):
+def convert_state_dict(orig_state_dict, dim, config):
     for key in orig_state_dict.copy().keys():
         val = orig_state_dict.pop(key)
 
@@ -121,7 +137,7 @@ def convert_state_dict(orig_state_dict, dim):
                 orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
                 orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.value.bias"] = val[-dim:]
         else:
-            orig_state_dict[rename_key(key)] = val
+            orig_state_dict[rename_key(key, config)] = val
 
     return orig_state_dict
 
@@ -152,7 +168,7 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     model = ViTPoseForPoseEstimation(config)
     model.eval()
 
-    # load state_dict of original model
+    # load original state_dict
     checkpoint_path = name_to_path[model_name]
     state_dict = torch.load(checkpoint_path, map_location="cpu")["state_dict"]
 
@@ -160,7 +176,7 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     #     print(name, param.shape)
 
     # rename some keys
-    new_state_dict = convert_state_dict(state_dict, dim=config.hidden_size)
+    new_state_dict = convert_state_dict(state_dict, dim=config.hidden_size, config=config)
     model.load_state_dict(new_state_dict)
 
     # TODO verify image processor
@@ -239,7 +255,7 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     result["bbox_ids"] = bbox_ids
     result["output_heatmap"] = None  # return_heatmap = False for inference in mmpose
 
-    print(result)
+    # print(result)
     poses, _ = result["preds"], result["output_heatmap"]
 
     # create final results by adding person bbox information
@@ -267,10 +283,18 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     )
     assert pose_results[0]["keypoints"].shape == (17, 3)
     assert pose_results[1]["keypoints"].shape == (17, 3)
-    assert torch.allclose(
-        torch.from_numpy(pose_results[1]["keypoints"][0, :3]),
-        torch.tensor([3.98180511e02, 1.81808380e02, 8.66642594e-01]),
-    )
+
+    if model_name == "vitpose-base-simple":
+        assert torch.allclose(
+            torch.from_numpy(pose_results[1]["keypoints"][0, :3]),
+            torch.tensor([3.98180511e02, 1.81808380e02, 8.66642594e-01]),
+        )
+    elif model_name == "vitpose-base":
+        # TODO not sure this is right
+        assert torch.allclose(
+            torch.from_numpy(pose_results[1]["keypoints"][0, :3]),
+            torch.tensor([3.9811887e02, 1.8188435e02, 4.5788464e-01]),
+        )
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
