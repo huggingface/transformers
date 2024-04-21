@@ -40,8 +40,8 @@ def _replace_with_eetq_linear(
     """
     if current_key_name is None:
         current_key_name = []
-    
-    for name, module in model.named_children():    
+
+    for name, module in model.named_children():
         current_key_name.append(name)
 
         if (isinstance(module, nn.Linear)) and name not in modules_to_not_convert:
