@@ -665,7 +665,7 @@ quantization_config = EetqConfig("int8")
 model = AutoModelForCausalLM.from_pretrained(path, device_map="auto", quantization_config=quantization_config)
 ```
 
-A quantized model shall be saved via "saved_pretrained" and be reused again via the "from_pretrained".
+A quantized model can be saved via "saved_pretrained" and be reused again via the "from_pretrained".
 
 ```py
 quant_path = "/path/to/save/quantized/model"
