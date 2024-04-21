@@ -657,7 +657,7 @@ git submodule update --init --recursive
 pip install .
 ```
 
-An unquantized model will be quantized via "from_pretrained".
+An unquantized model can be quantized via "from_pretrained".
 ```py
 from transformers import AutoModelForCausalLM, EetqConfig
 path = "/path/to/model"
