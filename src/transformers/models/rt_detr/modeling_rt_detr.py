@@ -1575,14 +1575,17 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         # Create backbone
         self.backbone = RTDetrConvEncoder(config)
+        intermediate_channel_sizes = self.backbone.intermediate_channel_sizes
 
         # Create encoder input projection layers
         # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/hybrid_encoder.py#L212
+        num_backbone_outs = len(intermediate_channel_sizes)
         encoder_input_proj_list = []
-        for in_channel in config.encoder_in_channels:
+        for _ in range(num_backbone_outs):
+            in_channels = intermediate_channel_sizes[_]
             encoder_input_proj_list.append(
                 nn.Sequential(
-                    nn.Conv2d(in_channel, config.d_model, kernel_size=1, bias=False), nn.BatchNorm2d(config.d_model)
+                    nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False), nn.BatchNorm2d(config.d_model)
                 )
             )
         self.encoder_input_proj = nn.ModuleList(encoder_input_proj_list)
