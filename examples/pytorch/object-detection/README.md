@@ -25,21 +25,6 @@ Content:
 * [Note on custom data](#note-on-custom-data)
 
 
-### Creating an id2label mapping
-
-Besides that, the script also assumes the existence of an `id2label.json` file in the repo, containing a mapping from integers to actual class names. An example of that can be seen [here](https://huggingface.co/datasets/nielsr/ade20k-demo/blob/main/id2label.json). This can be created in Python as follows:
-
-```python
-import json
-# simple example
-id2label = {0: 'cat', 1: 'dog'}
-with open('id2label.json', 'w') as fp:
-    json.dump(id2label, fp)
-```
-
-You can easily upload this by clicking on "Add file" in the "Files and versions" tab of your repo on the hub.
--->
-
 ## PyTorch version, Trainer
 
 Based on the script [`run_object_detection.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/object-detection/run_object_detection.py).
@@ -237,5 +222,11 @@ dataset.push_to_hub("name of repo on the hub")
 # optionally, you can push to a private repo on the hub
 # dataset.push_to_hub("name of repo on the hub", private=True)
 ```
+
+And the final step, for training you should provide id2label mapping in the following way:
+```python
+label2id = {0: "Car", 1: "Bird", ...}
+```
+Just find it in code and replace for simplicity, or save `json` locally and with the dataset on the hub!
 
 See also: [Dataset Creation Guide](https://huggingface.co/docs/datasets/image_dataset#create-an-image-dataset)
