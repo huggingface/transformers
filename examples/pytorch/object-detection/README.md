@@ -1,5 +1,5 @@
 <!---
-Copyright 2022 The HuggingFace Team. All rights reserved.
+Copyright 2024 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,60 +19,11 @@ limitations under the License.
 This directory contains 2 scripts that showcase how to fine-tune any model supported by the [`AutoModelForObjectDetection` API](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForObjectDetection) (such as [DETR](https://huggingface.co/docs/transformers/main/en/model_doc/detr), [DETA](https://huggingface.co/docs/transformers/main/en/model_doc/deta), [Deformable DETR](https://huggingface.co/docs/transformers/main/en/model_doc/deformable_detr)) using PyTorch.
 
 Content:
-* [Note on custom data](#note-on-custom-data)
 * [PyTorch version, Trainer](#pytorch-version-trainer)
 * [PyTorch version, no Trainer](#pytorch-version-no-trainer)
 * [Reload and perform inference](#reload-and-perform-inference)
-* [Important notes](#important-notes)
+* [Note on custom data](#note-on-custom-data)
 
-## Note on custom data
-
-<!---
-In case you'd like to use the script with custom data, there are 2 things required: 1) creating a DatasetDict 2) creating an id2label mapping. Below, these are explained in more detail.
-
-### Creating a `DatasetDict`
-
-The script assumes that you have a `DatasetDict` with 2 columns, "image" and "label", both of type [Image](https://huggingface.co/docs/datasets/package_reference/main_classes#datasets.Image). This can be created as follows:
-
-```python
-from datasets import Dataset, DatasetDict, Image
-
-# your images can of course have a different extension
-# semantic segmentation maps are typically stored in the png format
-image_paths_train = ["path/to/image_1.jpg/jpg", "path/to/image_2.jpg/jpg", ..., "path/to/image_n.jpg/jpg"]
-label_paths_train = ["path/to/annotation_1.png", "path/to/annotation_2.png", ..., "path/to/annotation_n.png"]
-
-# same for validation
-# image_paths_validation = [...]
-# label_paths_validation = [...]
-
-def create_dataset(image_paths, label_paths):
-    dataset = Dataset.from_dict({"image": sorted(image_paths),
-                                "label": sorted(label_paths)})
-    dataset = dataset.cast_column("image", Image())
-    dataset = dataset.cast_column("label", Image())
-
-    return dataset
-
-# step 1: create Dataset objects
-train_dataset = create_dataset(image_paths_train, label_paths_train)
-validation_dataset = create_dataset(image_paths_validation, label_paths_validation)
-
-# step 2: create DatasetDict
-dataset = DatasetDict({
-    "train": train_dataset,
-    "validation": validation_dataset,
-  }
-)
-
-# step 3: push to hub (assumes you have ran the huggingface-cli login command in a terminal/notebook)
-dataset.push_to_hub("name of repo on the hub")
-
-# optionally, you can push to a private repo on the hub
-# dataset.push_to_hub("name of repo on the hub", private=True)
-```
-
-An example of such a dataset can be seen at [nielsr/ade20k-demo](https://huggingface.co/datasets/nielsr/ade20k-demo).
 
 ### Creating an id2label mapping
 
@@ -240,3 +191,51 @@ for score, label, box in zip(results["scores"], results["labels"], results["boxe
 image
 ```
 
+
+## Note on custom data
+
+In case you'd like to use the script with custom data, you could prepare your data with the following way:
+
+```bash
+custom_dataset/
+└── train
+    ├── 0001.jpg
+    ├── 0002.jpg
+    ├── ...
+    └── metadata.jsonl
+└── validation
+    └── ...
+└── test
+    └── ...
+```
+
+Where `metadata.jsonl` is a file with the following structure:
+```json
+{"file_name": "0001.jpg", "objects": {"bbox": [[302.0, 109.0, 73.0, 52.0]], "categories": [0], "id": [1], "area": [50.0]}}
+{"file_name": "0002.jpg", "objects": {"bbox": [[810.0, 100.0, 57.0, 28.0]], "categories": [1], "id": [2], "area": [40.0]}}
+...
+```
+
+Then, you cat load the dataset with just a few lines of code:
+
+```python
+from datasets import load_dataset
+
+# Load dataset
+dataset = load_dataset("imagefolder", data_dir="custom_dataset/")
+
+# >>> DatasetDict({
+# ...     train: Dataset({
+# ...         features: ['image', 'objects'],
+# ...         num_rows: 2
+# ...     })
+# ... })
+
+# Push to hub (assumes you have ran the huggingface-cli login command in a terminal/notebook)
+dataset.push_to_hub("name of repo on the hub")
+
+# optionally, you can push to a private repo on the hub
+# dataset.push_to_hub("name of repo on the hub", private=True)
+```
+
+See also: [Dataset Creation Guide](https://huggingface.co/docs/datasets/image_dataset#create-an-image-dataset)
