@@ -27,6 +27,8 @@
     title: Agents
   - local: llm_tutorial
     title: Generation with LLMs
+  - local: conversations
+    title: Talking to Chat Models
   title: Tutorials
 - sections:
   - isExpanded: false
