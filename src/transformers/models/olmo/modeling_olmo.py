@@ -1234,7 +1234,14 @@ class OlmoForCausalLM(OlmoPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, cache_position=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        cache_position=None,
+        use_cache=True,
+        **kwargs,
     ):
         # With static cache, the `past_key_values` is None
         # TODO joao: standardize interface for the different Cache classes and remove of this if
@@ -1298,7 +1305,7 @@ class OlmoForCausalLM(OlmoPreTrainedModel):
         input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
         if cache_position is None:
             cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
-        else:
+        elif use_cache:
             cache_position = cache_position[-input_length:]
 
         if has_static_cache:
@@ -1309,7 +1316,7 @@ class OlmoForCausalLM(OlmoPreTrainedModel):
                 "position_ids": position_ids,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
+                "use_cache": use_cache,
                 "attention_mask": attention_mask,
             }
         )

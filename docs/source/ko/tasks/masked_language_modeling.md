@@ -236,7 +236,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티와
 ```py
 >>> training_args = TrainingArguments(
 ...     output_dir="my_awesome_eli5_mlm_model",
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     learning_rate=2e-5,
 ...     num_train_epochs=3,
 ...     weight_decay=0.01,
