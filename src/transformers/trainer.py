@@ -235,6 +235,10 @@ if is_accelerate_available("0.28.0"):
     from accelerate.utils import DataLoaderConfiguration
 
 
+if is_lomo_available():
+    from lomo_optim import AdaLomo, Lomo
+
+
 def _is_peft_model(model):
     if is_peft_available():
         classes_to_check = (PeftModel,) if is_peft_available() else ()
@@ -2136,7 +2140,10 @@ class Trainer:
         model.zero_grad()
         grad_norm: Optional[float] = None
         # LOMO has a slightly different optimizer API, see: https://github.com/OpenLMLab/LOMO/issues/73#issuecomment-2049612639
-        _is_lomo_optimizer = "Lomo" in self.optimizer.optimizer.__class__.__name__
+        if use_accelerator_prepare:
+            _is_lomo_optimizer = is_lomo_available() and isinstance(self.optimizer.optimizer, (Lomo, AdaLomo))
+        else:
+            _is_lomo_optimizer = is_lomo_available() and isinstance(self.optimizer, (Lomo, AdaLomo))
 
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
 
@@ -2287,8 +2294,7 @@ class Trainer:
                         else:
                             grad_norm = _grad_norm
 
-                    if not _is_lomo_optimizer:
-                        self.optimizer.step()
+                    self.optimizer.step()
 
                     optimizer_was_run = not self.accelerator.optimizer_step_was_skipped
                     if optimizer_was_run:
