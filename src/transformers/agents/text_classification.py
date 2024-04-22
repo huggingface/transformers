@@ -19,7 +19,7 @@ from typing import List, Union
 import torch
 
 from ..models.auto import AutoModelForSequenceClassification, AutoTokenizer
-from .base import PipelineTool
+from .tools import PipelineTool
 
 
 class TextClassificationTool(PipelineTool):
@@ -60,9 +60,7 @@ class TextClassificationTool(PipelineTool):
             if label.lower().startswith("entail"):
                 self.entailment_id = int(idx)
         if self.entailment_id == -1:
-            raise ValueError(
-                "Could not determine the entailment ID from the model config, please pass it at init."
-            )
+            raise ValueError("Could not determine the entailment ID from the model config, please pass it at init.")
 
     def encode(self, text, labels):
         self._labels = labels

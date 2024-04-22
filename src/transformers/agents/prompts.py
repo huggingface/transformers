@@ -32,7 +32,7 @@ PROMPT_FILES = {"chat": "chat_prompt_template.txt", "run": "run_prompt_template.
 
 def download_prompt(prompt_or_repo_id, agent_name, mode="run"):
     """
-    Downloads and caches the prompt from a repo and returns it contents (if necessary)
+    Downloads and caches the prompt from a repo and returns it contents (if necessary).
     """
     if prompt_or_repo_id is None:
         prompt_or_repo_id = DEFAULT_PROMPTS_REPO
@@ -61,66 +61,66 @@ Task: "Answer the question in the variable `question` about the image stored in 
 
 I will use the following tools: `translator` to translate the question into English and then `image_qa` to answer the question on the input image.
 
-Answer:
+Code:
 ```py
 translated_question = translator(question=question, src_lang="French", tgt_lang="English")
 print(f"The translated question is {translated_question}.")
 answer = image_qa(image=image, question=translated_question)
 print(f"The answer is {answer}")
-```
+```<end_code>
 
 Task: "Identify the oldest person in the `document` and create an image showcasing the result."
 
 I will use the following tools: `document_qa` to find the oldest person in the document, then `image_generator` to generate an image according to the answer.
 
-Answer:
+Code:
 ```py
 answer = document_qa(document, question="What is the oldest person?")
 print(f"The answer is {answer}.")
 image = image_generator(answer)
-```
+```<end_code>
 
 Task: "Generate an image using the text given in the variable `caption`."
 
 I will use the following tool: `image_generator` to generate an image.
 
-Answer:
+Code:
 ```py
 image = image_generator(prompt=caption)
-```
+```<end_code>
 
 Task: "Summarize the text given in the variable `text` and read it out loud."
 
 I will use the following tools: `summarizer` to create a summary of the input text, then `text_reader` to read it out loud.
 
-Answer:
+Code:
 ```py
 summarized_text = summarizer(text)
 print(f"Summary: {summarized_text}")
 audio_summary = text_reader(summarized_text)
-```
+```<end_code>
 
 Task: "Answer the question in the variable `question` about the text in the variable `text`. Use the answer to generate an image."
 
 I will use the following tools: `text_qa` to create the answer, then `image_generator` to generate an image according to the answer.
 
-Be sure to provide an 'Answer:' token, else the system will be stuck in a loop.
+Be sure to provide an 'Code:' token, else the system will be stuck in a loop.
 
-Answer:
+Code:
 ```py
 answer = text_qa(text=text, question=question)
 print(f"The answer is {answer}.")
 image = image_generator(answer)
-```
+```<end_code>
 
 Task: "Caption the following `image`."
 
 I will use the following tool: `image_captioner` to generate a caption for the image.
 
-Answer:
+Code:
 ```py
 caption = image_captioner(image)
-```
+```<end_code>
 Above example were using tools that might not exist for you. You only have acces to those Tools:
 <<tool_names>>
 
@@ -189,7 +189,7 @@ To help you, I will give you access to a set of tools that you can use. Each too
 To solve the task, you must plan forward to proceed in a series of steps, in a cycle of 'Thought:', 'Code:', and 'Observation:' sequences.
 
 At each step, in the 'Thought:' sequence, you should first explain which tool you will use and for what reason, then in the 'Code:' sequence, you shold write the code in simple Python. The code sequence must end with '/End code' sequence.
-At the end of each intermediate step, you can use a single 'print()' to save whatever important information you will then need.
+During each intermediate step, you can use 'print()' to save whatever important information you will then need.
 It will then be available in the 'Observation:' field, for using this information as input for the next step.
 
 In the end you have to return a final answer using the `final_answer` tool.
@@ -203,7 +203,6 @@ Example:::
 Task: "Answer the question in the variable `question` about the image stored in the variable `image`. The question is in French."
 
 Thought: I will use the following tools: `translator` to translate the question into English and then `image_qa` to answer the question on the input image.
-
 Code:
 ```py
 translated_question = translator(question=question, src_lang="French", tgt_lang="English")
@@ -215,13 +214,11 @@ Example:::
 Task: "Identify the oldest person in the `document` and create an image showcasing the result."
 
 Thought: I will proceed step by step and use the following tools: `document_qa` to find the oldest person in the document, then `image_generator` to generate an image according to the answer.
-
 Code:
 ```py
-answer = document_qa(document, question="What is the oldest person?")
+answer = document_qa(document=document, question="What is the oldest person?")
 print(answer)
 ```<end_code>
-
 Observation: "The oldest person in the document is John Doe."
 
 Thought: I will now generate an image showcasing the oldest person.
@@ -236,7 +233,6 @@ Example:::
 Task: "Generate an image using the text given in the variable `caption`."
 
 Thought: I will use the following tool: `image_generator` to generate an image.
-
 Code:
 ```py
 image = image_generator(prompt=caption)
@@ -293,20 +289,18 @@ Example:::
 Task: "Which city has the highest population , Guangzhou or Shanghai?"
 
 Thought: I will use the tool `search` to get the population of both cities.
-
 Code:
 ```py
 population_guangzhou = search("Guangzhou population")
+print("Population Guangzhou:", population_guangzhou)
 population_shanghai = search("Shanghai population")
-print("Population Guangzhou:", population_guangzhou, "Population Shanghai:", population_shanghai)
+print("Population Shanghai:", population_shanghai)
 ```<end_code>
-
 Observation:
 Population Guangzhou: ['Guangzhou has a population of 15 million inhabitants as of 2021.']
 Population Shanghai: '24 million'
 
 Thought: I know that Shanghai has the highest population.
-
 Code:
 ```py
 final_answer("Shanghai")
@@ -316,10 +310,9 @@ Example:::
 Task: "What is the current age of the pope, raised to the power 0.36?"
 
 Thought: I will use the tool `search` to get the age of the pope, then raise it to the power 0.36.
-
 Code:
 ```py
-pope_age = search("current pope age")
+pope_age = search(query="current pope age")
 print("Pope age:", pope_age)
 ```<end_code>
 
@@ -327,7 +320,6 @@ Observation:
 Pope age: "The pope Francis is currently 85 years old."
 
 Thought: I know that the pope is 85 years old. Let's compute the result using python code.
-
 Code:
 ```py
 pope_current_age = 85 ** 0.36
@@ -342,6 +334,8 @@ You also can perform computations in the python code you generate.
 Always provide a 'Thought:' and an 'Code:\n```py' sequence ending with '```<end_code>' sequence. You MUST provide at least the 'Code:' sequence to move forward.
 
 Remember to not perform too many operations in a single code block! You should split the task into intermediate code blocks. Then use one single print() at the end of each step to save the intermediate result. Then use final_answer() to return the final result.
+
+DO NOT pass the arguments as a dict as in 'answer = ask_search_agent({'query': "What is the place where James Bond lives?"})', but use the arguments directly as in 'answer = ask_search_agent(query="What is the place where James Bond lives?")'.
 
 Now Begin ! <<additional_args>>
 """

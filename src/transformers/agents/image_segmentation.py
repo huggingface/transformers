@@ -19,7 +19,7 @@ import torch
 
 from ..models.clipseg import CLIPSegForImageSegmentation
 from ..utils import is_vision_available, requires_backends
-from .base import PipelineTool
+from .tools import PipelineTool
 
 
 if is_vision_available():
@@ -37,7 +37,10 @@ class ImageSegmentationTool(PipelineTool):
 
     inputs = {
         "image": {"type": Image.Image, "description": "The image to segment"},
-        "label": {"type": str, "description": "The label describing the elements what should be identified in the segmentation mask"}
+        "label": {
+            "type": str,
+            "description": "The label describing the elements what should be identified in the segmentation mask",
+        },
     }
     output_type = Image.Image
 

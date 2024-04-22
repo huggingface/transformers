@@ -74,9 +74,7 @@ def get_repo_type(repo_id, repo_type=None, **hub_kwargs):
             hf_hub_download(repo_id, TOOL_CONFIG_FILE, repo_type="model", **hub_kwargs)
             return "model"
         except RepositoryNotFoundError:
-            raise EnvironmentError(
-                f"`{repo_id}` does not seem to be a valid repo identifier on the Hub."
-            )
+            raise EnvironmentError(f"`{repo_id}` does not seem to be a valid repo identifier on the Hub.")
         except Exception:
             return "model"
     except Exception:
@@ -131,9 +129,7 @@ class Tool:
         for attr, expected_type in required_attributes.items():
             attr_value = getattr(self, attr, None)
             if not isinstance(attr_value, expected_type):
-                raise TypeError(
-                    f"Instance attribute {attr} must exist and be of type {expected_type.__name__}"
-                )
+                raise TypeError(f"Instance attribute {attr} must exist and be of type {expected_type.__name__}")
 
     def __call__(self, *args, **kwargs):
         return NotImplemented("Write this method in your subclass of `Tool`.")
@@ -194,11 +190,7 @@ class Tool:
         # Save app file
         app_file = os.path.join(output_dir, "app.py")
         with open(app_file, "w", encoding="utf-8") as f:
-            f.write(
-                APP_FILE_TEMPLATE.format(
-                    module_name=last_module, class_name=self.__class__.__name__
-                )
-            )
+            f.write(APP_FILE_TEMPLATE.format(module_name=last_module, class_name=self.__class__.__name__))
 
         # Save requirements file
         requirements_file = os.path.join(output_dir, "requirements.txt")
@@ -305,10 +297,8 @@ class Tool:
             custom_tool = config
 
         tool_class = custom_tool["tool_class"]
-        tool_class = get_class_from_dynamic_module(
-            tool_class, repo_id, token=token, **hub_kwargs
-        )
-        
+        tool_class = get_class_from_dynamic_module(tool_class, repo_id, token=token, **hub_kwargs)
+
         if len(tool_class.name) == 0:
             tool_class.name = custom_tool["name"]
         if tool_class.name != custom_tool["name"]:
@@ -383,9 +373,7 @@ class Tool:
         with tempfile.TemporaryDirectory() as work_dir:
             # Save all files.
             self.save(work_dir)
-            logger.info(
-                f"Uploading the following files to {repo_id}: {','.join(os.listdir(work_dir))}"
-            )
+            logger.info(f"Uploading the following files to {repo_id}: {','.join(os.listdir(work_dir))}")
             return upload_folder(
                 repo_id=repo_id,
                 commit_message=commit_message,
@@ -411,6 +399,7 @@ class Tool:
 
             def __call__(self, *args, **kwargs):
                 return self._gradio_tool.run(*args, *list(kwargs.values()))
+
         return GradioToolWrapper(gradio_tool)
 
     @staticmethod
@@ -476,9 +465,7 @@ OPENAI_TOOL_DESCRIPTION_TEMPLATE = """
 """
 
 
-def get_tool_description_with_args(
-    tool: Tool, description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE
-) -> str:
+def get_tool_description_with_args(tool: Tool, description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE) -> str:
     compiled_template = compile_jinja_template(description_template)
     return compiled_template.render(
         tool=tool,  # **self.special_tokens_map
@@ -495,10 +482,7 @@ def compile_jinja_template(template):
         raise ImportError("template requires jinja2 to be installed.")
 
     if version.parse(jinja2.__version__) <= version.parse("3.0.0"):
-        raise ImportError(
-            "template requires jinja2>=3.0.0 to be installed. Your version is "
-            f"{jinja2.__version__}."
-        )
+        raise ImportError("template requires jinja2>=3.0.0 to be installed. Your version is " f"{jinja2.__version__}.")
 
     def raise_exception(message):
         raise TemplateError(message)
@@ -528,9 +512,7 @@ class RemoteTool(Tool):
     inputs = {"default": Any}
     output_type = str
 
-    def __init__(
-        self, endpoint_url, name, description, inputs, output_type, token=None
-    ):
+    def __init__(self, endpoint_url, name, description, inputs, output_type, token=None):
         self.endpoint_url = endpoint_url
         self.client = EndpointClient(endpoint_url, token=token)
         self.name = name
@@ -567,11 +549,7 @@ class RemoteTool(Tool):
             outputs = self.client(**inputs, output_image=output_image)
         else:
             outputs = self.client(inputs, output_image=output_image)
-        if (
-            isinstance(outputs, list)
-            and len(outputs) == 1
-            and isinstance(outputs[0], list)
-        ):
+        if isinstance(outputs, list) and len(outputs) == 1 and isinstance(outputs[0], list):
             outputs = outputs[0]
         return self.extract_outputs(outputs)
 
@@ -642,9 +620,7 @@ class PipelineTool(Tool):
 
         if model is None:
             if self.default_checkpoint is None:
-                raise ValueError(
-                    "This tool does not implement a default checkpoint, you need to pass one."
-                )
+                raise ValueError("This tool does not implement a default checkpoint, you need to pass one.")
             model = self.default_checkpoint
         if pre_processor is None:
             pre_processor = model
@@ -667,21 +643,15 @@ class PipelineTool(Tool):
         Instantiates the `pre_processor`, `model` and `post_processor` if necessary.
         """
         if isinstance(self.pre_processor, str):
-            self.pre_processor = self.pre_processor_class.from_pretrained(
-                self.pre_processor, **self.hub_kwargs
-            )
+            self.pre_processor = self.pre_processor_class.from_pretrained(self.pre_processor, **self.hub_kwargs)
 
         if isinstance(self.model, str):
-            self.model = self.model_class.from_pretrained(
-                self.model, **self.model_kwargs, **self.hub_kwargs
-            )
+            self.model = self.model_class.from_pretrained(self.model, **self.model_kwargs, **self.hub_kwargs)
 
         if self.post_processor is None:
             self.post_processor = self.pre_processor
         elif isinstance(self.post_processor, str):
-            self.post_processor = self.post_processor_class.from_pretrained(
-                self.post_processor, **self.hub_kwargs
-            )
+            self.post_processor = self.post_processor_class.from_pretrained(self.post_processor, **self.hub_kwargs)
 
         if self.device is None:
             if self.device_map is not None:
@@ -739,9 +709,7 @@ def launch_gradio_demo(tool_class: Tool):
     try:
         import gradio as gr
     except ImportError:
-        raise ImportError(
-            "Gradio should be installed in order to launch a gradio demo."
-        )
+        raise ImportError("Gradio should be installed in order to launch a gradio demo.")
 
     tool = tool_class()
 
@@ -749,7 +717,7 @@ def launch_gradio_demo(tool_class: Tool):
         return tool(*args, **kwargs)
 
     gradio_inputs = []
-    for input_type in [tool_input['type'] for tool_input in tool_class.inputs.values()]:
+    for input_type in [tool_input["type"] for tool_input in tool_class.inputs.values()]:
         if input_type in [str, int, float]:
             gradio_inputs += "text"
         elif is_vision_available() and input_type == PIL.Image.Image:
@@ -928,9 +896,7 @@ class EndpointClient:
             payload["parameters"] = params
 
         # Make API call
-        response = get_session().post(
-            self.endpoint_url, headers=self.headers, json=payload, data=data
-        )
+        response = get_session().post(self.endpoint_url, headers=self.headers, json=payload, data=data)
 
         # By default, parse the response for the user.
         if output_image:

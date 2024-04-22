@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ..models.auto import AutoModelForSeq2SeqLM, AutoTokenizer
-from .base import PipelineTool
+from .tools import PipelineTool
 
 
 QA_PROMPT = """Here is a text containing a lot of information: '''{text}'''.
@@ -25,18 +25,16 @@ Can you answer this question about the text: '{question}'"""
 
 class TextQuestionAnsweringTool(PipelineTool):
     default_checkpoint = "google/flan-t5-base"
-    description = (
-        "This is a tool that answers questions related to a text. It returns the answer to the question."
-    )
+    description = "This is a tool that answers questions related to a text. It returns the answer to the question."
     name = "text_qa"
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSeq2SeqLM
 
     inputs = {
         "text": {"type": str, "description": "The text where to find the answer"},
-        "question": {"type": str, "description": "The question"}
+        "question": {"type": str, "description": "The question"},
     }
-    output_type= str
+    output_type = str
 
     def encode(self, text: str, question: str):
         prompt = QA_PROMPT.format(text=text, question=question)

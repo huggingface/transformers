@@ -18,14 +18,13 @@ import ast
 import difflib
 from collections.abc import Mapping
 from typing import Any, Callable, Dict, Optional
-
+from copy import copy
 
 class InterpretorError(ValueError):
     """
     An error raised when the interpretor cannot evaluate a Python expression, due to syntax error or unsupported
     operations.
     """
-
     pass
 
 
@@ -56,6 +55,7 @@ def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, s
     if state is None:
         state = {}
     result = None
+    state['print_outputs'] = ''
     for idx, node in enumerate(expression.body):
         try:
             line_result = evaluate_ast(node, state, tools)
@@ -71,7 +71,7 @@ def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, s
         if line_result is not None:
             result = line_result
 
-    return result
+    return result, copy(state['print_outputs'])
 
 
 def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Callable]):
@@ -147,7 +147,7 @@ def evaluate_augassign(expression: ast.AugAssign, state: Dict[str, Any], tools: 
         var_name = expression.target.id
         current_value = state.get(var_name, 0)  # Assuming default of 0 if not in state
         value_to_add = evaluate_ast(expression.value, state, tools)
-        
+
         # Determine the operation and apply it
         if isinstance(expression.op, ast.Add):
             updated_value = current_value + value_to_add
@@ -183,7 +183,7 @@ def evaluate_binop(binop, state, tools):
     elif isinstance(binop.op, ast.Mod):
         return left_val % right_val
     elif isinstance(binop.op, ast.Pow):
-        return left_val ** right_val
+        return left_val**right_val
     elif isinstance(binop.op, ast.FloorDiv):
         return left_val // right_val
     elif isinstance(binop.op, ast.BitAnd):
@@ -221,6 +221,7 @@ def evaluate_call(call, state, tools):
             f"type {type(call.func)}."
         )
     func_name = call.func.id
+
     if func_name not in tools:
         raise InterpretorError(
             f"It is not permitted to evaluate other functions than the provided tools (tried to execute {call.func.id})."
@@ -229,7 +230,13 @@ def evaluate_call(call, state, tools):
     # Todo deal with args
     args = [evaluate_ast(arg, state, tools) for arg in call.args]
     kwargs = {keyword.arg: evaluate_ast(keyword.value, state, tools) for keyword in call.keywords}
-    return func(*args, **kwargs)
+    output = func(*args, **kwargs)
+
+    # store logs of print statements
+    if func_name == "print":
+        state['print_outputs'] += '\n' + output
+    
+    return output
 
 
 def evaluate_subscript(subscript, state, tools):

@@ -24,8 +24,8 @@ from ..utils import (
 
 
 _import_structure = {
-    "agents": ["Agent", "ReactAgent", "CodeAgent"],
-    "base": ["PipelineTool", "RemoteTool", "Tool", "launch_gradio_demo", "load_tool"],
+    "agents": ["Agent", "CodeAgent", "ReactAgent"],
+    "tools": ["PipelineTool", "RemoteTool", "Tool", "launch_gradio_demo", "load_tool"],
 }
 
 try:
@@ -34,6 +34,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
+    _import_structure["default_tools"] = ["CalculatorTool", "PythonEvaluatorTool"]
     _import_structure["document_question_answering"] = ["DocumentQuestionAnsweringTool"]
     _import_structure["image_captioning"] = ["ImageCaptioningTool"]
     _import_structure["image_question_answering"] = ["ImageQuestionAnsweringTool"]
@@ -44,11 +45,10 @@ else:
     _import_structure["text_summarization"] = ["TextSummarizationTool"]
     _import_structure["text_to_speech"] = ["TextToSpeechTool"]
     _import_structure["translation"] = ["TranslationTool"]
-    _import_structure["default_tools"] = ["CalculatorTool", "PythonEvaluatorTool"]
 
 if TYPE_CHECKING:
-    from .agents import Agent, CodeAgent, ReactAgent
-    from .base import PipelineTool, RemoteTool, Tool, launch_gradio_demo, load_tool
+    from .agents import Agent, CodeAgent, ReactAgent, ReactCodeAgent, ReactJSONAgent
+    from .tools import PipelineTool, RemoteTool, Tool, launch_gradio_demo, load_tool
 
     try:
         if not is_torch_available():
@@ -56,6 +56,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
+        from .default_tools import CalculatorTool, PythonEvaluatorTool
         from .document_question_answering import DocumentQuestionAnsweringTool
         from .image_captioning import ImageCaptioningTool
         from .image_question_answering import ImageQuestionAnsweringTool
@@ -66,8 +67,6 @@ if TYPE_CHECKING:
         from .text_summarization import TextSummarizationTool
         from .text_to_speech import TextToSpeechTool
         from .translation import TranslationTool
-        from .default_tools import CalculatorTool, PythonEvaluatorTool
-        from .agents import ReactJSONAgent, CodeAgent, ReactCodeAgent
 else:
     import sys
 
