@@ -43,11 +43,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "LukeConfig"
 _CHECKPOINT_FOR_DOC = "studio-ousia/luke-base"
 
-LUKE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "studio-ousia/luke-base",
-    "studio-ousia/luke-large",
-    # See all LUKE models at https://huggingface.co/models?filter=luke
-]
+
+from ..deprecated._archive_maps import LUKE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -78,7 +75,7 @@ class BaseLukeModelOutputWithPooling(BaseModelOutputWithPooling):
     """
 
     entity_last_hidden_state: torch.FloatTensor = None
-    entity_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    entity_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -109,7 +106,7 @@ class BaseLukeModelOutput(BaseModelOutput):
     """
 
     entity_last_hidden_state: torch.FloatTensor = None
-    entity_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    entity_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -151,8 +148,8 @@ class LukeMaskedLMOutput(ModelOutput):
     logits: torch.FloatTensor = None
     entity_logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    entity_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    entity_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -181,9 +178,9 @@ class EntityClassificationOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    entity_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    entity_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -212,9 +209,9 @@ class EntityPairClassificationOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    entity_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    entity_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -243,9 +240,9 @@ class EntitySpanClassificationOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    entity_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    entity_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -277,9 +274,9 @@ class LukeSequenceClassifierOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    entity_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    entity_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -311,9 +308,9 @@ class LukeTokenClassifierOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    entity_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    entity_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -348,9 +345,9 @@ class LukeQuestionAnsweringModelOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     start_logits: torch.FloatTensor = None
     end_logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    entity_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    entity_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -384,9 +381,9 @@ class LukeMultipleChoiceModelOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    entity_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    entity_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 class LukeEmbeddings(nn.Module):

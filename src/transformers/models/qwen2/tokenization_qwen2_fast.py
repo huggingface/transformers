@@ -30,13 +30,6 @@ VOCAB_FILES_NAMES = {
     "tokenizer_file": "tokenizer.json",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"qwen/qwen-tokenizer": "https://huggingface.co/qwen/qwen-tokenizer/resolve/main/vocab.json"},
-    "merges_file": {"qwen/qwen-tokenizer": "https://huggingface.co/qwen/qwen-tokenizer/resolve/main/merges.txt"},
-    "tokenizer_file": {
-        "qwen/qwen-tokenizer": "https://huggingface.co/qwen/qwen-tokenizer/resolve/main/tokenizer.json"
-    },
-}
 
 MAX_MODEL_INPUT_SIZES = {"qwen/qwen-tokenizer": 32768}
 
@@ -46,7 +39,7 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
     Construct a "fast" Qwen2 tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
     Byte-Pair-Encoding.
 
-    Same with GPT2Tokenzier, this tokenizer has been trained to treat spaces like parts of the tokens so a word will
+    Same with GPT2Tokenizer, this tokenizer has been trained to treat spaces like parts of the tokens so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
     ```python
@@ -84,8 +77,6 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = MAX_MODEL_INPUT_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = Qwen2Tokenizer
 

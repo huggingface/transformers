@@ -60,7 +60,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 🚀 Deploy
 
-- A blog post on how to deploy Wav2Vec2 for [Automatic Speech Recogntion with Hugging Face's Transformers & Amazon SageMaker](https://www.philschmid.de/automatic-speech-recognition-sagemaker).
+- A blog post on how to deploy Wav2Vec2 for [Automatic Speech Recognition with Hugging Face's Transformers & Amazon SageMaker](https://www.philschmid.de/automatic-speech-recognition-sagemaker).
 
 ## Wav2Vec2Config
 

@@ -43,10 +43,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "LayoutLMConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/layoutlm-base-uncased"
 
-LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "layoutlm-base-uncased",
-    "layoutlm-large-uncased",
-]
+
+from ..deprecated._archive_maps import LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 LayoutLMLayerNorm = nn.LayerNorm
@@ -613,7 +611,6 @@ class LayoutLMPreTrainedModel(PreTrainedModel):
     """
 
     config_class = LayoutLMConfig
-    pretrained_model_archive_map = LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST
     base_model_prefix = "layoutlm"
     supports_gradient_checkpointing = True
 

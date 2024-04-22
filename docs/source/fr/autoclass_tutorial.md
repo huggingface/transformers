@@ -20,7 +20,7 @@ Avec autant d'architectures Transformer différentes, il peut être difficile d'
 
 <Tip>
 
-Rappel, l'architecture fait référence au squelette du modèle et l'ensemble de poids contient les poids pour une architecture donnée. Par exemple, [BERT](https://huggingface.co/bert-base-uncased) est une architecture, tandis que `bert-base-uncased` est un ensemble de poids. Le terme modèle est général et peut signifier soit architecture soit ensemble de poids.
+Rappel, l'architecture fait référence au squelette du modèle et l'ensemble de poids contient les poids pour une architecture donnée. Par exemple, [BERT](https://huggingface.co/google-bert/bert-base-uncased) est une architecture, tandis que `google-bert/bert-base-uncased` est un ensemble de poids. Le terme modèle est général et peut signifier soit architecture soit ensemble de poids.
 
 </Tip>
 
@@ -41,7 +41,7 @@ Chargez un tokenizer avec [`AutoTokenizer.from_pretrained`]:
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 ```
 
 Puis, transformez votre texte initial comme montré ci-dessous:
@@ -99,7 +99,7 @@ Enfin, les classes `AutoModelFor` vous permettent de charger un modèle pré-ent
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
->>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> model = AutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Réutilisez facilement le même ensemble de poids pour charger une architecture pour une tâche différente :
@@ -107,7 +107,7 @@ Réutilisez facilement le même ensemble de poids pour charger une architecture 
 ```py
 >>> from transformers import AutoModelForTokenClassification
 
->>> model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
+>>> model = AutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 <Tip warning={true}>
@@ -126,7 +126,7 @@ Enfin, les classes `TFAutoModelFor` vous permettent de charger un modèle pré-e
 ```py
 >>> from transformers import TFAutoModelForSequenceClassification
 
->>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Réutilisez facilement le même ensemble de poids pour charger une architecture pour une tâche différente :
@@ -134,7 +134,7 @@ Réutilisez facilement le même ensemble de poids pour charger une architecture 
 ```py
 >>> from transformers import TFAutoModelForTokenClassification
 
->>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
+>>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 En général, nous recommandons d'utiliser les classes `AutoTokenizer` et `TFAutoModelFor` pour charger des instances pré-entraînées de tokenizers et modèles respectivement. Cela vous permettra de charger la bonne architecture à chaque fois. Dans le prochain [tutoriel](preprocessing), vous apprenez à utiliser un tokenizer, processeur d'image, extracteur de caractéristiques et processeur pour pré-traiter un jeu de données pour le fine-tuning.

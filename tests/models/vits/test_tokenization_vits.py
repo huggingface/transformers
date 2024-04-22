@@ -27,6 +27,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/mms-tts-eng"
     tokenizer_class = VitsTokenizer
     test_rust_tokenizer = False
 

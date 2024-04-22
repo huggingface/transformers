@@ -208,14 +208,10 @@ from transformers import pipeline
 classifier = pipeline("pair-classification", model="sgugger/finetuned-bert-mrpc")
 ```
 
-Dann können wir sie auf dem Hub mit der Methode `save_pretrained` in einem `Repository` freigeben:
+Dann können wir sie auf dem Hub mit der Methode `push_to_hub` freigeben:
 
 ```py
-from huggingface_hub import Repository
-
-repo = Repository("test-dynamic-pipeline", clone_from="{your_username}/test-dynamic-pipeline")
-classifier.save_pretrained("test-dynamic-pipeline")
-repo.push_to_hub()
+classifier.push_to_hub("test-dynamic-pipeline")
 ```
 
 Dadurch wird die Datei, in der Sie `PairClassificationPipeline` definiert haben, in den Ordner `"test-dynamic-pipeline"` kopiert,
@@ -246,13 +242,13 @@ Ausgabe der Pipeline TYPE.
 
 Außerdem *müssen* Sie 2 (idealerweise 4) Tests implementieren.
 
-- test_small_model_pt` : Definieren Sie 1 kleines Modell für diese Pipeline (es spielt keine Rolle, ob die Ergebnisse keinen Sinn ergeben)
+- `test_small_model_pt` : Definieren Sie 1 kleines Modell für diese Pipeline (es spielt keine Rolle, ob die Ergebnisse keinen Sinn ergeben)
   und testen Sie die Ausgaben der Pipeline. Die Ergebnisse sollten die gleichen sein wie bei `test_small_model_tf`.
-- test_small_model_tf : Definieren Sie 1 kleines Modell für diese Pipeline (es spielt keine Rolle, ob die Ergebnisse keinen Sinn ergeben)
+- `test_small_model_tf` : Definieren Sie 1 kleines Modell für diese Pipeline (es spielt keine Rolle, ob die Ergebnisse keinen Sinn ergeben)
   und testen Sie die Ausgaben der Pipeline. Die Ergebnisse sollten die gleichen sein wie bei `test_small_model_pt`.
-- test_large_model_pt` (`optional`): Testet die Pipeline an einer echten Pipeline, bei der die Ergebnisse
+- `test_large_model_pt` (`optional`): Testet die Pipeline an einer echten Pipeline, bei der die Ergebnisse
   Sinn machen. Diese Tests sind langsam und sollten als solche gekennzeichnet werden. Hier geht es darum, die Pipeline zu präsentieren und sicherzustellen
   sicherzustellen, dass es in zukünftigen Versionen keine Abweichungen gibt.
-- test_large_model_tf` (`optional`): Testet die Pipeline an einer echten Pipeline, bei der die Ergebnisse
+- `test_large_model_tf` (`optional`): Testet die Pipeline an einer echten Pipeline, bei der die Ergebnisse
   Sinn machen. Diese Tests sind langsam und sollten als solche gekennzeichnet werden. Hier geht es darum, die Pipeline zu präsentieren und sicherzustellen
   sicherzustellen, dass es in zukünftigen Versionen keine Abweichungen gibt.

@@ -58,10 +58,7 @@ _IMAGE_CLASS_CHECKPOINT = "facebook/dinov2-small-imagenet1k-1-layer"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/dinov2-base",
-    # See all DINOv2 models at https://huggingface.co/models?filter=dinov2
-]
+from ..deprecated._archive_maps import DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class Dinov2Embeddings(nn.Module):
@@ -380,7 +377,7 @@ class Dinov2Layer(nn.Module):
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = Dinov2Attention(config)
         self.layer_scale1 = Dinov2LayerScale(config)
-        self.drop_path1 = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -389,7 +386,6 @@ class Dinov2Layer(nn.Module):
         else:
             self.mlp = Dinov2MLP(config)
         self.layer_scale2 = Dinov2LayerScale(config)
-        self.drop_path2 = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
     def forward(
         self,
@@ -408,7 +404,7 @@ class Dinov2Layer(nn.Module):
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
-        hidden_states = attention_output + hidden_states
+        hidden_states = self.drop_path(attention_output) + hidden_states
 
         # in Dinov2, layernorm is also applied after self-attention
         layer_output = self.norm2(hidden_states)
@@ -416,7 +412,7 @@ class Dinov2Layer(nn.Module):
         layer_output = self.layer_scale2(layer_output)
 
         # second residual connection
-        layer_output = layer_output + hidden_states
+        layer_output = self.drop_path(layer_output) + hidden_states
 
         outputs = (layer_output,) + outputs
 

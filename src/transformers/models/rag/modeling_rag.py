@@ -120,14 +120,14 @@ class RetrievAugLMMarginOutput(ModelOutput):
     context_input_ids: Optional[torch.LongTensor] = None
     context_attention_mask: Optional[torch.LongTensor] = None
     question_encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    question_enc_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    question_enc_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    question_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    question_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     generator_enc_last_hidden_state: Optional[torch.FloatTensor] = None
-    generator_enc_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    generator_enc_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    generator_dec_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    generator_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    generator_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_dec_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -210,14 +210,14 @@ class RetrievAugLMOutput(ModelOutput):
     context_input_ids: Optional[torch.LongTensor] = None
     context_attention_mask: Optional[torch.LongTensor] = None
     question_encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    question_enc_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    question_enc_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    question_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    question_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     generator_enc_last_hidden_state: Optional[torch.FloatTensor] = None
-    generator_enc_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    generator_enc_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    generator_dec_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    generator_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    generator_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_dec_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 class RagPreTrainedModel(PreTrainedModel):
@@ -260,8 +260,6 @@ class RagPreTrainedModel(PreTrainedModel):
                 Information necessary to initiate the question encoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
@@ -273,8 +271,6 @@ class RagPreTrainedModel(PreTrainedModel):
                 Information necessary to initiate the generator. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
@@ -304,7 +300,7 @@ class RagPreTrainedModel(PreTrainedModel):
 
         >>> # initialize a RAG from two pretrained models.
         >>> model = RagModel.from_pretrained_question_encoder_generator(
-        ...     "facebook/dpr-question_encoder-single-nq-base", "t5-small"
+        ...     "facebook/dpr-question_encoder-single-nq-base", "google-t5/t5-small"
         ... )
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./rag")
@@ -1543,7 +1539,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
                     f"num_return_sequences has to be 1, but is {generation_config.num_return_sequences} when doing"
                     " greedy search."
                 )
-            return self.greedy_search(
+            return self._greedy_search(
                 input_ids,
                 logits_processor=pre_processor,
                 max_length=generation_config.max_length,
@@ -1563,7 +1559,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 num_beam_hyps_to_keep=generation_config.num_return_sequences,
                 max_length=generation_config.max_length,
             )
-            return self.beam_search(
+            return self._beam_search(
                 input_ids,
                 beam_scorer,
                 logits_processor=pre_processor,

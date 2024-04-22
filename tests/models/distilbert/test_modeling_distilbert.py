@@ -30,7 +30,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         DistilBertForMaskedLM,
         DistilBertForMultipleChoice,
         DistilBertForQuestionAnswering,
@@ -38,6 +37,7 @@ if is_torch_available():
         DistilBertForTokenClassification,
         DistilBertModel,
     )
+    from transformers.models.distilbert.modeling_distilbert import _create_sinusoidal_embeddings
 
 
 class DistilBertModelTester(object):
@@ -239,6 +239,15 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_distilbert_model(*config_and_inputs)
 
+    def test_distilbert_model_with_sinusoidal_encodings(self):
+        config = DistilBertConfig(sinusoidal_pos_embds=True)
+        model = DistilBertModel(config=config)
+        sinusoidal_pos_embds = torch.empty((config.max_position_embeddings, config.dim), dtype=torch.float32)
+        _create_sinusoidal_embeddings(config.max_position_embeddings, config.dim, sinusoidal_pos_embds)
+        self.model_tester.parent.assertTrue(
+            torch.equal(model.embeddings.position_embeddings.weight, sinusoidal_pos_embds)
+        )
+
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_distilbert_for_masked_lm(*config_and_inputs)
@@ -261,9 +270,9 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DistilBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "distilbert-base-uncased"
+        model = DistilBertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     @require_torch_accelerator
@@ -292,7 +301,7 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
-    def test_flash_attn_2_inference(self):
+    def test_flash_attn_2_inference_equivalence(self):
         import torch
 
         for model_class in self.all_model_classes:
@@ -344,7 +353,7 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
-    def test_flash_attn_2_inference_padding_right(self):
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
         import torch
 
         for model_class in self.all_model_classes:

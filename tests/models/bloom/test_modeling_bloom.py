@@ -30,7 +30,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
         BloomForCausalLM,
         BloomForQuestionAnswering,
         BloomForSequenceClassification,
@@ -396,9 +395,9 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BloomModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "bigscience/bigscience-small-testing"
+        model = BloomModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     @require_torch_accelerator

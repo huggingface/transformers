@@ -138,7 +138,7 @@ def convert_musicgen_checkpoint(
         decoder_state_dict, hidden_size=decoder_config.hidden_size
     )
 
-    text_encoder = T5EncoderModel.from_pretrained("t5-base")
+    text_encoder = T5EncoderModel.from_pretrained("google-t5/t5-base")
     audio_encoder = EncodecModel.from_pretrained("facebook/encodec_32khz")
     decoder = MusicgenForCausalLM(decoder_config).eval()
 
@@ -172,7 +172,7 @@ def convert_musicgen_checkpoint(
         raise ValueError("Incorrect shape for logits")
 
     # now construct the processor
-    tokenizer = AutoTokenizer.from_pretrained("t5-base")
+    tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         "facebook/encodec_32khz", padding_side="left", feature_size=decoder_config.audio_channels
     )

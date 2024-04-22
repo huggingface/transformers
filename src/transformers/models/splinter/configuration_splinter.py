@@ -20,13 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "tau/splinter-base": "https://huggingface.co/tau/splinter-base/resolve/main/config.json",
-    "tau/splinter-base-qass": "https://huggingface.co/tau/splinter-base-qass/resolve/main/config.json",
-    "tau/splinter-large": "https://huggingface.co/tau/splinter-large/resolve/main/config.json",
-    "tau/splinter-large-qass": "https://huggingface.co/tau/splinter-large-qass/resolve/main/config.json",
-    # See all Splinter models at https://huggingface.co/models?filter=splinter
-}
+
+from ..deprecated._archive_maps import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class SplinterConfig(PretrainedConfig):
@@ -56,7 +51,7 @@ class SplinterConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):

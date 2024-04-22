@@ -105,7 +105,7 @@ def convert_blip_checkpoint(pytorch_dump_folder_path, config_path=None):
 
     image_size = 384
     image = load_demo_image(image_size=image_size, device="cpu")
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
     input_ids = tokenizer(["a picture of"]).input_ids
 
     out = hf_model.generate(image, input_ids)

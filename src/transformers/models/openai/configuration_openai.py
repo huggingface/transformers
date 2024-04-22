@@ -21,7 +21,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {"openai-gpt": "https://huggingface.co/openai-gpt/resolve/main/config.json"}
+
+from ..deprecated._archive_maps import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class OpenAIGPTConfig(PretrainedConfig):
@@ -29,7 +30,7 @@ class OpenAIGPTConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`OpenAIGPTModel`] or a [`TFOpenAIGPTModel`]. It is
     used to instantiate a GPT model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the GPT
-    [openai-gpt](https://huggingface.co/openai-gpt) architecture from OpenAI.
+    [openai-community/openai-gpt](https://huggingface.co/openai-community/openai-gpt) architecture from OpenAI.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

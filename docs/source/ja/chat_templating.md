@@ -205,7 +205,7 @@ tokenizer.push_to_hub("model_name")  # Upload your new template to the Hub!
 
 一方、ゼロからモデルをトレーニングするか、チャットのためにベース言語モデルをファインチューニングする場合、適切なテンプレートを選択する自由度があります。
 LLM（Language Model）はさまざまな入力形式を処理できるほどスマートです。クラス固有のテンプレートがないモデル用のデフォルトテンプレートは、一般的なユースケースに対して良い柔軟な選択肢です。
-これは、[ChatMLフォーマット](https://github.com/openai/openai-python/blob/main/chatml.md)に従ったもので、多くのユースケースに適しています。次のようになります：
+これは、`ChatMLフォーマット`に従ったもので、多くのユースケースに適しています。次のようになります：
 
 ```
 {% for message in messages %}
@@ -215,7 +215,7 @@ LLM（Language Model）はさまざまな入力形式を処理できるほどス
 
 If you like this one, here it is in one-liner form, ready to copy into your code:
 
-```
+```python
 tokenizer.chat_template = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}"
 ```
 

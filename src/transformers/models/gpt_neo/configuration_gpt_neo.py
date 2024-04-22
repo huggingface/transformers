@@ -25,10 +25,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "EleutherAI/gpt-neo-1.3B": "https://huggingface.co/EleutherAI/gpt-neo-1.3B/resolve/main/config.json",
-    # See all GPTNeo models at https://huggingface.co/models?filter=gpt_neo
-}
+
+from ..deprecated._archive_maps import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class GPTNeoConfig(PretrainedConfig):
@@ -70,7 +68,7 @@ class GPTNeoConfig(PretrainedConfig):
         resid_dropout (`float`, *optional*, defaults to 0.0):
             Residual dropout used in the attention pattern.
         embed_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         classifier_dropout (`float`, *optional*, defaults to 0.1):

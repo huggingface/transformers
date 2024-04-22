@@ -25,6 +25,7 @@ from ...test_tokenization_common import TokenizerTesterMixin, slow
 
 
 class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "susnato/clvp_dev"
     tokenizer_class = ClvpTokenizer
     test_rust_tokenizer = False
     from_pretrained_kwargs = {"add_prefix_space": True}

@@ -41,7 +41,7 @@ PyTorchをTensorFlowモデルの重みに変換する手順、およびMLフレ�
 &nbsp;
 
 選択したモデルの`config.json`の`model_type`フィールドをチェックしてみてください
-（[例](https://huggingface.co/bert-base-uncased/blob/main/config.json#L14)）。
+（[例](https://huggingface.co/google-bert/bert-base-uncased/blob/main/config.json#L14)）。
 🤗 Transformersの該当するモデルフォルダに、名前が"modeling_tf"で始まるファイルがある場合、それは対応するTensorFlow
 アーキテクチャを持っていることを意味します（[例](https://github.com/huggingface/transformers/tree/main/src/transformers/models/bert)）。
 
@@ -77,7 +77,7 @@ TensorFlowモデルアーキテクチャを追加するために必要なステ�
 特定のアーキテクチャを決めていない場合、🤗 Transformers チームに提案を求めることは、影響を最大限にする素晴らしい方法です。
 チームは、TensorFlow サイドで不足している最も注目されるアーキテクチャに向けてガイドします。
 TensorFlow で使用したい特定のモデルに、🤗 Transformers に既に TensorFlow アーキテクチャの実装が存在しているが、重みが不足している場合、
-このページの[重みの追加セクション](#adding-tensorflow-weights-to-hub)に直接移動してください。
+このページの[重みの追加セクション](#adding-tensorflow-weights-to--hub)に直接移動してください。
 
 簡単にするために、このガイドの残りの部分では、TensorFlow バージョンの *BrandNewBert* を貢献することを決定したと仮定しています
 （これは、[新しいモデルの追加ガイド](add_new_model)での例と同じです）。

@@ -17,15 +17,6 @@ rendered properly in your Markdown viewer.
 # 発電用ユーティリティ
 
 このページには、[`~generation.GenerationMixin.generate`] で使用されるすべてのユーティリティ関数がリストされています。
-[`~generation.GenerationMixin.greedy_search`],
-[`~generation.GenerationMixin.contrastive_search`],
-[`~generation.GenerationMixin.sample`],
-[`~generation.GenerationMixin.beam_search`],
-[`~generation.GenerationMixin.beam_sample`],
-[`~generation.GenerationMixin.group_beam_search`]、および
-[`~generation.GenerationMixin.constrained_beam_search`]。
-
-これらのほとんどは、ライブラリ内の生成メソッドのコードを学習する場合にのみ役に立ちます。
 
 ## 出力を生成する
 
@@ -38,8 +29,8 @@ rendered properly in your Markdown viewer.
 ```python
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
-tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-model = GPT2LMHeadModel.from_pretrained("gpt2")
+tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
 
 inputs = tokenizer("Hello, my dog is cute and ", return_tensors="pt")
 generation_output = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
@@ -343,12 +334,6 @@ generation_output[:2]
 [[autodoc]] ConstrainedBeamSearchScorer
     - process
     - finalize
-
-## Utilities
-
-[[autodoc]] top_k_top_p_filtering
-
-[[autodoc]] tf_top_k_top_p_filtering
 
 ## Streamers
 

@@ -59,7 +59,7 @@ pip install datasets
 ```python
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 ```
 
 次に、テキストをトークナイザに渡します：

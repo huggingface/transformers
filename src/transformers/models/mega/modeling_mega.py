@@ -50,10 +50,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "mnaylor/mega-base-wikitext"
 _CONFIG_FOR_DOC = "MegaConfig"
 
-MEGA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "mnaylor/mega-base-wikitext",
-    # See all Mega models at https://huggingface.co/models?filter=mega
-]
+
+from ..deprecated._archive_maps import MEGA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class MegaEmbeddings(nn.Module):
@@ -169,7 +167,7 @@ class MegaRotaryRelativePositionalBias(nn.Module):
     def get_sinusoid_embeddings(max_positions: int, embedding_dim: int):
         half_dim = embedding_dim // 2
         emb = math.log(10000) / half_dim
-        emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
+        emb = torch.exp(torch.arange(half_dim, dtype=torch.int64).float() * -emb)
         emb = torch.arange(max_positions, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
         return torch.sin(emb), torch.cos(emb)
 

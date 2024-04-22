@@ -27,7 +27,7 @@ The model can be used for tasks like question answering on web pages or informat
 state-of-the-art results on 2 important benchmarks:
 - [WebSRC](https://x-lance.github.io/WebSRC/), a dataset for Web-Based Structural Reading Comprehension (a bit like SQuAD but for web pages)
 - [SWDE](https://www.researchgate.net/publication/221299838_From_one_tree_to_a_forest_a_unified_solution_for_structured_web_data_extraction), a dataset
-for information extraction from web pages (basically named-entity recogntion on web pages)
+for information extraction from web pages (basically named-entity recognition on web pages)
 
 The abstract from the paper is the following:
 

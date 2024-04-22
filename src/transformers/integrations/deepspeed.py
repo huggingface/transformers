@@ -14,20 +14,19 @@
 """
 Integration with Deepspeed
 """
-
+import copy
 import importlib.metadata as importlib_metadata
 import importlib.util
 import weakref
 from functools import partialmethod
 
 from ..dependency_versions_check import dep_version_check
-from ..utils import is_accelerate_available, is_torch_available, logging
+from ..utils import is_accelerate_available, is_torch_available, is_torch_mlu_available, logging
 
 
 if is_torch_available():
     import torch
 
-    from ..optimization import get_scheduler
 
 logger = logging.get_logger(__name__)
 
@@ -39,6 +38,9 @@ def is_deepspeed_available():
     # AND checking it has an author field in the metadata that is HuggingFace.
     if package_exists:
         try:
+            if is_torch_mlu_available():
+                _ = importlib_metadata.metadata("deepspeed-mlu")
+                return True
             _ = importlib_metadata.metadata("deepspeed")
             return True
         except importlib_metadata.PackageNotFoundError:
@@ -143,14 +145,25 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
             "per_device_train_batch_size",
             not auto_find_batch_size,
         )
-        self.fill_match("gradient_accumulation_steps", args.gradient_accumulation_steps, "gradient_accumulation_steps")
         self.fill_match(
-            "train_batch_size", train_batch_size, "train_batch_size (calculated)", not auto_find_batch_size
+            "gradient_accumulation_steps",
+            args.gradient_accumulation_steps,
+            "gradient_accumulation_steps",
+        )
+        self.fill_match(
+            "train_batch_size",
+            train_batch_size,
+            "train_batch_size (calculated)",
+            not auto_find_batch_size,
         )
         self.fill_match("gradient_clipping", args.max_grad_norm, "max_grad_norm")
 
         self.fill_match("optimizer.params.lr", args.learning_rate, "learning_rate")
-        self.fill_match("optimizer.params.betas", [args.adam_beta1, args.adam_beta2], "adam_beta1+adam_beta2")
+        self.fill_match(
+            "optimizer.params.betas",
+            [args.adam_beta1, args.adam_beta2],
+            "adam_beta1+adam_beta2",
+        )
         self.fill_match("optimizer.params.eps", args.adam_epsilon, "adam_epsilon")
         self.fill_match("optimizer.params.weight_decay", args.weight_decay, "weight_decay")
 
@@ -225,12 +238,26 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
             self.fill_only("zero_optimization.reduce_bucket_size", hidden_size * hidden_size)
             if self.is_zero3():
                 # automatically assign the optimal config values based on model config
-                self.fill_only("zero_optimization.stage3_prefetch_bucket_size", 0.9 * hidden_size * hidden_size)
-                self.fill_only("zero_optimization.stage3_param_persistence_threshold", 10 * hidden_size)
+                self.fill_only(
+                    "zero_optimization.stage3_prefetch_bucket_size",
+                    0.9 * hidden_size * hidden_size,
+                )
+                self.fill_only(
+                    "zero_optimization.stage3_param_persistence_threshold",
+                    10 * hidden_size,
+                )
 
         # scheduler
-        self.fill_match("scheduler.params.total_num_steps", num_training_steps, "num_training_steps (calculated)")
-        self.fill_match("scheduler.params.warmup_num_steps", args.get_warmup_steps(num_training_steps), "warmup_steps")
+        self.fill_match(
+            "scheduler.params.total_num_steps",
+            num_training_steps,
+            "num_training_steps (calculated)",
+        )
+        self.fill_match(
+            "scheduler.params.warmup_num_steps",
+            args.get_warmup_steps(num_training_steps),
+            "warmup_steps",
+        )
 
         if len(self.mismatches) > 0:
             mismatches = "\n".join(self.mismatches)
@@ -316,12 +343,15 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
         if isinstance(optimizer, DummyOptim):
 
             def _lr_scheduler_callable(optimizer):
-                return get_scheduler(
-                    trainer.args.lr_scheduler_type,
-                    optimizer=optimizer,
-                    num_warmup_steps=trainer.args.get_warmup_steps(num_training_steps),
-                    num_training_steps=num_training_steps,
+                # create a shallow copy first, so later modifications do not affect original trainer
+                trainer_copy = copy.copy(trainer)
+                # at the time _lr_scheduler_callable is called, trainer.lr_scheduler has been set
+                # update it to None so that we can re-create a new scheduler
+                trainer_copy.lr_scheduler = None
+                lr_scheduler = trainer_copy.create_scheduler(
+                    num_training_steps=num_training_steps, optimizer=optimizer
                 )
+                return lr_scheduler
 
             lr_scheduler = DummyScheduler(optimizer, lr_scheduler_callable=_lr_scheduler_callable)
         else:
@@ -387,7 +417,7 @@ def deepspeed_init(trainer, num_training_steps, inference=False):
     return optimizer, lr_scheduler
 
 
-def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path):
+def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path, load_module_strict=True):
     # it's possible that the user is trying to resume from model_path, which doesn't necessarily
     # contain a deepspeed checkpoint. e.g. examples just check if the dir exists and assume it's
     # a resume from a checkpoint and not just a local pretrained weight. So we check here if the
@@ -400,7 +430,10 @@ def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path):
         logger.info(f"Attempting to resume from {checkpoint_path}")
         # this magically updates self.optimizer and self.lr_scheduler
         load_path, _ = deepspeed_engine.load_checkpoint(
-            checkpoint_path, load_optimizer_states=True, load_lr_scheduler_states=True
+            checkpoint_path,
+            load_module_strict=load_module_strict,
+            load_optimizer_states=True,
+            load_lr_scheduler_states=True,
         )
         if load_path is None:
             raise ValueError(f"[deepspeed] failed to resume from checkpoint {checkpoint_path}")

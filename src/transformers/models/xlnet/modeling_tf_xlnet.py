@@ -39,6 +39,7 @@ from ...modeling_tf_utils import (
     TFSharedEmbeddings,
     TFTokenClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -56,17 +57,14 @@ from .configuration_xlnet import XLNetConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "xlnet-base-cased"
+_CHECKPOINT_FOR_DOC = "xlnet/xlnet-base-cased"
 _CONFIG_FOR_DOC = "XLNetConfig"
 
-TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "xlnet-base-cased",
-    "xlnet-large-cased",
-    # See all XLNet models at https://huggingface.co/models?filter=xlnet
-]
+
+from ..deprecated._archive_maps import TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
-class TFXLNetRelativeAttention(tf.keras.layers.Layer):
+class TFXLNetRelativeAttention(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -83,8 +81,8 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         self.initializer_range = config.initializer_range
         self.output_attentions = config.output_attentions
 
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.dropout = keras.layers.Dropout(config.dropout)
         self.config = config
 
     def build(self, input_shape=None):
@@ -336,17 +334,17 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         return outputs
 
 
-class TFXLNetFeedForward(tf.keras.layers.Layer):
+class TFXLNetFeedForward(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
-        self.layer_1 = tf.keras.layers.Dense(
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.layer_1 = keras.layers.Dense(
             config.d_inner, kernel_initializer=get_initializer(config.initializer_range), name="layer_1"
         )
-        self.layer_2 = tf.keras.layers.Dense(
+        self.layer_2 = keras.layers.Dense(
             config.d_model, kernel_initializer=get_initializer(config.initializer_range), name="layer_2"
         )
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
         if isinstance(config.ff_activation, str):
             self.activation_function = get_tf_activation(config.ff_activation)
         else:
@@ -378,12 +376,12 @@ class TFXLNetFeedForward(tf.keras.layers.Layer):
                 self.layer_2.build([None, None, self.config.d_inner])
 
 
-class TFXLNetLayer(tf.keras.layers.Layer):
+class TFXLNetLayer(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.rel_attn = TFXLNetRelativeAttention(config, name="rel_attn")
         self.ff = TFXLNetFeedForward(config, name="ff")
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
 
     def call(
         self,
@@ -433,7 +431,7 @@ class TFXLNetLayer(tf.keras.layers.Layer):
                 self.ff.build(None)
 
 
-class TFXLNetLMHead(tf.keras.layers.Layer):
+class TFXLNetLMHead(keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -466,7 +464,7 @@ class TFXLNetLMHead(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFXLNetMainLayer(tf.keras.layers.Layer):
+class TFXLNetMainLayer(keras.layers.Layer):
     config_class = XLNetConfig
 
     def __init__(self, config, **kwargs):
@@ -492,7 +490,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             config.vocab_size, config.d_model, initializer_range=config.initializer_range, name="word_embedding"
         )
         self.layer = [TFXLNetLayer(config, name=f"layer_._{i}") for i in range(config.n_layer)]
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
 
         self.use_mems_eval = config.use_mems_eval
         self.use_mems_train = config.use_mems_train
@@ -871,8 +869,8 @@ class TFXLNetModelOutput(ModelOutput):
 
     last_hidden_state: tf.Tensor = None
     mems: List[tf.Tensor] | None = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -908,8 +906,8 @@ class TFXLNetLMHeadModelOutput(ModelOutput):
     loss: tf.Tensor | None = None
     logits: tf.Tensor = None
     mems: List[tf.Tensor] | None = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -942,8 +940,8 @@ class TFXLNetForSequenceClassificationOutput(ModelOutput):
     loss: tf.Tensor | None = None
     logits: tf.Tensor = None
     mems: List[tf.Tensor] | None = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -976,8 +974,8 @@ class TFXLNetForTokenClassificationOutput(ModelOutput):
     loss: tf.Tensor | None = None
     logits: tf.Tensor = None
     mems: List[tf.Tensor] | None = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -1012,8 +1010,8 @@ class TFXLNetForMultipleChoiceOutput(ModelOutput):
     loss: tf.Tensor | None = None
     logits: tf.Tensor = None
     mems: List[tf.Tensor] | None = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -1049,8 +1047,8 @@ class TFXLNetForQuestionAnsweringSimpleOutput(ModelOutput):
     start_logits: tf.Tensor = None
     end_logits: tf.Tensor = None
     mems: List[tf.Tensor] | None = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 XLNET_START_DOCSTRING = r"""
@@ -1059,7 +1057,7 @@ XLNET_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -1324,8 +1322,8 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         >>> import numpy as np
         >>> from transformers import AutoTokenizer, TFXLNetLMHeadModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("xlnet-large-cased")
-        >>> model = TFXLNetLMHeadModel.from_pretrained("xlnet-large-cased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("xlnet/xlnet-large-cased")
+        >>> model = TFXLNetLMHeadModel.from_pretrained("xlnet/xlnet-large-cased")
 
         >>> # We show how to setup inputs to predict a next token using a bi-directional context.
         >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is very <mask>", add_special_tokens=True))[
@@ -1415,7 +1413,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
         self.sequence_summary = TFSequenceSummary(
             config, initializer_range=config.initializer_range, name="sequence_summary"
         )
-        self.logits_proj = tf.keras.layers.Dense(
+        self.logits_proj = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="logits_proj"
         )
         self.config = config
@@ -1516,7 +1514,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
         self.sequence_summary = TFSequenceSummary(
             config, initializer_range=config.initializer_range, name="sequence_summary"
         )
-        self.logits_proj = tf.keras.layers.Dense(
+        self.logits_proj = keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="logits_proj"
         )
         self.config = config
@@ -1630,7 +1628,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
         self.num_labels = config.num_labels
 
         self.transformer = TFXLNetMainLayer(config, name="transformer")
-        self.classifier = tf.keras.layers.Dense(
+        self.classifier = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config
@@ -1720,7 +1718,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name="transformer")
-        self.qa_outputs = tf.keras.layers.Dense(
+        self.qa_outputs = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
         self.config = config

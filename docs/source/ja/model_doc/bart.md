@@ -123,7 +123,7 @@ BART を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 
 <PipelineTag pipeline="translation"/>
 
-- [ヒンディー語から英語への翻訳に Seq2SeqTrainer を使用して mBART を微調整する]方法に関するノート (https://colab.research.google.com/github/vasudevgupta7/huggingface-tutorials/blob/main/translation_training.ipynb)。 🌎
+- [ヒンディー語から英語への翻訳に Seq2SeqTrainer を使用して mBART を微調整する方法に関するノート](https://colab.research.google.com/github/vasudevgupta7/huggingface-tutorials/blob/main/translation_training.ipynb)。 🌎
 - [`BartForConditionalGeneration`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/translation) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb)。
 - [`TFBartForConditionalGeneration`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/translation) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb)。
 - [翻訳タスクガイド](../tasks/translation)

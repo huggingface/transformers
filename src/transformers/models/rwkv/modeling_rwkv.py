@@ -44,19 +44,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "RWKV/rwkv-4-169m-pile"
 _CONFIG_FOR_DOC = "RwkvConfig"
 
-RWKV_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "RWKV/rwkv-4-169m-pile",
-    "RWKV/rwkv-4-430m-pile",
-    "RWKV/rwkv-4-1b5-pile",
-    "RWKV/rwkv-4-3b-pile",
-    "RWKV/rwkv-4-7b-pile",
-    "RWKV/rwkv-4-14b-pile",
-    "RWKV/rwkv-raven-1b5",
-    "RWKV/rwkv-raven-3b",
-    "RWKV/rwkv-raven-7b",
-    "RWKV/rwkv-raven-14b",
-    # See all RWKV models at https://huggingface.co/models?filter=rwkv
-]
+
+from ..deprecated._archive_maps import RWKV_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 rwkv_cuda_kernel = None
@@ -493,8 +482,8 @@ class RwkvOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     state: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -526,8 +515,8 @@ class RwkvCausalLMOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     state: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 RWKV_START_DOCSTRING = r"""

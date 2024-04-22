@@ -44,10 +44,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "Speech2TextConfig"
 
 
-SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/s2t-small-librispeech-asr",
-    # See all Speech2Text models at https://huggingface.co/models?filter=speech_to_text
-]
+from ..deprecated._archive_maps import SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
@@ -130,8 +127,8 @@ class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
         """
         half_dim = embedding_dim // 2
         emb = math.log(10000) / (half_dim - 1)
-        emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
-        emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
+        emb = torch.exp(torch.arange(half_dim, dtype=torch.int64).float() * -emb)
+        emb = torch.arange(num_embeddings, dtype=torch.int64).float().unsqueeze(1) * emb.unsqueeze(0)
         emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1)
         if embedding_dim % 2 == 1:
             # zero pad

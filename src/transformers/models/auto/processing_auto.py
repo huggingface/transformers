@@ -61,11 +61,13 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("groupvit", "CLIPProcessor"),
         ("hubert", "Wav2Vec2Processor"),
         ("idefics", "IdeficsProcessor"),
+        ("idefics2", "Idefics2Processor"),
         ("instructblip", "InstructBlipProcessor"),
         ("kosmos-2", "Kosmos2Processor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
         ("llava", "LlavaProcessor"),
+        ("llava_next", "LlavaNextProcessor"),
         ("markuplm", "MarkupLMProcessor"),
         ("mctct", "MCTCTProcessor"),
         ("mgp-str", "MgpstrProcessor"),
@@ -156,8 +158,7 @@ class AutoProcessor:
                 This can be either:
 
                 - a string, the *model id* of a pretrained feature_extractor hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                  huggingface.co.
                 - a path to a *directory* containing a processor files saved using the `save_pretrained()` method,
                   e.g., `./my_model_directory/`.
             cache_dir (`str` or `os.PathLike`, *optional*):

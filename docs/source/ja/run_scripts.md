@@ -92,12 +92,12 @@ pip install -r requirements.txt
 
 <frameworkcontent>
 <pt>
-この例のスクリプトは、🤗 [Datasets](https://huggingface.co/docs/datasets/) ライブラリからデータセットをダウンロードし、前処理を行います。次に、[Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) を使用して要約をサポートするアーキテクチャ上でデータセットをファインチューニングします。以下の例では、[CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) データセット上で [T5-small](https://huggingface.co/t5-small) をファインチューニングする方法が示されています。T5 モデルは、そのトレーニング方法に起因して追加の `source_prefix` 引数が必要です。このプロンプトにより、T5 はこれが要約タスクであることを知ることができます。
+この例のスクリプトは、🤗 [Datasets](https://huggingface.co/docs/datasets/) ライブラリからデータセットをダウンロードし、前処理を行います。次に、[Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) を使用して要約をサポートするアーキテクチャ上でデータセットをファインチューニングします。以下の例では、[CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) データセット上で [T5-small](https://huggingface.co/google-t5/t5-small) をファインチューニングする方法が示されています。T5 モデルは、そのトレーニング方法に起因して追加の `source_prefix` 引数が必要です。このプロンプトにより、T5 はこれが要約タスクであることを知ることができます。
 
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -112,12 +112,12 @@ python examples/pytorch/summarization/run_summarization.py \
 
 </pt>
 <tf>
-この例のスクリプトは、🤗 [Datasets](https://huggingface.co/docs/datasets/) ライブラリからデータセットをダウンロードして前処理します。その後、スクリプトは要約をサポートするアーキテクチャ上で Keras を使用してデータセットをファインチューニングします。以下の例では、[T5-small](https://huggingface.co/t5-small) を [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) データセットでファインチューニングする方法を示しています。T5 モデルは、そのトレーニング方法に起因して追加の `source_prefix` 引数が必要です。このプロンプトは、T5 にこれが要約タスクであることを知らせます。
+この例のスクリプトは、🤗 [Datasets](https://huggingface.co/docs/datasets/) ライブラリからデータセットをダウンロードして前処理します。その後、スクリプトは要約をサポートするアーキテクチャ上で Keras を使用してデータセットをファインチューニングします。以下の例では、[T5-small](https://huggingface.co/google-t5/t5-small) を [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) データセットでファインチューニングする方法を示しています。T5 モデルは、そのトレーニング方法に起因して追加の `source_prefix` 引数が必要です。このプロンプトは、T5 にこれが要約タスクであることを知らせます。
 
 
 ```bash
 python examples/tensorflow/summarization/run_summarization.py  \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --dataset_name cnn_dailymail \
     --dataset_config "3.0.0" \
     --output_dir /tmp/tst-summarization  \
@@ -143,7 +143,7 @@ python examples/tensorflow/summarization/run_summarization.py  \
 torchrun \
     --nproc_per_node 8 pytorch/summarization/run_summarization.py \
     --fp16 \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -167,7 +167,7 @@ Tensor Processing Units (TPUs)は、パフォーマンスを加速させるた�
 ```bash
 python xla_spawn.py --num_cores 8 \
     summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -186,7 +186,7 @@ python xla_spawn.py --num_cores 8 \
 ```bash
 python run_summarization.py  \
     --tpu name_of_tpu_resource \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --dataset_name cnn_dailymail \
     --dataset_config "3.0.0" \
     --output_dir /tmp/tst-summarization  \
@@ -226,7 +226,7 @@ Now you are ready to launch the training:
 
 ```bash
 accelerate launch run_summarization_no_trainer.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --dataset_name cnn_dailymail \
     --dataset_config "3.0.0" \
     --source_prefix "summarize: " \
@@ -245,7 +245,7 @@ accelerate launch run_summarization_no_trainer.py \
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --train_file path_to_csv_or_jsonlines_file \
@@ -270,7 +270,7 @@ python examples/pytorch/summarization/run_summarization.py \
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --max_train_samples 50 \
     --max_eval_samples 50 \
     --max_predict_samples 50 \
@@ -300,7 +300,7 @@ examples/pytorch/summarization/run_summarization.py -h
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -318,7 +318,7 @@ python examples/pytorch/summarization/run_summarization.py
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -350,7 +350,7 @@ huggingface-cli login
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \

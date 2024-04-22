@@ -55,10 +55,8 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "susnato/clvp_dev"
 
-CLVP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "susnato/clvp_dev",
-    # See all Clvp models at https://huggingface.co/models?filter=clvp
-]
+
+from ..deprecated._archive_maps import CLVP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss
@@ -255,7 +253,7 @@ class ClvpRotaryPositionalEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
         dim = max(config.projection_dim // (config.num_attention_heads * 2), 32)
-        inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2).float() / dim))
+        inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
 
         self.register_buffer("inv_freq", inv_freq)
         self.cached_sequence_length = None

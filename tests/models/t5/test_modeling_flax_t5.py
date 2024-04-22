@@ -773,8 +773,8 @@ class FlaxT5ModelIntegrationTests(unittest.TestCase):
         >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small")
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        model = FlaxT5ForConditionalGeneration.from_pretrained("google-t5/t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
         input_ids = tokenizer("Hello there", return_tensors="np").input_ids
         labels = tokenizer("Hi I am", return_tensors="np").input_ids
@@ -849,11 +849,11 @@ class FlaxT5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_small_generation(self):
-        model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small")
+        model = FlaxT5ForConditionalGeneration.from_pretrained("google-t5/t5-small")
         model.config.max_length = 8
         model.config.num_beams = 1
         model.config.do_sample = False
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
         input_ids = tokenizer("summarize: Hello there", return_tensors="np").input_ids
 
@@ -864,11 +864,11 @@ class FlaxT5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_small_generation_bfloat16(self):
-        model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small", dtype=jnp.bfloat16)
+        model = FlaxT5ForConditionalGeneration.from_pretrained("google-t5/t5-small", dtype=jnp.bfloat16)
         model.config.max_length = 8
         model.config.num_beams = 1
         model.config.do_sample = False
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
         input_ids = tokenizer("summarize: Hello there", return_tensors="np").input_ids
 
@@ -879,8 +879,8 @@ class FlaxT5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_summarization(self):
-        model = FlaxT5ForConditionalGeneration.from_pretrained("t5-base")
-        tok = T5Tokenizer.from_pretrained("t5-base")
+        model = FlaxT5ForConditionalGeneration.from_pretrained("google-t5/t5-base")
+        tok = T5Tokenizer.from_pretrained("google-t5/t5-base")
 
         FRANCE_ARTICLE = (  # @noqa
             "Marseille, France (CNN)The French prosecutor leading an investigation into the crash of Germanwings"

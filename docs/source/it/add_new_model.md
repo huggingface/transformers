@@ -583,7 +583,7 @@ model.save_pretrained("/path/to/converted/checkpoint/folder")
 **7. Implementare il forward pass**
 
 Una volta che i weights pretrained sono stati correttamente caricati in 🤗 Transformers, dovrete assicurarvi che il forward pass 
-sia correttamente implementato. [Qui](#provare-un-pretrained-checkpoint-usando-la-repo-originale), avete give creato e provato
+sia correttamente implementato. [Qui](#3-4-provare-un-pretrained-checkpoint-usando-la-repo-originale), avete give creato e provato
 uno script che testi il forward pass del modello usando la repo originaria. Ora dovrete fare lo stesso con uno script analogo 
 usando l'implementazione in 🤗 Transformers anziché l'originale. Piu o meno lo script dovrebbe essere:
 

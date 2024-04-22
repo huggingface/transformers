@@ -5,10 +5,11 @@ import tensorflow as tf
 from keras_nlp.tokenizers import BytePairTokenizer
 from tensorflow_text import pad_model_inputs
 
+from ...modeling_tf_utils import keras
 from .tokenization_gpt2 import GPT2Tokenizer
 
 
-class TFGPT2Tokenizer(tf.keras.layers.Layer):
+class TFGPT2Tokenizer(keras.layers.Layer):
     """
     This is an in-graph tokenizer for GPT2. It should be initialized similarly to other tokenizers, using the
     `from_pretrained()` method. It can also be initialized with the `from_tokenizer()` method, which imports settings
@@ -44,7 +45,7 @@ class TFGPT2Tokenizer(tf.keras.layers.Layer):
         ```python
         from transformers import AutoTokenizer, TFGPT2Tokenizer
 
-        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         tf_tokenizer = TFGPT2Tokenizer.from_tokenizer(tokenizer)
         ```
         """
@@ -64,7 +65,7 @@ class TFGPT2Tokenizer(tf.keras.layers.Layer):
         ```python
         from transformers import TFGPT2Tokenizer
 
-        tf_tokenizer = TFGPT2Tokenizer.from_pretrained("gpt2")
+        tf_tokenizer = TFGPT2Tokenizer.from_pretrained("openai-community/gpt2")
         ```
         """
         tokenizer = GPT2Tokenizer.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)

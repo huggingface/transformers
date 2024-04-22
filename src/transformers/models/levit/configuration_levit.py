@@ -26,10 +26,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/levit-128S": "https://huggingface.co/facebook/levit-128S/resolve/main/config.json",
-    # See all LeViT models at https://huggingface.co/models?filter=levit
-}
+
+from ..deprecated._archive_maps import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class LevitConfig(PretrainedConfig):

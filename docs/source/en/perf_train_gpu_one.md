@@ -51,7 +51,7 @@ The methods and tools covered in this guide can be classified based on the effec
 | [Data preloading](#data-preloading)                        | Yes                     | No                           |
 | [DeepSpeed Zero](#deepspeed-zero)                          | No                      | Yes                          |
 | [torch.compile](#using-torchcompile)                       | Yes                     | No                           |
-| [Parameter-Efficient Fine Tuning (PEFT)](#peft)            | No                      | Yes                          |
+| [Parameter-Efficient Fine Tuning (PEFT)](#using--peft)            | No                      | Yes                          |
  
 <Tip>
 
@@ -62,12 +62,12 @@ large model and a small batch size, the memory use will be larger.
 
 You can combine the above methods to get a cumulative effect. These techniques are available to you whether you are 
 training your model with [`Trainer`] or writing a pure PyTorch loop, in which case you can [configure these optimizations 
-with 🤗 Accelerate](#using-accelerate).
+with 🤗 Accelerate](#using--accelerate).
 
 If these methods do not result in sufficient gains, you can explore the following options: 
-* [Look into building your own custom Docker container with efficient softare prebuilds](#efficient-software-prebuilds)
+* [Look into building your own custom Docker container with efficient software prebuilds](#efficient-software-prebuilds)
 * [Consider a model that uses Mixture of Experts (MoE)](#mixture-of-experts)
-* [Convert your model to BetterTransformer to leverage PyTorch native attention](#using-pytorch-native-attention)
+* [Convert your model to BetterTransformer to leverage PyTorch native attention](#using-pytorch-native-attention-and-flash-attention)
 
 Finally, if all of the above is still not enough, even after switching to a server-grade GPU like A100, consider moving 
 to a multi-GPU setup. All these approaches are still valid in a multi-GPU setup, plus you can leverage additional parallelism 
@@ -110,7 +110,7 @@ training_args = TrainingArguments(per_device_train_batch_size=1, gradient_accumu
 In the above example, your effective batch size becomes 4. 
 
 Alternatively, use 🤗 Accelerate to gain full control over the training loop. Find the 🤗 Accelerate example 
-[further down in this guide](#using-accelerate).
+[further down in this guide](#using--accelerate).
 
 While it is advised to max out GPU usage as much as possible, a high number of gradient accumulation steps can 
 result in a more pronounced training slowdown. Consider the following example. Let's say, the `per_device_train_batch_size=4` 
@@ -143,7 +143,7 @@ training_args = TrainingArguments(
 )
 ```
 
-Alternatively, use 🤗 Accelerate - find the 🤗 Accelerate example [further in this guide](#using-accelerate). 
+Alternatively, use 🤗 Accelerate - find the 🤗 Accelerate example [further in this guide](#using--accelerate). 
 
 <Tip>
 
@@ -179,7 +179,7 @@ To enable mixed precision training, set the `fp16` flag to `True`:
 training_args = TrainingArguments(per_device_train_batch_size=4, fp16=True, **default_args)
 ```
 
-If you prefer to use 🤗 Accelerate, find the 🤗 Accelerate example [further in this guide](#using-accelerate). 
+If you prefer to use 🤗 Accelerate, find the 🤗 Accelerate example [further in this guide](#using--accelerate). 
 
 ### BF16
 
@@ -201,7 +201,7 @@ of 23 bits precision it has only 10 bits (same as fp16) and uses only 19 bits in
 you can use the normal fp32 training and/or inference code and by enabling tf32 support you can get up to 3x throughput 
 improvement. All you need to do is to add the following to your code:
 
-```
+```python
 import torch
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -248,7 +248,7 @@ Let's take a closer look at two alternatives to AdamW optimizer:
 1. `adafactor` which is available in [`Trainer`]
 2. `adamw_bnb_8bit` is also available in Trainer, but a third-party integration is provided below for demonstration.
 
-For comparison, for a 3B-parameter model, like “t5-3b”: 
+For comparison, for a 3B-parameter model, like “google-t5/t5-3b”: 
 * A standard AdamW optimizer will need 24GB of GPU memory because it uses 8 bytes for each parameter (8*3 => 24GB)
 * Adafactor optimizer will need more than 12GB. It uses slightly more than 4 bytes for each parameter, so 4*3 and then some extra.
 * 8bit BNB quantized optimizer will use only (2*3) 6GB if all optimizer states are quantized.
@@ -529,24 +529,6 @@ And for Pytorch DeepSpeed has built one as well: [DeepSpeed-MoE: Advancing Mixtu
 
 ## Using PyTorch native attention and Flash Attention
 
-PyTorch 2.0 released a native [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA), 
-that allows using fused GPU kernels such as [memory-efficient attention](https://arxiv.org/abs/2112.05682) and [flash attention](https://arxiv.org/abs/2205.14135).
-
-After installing the [`optimum`](https://github.com/huggingface/optimum) package, the relevant internal modules can be 
-replaced to use PyTorch's native attention with:
-
-```python
-model = model.to_bettertransformer()
-```
-
-Once converted, train the model as usual.
-
-<Tip warning={true}>
-
-The PyTorch-native `scaled_dot_product_attention` operator can only dispatch to Flash Attention if no `attention_mask` is provided.
-
-By default, in training mode, the BetterTransformer integration **drops the mask support and can only be used for training that does not require a padding mask for batched training**. This is the case, for example, during masked language modeling or causal language modeling. BetterTransformer is not suited for fine-tuning models on tasks that require a padding mask. 
-
-</Tip>
+PyTorch's [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA) can also call FlashAttention and memory-efficient attention kernels under the hood. SDPA support is currently being added natively in Transformers and is used by default for `torch>=2.1.1` when an implementation is available. Please refer to [PyTorch scaled dot product attention](https://huggingface.co/docs/transformers/perf_infer_gpu_one#pytorch-scaled-dot-product-attention) for a list of supported models and more details.
 
 Check out this [blogpost](https://pytorch.org/blog/out-of-the-box-acceleration/) to learn more about acceleration and memory-savings with SDPA.

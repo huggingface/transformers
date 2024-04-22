@@ -94,12 +94,12 @@ pip install -r requirements.txt
 <pt>
 예제 스크립트는 🤗 [Datasets](https://huggingface.co/docs/datasets/) 라이브러리에서 데이터 세트를 다운로드하고 전처리합니다.
 그런 다음 스크립트는 요약 기능을 지원하는 아키텍처에서 [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer)를 사용하여 데이터 세트를 미세 조정합니다.
-다음 예는 [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) 데이터 세트에서 [T5-small](https://huggingface.co/t5-small)을 미세 조정합니다.
+다음 예는 [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) 데이터 세트에서 [T5-small](https://huggingface.co/google-t5/t5-small)을 미세 조정합니다.
 T5 모델은 훈련 방식에 따라 추가 `source_prefix` 인수가 필요하며, 이 프롬프트는 요약 작업임을 T5에 알려줍니다.
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -115,11 +115,11 @@ python examples/pytorch/summarization/run_summarization.py \
 <tf>
 예제 스크립트는 🤗 [Datasets](https://huggingface.co/docs/datasets/) 라이브러리에서 데이터 세트를 다운로드하고 전처리합니다.
 그런 다음 스크립트는 요약 기능을 지원하는 아키텍처에서 Keras를 사용하여 데이터 세트를 미세 조정합니다. 
-다음 예는 [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) 데이터 세트에서 [T5-small](https://huggingface.co/t5-small)을 미세 조정합니다.
+다음 예는 [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) 데이터 세트에서 [T5-small](https://huggingface.co/google-t5/t5-small)을 미세 조정합니다.
 T5 모델은 훈련 방식에 따라 추가 `source_prefix` 인수가 필요하며, 이 프롬프트는 요약 작업임을 T5에 알려줍니다.
 ```bash
 python examples/tensorflow/summarization/run_summarization.py  \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --dataset_name cnn_dailymail \
     --dataset_config "3.0.0" \
     --output_dir /tmp/tst-summarization  \
@@ -144,7 +144,7 @@ python examples/tensorflow/summarization/run_summarization.py  \
 torchrun \
     --nproc_per_node 8 pytorch/summarization/run_summarization.py \
     --fp16 \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -171,7 +171,7 @@ TPU를 사용하려면 `xla_spawn.py` 스크립트를 실행하고 `num_cores` �
 ```bash
 python xla_spawn.py --num_cores 8 \
     summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -192,7 +192,7 @@ TPU를 사용하려면 TPU 리소스의 이름을 `tpu` 인수에 전달합니�
 ```bash
 python run_summarization.py  \
     --tpu name_of_tpu_resource \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --dataset_name cnn_dailymail \
     --dataset_config "3.0.0" \
     --output_dir /tmp/tst-summarization  \
@@ -232,7 +232,7 @@ accelerate test
 
 ```bash
 accelerate launch run_summarization_no_trainer.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --dataset_name cnn_dailymail \
     --dataset_config "3.0.0" \
     --source_prefix "summarize: " \
@@ -252,7 +252,7 @@ accelerate launch run_summarization_no_trainer.py \
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --train_file path_to_csv_or_jsonlines_file \
@@ -278,7 +278,7 @@ python examples/pytorch/summarization/run_summarization.py \
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --max_train_samples 50 \
     --max_eval_samples 50 \
     --max_predict_samples 50 \
@@ -311,7 +311,7 @@ examples/pytorch/summarization/run_summarization.py -h
 이 경우 `overwrite_output_dir`을 제거해야 합니다:
 ```bash
 python examples/pytorch/summarization/run_summarization.py
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -328,7 +328,7 @@ python examples/pytorch/summarization/run_summarization.py
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -359,7 +359,7 @@ huggingface-cli login
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \

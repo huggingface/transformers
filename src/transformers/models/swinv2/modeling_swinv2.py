@@ -56,10 +56,7 @@ _IMAGE_CLASS_CHECKPOINT = "microsoft/swinv2-tiny-patch4-window8-256"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
-SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/swinv2-tiny-patch4-window8-256",
-    # See all Swinv2 models at https://huggingface.co/models?filter=swinv2
-]
+from ..deprecated._archive_maps import SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # drop_path, Swinv2PatchEmbeddings, Swinv2PatchMerging and Swinv2DropPath are from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/swin_transformer_v2.py.
@@ -94,9 +91,9 @@ class Swinv2EncoderOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -131,9 +128,9 @@ class Swinv2ModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -168,9 +165,9 @@ class Swinv2MaskedImageModelingOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     reconstruction: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
     @property
     def logits(self):
@@ -214,9 +211,9 @@ class Swinv2ImageClassifierOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 # Copied from transformers.models.swin.modeling_swin.window_partition
@@ -446,8 +443,8 @@ class Swinv2SelfAttention(nn.Module):
         )
 
         # get relative_coords_table
-        relative_coords_h = torch.arange(-(self.window_size[0] - 1), self.window_size[0], dtype=torch.float32)
-        relative_coords_w = torch.arange(-(self.window_size[1] - 1), self.window_size[1], dtype=torch.float32)
+        relative_coords_h = torch.arange(-(self.window_size[0] - 1), self.window_size[0], dtype=torch.int64).float()
+        relative_coords_w = torch.arange(-(self.window_size[1] - 1), self.window_size[1], dtype=torch.int64).float()
         relative_coords_table = (
             torch.stack(meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
             .permute(1, 2, 0)
@@ -457,7 +454,7 @@ class Swinv2SelfAttention(nn.Module):
         if pretrained_window_size[0] > 0:
             relative_coords_table[:, :, :, 0] /= pretrained_window_size[0] - 1
             relative_coords_table[:, :, :, 1] /= pretrained_window_size[1] - 1
-        else:
+        elif window_size > 1:
             relative_coords_table[:, :, :, 0] /= self.window_size[0] - 1
             relative_coords_table[:, :, :, 1] /= self.window_size[1] - 1
         relative_coords_table *= 8  # normalize to -8, 8
@@ -942,6 +939,7 @@ class Swinv2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "swinv2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["Swinv2Stage"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

@@ -38,10 +38,8 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "VipLlavaConfig"
 
-VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "llava-hf/vip-llava-7b-hf",
-    # See all VipLlava models at https://huggingface.co/models?filter=vipllava
-]
+
+from ..deprecated._archive_maps import VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -248,7 +246,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = VipLlavaMultiModalProjector(config)
-        self.vocab_size = config.vocab_size
+        self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
             config.text_config, attn_implementation=config._attn_implementation
         )
@@ -280,7 +278,6 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
         # update vocab size
         self.config.text_config.vocab_size = model_embeds.num_embeddings
-        self.config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
@@ -347,6 +344,12 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
+
+        # 6. Mask out the embedding at padding positions, as we later use the past_key_value value to determine the non-attended tokens.
+        batch_indices, pad_indices = torch.where(input_ids == self.pad_token_id)
+        indices_to_mask = new_token_positions[batch_indices, pad_indices]
+
+        final_embedding[batch_indices, indices_to_mask] = 0
 
         if labels is None:
             final_labels = None
@@ -438,16 +441,16 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
                 if past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
                     # Retrieve the first layer to inspect the logits and mask out the hidden states
                     # that are set to 0
-                    first_layer_past_key_value = past_key_values[0][0][:, 0, :, :]
+                    first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
 
                     # Sum all dimensions of head_dim (-1) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
-                    batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-1) == 0)
+                    batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
 
-                    # Get the target length
-                    target_seqlen = first_layer_past_key_value.shape[-2] + 1
+                    target_length = input_ids.shape[1]
+                    past_length = first_layer_past_key_value.shape[-1]
 
                     extended_attention_mask = torch.ones(
-                        (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
+                        (attention_mask.shape[0], past_length),
                         dtype=attention_mask.dtype,
                         device=attention_mask.device,
                     )
@@ -462,7 +465,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
                     # Zero-out the places where we don't need to attend
                     extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
 
-                    attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
+                    attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
         outputs = self.language_model(

@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_timm,
     require_torch,
     require_torch_accelerator,
+    require_torch_bf16,
     require_vision,
     slow,
     torch_device,
@@ -149,7 +150,9 @@ class DeformableDetrModelTester:
             encoder_n_points=self.encoder_n_points,
             decoder_n_points=self.decoder_n_points,
             use_timm_backbone=False,
+            backbone=None,
             backbone_config=resnet_config,
+            use_pretrained_backbone=False,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -189,7 +192,7 @@ class DeformableDetrModelTester:
 class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DeformableDetrModel, DeformableDetrForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": DeformableDetrModel, "object-detection": DeformableDetrForObjectDetection}
+        {"image-feature-extraction": DeformableDetrModel, "object-detection": DeformableDetrForObjectDetection}
         if is_torch_available()
         else {}
     )
@@ -518,6 +521,8 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
         # let's pick a random timm backbone
         config.backbone = "tf_mobilenetv3_small_075"
+        config.use_timm_backbone = True
+        config.backbone_config = None
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -574,6 +579,30 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
         loss = model(**inputs).loss
         loss.backward()
+
+    def create_and_check_model_fp16_forward(self):
+        model_class = DeformableDetrForObjectDetection
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        model = model_class(config)
+        model.to(torch_device)
+        model.half()
+        model.eval()
+        inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+        output = model(**inputs)["last_hidden_state"]
+        self.parent.assertFalse(torch.isnan(output).any().item())
+
+    @require_torch_bf16
+    def create_and_check_model_bf16_forward(self):
+        model_class = DeformableDetrForObjectDetection
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        model = model_class(config, torch_dtype=torch.bfloat16)
+        model.to(torch_device)
+        model.eval()
+        inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+        output = model(**inputs)["last_hidden_state"]
+        self.parent.assertFalse(torch.isnan(output).any().item())
 
 
 TOLERANCE = 1e-4

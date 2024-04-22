@@ -24,10 +24,8 @@ from ..bit import BitConfig
 
 logger = logging.get_logger(__name__)
 
-DPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Intel/dpt-large": "https://huggingface.co/Intel/dpt-large/resolve/main/config.json",
-    # See all DPT models at https://huggingface.co/models?filter=dpt
-}
+
+from ..deprecated._archive_maps import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class DPTConfig(PretrainedConfig):
@@ -54,7 +52,7 @@ class DPTConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -111,6 +109,18 @@ class DPTConfig(PretrainedConfig):
         backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
             The configuration of the backbone model. Only used in case `is_hybrid` is `True` or in case you want to
             leverage the [`AutoBackbone`] API.
+        backbone (`str`, *optional*):
+            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
+            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
+            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
+        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
+            Whether to use pretrained weights for the backbone.
+        use_timm_backbone (`bool`, *optional*, defaults to `False`):
+            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
+            library.
+        backbone_kwargs (`dict`, *optional*):
+            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
+            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
 
     Example:
 
@@ -161,6 +171,10 @@ class DPTConfig(PretrainedConfig):
         backbone_featmap_shape=[1, 1024, 24, 24],
         neck_ignore_stages=[0, 1],
         backbone_config=None,
+        backbone=None,
+        use_pretrained_backbone=False,
+        use_timm_backbone=False,
+        backbone_kwargs=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -168,9 +182,12 @@ class DPTConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.is_hybrid = is_hybrid
 
+        if use_pretrained_backbone:
+            raise ValueError("Pretrained backbones are not supported yet.")
+
         use_autobackbone = False
         if self.is_hybrid:
-            if backbone_config is None:
+            if backbone_config is None and backbone is None:
                 logger.info("Initializing the config with a `BiT` backbone.")
                 backbone_config = {
                     "global_padding": "same",
@@ -179,17 +196,17 @@ class DPTConfig(PretrainedConfig):
                     "out_features": ["stage1", "stage2", "stage3"],
                     "embedding_dynamic_padding": True,
                 }
-                self.backbone_config = BitConfig(**backbone_config)
+                backbone_config = BitConfig(**backbone_config)
             elif isinstance(backbone_config, dict):
                 logger.info("Initializing the config with a `BiT` backbone.")
-                self.backbone_config = BitConfig(**backbone_config)
+                backbone_config = BitConfig(**backbone_config)
             elif isinstance(backbone_config, PretrainedConfig):
-                self.backbone_config = backbone_config
+                backbone_config = backbone_config
             else:
                 raise ValueError(
                     f"backbone_config must be a dictionary or a `PretrainedConfig`, got {backbone_config.__class__}."
                 )
-
+            self.backbone_config = backbone_config
             self.backbone_featmap_shape = backbone_featmap_shape
             self.neck_ignore_stages = neck_ignore_stages
 
@@ -207,12 +224,21 @@ class DPTConfig(PretrainedConfig):
             self.backbone_config = backbone_config
             self.backbone_featmap_shape = None
             self.neck_ignore_stages = []
-
         else:
             self.backbone_config = backbone_config
             self.backbone_featmap_shape = None
             self.neck_ignore_stages = []
 
+        if use_autobackbone and backbone_config is not None and backbone is not None:
+            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+
+        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
+            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
+
+        self.backbone = backbone
+        self.use_pretrained_backbone = use_pretrained_backbone
+        self.use_timm_backbone = use_timm_backbone
+        self.backbone_kwargs = backbone_kwargs
         self.num_hidden_layers = None if use_autobackbone else num_hidden_layers
         self.num_attention_heads = None if use_autobackbone else num_attention_heads
         self.intermediate_size = None if use_autobackbone else intermediate_size

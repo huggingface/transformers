@@ -41,7 +41,6 @@ if is_torch_available():
         VideoMAEForVideoClassification,
         VideoMAEModel,
     )
-    from transformers.models.videomae.modeling_videomae import VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -237,9 +236,9 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = VideoMAEModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "MCG-NJU/videomae-base"
+        model = VideoMAEModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         if not self.has_attentions:

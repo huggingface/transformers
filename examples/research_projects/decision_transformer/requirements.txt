@@ -34,11 +34,11 @@ cmd2==2.4.0
 codecarbon==1.2.0
 colorlog==6.6.0
 cookiecutter==2.1.1
-cryptography==41.0.2
+cryptography==42.0.0
 csvw==2.0.0
 cycler==0.11.0
 Cython==0.29.28
-dash==2.3.0
+dash==2.15.0
 dash-bootstrap-components==1.0.3
 dash-core-components==2.0.0
 dash-html-components==2.0.0

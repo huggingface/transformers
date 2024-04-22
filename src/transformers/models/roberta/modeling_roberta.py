@@ -48,18 +48,11 @@ from .configuration_roberta import RobertaConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "roberta-base"
+_CHECKPOINT_FOR_DOC = "FacebookAI/roberta-base"
 _CONFIG_FOR_DOC = "RobertaConfig"
 
-ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "roberta-base",
-    "roberta-large",
-    "roberta-large-mnli",
-    "distilroberta-base",
-    "roberta-base-openai-detector",
-    "roberta-large-openai-detector",
-    # See all RoBERTa models at https://huggingface.co/models?filter=roberta
-]
+
+from ..deprecated._archive_maps import ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class RobertaEmbeddings(nn.Module):
@@ -936,10 +929,10 @@ class RobertaForCausalLM(RobertaPreTrainedModel):
         >>> from transformers import AutoTokenizer, RobertaForCausalLM, AutoConfig
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("roberta-base")
-        >>> config = AutoConfig.from_pretrained("roberta-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base")
+        >>> config = AutoConfig.from_pretrained("FacebookAI/roberta-base")
         >>> config.is_decoder = True
-        >>> model = RobertaForCausalLM.from_pretrained("roberta-base", config=config)
+        >>> model = RobertaForCausalLM.from_pretrained("FacebookAI/roberta-base", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

@@ -20,10 +20,8 @@ from ....utils import logging
 
 logger = logging.get_logger(__name__)
 
-MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "speechbrain/m-ctc-t-large": "https://huggingface.co/speechbrain/m-ctc-t-large/resolve/main/config.json",
-    # See all M-CTC-T models at https://huggingface.co/models?filter=mctct
-}
+
+from .._archive_maps import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class MCTCTConfig(PretrainedConfig):
@@ -64,7 +62,7 @@ class MCTCTConfig(PretrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.3):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.3):
             The dropout ratio for the attention probabilities.
         pad_token_id (`int`, *optional*, defaults to 1):

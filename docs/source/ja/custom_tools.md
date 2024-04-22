@@ -385,7 +385,7 @@ Assistant:
 
 したがって、カスタム`chat`プロンプトテンプレートの例もこのフォーマットを使用することが重要です。以下のように、インスタンス化時に`chat`テンプレートを上書きできます。
 
-```
+```python
 template = """ [...] """
 
 agent = HfAgent(url_endpoint=your_endpoint, chat_prompt_template=template)
@@ -566,7 +566,7 @@ model = next(iter(list_models(filter=task, sort="downloads", direction=-1)))
 print(model.id)
 ```
 
-タスク `text-classification` の場合、これは `'facebook/bart-large-mnli'` を返します。`translation` の場合、`'t5-base'` を返します。
+タスク `text-classification` の場合、これは `'facebook/bart-large-mnli'` を返します。`translation` の場合、`'google-t5/t5-base'` を返します。
 
 これをエージェントが利用できるツールに変換する方法は何でしょうか？すべてのツールは、主要な属性を保持するスーパークラス `Tool` に依存しています。私たちは、それを継承したクラスを作成します:
 

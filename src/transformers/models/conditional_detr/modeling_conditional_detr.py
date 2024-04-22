@@ -30,6 +30,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_accelerate_available,
     is_scipy_available,
     is_timm_available,
     is_vision_available,
@@ -37,9 +38,13 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
-from ..auto import AutoBackbone
+from ...utils.backbone_utils import load_backbone
 from .configuration_conditional_detr import ConditionalDetrConfig
 
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
@@ -55,10 +60,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ConditionalDetrConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/conditional-detr-resnet-50"
 
-CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/conditional-detr-resnet-50",
-    # See all Conditional DETR models at https://huggingface.co/models?filter=conditional_detr
-]
+
+from ..deprecated._archive_maps import CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -363,7 +366,7 @@ class ConditionalDetrConvEncoder(nn.Module):
                 **kwargs,
             )
         else:
-            backbone = AutoBackbone.from_config(config.backbone_config)
+            backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
@@ -443,7 +446,7 @@ class ConditionalDetrSinePositionEmbedding(nn.Module):
             y_embed = y_embed / (y_embed[:, -1:, :] + 1e-6) * self.scale
             x_embed = x_embed / (x_embed[:, :, -1:] + 1e-6) * self.scale
 
-        dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device)
+        dim_t = torch.arange(self.embedding_dim, dtype=torch.int64, device=pixel_values.device).float()
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
 
         pos_x = x_embed[:, :, :, None] / dim_t
@@ -2507,11 +2510,13 @@ class ConditionalDetrLoss(nn.Module):
         # Compute the average number of target boxes across all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
-        # (Niels): comment out function below, distributed training to be added
-        # if is_dist_avail_and_initialized():
-        #     torch.distributed.all_reduce(num_boxes)
-        # (Niels) in original implementation, num_boxes is divided by get_world_size()
-        num_boxes = torch.clamp(num_boxes, min=1).item()
+
+        world_size = 1
+        if is_accelerate_available():
+            if PartialState._shared_state != {}:
+                num_boxes = reduce(num_boxes)
+                world_size = PartialState().num_processes
+        num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
 
         # Compute all the requested losses
         losses = {}

@@ -48,10 +48,8 @@ _CONFIG_FOR_DOC = "DonutSwinConfig"
 _CHECKPOINT_FOR_DOC = "https://huggingface.co/naver-clova-ix/donut-base"
 _EXPECTED_OUTPUT_SHAPE = [1, 49, 768]
 
-DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "naver-clova-ix/donut-base",
-    # See all Donut Swin models at https://huggingface.co/models?filter=donut
-]
+
+from ..deprecated._archive_maps import DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -83,9 +81,9 @@ class DonutSwinEncoderOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -120,9 +118,9 @@ class DonutSwinModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 # Copied from transformers.models.swin.modeling_swin.window_partition
@@ -750,7 +748,12 @@ class DonutSwinEncoder(nn.Module):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__, hidden_states, input_dimensions, layer_head_mask, output_attentions
+                    layer_module.__call__,
+                    hidden_states,
+                    input_dimensions,
+                    layer_head_mask,
+                    output_attentions,
+                    always_partition,
                 )
             else:
                 layer_outputs = layer_module(
@@ -806,6 +809,7 @@ class DonutSwinPreTrainedModel(PreTrainedModel):
     base_model_prefix = "swin"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["DonutSwinStage"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

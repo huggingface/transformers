@@ -134,6 +134,8 @@ class ConditionalDetrModelTester:
             num_labels=self.num_labels,
             use_timm_backbone=False,
             backbone_config=resnet_config,
+            backbone=None,
+            use_pretrained_backbone=False,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -183,7 +185,7 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": ConditionalDetrModel, "object-detection": ConditionalDetrForObjectDetection}
+        {"image-feature-extraction": ConditionalDetrModel, "object-detection": ConditionalDetrForObjectDetection}
         if is_torch_available()
         else {}
     )
@@ -192,6 +194,7 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    zero_init_hidden_state = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -441,6 +444,7 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
 
         # let's pick a random timm backbone
         config.backbone = "tf_mobilenetv3_small_075"
+        config.use_timm_backbone = True
 
         for model_class in self.all_model_classes:
             model = model_class(config)

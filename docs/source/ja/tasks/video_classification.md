@@ -360,7 +360,7 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 >>> args = TrainingArguments(
 ...     new_model_name,
 ...     remove_unused_columns=False,
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     save_strategy="epoch",
 ...     learning_rate=5e-5,
 ...     per_device_train_batch_size=batch_size,
@@ -490,7 +490,7 @@ def compute_metrics(eval_pred):
 
 次に、入力をモデルに渡し、`logits `を返します。
 
-```
+```py
 >>> logits = run_inference(trained_model, sample_test_video["video"])
 ```
 

@@ -25,6 +25,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 @require_rjieba
 @require_tokenizers
 class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "junnyu/roformer_chinese_small"
     tokenizer_class = RoFormerTokenizer
     rust_tokenizer_class = RoFormerTokenizerFast
     space_between_special_tokens = True

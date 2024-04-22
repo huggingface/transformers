@@ -38,7 +38,6 @@ if is_torch_available():
         RobertaModel,
     )
     from transformers.models.roberta.modeling_roberta import (
-        ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         RobertaEmbeddings,
         create_position_ids_from_input_ids,
     )
@@ -477,9 +476,9 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = RobertaModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "FacebookAI/roberta-base"
+        model = RobertaModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
         """Ensure that the default position ids only assign a sequential . This is a regression
@@ -527,7 +526,7 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 class RobertaModelIntegrationTest(TestCasePlus):
     @slow
     def test_inference_masked_lm(self):
-        model = RobertaForMaskedLM.from_pretrained("roberta-base")
+        model = RobertaForMaskedLM.from_pretrained("FacebookAI/roberta-base")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         with torch.no_grad():
@@ -547,7 +546,7 @@ class RobertaModelIntegrationTest(TestCasePlus):
 
     @slow
     def test_inference_no_head(self):
-        model = RobertaModel.from_pretrained("roberta-base")
+        model = RobertaModel.from_pretrained("FacebookAI/roberta-base")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         with torch.no_grad():
@@ -565,7 +564,7 @@ class RobertaModelIntegrationTest(TestCasePlus):
 
     @slow
     def test_inference_classification_head(self):
-        model = RobertaForSequenceClassification.from_pretrained("roberta-large-mnli")
+        model = RobertaForSequenceClassification.from_pretrained("FacebookAI/roberta-large-mnli")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         with torch.no_grad():

@@ -34,6 +34,7 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -55,14 +56,8 @@ _CONFIG_FOR_DOC = "LongformerConfig"
 
 LARGE_NEGATIVE = -1e8
 
-TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "allenai/longformer-base-4096",
-    "allenai/longformer-large-4096",
-    "allenai/longformer-large-4096-finetuned-triviaqa",
-    "allenai/longformer-base-4096-extra.pos.embd.only",
-    "allenai/longformer-large-4096-extra.pos.embd.only",
-    # See all Longformer models at https://huggingface.co/models?filter=longformer
-]
+
+from ..deprecated._archive_maps import TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -103,9 +98,9 @@ class TFLongformerBaseModelOutput(ModelOutput):
     """
 
     last_hidden_state: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
-    global_attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
+    global_attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -151,9 +146,9 @@ class TFLongformerBaseModelOutputWithPooling(ModelOutput):
 
     last_hidden_state: tf.Tensor = None
     pooler_output: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
-    global_attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
+    global_attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -197,9 +192,9 @@ class TFLongformerMaskedLMOutput(ModelOutput):
 
     loss: tf.Tensor | None = None
     logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
-    global_attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
+    global_attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -246,9 +241,9 @@ class TFLongformerQuestionAnsweringModelOutput(ModelOutput):
     loss: tf.Tensor | None = None
     start_logits: tf.Tensor = None
     end_logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
-    global_attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
+    global_attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -292,9 +287,9 @@ class TFLongformerSequenceClassifierOutput(ModelOutput):
 
     loss: tf.Tensor | None = None
     logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
-    global_attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
+    global_attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -340,9 +335,9 @@ class TFLongformerMultipleChoiceModelOutput(ModelOutput):
 
     loss: tf.Tensor | None = None
     logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
-    global_attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
+    global_attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -386,9 +381,9 @@ class TFLongformerTokenClassifierOutput(ModelOutput):
 
     loss: tf.Tensor | None = None
     logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
-    global_attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
+    global_attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 def _compute_global_attention_mask(input_ids_shape, sep_token_indices, before_sep_token=True):
@@ -416,7 +411,7 @@ def _compute_global_attention_mask(input_ids_shape, sep_token_indices, before_se
 
 
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaLMHead with Roberta->Longformer
-class TFLongformerLMHead(tf.keras.layers.Layer):
+class TFLongformerLMHead(keras.layers.Layer):
     """Longformer Head for masked language modeling."""
 
     def __init__(self, config, input_embeddings, **kwargs):
@@ -424,10 +419,10 @@ class TFLongformerLMHead(tf.keras.layers.Layer):
 
         self.config = config
         self.hidden_size = config.hidden_size
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.act = get_tf_activation("gelu")
 
         # The output weights are the same as the input embeddings, but there is
@@ -476,7 +471,7 @@ class TFLongformerLMHead(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFLongformerEmbeddings(tf.keras.layers.Layer):
+class TFLongformerEmbeddings(keras.layers.Layer):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing and some extra casting.
     """
@@ -489,8 +484,8 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
         self.hidden_size = config.hidden_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
@@ -583,11 +578,11 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->Longformer
-class TFLongformerIntermediate(tf.keras.layers.Layer):
+class TFLongformerIntermediate(keras.layers.Layer):
     def __init__(self, config: LongformerConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
@@ -613,15 +608,15 @@ class TFLongformerIntermediate(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->Longformer
-class TFLongformerOutput(tf.keras.layers.Layer):
+class TFLongformerOutput(keras.layers.Layer):
     def __init__(self, config: LongformerConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -644,11 +639,11 @@ class TFLongformerOutput(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->Longformer
-class TFLongformerPooler(tf.keras.layers.Layer):
+class TFLongformerPooler(keras.layers.Layer):
     def __init__(self, config: LongformerConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
@@ -674,15 +669,15 @@ class TFLongformerPooler(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->Longformer
-class TFLongformerSelfOutput(tf.keras.layers.Layer):
+class TFLongformerSelfOutput(keras.layers.Layer):
     def __init__(self, config: LongformerConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -704,7 +699,7 @@ class TFLongformerSelfOutput(tf.keras.layers.Layer):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
-class TFLongformerSelfAttention(tf.keras.layers.Layer):
+class TFLongformerSelfAttention(keras.layers.Layer):
     def __init__(self, config, layer_id, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -718,40 +713,40 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         self.num_heads = config.num_attention_heads
         self.head_dim = int(config.hidden_size / config.num_attention_heads)
         self.embed_dim = config.hidden_size
-        self.query = tf.keras.layers.Dense(
+        self.query = keras.layers.Dense(
             self.embed_dim,
             kernel_initializer=get_initializer(config.initializer_range),
             name="query",
         )
-        self.key = tf.keras.layers.Dense(
+        self.key = keras.layers.Dense(
             self.embed_dim,
             kernel_initializer=get_initializer(config.initializer_range),
             name="key",
         )
-        self.value = tf.keras.layers.Dense(
+        self.value = keras.layers.Dense(
             self.embed_dim,
             kernel_initializer=get_initializer(config.initializer_range),
             name="value",
         )
 
         # separate projection layers for tokens with global attention
-        self.query_global = tf.keras.layers.Dense(
+        self.query_global = keras.layers.Dense(
             self.embed_dim,
             kernel_initializer=get_initializer(config.initializer_range),
             name="query_global",
         )
-        self.key_global = tf.keras.layers.Dense(
+        self.key_global = keras.layers.Dense(
             self.embed_dim,
             kernel_initializer=get_initializer(config.initializer_range),
             name="key_global",
         )
-        self.value_global = tf.keras.layers.Dense(
+        self.value_global = keras.layers.Dense(
             self.embed_dim,
             kernel_initializer=get_initializer(config.initializer_range),
             name="value_global",
         )
-        self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
-        self.global_dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.dropout = keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.global_dropout = keras.layers.Dropout(config.attention_probs_dropout_prob)
         self.layer_id = layer_id
         attention_window = config.attention_window[self.layer_id]
 
@@ -1571,7 +1566,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
 
 
-class TFLongformerAttention(tf.keras.layers.Layer):
+class TFLongformerAttention(keras.layers.Layer):
     def __init__(self, config, layer_id=0, **kwargs):
         super().__init__(**kwargs)
 
@@ -1612,7 +1607,7 @@ class TFLongformerAttention(tf.keras.layers.Layer):
                 self.dense_output.build(None)
 
 
-class TFLongformerLayer(tf.keras.layers.Layer):
+class TFLongformerLayer(keras.layers.Layer):
     def __init__(self, config, layer_id=0, **kwargs):
         super().__init__(**kwargs)
 
@@ -1656,7 +1651,7 @@ class TFLongformerLayer(tf.keras.layers.Layer):
                 self.longformer_output.build(None)
 
 
-class TFLongformerEncoder(tf.keras.layers.Layer):
+class TFLongformerEncoder(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -1744,7 +1739,7 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFLongformerMainLayer(tf.keras.layers.Layer):
+class TFLongformerMainLayer(keras.layers.Layer):
     config_class = LongformerConfig
 
     def __init__(self, config, add_pooling_layer=True, **kwargs):
@@ -2006,7 +2001,7 @@ LONGFORMER_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -2288,7 +2283,7 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
 
         self.num_labels = config.num_labels
         self.longformer = TFLongformerMainLayer(config, add_pooling_layer=False, name="longformer")
-        self.qa_outputs = tf.keras.layers.Dense(
+        self.qa_outputs = keras.layers.Dense(
             config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
             name="qa_outputs",
@@ -2414,19 +2409,19 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
                 self.qa_outputs.build([None, None, self.config.hidden_size])
 
 
-class TFLongformerClassificationHead(tf.keras.layers.Layer):
+class TFLongformerClassificationHead(keras.layers.Layer):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
             name="dense",
         )
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.out_proj = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
+        self.out_proj = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
         )
         self.config = config
@@ -2580,8 +2575,8 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         super().__init__(config, *inputs, **kwargs)
 
         self.longformer = TFLongformerMainLayer(config, name="longformer")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
+        self.classifier = keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config
@@ -2708,8 +2703,8 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
 
         self.num_labels = config.num_labels
         self.longformer = TFLongformerMainLayer(config=config, add_pooling_layer=False, name="longformer")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
+        self.classifier = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config

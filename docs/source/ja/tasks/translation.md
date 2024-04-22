@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 このガイドでは、次の方法を説明します。
 
-1. [OPUS Books](https://huggingface.co/datasets/opus_books) データセットの英語-フランス語サブセットの [T5](https://huggingface.co/t5-small) を微調整して、英語のテキストを次の形式に翻訳します。フランス語。
+1. [OPUS Books](https://huggingface.co/datasets/opus_books) データセットの英語-フランス語サブセットの [T5](https://huggingface.co/google-t5/t5-small) を微調整して、英語のテキストを次の形式に翻訳します。フランス語。
 2. 微調整されたモデルを推論に使用します。
 
 <Tip>
@@ -88,7 +88,7 @@ pip install transformers datasets evaluate sacrebleu
 ```py
 >>> from transformers import AutoTokenizer
 
->>> checkpoint = "t5-small"
+>>> checkpoint = "google-t5/t5-small"
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 ```
 
@@ -208,7 +208,7 @@ pip install transformers datasets evaluate sacrebleu
 ```py
 >>> training_args = Seq2SeqTrainingArguments(
 ...     output_dir="my_awesome_opus_books_model",
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     learning_rate=2e-5,
 ...     per_device_train_batch_size=16,
 ...     per_device_eval_batch_size=16,
@@ -349,7 +349,10 @@ TensorFlow でモデルを微調整するには、オプティマイザー関数
 ```py
 >>> from transformers import pipeline
 
->>> translator = pipeline("translation", model="my_awesome_opus_books_model")
+# Change `xx` to the language of the input and `yy` to the language of the desired output.
+# Examples: "en" for English, "fr" for French, "de" for German, "es" for Spanish, "zh" for Chinese, etc; translation_en_to_fr translates English to French
+# You can view all the lists of languages here - https://huggingface.co/languages
+>>> translator = pipeline("translation_xx_to_yy", model="my_awesome_opus_books_model")
 >>> translator(text)
 [{'translation_text': 'Legumes partagent des ressources avec des bactéries azotantes.'}]
 ```

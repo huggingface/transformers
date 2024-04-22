@@ -41,17 +41,8 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "Salesforce/blip-vqa-base"
 
-BLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Salesforce/blip-vqa-base",
-    "Salesforce/blip-vqa-capfilt-large",
-    "Salesforce/blip-image-captioning-base",
-    "Salesforce/blip-image-captioning-large",
-    "Salesforce/blip-itm-base-coco",
-    "Salesforce/blip-itm-large-coco",
-    "Salesforce/blip-itm-base-flickr",
-    "Salesforce/blip-itm-large-flickr",
-    # See all BLIP models at https://huggingface.co/models?filter=blip
-]
+
+from ..deprecated._archive_maps import BLIP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss
@@ -98,8 +89,8 @@ class BlipForConditionalGenerationModelOutput(ModelOutput):
     logits: Optional[Tuple[torch.FloatTensor]] = None
     image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
     @property
     def decoder_logits(self):
@@ -140,8 +131,8 @@ class BlipTextVisionModelOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -181,9 +172,9 @@ class BlipImageTextMatchingModelOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     vision_pooler_output: Optional[torch.FloatTensor] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     question_embeds: Optional[Tuple[torch.FloatTensor]] = None
 
 

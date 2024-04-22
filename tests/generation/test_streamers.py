@@ -89,8 +89,8 @@ class StreamerTester(unittest.TestCase):
         # Tests that we can pass `decode_kwargs` to the streamer to control how the tokens are decoded. Must be tested
         # with actual models -- the dummy models' tokenizers are not aligned with their models, and
         # `skip_special_tokens=True` has no effect on them
-        tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
-        model = AutoModelForCausalLM.from_pretrained("distilgpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
+        model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2").to(torch_device)
         model.config.eos_token_id = -1
 
         input_ids = torch.ones((1, 5), device=torch_device).long() * model.config.bos_token_id

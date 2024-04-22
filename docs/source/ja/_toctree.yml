@@ -300,6 +300,8 @@
         title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
+      - local: model_doc/dialogpt
+        title: DialoGPT
       title: 文章モデル
     - isExpanded: false
       sections:
@@ -317,6 +319,14 @@
         title: CvT
       - local: model_doc/deformable_detr
         title: Deformable DETR
+      - local: model_doc/deit
+        title: DeiT
+      - local: model_doc/deta
+        title: DETA
+      - local: model_doc/detr
+        title: DETR
+      - local: model_doc/dinat
+        title: DiNAT
       title: ビジョンモデル
     - isExpanded: false
       sections:
@@ -351,6 +361,8 @@
         title: CLVP
       - local: model_doc/data2vec
         title: Data2Vec
+      - local: model_doc/deplot
+        title: DePlot
       title: マルチモーダルモデル
     - isExpanded: false
       sections:

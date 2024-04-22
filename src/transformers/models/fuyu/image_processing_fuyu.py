@@ -35,6 +35,7 @@ from ...image_utils import (
     is_valid_image,
     make_list_of_images,
     to_numpy_array,
+    validate_preprocess_arguments,
 )
 from ...utils import (
     TensorType,
@@ -260,6 +261,24 @@ class FuyuImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.patch_size = patch_size if patch_size is not None else {"height": 30, "width": 30}
+        self._valid_processor_keys = [
+            "images",
+            "do_resize",
+            "size",
+            "resample",
+            "do_pad",
+            "padding_value",
+            "padding_mode",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "do_rescale",
+            "rescale_factor",
+            "patch_size",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     def resize(
         self,
@@ -446,15 +465,18 @@ class FuyuImageProcessor(BaseImageProcessor):
 
         batch_images = make_list_of_list_of_images(images)
 
-        if do_resize and size is None:
-            raise ValueError("Size must be specified if do_resize is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and image_mean is None or image_std is None:
-            raise ValueError("image_mean and image_std must be specified if do_normalize is True.")
-
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_pad=do_pad,
+            size_divisibility=size,  # There is no pad divisibility in this processor, but pad requires the size arg.
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
         # All transformations expect numpy arrays.
         batch_images = [[to_numpy_array(image) for image in images] for images in batch_images]
 
@@ -684,8 +706,8 @@ class FuyuImageProcessor(BaseImageProcessor):
                 # Indices of image patches.
                 patches_mask = subseq_image_input_ids == image_placeholder_id
                 num_patches = torch.count_nonzero(patches_mask)
-                indices = torch.arange(
-                    num_patches, dtype=subseq_image_input_ids.dtype, device=subseq_image_input_ids.device
+                indices = torch.arange(num_patches, dtype=torch.int64, device=subseq_image_input_ids.device).type_as(
+                    subseq_image_input_ids
                 )
 
                 # Place those indices in the image input ids token stream, with -1 representing non-index tokens.

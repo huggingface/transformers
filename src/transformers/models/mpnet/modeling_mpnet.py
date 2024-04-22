@@ -45,14 +45,11 @@ _CHECKPOINT_FOR_DOC = "microsoft/mpnet-base"
 _CONFIG_FOR_DOC = "MPNetConfig"
 
 
-MPNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/mpnet-base",
-]
+from ..deprecated._archive_maps import MPNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class MPNetPreTrainedModel(PreTrainedModel):
     config_class = MPNetConfig
-    pretrained_model_archive_map = MPNET_PRETRAINED_MODEL_ARCHIVE_LIST
     base_model_prefix = "mpnet"
 
     def _init_weights(self, module):

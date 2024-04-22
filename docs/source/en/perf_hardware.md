@@ -64,7 +64,7 @@ Next let's have a look at one of the most important aspects when having multiple
 
 If you use multiple GPUs the way cards are inter-connected can have a huge impact on the total training time. If the GPUs are on the same physical node, you can run:
 
-```
+```bash
 nvidia-smi topo -m
 ```
 
@@ -116,7 +116,7 @@ Each new generation provides a faster bandwidth, e.g. here is a quote from [Nvid
 
 So the higher `X` you get in the report of `NVX` in the output of `nvidia-smi topo -m` the better. The generation will depend on your GPU architecture.
 
-Let's compare the execution of a gpt2 language model training over a small sample of wikitext.
+Let's compare the execution of a openai-community/gpt2 language model training over a small sample of wikitext.
 
 The results are:
 
@@ -135,7 +135,7 @@ Here is the full benchmark code and outputs:
 # DDP w/ NVLink
 
 rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 torchrun \
---nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py --model_name_or_path gpt2 \
+--nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py --model_name_or_path openai-community/gpt2 \
 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 --do_train \
 --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 
@@ -144,7 +144,7 @@ rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 torchrun \
 # DDP w/o NVLink
 
 rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 NCCL_P2P_DISABLE=1 torchrun \
---nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py --model_name_or_path gpt2 \
+--nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py --model_name_or_path openai-community/gpt2 \
 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 --do_train
 --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 

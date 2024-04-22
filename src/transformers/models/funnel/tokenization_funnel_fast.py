@@ -41,55 +41,6 @@ _model_names = [
     "xlarge-base",
 ]
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "funnel-transformer/small": "https://huggingface.co/funnel-transformer/small/resolve/main/vocab.txt",
-        "funnel-transformer/small-base": "https://huggingface.co/funnel-transformer/small-base/resolve/main/vocab.txt",
-        "funnel-transformer/medium": "https://huggingface.co/funnel-transformer/medium/resolve/main/vocab.txt",
-        "funnel-transformer/medium-base": (
-            "https://huggingface.co/funnel-transformer/medium-base/resolve/main/vocab.txt"
-        ),
-        "funnel-transformer/intermediate": (
-            "https://huggingface.co/funnel-transformer/intermediate/resolve/main/vocab.txt"
-        ),
-        "funnel-transformer/intermediate-base": (
-            "https://huggingface.co/funnel-transformer/intermediate-base/resolve/main/vocab.txt"
-        ),
-        "funnel-transformer/large": "https://huggingface.co/funnel-transformer/large/resolve/main/vocab.txt",
-        "funnel-transformer/large-base": "https://huggingface.co/funnel-transformer/large-base/resolve/main/vocab.txt",
-        "funnel-transformer/xlarge": "https://huggingface.co/funnel-transformer/xlarge/resolve/main/vocab.txt",
-        "funnel-transformer/xlarge-base": (
-            "https://huggingface.co/funnel-transformer/xlarge-base/resolve/main/vocab.txt"
-        ),
-    },
-    "tokenizer_file": {
-        "funnel-transformer/small": "https://huggingface.co/funnel-transformer/small/resolve/main/tokenizer.json",
-        "funnel-transformer/small-base": (
-            "https://huggingface.co/funnel-transformer/small-base/resolve/main/tokenizer.json"
-        ),
-        "funnel-transformer/medium": "https://huggingface.co/funnel-transformer/medium/resolve/main/tokenizer.json",
-        "funnel-transformer/medium-base": (
-            "https://huggingface.co/funnel-transformer/medium-base/resolve/main/tokenizer.json"
-        ),
-        "funnel-transformer/intermediate": (
-            "https://huggingface.co/funnel-transformer/intermediate/resolve/main/tokenizer.json"
-        ),
-        "funnel-transformer/intermediate-base": (
-            "https://huggingface.co/funnel-transformer/intermediate-base/resolve/main/tokenizer.json"
-        ),
-        "funnel-transformer/large": "https://huggingface.co/funnel-transformer/large/resolve/main/tokenizer.json",
-        "funnel-transformer/large-base": (
-            "https://huggingface.co/funnel-transformer/large-base/resolve/main/tokenizer.json"
-        ),
-        "funnel-transformer/xlarge": "https://huggingface.co/funnel-transformer/xlarge/resolve/main/tokenizer.json",
-        "funnel-transformer/xlarge-base": (
-            "https://huggingface.co/funnel-transformer/xlarge-base/resolve/main/tokenizer.json"
-        ),
-    },
-}
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {f"funnel-transformer/{name}": 512 for name in _model_names}
-PRETRAINED_INIT_CONFIGURATION = {f"funnel-transformer/{name}": {"do_lower_case": True} for name in _model_names}
-
 
 class FunnelTokenizerFast(PreTrainedTokenizerFast):
     r"""
@@ -136,10 +87,7 @@ class FunnelTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     slow_tokenizer_class = FunnelTokenizer
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     cls_token_type_id: int = 2
 
     def __init__(

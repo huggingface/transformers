@@ -24,11 +24,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/xlm-roberta-xl": "https://huggingface.co/facebook/xlm-roberta-xl/resolve/main/config.json",
-    "facebook/xlm-roberta-xxl": "https://huggingface.co/facebook/xlm-roberta-xxl/resolve/main/config.json",
-    # See all XLM-RoBERTa-XL models at https://huggingface.co/models?filter=xlm-roberta-xl
-}
+
+from ..deprecated._archive_maps import XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class XLMRobertaXLConfig(PretrainedConfig):
@@ -88,10 +85,10 @@ class XLMRobertaXLConfig(PretrainedConfig):
     ```python
     >>> from transformers import XLMRobertaXLConfig, XLMRobertaXLModel
 
-    >>> # Initializing a XLM_ROBERTA_XL bert-base-uncased style configuration
+    >>> # Initializing a XLM_ROBERTA_XL google-bert/bert-base-uncased style configuration
     >>> configuration = XLMRobertaXLConfig()
 
-    >>> # Initializing a model (with random weights) from the bert-base-uncased style configuration
+    >>> # Initializing a model (with random weights) from the google-bert/bert-base-uncased style configuration
     >>> model = XLMRobertaXLModel(configuration)
 
     >>> # Accessing the model configuration

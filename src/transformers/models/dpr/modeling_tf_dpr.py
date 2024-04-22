@@ -23,7 +23,7 @@ from typing import Tuple, Union
 import tensorflow as tf
 
 from ...modeling_tf_outputs import TFBaseModelOutputWithPooling
-from ...modeling_tf_utils import TFModelInputType, TFPreTrainedModel, get_initializer, shape_list, unpack_inputs
+from ...modeling_tf_utils import TFModelInputType, TFPreTrainedModel, get_initializer, keras, shape_list, unpack_inputs
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -39,18 +39,12 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DPRConfig"
 
-TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/dpr-ctx_encoder-single-nq-base",
-    "facebook/dpr-ctx_encoder-multiset-base",
-]
-TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/dpr-question_encoder-single-nq-base",
-    "facebook/dpr-question_encoder-multiset-base",
-]
-TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/dpr-reader-single-nq-base",
-    "facebook/dpr-reader-multiset-base",
-]
+
+from ..deprecated._archive_maps import (  # noqa: F401, E402
+    TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,  # noqa: F401, E402
+    TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,  # noqa: F401, E402
+    TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,  # noqa: F401, E402
+)
 
 
 ##########
@@ -82,8 +76,8 @@ class TFDPRContextEncoderOutput(ModelOutput):
     """
 
     pooler_output: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -110,8 +104,8 @@ class TFDPRQuestionEncoderOutput(ModelOutput):
     """
 
     pooler_output: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -143,11 +137,11 @@ class TFDPRReaderOutput(ModelOutput):
     start_logits: tf.Tensor = None
     end_logits: tf.Tensor = None
     relevance_logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
-class TFDPREncoderLayer(tf.keras.layers.Layer):
+class TFDPREncoderLayer(keras.layers.Layer):
     base_model_prefix = "bert_model"
 
     def __init__(self, config: DPRConfig, **kwargs):
@@ -161,7 +155,7 @@ class TFDPREncoderLayer(tf.keras.layers.Layer):
             raise ValueError("Encoder hidden_size can't be zero")
         self.projection_dim = config.projection_dim
         if self.projection_dim > 0:
-            self.encode_proj = tf.keras.layers.Dense(
+            self.encode_proj = keras.layers.Dense(
                 config.projection_dim, kernel_initializer=get_initializer(config.initializer_range), name="encode_proj"
             )
 
@@ -221,7 +215,7 @@ class TFDPREncoderLayer(tf.keras.layers.Layer):
                 self.encode_proj.build(None)
 
 
-class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
+class TFDPRSpanPredictorLayer(keras.layers.Layer):
     base_model_prefix = "encoder"
 
     def __init__(self, config: DPRConfig, **kwargs):
@@ -229,10 +223,10 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
         self.config = config
         self.encoder = TFDPREncoderLayer(config, name="encoder")
 
-        self.qa_outputs = tf.keras.layers.Dense(
+        self.qa_outputs = keras.layers.Dense(
             2, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
-        self.qa_classifier = tf.keras.layers.Dense(
+        self.qa_classifier = keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="qa_classifier"
         )
 
@@ -409,7 +403,7 @@ TF_DPR_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a Tensorflow [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)
+    This model is also a Tensorflow [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)
     subclass. Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to
     general usage and behavior.
 

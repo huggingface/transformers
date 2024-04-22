@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 మీరు ప్రారంభించడానికి ముందు, మీరు అవసరమైన అన్ని లైబ్రరీలను ఇన్‌స్టాల్ చేశారని నిర్ధారించుకోండి:
 
 ```bash
-!pip install transformers datasets
+!pip install transformers datasets evaluate accelerate
 ```
 
 మీరు మీ ప్రాధాన్య యంత్ర అభ్యాస ఫ్రేమ్‌వర్క్‌ను కూడా ఇన్‌స్టాల్ చేయాలి:
@@ -81,7 +81,7 @@ Here is the translation in Telugu:
 >>> classifier = pipeline("sentiment-analysis")
 ```
 
-సెంటిమెంట్ విశ్లేషణ కోసం [`pipeline`] డిఫాల్ట్ [ప్రీట్రైన్డ్ మోడల్](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english) మరియు టోకెనైజర్‌ని డౌన్‌లోడ్ చేస్తుంది మరియు కాష్ చేస్తుంది. ఇప్పుడు మీరు మీ లక్ష్య వచనంలో `classifier`ని ఉపయోగించవచ్చు:
+సెంటిమెంట్ విశ్లేషణ కోసం [`pipeline`] డిఫాల్ట్ [ప్రీట్రైన్డ్ మోడల్](https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english) మరియు టోకెనైజర్‌ని డౌన్‌లోడ్ చేస్తుంది మరియు కాష్ చేస్తుంది. ఇప్పుడు మీరు మీ లక్ష్య వచనంలో `classifier`ని ఉపయోగించవచ్చు:
 
 ```py
 >>> classifier("We are very happy to show you the 🤗 Transformers library.")
@@ -389,7 +389,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ```py
 >>> from transformers import AutoConfig
 
->>> my_config = AutoConfig.from_pretrained("distilbert-base-uncased", n_heads=12)
+>>> my_config = AutoConfig.from_pretrained("distilbert/distilbert-base-uncased", n_heads=12)
 ```
 
 <frameworkcontent>
@@ -425,7 +425,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ```py
    >>> from transformers import AutoModelForSequenceClassification
 
-   >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+   >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
    ```
 
 2. [`TrainingArguments`] మీరు నేర్చుకునే రేటు, బ్యాచ్ పరిమాణం మరియు శిక్షణ పొందవలసిన యుగాల సంఖ్య వంటి మార్చగల మోడల్ హైపర్‌పారామీటర్‌లను కలిగి ఉంది. మీరు ఎలాంటి శిక్షణా వాదనలను పేర్కొనకుంటే డిఫాల్ట్ విలువలు ఉపయోగించబడతాయి:
@@ -446,7 +446,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ```py
    >>> from transformers import AutoTokenizer
 
-   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
    ```
 
 4. డేటాసెట్‌ను లోడ్ చేయండి:
@@ -511,13 +511,13 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 ## TensorFlowతో శిక్షణ పొందండి
 
-అన్ని మోడల్‌లు ప్రామాణికమైన [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) కాబట్టి వాటిని [Keras]తో TensorFlowలో శిక్షణ పొందవచ్చు(https: //keras.io/) API. 🤗 ట్రాన్స్‌ఫార్మర్‌లు మీ డేటాసెట్‌ని సులభంగా `tf.data.Dataset`గా లోడ్ చేయడానికి [`~TFPreTrainedModel.prepare_tf_dataset`] పద్ధతిని అందజేస్తుంది కాబట్టి మీరు వెంటనే Keras' [`compile`](https://keras.io /api/models/model_training_apis/#compile-method) మరియు [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) పద్ధతులు.
+అన్ని మోడల్‌లు ప్రామాణికమైన [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) కాబట్టి వాటిని [Keras]తో TensorFlowలో శిక్షణ పొందవచ్చు(https: //keras.io/) API. 🤗 ట్రాన్స్‌ఫార్మర్‌లు మీ డేటాసెట్‌ని సులభంగా `tf.data.Dataset`గా లోడ్ చేయడానికి [`~TFPreTrainedModel.prepare_tf_dataset`] పద్ధతిని అందజేస్తుంది కాబట్టి మీరు వెంటనే Keras' [`compile`](https://keras.io/api/models/model_training_apis/#compile-method) మరియు [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) పద్ధతులు.
 
 1. మీరు [`TFPreTrainedModel`] లేదా [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model)తో ప్రారంభిస్తారు:
    ```py
    >>> from transformers import TFAutoModelForSequenceClassification
 
-   >>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+   >>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
    ```
 
 2. టోకెనైజర్, ఇమేజ్ ప్రాసెసర్, ఫీచర్ ఎక్స్‌ట్రాక్టర్ లేదా ప్రాసెసర్ వంటి ప్రీప్రాసెసింగ్ క్లాస్‌ని లోడ్ చేయండి:
@@ -525,7 +525,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ```py
    >>> from transformers import AutoTokenizer
 
-   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
    ```
 
 3. డేటాసెట్‌ను టోకనైజ్ చేయడానికి ఒక ఫంక్షన్‌ను సృష్టించండి:

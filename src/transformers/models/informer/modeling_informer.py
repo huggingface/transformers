@@ -40,10 +40,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "InformerConfig"
 
 
-INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "huggingface/informer-tourism-monthly",
-    # See all Informer models at https://huggingface.co/models?filter=informer
-]
+from ..deprecated._archive_maps import INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesFeatureEmbedder with TimeSeries->Informer
@@ -893,7 +890,7 @@ class InformerPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
+        elif isinstance(module, nn.Embedding) and not isinstance(module, InformerSinusoidalPositionalEmbedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()

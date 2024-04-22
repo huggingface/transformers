@@ -87,11 +87,11 @@ pip install -r requirements.txt
 <frameworkcontent>
 <pt>
 
-Lo script di esempio scarica e pre-processa un dataset dalla libreria 🤗 [Datasets](https://huggingface.co/docs/datasets/). Successivamente, lo script esegue il fine-tuning su un dataset usando il [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) su un'architettura che supporta la summarization. Il seguente esempio mostra come eseguire il fine-tuning di [T5-small](https://huggingface.co/t5-small) sul dataset [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). Il modello T5 richiede un parametro addizionale `source_prefix` a causa del modo in cui è stato addestrato. Questo prefisso permette a T5 di sapere che si tratta di un task di summarization.
+Lo script di esempio scarica e pre-processa un dataset dalla libreria 🤗 [Datasets](https://huggingface.co/docs/datasets/). Successivamente, lo script esegue il fine-tuning su un dataset usando il [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) su un'architettura che supporta la summarization. Il seguente esempio mostra come eseguire il fine-tuning di [T5-small](https://huggingface.co/google-t5/t5-small) sul dataset [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). Il modello T5 richiede un parametro addizionale `source_prefix` a causa del modo in cui è stato addestrato. Questo prefisso permette a T5 di sapere che si tratta di un task di summarization.
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -105,11 +105,11 @@ python examples/pytorch/summarization/run_summarization.py \
 ```
 </pt>
 <tf>
-Lo script di esempio scarica e pre-processa un dataset dalla libreria 🤗 [Datasets](https://huggingface.co/docs/datasets/). Successivamente, lo script esegue il fine-tuning su un dataset usando Keras su un'architettura che supporta la summarization. Il seguente esempio mostra come eseguire il fine-tuning di [T5-small](https://huggingface.co/t5-small) sul dataset [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). Il modello T5 richiede un parametro addizionale `source_prefix` a causa del modo in cui è stato addestrato. Questo prefisso permette a T5 di sapere che si tratta di un task di summarization.
+Lo script di esempio scarica e pre-processa un dataset dalla libreria 🤗 [Datasets](https://huggingface.co/docs/datasets/). Successivamente, lo script esegue il fine-tuning su un dataset usando Keras su un'architettura che supporta la summarization. Il seguente esempio mostra come eseguire il fine-tuning di [T5-small](https://huggingface.co/google-t5/t5-small) sul dataset [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). Il modello T5 richiede un parametro addizionale `source_prefix` a causa del modo in cui è stato addestrato. Questo prefisso permette a T5 di sapere che si tratta di un task di summarization.
 
 ```bash
 python examples/tensorflow/summarization/run_summarization.py  \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --dataset_name cnn_dailymail \
     --dataset_config "3.0.0" \
     --output_dir /tmp/tst-summarization  \
@@ -133,7 +133,7 @@ Il [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) supp
 torchrun \
     --nproc_per_node 8 pytorch/summarization/run_summarization.py \
     --fp16 \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -157,7 +157,7 @@ Le Tensor Processing Units (TPU) sono state progettate per migliorare le prestaz
 ```bash
 python xla_spawn.py --num_cores 8 \
     summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -176,7 +176,7 @@ Le Tensor Processing Units (TPU) sono state progettate per migliorare le prestaz
 ```bash
 python run_summarization.py  \
     --tpu name_of_tpu_resource \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --dataset_name cnn_dailymail \
     --dataset_config "3.0.0" \
     --output_dir /tmp/tst-summarization  \
@@ -214,7 +214,7 @@ Ora sei pronto per avviare l'addestramento:
 
 ```bash
 accelerate launch run_summarization_no_trainer.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --dataset_name cnn_dailymail \
     --dataset_config "3.0.0" \
     --source_prefix "summarize: " \
@@ -233,7 +233,7 @@ Uno script di summarization usando un dataset personalizzato sarebbe simile a qu
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --train_file path_to_csv_or_jsonlines_file \
@@ -258,7 +258,7 @@ python examples/pytorch/summarization/run_summarization.py \
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --max_train_samples 50 \
     --max_eval_samples 50 \
     --max_predict_samples 50 \
@@ -288,7 +288,7 @@ Il primo metodo usa l'argomento `output_dir previous_output_dir` per riavviare l
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -305,7 +305,7 @@ Il secondo metodo usa l'argomento `resume_from_checkpoint path_to_specific_check
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -335,7 +335,7 @@ Il seguente esempio mostra come caricare un modello specificando il nome del rep
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \

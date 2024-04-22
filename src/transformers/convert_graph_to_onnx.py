@@ -61,9 +61,9 @@ class OnnxConverterArgumentParser(ArgumentParser):
             "--model",
             type=str,
             required=True,
-            help="Model's id or path (ex: bert-base-cased)",
+            help="Model's id or path (ex: google-bert/bert-base-cased)",
         )
-        self.add_argument("--tokenizer", type=str, help="Tokenizer's id or path (ex: bert-base-cased)")
+        self.add_argument("--tokenizer", type=str, help="Tokenizer's id or path (ex: google-bert/bert-base-cased)")
         self.add_argument(
             "--framework",
             type=str,

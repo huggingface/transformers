@@ -35,7 +35,11 @@ if is_torch_available():
     import torch
 
     from transformers import InformerConfig, InformerForPrediction, InformerModel
-    from transformers.models.informer.modeling_informer import InformerDecoder, InformerEncoder
+    from transformers.models.informer.modeling_informer import (
+        InformerDecoder,
+        InformerEncoder,
+        InformerSinusoidalPositionalEmbedding,
+    )
 
 
 @require_torch
@@ -164,6 +168,12 @@ class InformerModelTester:
 
         self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
 
+        embed_positions = InformerSinusoidalPositionalEmbedding(
+            config.context_length + config.prediction_length, config.d_model
+        )
+        self.parent.assertTrue(torch.equal(model.encoder.embed_positions.weight, embed_positions.weight))
+        self.parent.assertTrue(torch.equal(model.decoder.embed_positions.weight, embed_positions.weight))
+
         with tempfile.TemporaryDirectory() as tmpdirname:
             decoder = model.get_decoder()
             decoder.save_pretrained(tmpdirname)
@@ -277,6 +287,10 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         pass
 
     def test_determinism(self):
+        pass
+
+    @unittest.skip("randomly selects U keys while calculating attentions")
+    def test_batching_equivalence(self):
         pass
 
     @unittest.skip(

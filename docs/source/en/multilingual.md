@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-There are several multilingual models in 🤗 Transformers, and their inference usage differs from monolingual models. Not *all* multilingual model usage is different though. Some models, like [bert-base-multilingual-uncased](https://huggingface.co/bert-base-multilingual-uncased), can be used just like a monolingual model. This guide will show you how to use multilingual models whose usage differs for inference.
+There are several multilingual models in 🤗 Transformers, and their inference usage differs from monolingual models. Not *all* multilingual model usage is different though. Some models, like [google-bert/bert-base-multilingual-uncased](https://huggingface.co/google-bert/bert-base-multilingual-uncased), can be used just like a monolingual model. This guide will show you how to use multilingual models whose usage differs for inference.
 
 ## XLM
 
@@ -28,24 +28,24 @@ XLM has ten different checkpoints, only one of which is monolingual. The nine re
 
 The following XLM models use language embeddings to specify the language used at inference:
 
-- `xlm-mlm-ende-1024` (Masked language modeling, English-German)
-- `xlm-mlm-enfr-1024` (Masked language modeling, English-French)
-- `xlm-mlm-enro-1024` (Masked language modeling, English-Romanian)
-- `xlm-mlm-xnli15-1024` (Masked language modeling, XNLI languages)
-- `xlm-mlm-tlm-xnli15-1024` (Masked language modeling + translation, XNLI languages)
-- `xlm-clm-enfr-1024` (Causal language modeling, English-French)
-- `xlm-clm-ende-1024` (Causal language modeling, English-German)
+- `FacebookAI/xlm-mlm-ende-1024` (Masked language modeling, English-German)
+- `FacebookAI/xlm-mlm-enfr-1024` (Masked language modeling, English-French)
+- `FacebookAI/xlm-mlm-enro-1024` (Masked language modeling, English-Romanian)
+- `FacebookAI/xlm-mlm-xnli15-1024` (Masked language modeling, XNLI languages)
+- `FacebookAI/xlm-mlm-tlm-xnli15-1024` (Masked language modeling + translation, XNLI languages)
+- `FacebookAI/xlm-clm-enfr-1024` (Causal language modeling, English-French)
+- `FacebookAI/xlm-clm-ende-1024` (Causal language modeling, English-German)
 
 Language embeddings are represented as a tensor of the same shape as the `input_ids` passed to the model. The values in these tensors depend on the language used and are identified by the tokenizer's `lang2id` and `id2lang` attributes.
 
-In this example, load the `xlm-clm-enfr-1024` checkpoint (Causal language modeling, English-French):
+In this example, load the `FacebookAI/xlm-clm-enfr-1024` checkpoint (Causal language modeling, English-French):
 
 ```py
 >>> import torch
 >>> from transformers import XLMTokenizer, XLMWithLMHeadModel
 
->>> tokenizer = XLMTokenizer.from_pretrained("xlm-clm-enfr-1024")
->>> model = XLMWithLMHeadModel.from_pretrained("xlm-clm-enfr-1024")
+>>> tokenizer = XLMTokenizer.from_pretrained("FacebookAI/xlm-clm-enfr-1024")
+>>> model = XLMWithLMHeadModel.from_pretrained("FacebookAI/xlm-clm-enfr-1024")
 ```
 
 The `lang2id` attribute of the tokenizer displays this model's languages and their ids:
@@ -83,8 +83,8 @@ The [run_generation.py](https://github.com/huggingface/transformers/tree/main/ex
 
 The following XLM models do not require language embeddings during inference:
 
-- `xlm-mlm-17-1280` (Masked language modeling, 17 languages)
-- `xlm-mlm-100-1280` (Masked language modeling, 100 languages)
+- `FacebookAI/xlm-mlm-17-1280` (Masked language modeling, 17 languages)
+- `FacebookAI/xlm-mlm-100-1280` (Masked language modeling, 100 languages)
 
 These models are used for generic sentence representations, unlike the previous XLM checkpoints.
 
@@ -92,8 +92,8 @@ These models are used for generic sentence representations, unlike the previous 
 
 The following BERT models can be used for multilingual tasks:
 
-- `bert-base-multilingual-uncased` (Masked language modeling + Next sentence prediction, 102 languages)
-- `bert-base-multilingual-cased` (Masked language modeling + Next sentence prediction, 104 languages)
+- `google-bert/bert-base-multilingual-uncased` (Masked language modeling + Next sentence prediction, 102 languages)
+- `google-bert/bert-base-multilingual-cased` (Masked language modeling + Next sentence prediction, 104 languages)
 
 These models do not require language embeddings during inference. They should identify the language from the
 context and infer accordingly.
@@ -102,8 +102,8 @@ context and infer accordingly.
 
 The following XLM-RoBERTa models can be used for multilingual tasks:
 
-- `xlm-roberta-base` (Masked language modeling, 100 languages)
-- `xlm-roberta-large` (Masked language modeling, 100 languages)
+- `FacebookAI/xlm-roberta-base` (Masked language modeling, 100 languages)
+- `FacebookAI/xlm-roberta-large` (Masked language modeling, 100 languages)
 
 XLM-RoBERTa was trained on 2.5TB of newly created and cleaned CommonCrawl data in 100 languages. It provides strong gains over previously released multilingual models like mBERT or XLM on downstream tasks like classification, sequence labeling, and question answering.
 

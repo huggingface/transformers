@@ -33,10 +33,6 @@ from transformers import BertConfig, BertModel, PreTrainedModel
 
 MAX_SIZE = 5000
 
-BERTABS_FINETUNED_MODEL_ARCHIVE_LIST = [
-    "remi/bertabs-finetuned-cnndm-extractive-abstractive-summarization",
-]
-
 
 class BertAbsPreTrainedModel(PreTrainedModel):
     config_class = BertAbsConfig
@@ -128,7 +124,7 @@ class Bert(nn.Module):
 
     def __init__(self):
         super().__init__()
-        config = BertConfig.from_pretrained("bert-base-uncased")
+        config = BertConfig.from_pretrained("google-bert/bert-base-uncased")
         self.model = BertModel(config)
 
     def forward(self, input_ids, attention_mask=None, token_type_ids=None, **kwargs):

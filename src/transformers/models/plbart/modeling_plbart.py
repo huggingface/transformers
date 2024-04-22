@@ -54,12 +54,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "uclanlp/plbart-base"
 _CONFIG_FOR_DOC = "PLBartConfig"
 
-PLBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "uclanlp/plbart-base",
-    "uclanlp/plbart-cs-java",
-    "uclanlp/plbart-multi_task-all",
-    # See all PLBART models at https://huggingface.co/models?filter=plbart
-]
+
+from ..deprecated._archive_maps import PLBART_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.mbart.modeling_mbart.shift_tokens_right

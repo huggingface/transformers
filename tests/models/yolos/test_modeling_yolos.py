@@ -31,7 +31,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import YolosForObjectDetection, YolosModel
-    from transformers.models.yolos.modeling_yolos import YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -168,7 +167,9 @@ class YolosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     all_model_classes = (YolosModel, YolosForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": YolosModel, "object-detection": YolosForObjectDetection} if is_torch_available() else {}
+        {"image-feature-extraction": YolosModel, "object-detection": YolosForObjectDetection}
+        if is_torch_available()
+        else {}
     )
 
     test_pruning = False
@@ -317,9 +318,9 @@ class YolosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = YolosModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "hustvl/yolos-small"
+        model = YolosModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

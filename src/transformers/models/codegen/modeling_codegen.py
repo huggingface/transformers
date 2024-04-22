@@ -34,27 +34,13 @@ _CHECKPOINT_FOR_DOC = "Salesforce/codegen-2B-mono"
 _CONFIG_FOR_DOC = "CodeGenConfig"
 
 
-CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Salesforce/codegen-350M-nl",
-    "Salesforce/codegen-350M-multi",
-    "Salesforce/codegen-350M-mono",
-    "Salesforce/codegen-2B-nl",
-    "Salesforce/codegen-2B-multi",
-    "Salesforce/codegen-2B-mono",
-    "Salesforce/codegen-6B-nl",
-    "Salesforce/codegen-6B-multi",
-    "Salesforce/codegen-6B-mono",
-    "Salesforce/codegen-16B-nl",
-    "Salesforce/codegen-16B-multi",
-    "Salesforce/codegen-16B-mono",
-    # See all CodeGen models at https://huggingface.co/models?filter=codegen
-]
+from ..deprecated._archive_maps import CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.gptj.modeling_gptj.create_sinusoidal_positions
 def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
-    inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2) / dim))
-    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.float), inv_freq).float()
+    inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / dim))
+    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.int64).float(), inv_freq).float()
     return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
 
 
@@ -266,6 +252,7 @@ class CodeGenMLP(nn.Module):
 
 # Copied from transformers.models.gptj.modeling_gptj.GPTJBlock with GPTJ->CodeGen
 class CodeGenBlock(nn.Module):
+    # Ignore copy
     def __init__(self, config):
         super().__init__()
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd

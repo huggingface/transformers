@@ -28,17 +28,14 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Mod
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import prune_linear_layer
 from ...utils import logging
-from ..auto import AutoBackbone
+from ...utils.backbone_utils import load_backbone
 from .configuration_tvp import TvpConfig
 
 
 logger = logging.get_logger(__name__)
 
-TVP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Intel/tvp-base",
-    "Intel/tvp-base-ANet",
-    # See all Tvp models at https://huggingface.co/models?filter=tvp
-]
+
+from ..deprecated._archive_maps import TVP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -61,8 +58,8 @@ class TvpVideoGroundingOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 class TvpLoss(nn.Module):
@@ -148,7 +145,7 @@ class TvpLoss(nn.Module):
 class TvpVisionModel(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.backbone = AutoBackbone.from_config(config.backbone_config)
+        self.backbone = load_backbone(config)
         self.grid_encoder_conv = nn.Conv2d(
             config.backbone_config.hidden_sizes[-1],
             config.hidden_size,
@@ -679,7 +676,7 @@ class TvpFramePadPrompter(nn.Module):
             prompt = torch.cat([self.pad_left, base, self.pad_right], dim=4)
             prompt = torch.cat([self.pad_up, prompt, self.pad_down], dim=3)
             prompt = torch.cat(pixel_values.size(0) * [prompt])
-            pixel_values += prompt.to(pixel_values.dtype)
+            pixel_values = pixel_values + prompt.to(pixel_values.dtype)
         return pixel_values
 
 

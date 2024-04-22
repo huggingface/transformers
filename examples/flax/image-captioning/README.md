@@ -34,7 +34,7 @@ Next, we create a [FlaxVisionEncoderDecoderModel](https://huggingface.co/docs/tr
 python3 create_model_from_encoder_decoder_models.py \
     --output_dir model \
     --encoder_model_name_or_path google/vit-base-patch16-224-in21k \
-    --decoder_model_name_or_path gpt2
+    --decoder_model_name_or_path openai-community/gpt2
 ```
 
 ### Train the model

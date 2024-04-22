@@ -57,10 +57,8 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 _IMAGE_CLASS_CHECKPOINT = "facebook/data2vec-vision-base-ft1k"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "remote control, remote"
 
-DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/data2vec-vision-base-ft1k",
-    # See all Data2VecVision models at https://huggingface.co/models?filter=data2vec-vision
-]
+
+from ..deprecated._archive_maps import DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -576,6 +574,7 @@ class Data2VecVisionPreTrainedModel(PreTrainedModel):
     base_model_prefix = "data2vec_vision"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["Data2VecVisionLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

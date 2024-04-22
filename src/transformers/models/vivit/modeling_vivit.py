@@ -36,10 +36,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "google/vivit-b-16x2-kinetics400"
 _CONFIG_FOR_DOC = "VivitConfig"
 
-VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/vivit-b-16x2-kinetics400",
-    # See all Vivit models at https://huggingface.co/models?filter=vivit
-]
+
+from ..deprecated._archive_maps import VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class VivitTubeletEmbeddings(nn.Module):
@@ -389,6 +387,7 @@ class VivitPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vivit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = []
 
     def _init_weights(self, module):
         """Initialize the weights"""

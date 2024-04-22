@@ -25,7 +25,7 @@ from transformers import (
     FastSpeech2ConformerWithHifiGanConfig,
     is_torch_available,
 )
-from transformers.testing_utils import require_g2p_en, require_torch, slow, torch_device
+from transformers.testing_utils import require_g2p_en, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
@@ -117,6 +117,7 @@ class FastSpeech2ConformerModelTester:
         return config, inputs_dict
 
 
+@require_torch_accelerator
 @require_torch
 class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FastSpeech2ConformerModel,) if is_torch_available() else ()
@@ -346,6 +347,13 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    @unittest.skip(
+        "FastSpeech2Conformer predicts durations in linear domain during inference"
+        "Even small differences on hidden states lead to different durations, due to `torch.round`"
+    )
+    def test_batching_equivalence(self):
+        pass
+
 
 @require_torch
 @require_g2p_en
@@ -532,6 +540,8 @@ class FastSpeech2ConformerWithHifiGanTester:
         return config, inputs_dict
 
 
+@require_torch_accelerator
+@require_torch
 class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FastSpeech2ConformerWithHifiGan,) if is_torch_available() else ()
     test_pruning = False
@@ -757,6 +767,13 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="FastSpeech2Conformer has no input embeddings")
     def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(
+        "FastSpeech2Conformer predicts durations in linear domain during inference"
+        "Even small differences on hidden states lead to different durations, due to `torch.round`"
+    )
+    def test_batching_equivalence(self):
         pass
 
 

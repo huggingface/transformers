@@ -43,15 +43,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "bigscience/bloom-560m"
 _CONFIG_FOR_DOC = "BloomConfig"
 
-BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "bigscience/bigscience-small-testing",
-    "bigscience/bloom-560m",
-    "bigscience/bloom-1b1",
-    "bigscience/bloom-1b7",
-    "bigscience/bloom-3b",
-    "bigscience/bloom-7b1",
-    "bigscience/bloom",
-]
+
+from ..deprecated._archive_maps import BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:

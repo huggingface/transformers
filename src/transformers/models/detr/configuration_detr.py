@@ -27,10 +27,8 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/detr-resnet-50": "https://huggingface.co/facebook/detr-resnet-50/resolve/main/config.json",
-    # See all DETR models at https://huggingface.co/models?filter=detr
-}
+
+from ..deprecated._archive_maps import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class DetrConfig(PretrainedConfig):
@@ -93,11 +91,14 @@ class DetrConfig(PretrainedConfig):
         position_embedding_type (`str`, *optional*, defaults to `"sine"`):
             Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
         backbone (`str`, *optional*, defaults to `"resnet50"`):
-            Name of convolutional backbone to use in case `use_timm_backbone` = `True`. Supports any convolutional
-            backbone from the timm package. For a list of all available models, see [this
-            page](https://rwightman.github.io/pytorch-image-models/#load-a-pretrained-model).
-        use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
-            Whether to use pretrained weights for the backbone. Only supported when `use_timm_backbone` = `True`.
+            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
+            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
+            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
+        use_pretrained_backbone (`bool`, *optional*, `True`):
+            Whether to use pretrained weights for the backbone.
+        backbone_kwargs (`dict`, *optional*):
+            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
+            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         dilation (`bool`, *optional*, defaults to `False`):
             Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
             `use_timm_backbone` = `True`.
@@ -166,6 +167,7 @@ class DetrConfig(PretrainedConfig):
         position_embedding_type="sine",
         backbone="resnet50",
         use_pretrained_backbone=True,
+        backbone_kwargs=None,
         dilation=False,
         class_cost=1,
         bbox_cost=5,
@@ -177,8 +179,19 @@ class DetrConfig(PretrainedConfig):
         eos_coefficient=0.1,
         **kwargs,
     ):
+        if not use_timm_backbone and use_pretrained_backbone:
+            raise ValueError(
+                "Loading pretrained backbone weights from the transformers library is not supported yet. `use_timm_backbone` must be set to `True` when `use_pretrained_backbone=True`"
+            )
+
+        if backbone_config is not None and backbone is not None:
+            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+
         if backbone_config is not None and use_timm_backbone:
             raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")
+
+        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
+            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
 
         if not use_timm_backbone:
             if backbone_config is None:
@@ -215,6 +228,7 @@ class DetrConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
+        self.backbone_kwargs = backbone_kwargs
         self.dilation = dilation
         # Hungarian matcher
         self.class_cost = class_cost
