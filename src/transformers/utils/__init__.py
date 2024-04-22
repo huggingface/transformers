@@ -98,6 +98,7 @@ from .import_utils import (
     USE_JAX,
     USE_TF,
     USE_TORCH,
+    XLA_FSDPV2_MIN_VERSION,
     DummyObject,
     OptionalDependencyNotAvailable,
     _LazyModule,

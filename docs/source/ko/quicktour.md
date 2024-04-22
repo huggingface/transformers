@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 시작하기 전에 필요한 라이브러리가 모두 설치되어 있는지 확인하세요:
 
 ```bash
-!pip install transformers datasets
+!pip install transformers datasets evaluate accelerate
 ```
 
 또한 선호하는 머신 러닝 프레임워크를 설치해야 합니다:

@@ -7,12 +7,14 @@ name: Self-hosted runner (scheduled)
 # `docker/transformers-pytorch-deepspeed-latest-gpu/Dockerfile`
 
 on:
-  repository_dispatch:
-  schedule:
-    - cron: "17 2 * * *"
-  push:
-    branches:
-      - run_scheduled_ci*
+  workflow_call:
+    inputs:
+      job:
+        required: true
+        type: string
+      slack_report_channel:
+        required: true
+        type: string
 
 env:
   HF_HOME: /mnt/cache
@@ -31,6 +33,7 @@ env:
 
 jobs:
   setup:
+    if: contains(fromJSON('["run_tests_gpu", "run_tests_quantization_torch_gpu"]'), inputs.job)
     name: Setup
     strategy:
       matrix:
@@ -42,6 +45,7 @@ jobs:
     outputs:
       folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
       slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
+      quantization_matrix: ${{ steps.set-matrix-quantization.outputs.quantization_matrix }}
     steps:
       - name: Update clone
         working-directory: /transformers
@@ -60,17 +64,26 @@ jobs:
         run: pip freeze
 
       - id: set-matrix
+        if: ${{ inputs.job == 'run_tests_gpu' }}
         name: Identify models to test
         working-directory: /transformers/tests
         run: |
           echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
           echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
+      
+      - id: set-matrix-quantization
+        if: ${{ inputs.job == 'run_tests_quantization_torch_gpu' }}
+        name: Identify quantization method to test
+        working-directory: /transformers/tests
+        run: |
+          echo "quantization_matrix=$(python3 -c 'import os; tests = os.getcwd(); quantization_tests = os.listdir(os.path.join(tests, "quantization")); d = sorted(list(filter(os.path.isdir, [f"quantization/{x}" for x in quantization_tests]))) ;  print(d)')" >> $GITHUB_OUTPUT
 
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
 
   run_tests_gpu:
+    if: ${{ inputs.job == 'run_tests_gpu' }}
     name: " "
     needs: setup
     strategy:
@@ -85,58 +98,8 @@ jobs:
       slice_id: ${{ matrix.slice_id }}
     secrets: inherit
 
-  run_examples_gpu:
-    name: Examples directory
-    strategy:
-      fail-fast: false
-      matrix:
-        machine_type: [single-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
-    container:
-      image: huggingface/transformers-all-latest-gpu
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
-    steps:
-      - name: Update clone
-        working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
-
-      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
-
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Environment
-        working-directory: /transformers
-        run: |
-          python3 utils/print_env.py
-
-      - name: Show installed libraries and their versions
-        working-directory: /transformers
-        run: pip freeze
-
-      - name: Run examples tests on GPU
-        working-directory: /transformers
-        run: |
-          pip install -r examples/pytorch/_tests_requirements.txt
-          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_examples_gpu examples/pytorch
-
-      - name: Failure short reports
-        if: ${{ failure() }}
-        continue-on-error: true
-        run: cat /transformers/reports/${{ matrix.machine_type }}_examples_gpu/failures_short.txt
-
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_examples_gpu"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ matrix.machine_type }}_run_examples_gpu
-          path: /transformers/reports/${{ matrix.machine_type }}_examples_gpu
-
   run_pipelines_torch_gpu:
+    if: ${{ inputs.job == 'run_pipelines_torch_gpu' }}
     name: PyTorch pipelines
     strategy:
       fail-fast: false
@@ -146,7 +109,6 @@ jobs:
     container:
       image: huggingface/transformers-pytorch-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
     steps:
       - name: Update clone
         working-directory: /transformers
@@ -181,12 +143,13 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_torch_pipeline_gpu"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.machine_type }}_run_tests_torch_pipeline_gpu
           path: /transformers/reports/${{ matrix.machine_type }}_tests_torch_pipeline_gpu
 
   run_pipelines_tf_gpu:
+    if: ${{ inputs.job == 'run_pipelines_tf_gpu' }}
     name: TensorFlow pipelines
     strategy:
       fail-fast: false
@@ -196,7 +159,6 @@ jobs:
     container:
       image: huggingface/transformers-tensorflow-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
     steps:
       - name: Update clone
         working-directory: /transformers
@@ -232,19 +194,70 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_tf_pipeline_gpu"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.machine_type }}_run_tests_tf_pipeline_gpu
           path: /transformers/reports/${{ matrix.machine_type }}_tests_tf_pipeline_gpu
 
+  run_examples_gpu:
+    if: ${{ inputs.job == 'run_examples_gpu' }}
+    name: Examples directory
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [single-gpu]
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Environment
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
+      - name: Run examples tests on GPU
+        working-directory: /transformers
+        run: |
+          pip install -r examples/pytorch/_tests_requirements.txt
+          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_examples_gpu examples/pytorch
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/${{ matrix.machine_type }}_examples_gpu/failures_short.txt
+
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_examples_gpu"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.machine_type }}_run_examples_gpu
+          path: /transformers/reports/${{ matrix.machine_type }}_examples_gpu
+
   run_all_tests_torch_cuda_extensions_gpu:
+    if: ${{ inputs.job == 'run_all_tests_torch_cuda_extensions_gpu' }}
     name: Torch CUDA extension tests
     strategy:
       fail-fast: false
       matrix:
         machine_type: [single-gpu, multi-gpu]
     runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
-    needs: setup
     container:
       image: huggingface/transformers-pytorch-deepspeed-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -292,23 +305,34 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports
           path: /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu
 
   run_tests_quantization_torch_gpu:
-    name: Quantization tests
+    if: ${{ inputs.job == 'run_tests_quantization_torch_gpu' }}
+    name: " "
+    needs: setup
     strategy:
       fail-fast: false
       matrix:
+        folders: ${{ fromJson(needs.setup.outputs.quantization_matrix) }}
         machine_type: [single-gpu, multi-gpu]
     runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
     container:
       image: huggingface/transformers-quantization-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
     steps:
+      - name: Echo folder ${{ matrix.folders }}
+        shell: bash
+        run: |
+          echo "${{ matrix.folders }}"
+          matrix_folders=${{ matrix.folders }}
+          matrix_folders=${matrix_folders/'quantization/'/'quantization_'}
+          echo "$matrix_folders"
+          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
+
       - name: Update clone
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
@@ -333,36 +357,29 @@ jobs:
       - name: Run quantization tests on GPU
         working-directory: /transformers
         run: |
-          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_quantization_torch_gpu tests/quantization
+          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_quantization_torch_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_quantization_torch_gpu/failures_short.txt
+        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_quantization_torch_gpu_${{ matrix.folders }}/failures_short.txt
 
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_quantization_torch_gpu"
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_quantization_torch_gpu_${{ env.matrix_folders }}"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.machine_type }}_run_tests_quantization_torch_gpu
-          path: /transformers/reports/${{ matrix.machine_type }}_tests_quantization_torch_gpu
+          name: ${{ matrix.machine_type }}_run_tests_quantization_torch_gpu_${{ env.matrix_folders }}
+          path: /transformers/reports/${{ matrix.machine_type }}_tests_quantization_torch_gpu_${{ matrix.folders }}
 
   run_extract_warnings:
+    # Let's only do this for the job `run_tests_gpu` to simplify the (already complex) logic.
+    if: ${{ always() && inputs.job == 'run_tests_gpu' }}
     name: Extract warnings in CI artifacts
     runs-on: ubuntu-22.04
-    if: always()
-    needs: [
-      setup,
-      run_tests_gpu,
-      run_examples_gpu,
-      run_pipelines_tf_gpu,
-      run_pipelines_torch_gpu,
-      run_all_tests_torch_cuda_extensions_gpu,
-      run_tests_quantization_torch_gpu,
-    ]
+    needs: [setup, run_tests_gpu]
     steps:
       - name: Checkout transformers
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
@@ -375,7 +392,7 @@ jobs:
       - name: Create output directory
         run: mkdir warnings_in_ci
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           path: warnings_in_ci
 
@@ -390,58 +407,32 @@ jobs:
 
       - name: Upload artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: warnings_in_ci
           path: warnings_in_ci/selected_warnings.json
 
   send_results:
-    name: Send results to webhook
-    runs-on: ubuntu-22.04
-    if: always()
+    name: Slack Report
     needs: [
       setup,
       run_tests_gpu,
-      run_examples_gpu,
-      run_pipelines_tf_gpu,
       run_pipelines_torch_gpu,
+      run_pipelines_tf_gpu,
+      run_examples_gpu,
       run_all_tests_torch_cuda_extensions_gpu,
       run_tests_quantization_torch_gpu,
       run_extract_warnings
     ]
-    steps:
-      - name: Preliminary job status
-        shell: bash
-        # For the meaning of these environment variables, see the job `Setup`
-        run: |
-          echo "Setup status: ${{ needs.setup.result }}"
-
-      - uses: actions/checkout@v3
-      - uses: actions/download-artifact@v3
-      - name: Send message to Slack
-        env:
-          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
-          CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
-          CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
-          CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
-          CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
-          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-          CI_EVENT: scheduled
-          CI_SHA: ${{ github.sha }}
-          CI_WORKFLOW_REF: ${{ github.workflow_ref }}
-          SETUP_STATUS: ${{ needs.setup.result }}
-        # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
-        # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
-        run: |
-          sudo apt-get install -y curl
-          pip install slack_sdk
-          pip show slack_sdk
-          python utils/notification_service.py "${{ needs.setup.outputs.folder_slices }}"
-
-      # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
-      - name: Failure table artifacts
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v3
-        with:
-          name: prev_ci_results
-          path: prev_ci_results
+    if: ${{ always() }}
+    uses: ./.github/workflows/slack-report.yml
+    with:
+      job: ${{ inputs.job }}
+      # This would be `skipped` if `setup` is skipped.
+      setup_status: ${{ needs.setup.result }}
+      slack_report_channel: ${{ inputs.slack_report_channel }}
+      # This would be an empty string if `setup` is skipped.
+      folder_slices: ${{ needs.setup.outputs.folder_slices }}
+      quantization_matrix: ${{ needs.setup.outputs.quantization_matrix }}
+      
+    secrets: inherit

@@ -65,9 +65,9 @@ After conversion, the model and tokenizer can be loaded via:
 >>> tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
 >>> model = LlamaForCausalLM.from_pretrained("codellama/CodeLlama-7b-hf")
 >>> PROMPT = '''def remove_non_ascii(s: str) -> str:
-    """ <FILL_ME>
-    return result
-'''
+...     """ <FILL_ME>
+...     return result
+... '''
 >>> input_ids = tokenizer(PROMPT, return_tensors="pt")["input_ids"]
 >>> generated_ids = model.generate(input_ids, max_new_tokens=128)
 
@@ -75,10 +75,10 @@ After conversion, the model and tokenizer can be loaded via:
 >>> print(PROMPT.replace("<FILL_ME>", filling))
 def remove_non_ascii(s: str) -> str:
     """ Remove non-ASCII characters from a string.
-
+<BLANKLINE>
     Args:
         s: The string to remove non-ASCII characters from.
-
+<BLANKLINE>
     Returns:
         The string with non-ASCII characters removed.
     """
@@ -87,6 +87,7 @@ def remove_non_ascii(s: str) -> str:
         if ord(c) < 128:
             result += c
     return result
+<BLANKLINE>
 ```
 
 If you only want the infilled part:
@@ -95,7 +96,8 @@ If you only want the infilled part:
 >>> import torch
 
 >>> generator = pipeline("text-generation",model="codellama/CodeLlama-7b-hf",torch_dtype=torch.float16, device_map="auto")
->>> generator('def remove_non_ascii(s: str) -> str:\n    """ <FILL_ME>\n    return result', max_new_tokens = 128, return_type = 1)
+>>> generator('def remove_non_ascii(s: str) -> str:\n    """ <FILL_ME>\n    return result', max_new_tokens = 128)
+[{'generated_text': 'def remove_non_ascii(s: str) -> str:\n    """ <FILL_ME>\n    return resultRemove non-ASCII characters from a string. """\n    result = ""\n    for c in s:\n        if ord(c) < 128:\n            result += c'}]
 ```
 
 Under the hood, the tokenizer [automatically splits by `<FILL_ME>`](https://huggingface.co/docs/transformers/main/model_doc/code_llama#transformers.CodeLlamaTokenizer.fill_token) to create a formatted input string that follows [the original training pattern](https://github.com/facebookresearch/codellama/blob/cb51c14ec761370ba2e2bc351374a79265d0465e/llama/generation.py#L402). This is more robust than preparing the pattern yourself: it avoids pitfalls, such as token glueing, that are very hard to debug.  To see how much CPU and GPU memory you need for this model or others, try [this calculator](https://huggingface.co/spaces/hf-accelerate/model-memory-usage) which can help determine that value.

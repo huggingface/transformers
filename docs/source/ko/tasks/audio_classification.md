@@ -221,7 +221,7 @@ MinDS-14 데이터 세트의 샘플링 속도는 8000khz이므로(이 정보는 
 ```py
 >>> training_args = TrainingArguments(
 ...     output_dir="my_awesome_mind_model",
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     save_strategy="epoch",
 ...     learning_rate=3e-5,
 ...     per_device_train_batch_size=32,
