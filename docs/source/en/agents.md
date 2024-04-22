@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 -->
 # Agents and tools
 
-Large Language Models (LLMs) trained to perform [causal language modeling](./tasks/language_modeling.) can tackle a wide range of tasks, but they often struggle with basic tasks like logic, calculation, and search. The worst scenario is when they perform poorly in a domain, such as math, yet still attempt to handle all the calculations themselves.
+Large Language Models (LLMs) trained to perform [causal language modeling](./tasks/language_modeling.) can tackle a wide range of tasks, but they often struggle with basic tasks like logic, calculation, and search. When prompted in domains in which they do not perform well, they often fail to generate the answer we expect them to.
 
 One approach to overcome this weakness is to create an *agent*, a program powered by an LLM. The agent is empowered by *tools* to help the agent perform an action.
 
@@ -48,12 +48,13 @@ In this tutorial, you'll learn what agents and tools are, how to build them with
 
 ### What is an agent?
 
-The definition of LLM Agents is quite broad: all systems that use LLMs as their engine, and have access to functions called **tools**.
+An agent is a system that uses an LLM as its engine, and it has access to functions called *tools*.
 
-When trying to accomplish a task, an agent can be either programmed to:
+These *tools* are functions for performing a task, and they contain all necessary description for the agent to properly use them.
 
-- devise a series of actions/tool calls and run them all at once, like our `CodeAgent`
-- or plan and execute them one by one to wait for the outcome of the each action before launching the next one, thus following a Reflexion ⇒ Action ⇒ Perception cycle. Our `ReactAgent` implements this latter framework.
+The agent can be programmed to:
+- devise a series of actions/tools and run them all at once like the `CodeAgent` for example
+- plan and execute actions/tools one by one and wait for the outcome of each action before launching the next one like the `ReactJSONAgent` for example
 
 ![Framework of a React Agent](Doc%20agents%20ac753b9a3b934eaba22f659ba994c4bd/Untitled.png)
 
@@ -171,11 +172,15 @@ Every [`~Agent.run`] operation is independent, so you can run it several times i
 
 #### ReactAgent
 
-This is the go-to agent to solve reasoning tasks, since the ReAct framework makes it really efficient to think on the basis of its previous observations.
+This is the go-to agent to solve reasoning tasks, since the ReAct framework ([Yao et al., 2022](https://huggingface.co/papers/2210.03629)) makes it really efficient to think on the basis of its previous observations.
+
+We implement two versions of ReactAgent: 
+- [`~ReactJSONAgent`] generates tool calls as a JSON in its output.
+- [`~ReactCodeAgent`] is a new type of ReactAgent that generates its tool calls as blobs of code, which works really well for LLMs that have strong coding performance.
 
 #### CodeAgent
 
-This class is the one to use when trying to execute multimodal tasks, since it natively handles different input and output types for its tools. It has a planning step, then generates python code to execute all actions at once.
+This agent has a planning step, then generates python code to execute all its actions at once. It natively handles different input and output types for its tools, thus it is the recommended choice for multimodal tasks.
 
 ##### Code execution?!
 
