@@ -1169,7 +1169,6 @@ class ModuleUtilsMixin:
                     total_numel.append(
                         param.numel() * 2 * num_bytes
                     )
-                    total_numel.append(param.numel() * 2 * nb_params)
                 else:
                     total_numel.append(param.numel())
 
