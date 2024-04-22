@@ -1473,15 +1473,22 @@ class Idefics2Model(Idefics2PreTrainedModel):
         super().__init__(config)
         self.padding_idx = self.config.text_config.pad_token_id
         self.vocab_size = self.config.text_config.vocab_size
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         self.vision_model = Idefics2VisionTransformer(config.vision_config)
         self.connector = Idefics2Connector(config)
-        self.text_model = AutoModel.from_config(config.text_config)
-
+        text_model_kwargs = {}
+        if self._use_flash_attention_2:
+            text_model_kwargs["use_flash_attention_2"] = True
+            torch_dtype = None
+            if config.text_config.torch_dtype is not None:
+                torch_dtype = config.text_config.torch_dtype
+            elif config.torch_dtype is not None:
+                torch_dtype = config.torch_dtype
+            text_model_kwargs["torch_dtype"] = torch_dtype
+        self.text_model = AutoModel.from_config(config.text_config, **text_model_kwargs)
         self.image_seq_len = config.perceiver_config.resampler_n_latents
         self.image_token_id = self.config.image_token_id
-
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         self.post_init()
 
