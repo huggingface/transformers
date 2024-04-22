@@ -2033,12 +2033,11 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         input_speech = self._load_datasamples(2)
 
-        inputs = processor(input_speech, return_tensors="pt", padding=True)
-
-        input_values = inputs.input_values.to(torch_device)
+        inputs = processor(input_speech, return_tensors="pt", padding=True, return_attention_mask=True)
+        inputs = inputs.to(torch_device)
 
         with torch.no_grad():
-            logits = model_fa(input_values.to(torch.bfloat16)).logits
+            logits = model_fa(inputs.input_values.to(torch.bfloat16), attention_mask=inputs.attention_mask).logits
 
         predicted_ids = torch.argmax(logits, dim=-1)
         predicted_trans = processor.batch_decode(predicted_ids)
