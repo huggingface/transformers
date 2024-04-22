@@ -46,6 +46,8 @@ The initial supported quantization types are decided according to the popular qu
 on the Hub.
 
 - F32
+- Q2_K
+- Q3_K
 - Q4_0
 - Q4_K
 - Q6_K
