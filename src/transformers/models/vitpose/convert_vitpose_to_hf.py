@@ -282,7 +282,10 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         )
 
     # test post_process_pose_estimation
-    results = image_processor.post_process_pose_estimation(outputs, centers=centers, scales=scales, use_udp=True)
+    target_sizes = [(426, 640)]
+    results = image_processor.post_process_pose_estimation(
+        outputs, boxes=boxes[0], target_sizes=target_sizes, use_udp=True
+    )
     print("Shape of results:", results.shape)
 
     if pytorch_dump_folder_path is not None:

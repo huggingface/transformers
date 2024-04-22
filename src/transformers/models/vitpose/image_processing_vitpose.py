@@ -44,7 +44,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-def _box2cs(box, input_size):
+def _box2cs(box, width, height):
     """This encodes a bounding box (x,y,w,h) into (center, scale)
 
     Args:
@@ -58,7 +58,7 @@ def _box2cs(box, input_size):
     """
 
     x, y, w, h = box[:4]
-    aspect_ratio = input_size[0] / input_size[1]
+    aspect_ratio = width / height
     center = np.array([x + w * 0.5, y + h * 0.5], dtype=np.float32)
 
     if w > aspect_ratio * h:
@@ -390,7 +390,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         if self.do_affine_transform:
             for image, image_boxes in zip(images, boxes):
                 for box in image_boxes:
-                    center, scale = _box2cs(box, (size["width"], size["height"]))
+                    center, scale = _box2cs(box, size["width"], size["height"])
                     transformed_image = self.affine_transform(
                         image, center, scale, rotation=0, size=size, input_data_format=input_data_format
                     )
@@ -421,17 +421,17 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
-    def post_process_pose_estimation(self, outputs, centers, scales, kernel_size=11, use_udp=False):
+    def post_process_pose_estimation(self, outputs, boxes, target_sizes, kernel_size=11, use_udp=False):
         """
         Transform the heatmaps into keypoint predictions and transform them back to the image.
 
         Args:
             outputs (torch.Tensor):
                 Model outputs.
-            centers (torch.Tensor of shape [batch_size, 2]):
-                Center of each bounding box (x, y).
-            scales (torch.Tensor of shape [batch_size, 2]):
-                Scale of each bounding box.
+            boxes (torch.Tensor of shape [batch_size, 4]):
+                Bounding boxes.
+            target_sizes (`List[Tuple[int, int]]`, *optional*):
+                Size of the target heatmaps.
             kernel_size (`int`, *optional*, defaults to 11):
                 Gaussian kernel size (K) for modulation.
             use_udp (`bool`, *optional*, defaults to `False`):
@@ -446,6 +446,17 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         preds, maxvals = _get_max_preds(heatmaps)
 
         preds = post_dark_udp(preds, heatmaps, kernel=kernel_size)
+
+        centers = np.zeros((batch_size, 2), dtype=np.float32)
+        scales = np.zeros((batch_size, 2), dtype=np.float32)
+
+        for idx, (box, (height, width)) in enumerate(zip(boxes, target_sizes)):
+            print("Box:", box)
+            print("Height:", height)
+            print("Width:", width)
+            center, scale = _box2cs(box, width, height)
+            centers[idx, :] = center
+            scales[idx, :] = scale
 
         # Transform back to the image
         for i in range(batch_size):
