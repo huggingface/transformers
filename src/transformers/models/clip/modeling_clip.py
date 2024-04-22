@@ -24,7 +24,12 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
+from ...modeling_attn_mask_utils import (
+    _create_4d_causal_attention_mask,
+    _prepare_4d_attention_mask,
+    _prepare_4d_attention_mask_for_sdpa,
+    _prepare_4d_causal_attention_mask_for_sdpa,
+)
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -331,6 +336,75 @@ class CLIPAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
+class CLIPSdpaAttention(CLIPAttention):
+    def __init__(self, *args, **kwargs):
+        is_causal = kwargs.pop("is_causal", False)
+        super().__init__(*args, **kwargs)
+        self.is_causal = is_causal
+
+    """
+    SDPA attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `CLIPAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    SDPA API.
+    """
+
+    # Adapted from CLIPAttention.forward
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        causal_attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if output_attentions:
+            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            logger.warning_once(
+                "CLIPModel is using ClipSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not "
+                "support `output_attentions=True`. Falling back to the manual attention implementation, but specifying "
+                "the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can "
+                'be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                causal_attention_mask=causal_attention_mask,
+                output_attentions=output_attentions,
+            )
+
+        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        # get query proj
+        query_states = self.q_proj(hidden_states) * self.scale
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=self.is_causal and attention_mask is None and tgt_len > 1,
+        )
+
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, None
+
+
+CLIP_ATTENTION_CLASSES = {
+    "eager": CLIPAttention,
+    "sdpa": CLIPSdpaAttention,
+}
+
+
 class CLIPMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -347,10 +421,13 @@ class CLIPMLP(nn.Module):
 
 
 class CLIPEncoderLayer(nn.Module):
-    def __init__(self, config: CLIPConfig):
+    def __init__(self, config: CLIPConfig, is_causal=False):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = CLIPAttention(config)
+        if config._attn_implementation == "sdpa":
+            self.self_attn = CLIP_ATTENTION_CLASSES[config._attn_implementation](config, is_causal=is_causal)
+        else:
+            self.self_attn = CLIP_ATTENTION_CLASSES[config._attn_implementation](config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = CLIPMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -405,6 +482,7 @@ class CLIPPreTrainedModel(PreTrainedModel):
     config_class = CLIPConfig
     base_model_prefix = "clip"
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -417,7 +495,7 @@ class CLIPPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-        elif isinstance(module, CLIPAttention):
+        elif isinstance(module, (CLIPAttention, CLIPSdpaAttention)):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
@@ -567,10 +645,12 @@ class CLIPEncoder(nn.Module):
         config: CLIPConfig
     """
 
-    def __init__(self, config: CLIPConfig):
+    def __init__(self, config: CLIPConfig, is_causal=False):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([CLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [CLIPEncoderLayer(config, is_causal=is_causal) for _ in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
 
     def forward(
@@ -661,8 +741,9 @@ class CLIPTextTransformer(nn.Module):
         self.config = config
         embed_dim = config.hidden_size
         self.embeddings = CLIPTextEmbeddings(config)
-        self.encoder = CLIPEncoder(config)
+        self.encoder = CLIPEncoder(config, is_causal=True)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self._use_sdpa = config._attn_implementation == "sdpa"
 
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
@@ -698,13 +779,25 @@ class CLIPTextTransformer(nn.Module):
 
         # CLIP's text model uses causal mask, prepare it here.
         # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
-        causal_attention_mask = _create_4d_causal_attention_mask(
-            input_shape, hidden_states.dtype, device=hidden_states.device
-        )
+        if self._use_sdpa and not output_attentions:
+            causal_attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                attention_mask=attention_mask,
+                input_shape=input_shape,
+                inputs_embeds=hidden_states,
+                past_key_values_length=0,
+            )
+        else:
+            causal_attention_mask = _create_4d_causal_attention_mask(
+                input_shape, hidden_states.dtype, device=hidden_states.device
+            )
+
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+            if self._use_sdpa and not output_attentions:
+                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, hidden_states.dtype)
+            else:
+                attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -950,7 +1043,9 @@ class CLIPModel(CLIPPreTrainedModel):
             )
 
         text_config = config.text_config
+        text_config._attn_implementation = config._attn_implementation
         vision_config = config.vision_config
+        vision_config._attn_implementation = config._attn_implementation
 
         self.projection_dim = config.projection_dim
         self.text_embed_dim = text_config.hidden_size
@@ -1329,6 +1424,7 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
+        config.vision_config._attn_implementation = config._attn_implementation
         self.vision_model = CLIPVisionTransformer(config.vision_config)
 
         # Classifier head
