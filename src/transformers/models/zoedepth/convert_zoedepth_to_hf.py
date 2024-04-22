@@ -23,7 +23,6 @@ Original logits where obtained by running the following code:
 import argparse
 from pathlib import Path
 
-import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -295,11 +294,11 @@ def rename_key(dct, old, new):
     dct[new] = val
 
 
-# We will verify our results on an image of cute cats
+# We will verify our results on an image
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    filepath = hf_hub_download(repo_id="shariqfarooq/ZoeDepth", filename="examples/person_1.jpeg", repo_type="space")
+    image = Image.open(filepath).convert("RGB")
+    return image
 
 
 @torch.no_grad()
@@ -309,7 +308,7 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     """
 
     # define ZoeDepth configuration based on URL
-    config, image_size = get_zoedepth_config(model_name)
+    config, _ = get_zoedepth_config(model_name)
 
     # load original model
     original_model = torch.hub.load(
@@ -337,30 +336,29 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     print("Unexpected keys:", unexpected_keys)
     model.eval()
 
-    # Check outputs on an image
+    # verify image processor
     image = prepare_img()
 
-    # TODO we could verify pixel values on this large image:
-    # filepath = hf_hub_download(repo_id="shariqfarooq/ZoeDepth", filename="examples/person_1.jpeg", repo_type="space")
-    # image = Image.open(filepath).convert("RGB")
-
-    # for now we'll default to this (for some reason this passes with bicubic):
-    image_processor = ZoeDepthImageProcessor(
-        size={"height": image_size, "width": image_size}, keep_aspect_ratio=False, do_pad=False, resample=Image.BICUBIC
-    )
+    image_processor = ZoeDepthImageProcessor()
     pixel_values = image_processor(image, return_tensors="pt").pixel_values
-    # verify pixel values
+    filepath = hf_hub_download(
+        repo_id="nielsr/test-image",
+        filename="zoedepth_pixel_values.pt",
+        repo_type="dataset",
+    )
+    original_pixel_values = torch.load(filepath, map_location="cpu")
+    assert torch.allclose(pixel_values, original_pixel_values)
+
+    # verify logits
+    # this was done on a resized version of the cats image (384x384)
     filepath = hf_hub_download(
         repo_id="nielsr/test-image",
         filename="zoedepth_pixel_values.pt",
         repo_type="dataset",
         revision="1865dbb81984f01c89e83eec10f8d07efd10743d",
     )
-    original_pixel_values = torch.load(filepath, map_location="cpu")
-    assert torch.allclose(pixel_values, original_pixel_values)
-
-    # forward pass HF model
-    depth = model(pixel_values).predicted_depth
+    cats_pixel_values = torch.load(filepath, map_location="cpu")
+    depth = model(cats_pixel_values).predicted_depth
 
     # Verify logits
     # These were obtained by inserting the pixel_values at the patch embeddings of BEiT

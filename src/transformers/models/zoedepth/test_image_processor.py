@@ -7,7 +7,7 @@ from transformers import ZoeDepthImageProcessor
 filepath = hf_hub_download(repo_id="shariqfarooq/ZoeDepth", filename="examples/person_1.jpeg", repo_type="space")
 image = Image.open(filepath).convert("RGB")
 
-image_processor = ZoeDepthImageProcessor(resample=Image.BICUBIC)
+image_processor = ZoeDepthImageProcessor()
 
 pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
 

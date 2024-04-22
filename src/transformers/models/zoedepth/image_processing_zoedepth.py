@@ -20,7 +20,7 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import PaddingMode, pad, resize, to_channel_dimension_format
+from ...image_transforms import PaddingMode, pad, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -33,14 +33,17 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, is_torch_available, is_vision_available, logging
 
 
 if is_vision_available():
     import PIL
+
+if is_torch_available():
+    import torch
+    from torch import nn
 
 
 logger = logging.get_logger(__name__)
@@ -179,10 +182,9 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to target size `(size["height"], size["width"])`. If `keep_aspect_ratio` is `True`, the image
@@ -198,21 +200,22 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
                 If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
             ensure_multiple_of (`int`, *optional*, defaults to 1):
                 The image is resized to a size that is a multiple of this value.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Defines the resampling filter to use if resizing the image. Otherwise, the image is resized to size
                 specified in `size`.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image)
+
+        data_format = data_format if data_format is not None else input_data_format
+
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
             raise ValueError(f"The size dictionary must contain the keys 'height' and 'width'. Got {size.keys()}")
-
-        print("Size: ", size)
 
         output_size = get_resize_output_image_size(
             image,
@@ -222,40 +225,34 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             input_data_format=input_data_format,
         )
 
-        print("Output size: ", output_size)
+        height, width = output_size
 
-        # START of a sanity check, let's use nn.functional.interpolate(x, (int(height), int(width)), mode='bilinear', align_corners=True) instead
-        # height, width = output_size
-        # from torch import nn
-        # import torch
+        print("Shape of input image for resizing:", image.shape)
+        print("Input data format:", input_data_format)
 
-        # torch_image = torch.from_numpy(image).unsqueeze(0)
-        # torch_image = torch_image.permute(0, 3, 1, 2)
-        # print(torch_image.shape)
+        torch_image = torch.from_numpy(image).unsqueeze(0)
+        torch_image = torch_image.permute(0, 3, 1, 2) if input_data_format == "channels_last" else torch_image
+        print(torch_image.shape)
 
-        # resized_image = nn.functional.interpolate(torch_image,
-        #                                           (int(height), int(width)),
-        #                                           mode='bilinear', align_corners=True)
-
-        # # put channels last again
-        # resized_image = resized_image.squeeze().permute(1, 2, 0).numpy()
-
-        # print("Shape of resized_image:", resized_image.shape)
-
-        # print("Mean of resized image:", resized_image.mean())
-
-        # return resized_image
-
-        # END of a sanity check
-
-        return resize(
-            image,
-            size=output_size,
-            resample=resample,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
+        # TODO support align_corners=True in image_transforms.resize
+        resample_to_mode = {PILImageResampling.BILINEAR: "bilinear", PILImageResampling.BICUBIC: "bicubic"}
+        mode = resample_to_mode[resample]
+        resized_image = nn.functional.interpolate(
+            torch_image, (int(height), int(width)), mode=mode, align_corners=True
         )
+        resized_image = (
+            resized_image.squeeze().permute(1, 2, 0).numpy()
+            if data_format == "channels_last"
+            else resized_image.squeeze().numpy()
+        )
+
+        print("Shape of resized image:", resized_image.shape)
+
+        resized_image = to_channel_dimension_format(resized_image, data_format, input_channel_dim=input_data_format)
+
+        print("Shape after channel dimension format:", resized_image.shape)
+
+        return resized_image
 
     def pad_image(
         self,
@@ -327,7 +324,6 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -396,8 +392,6 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
@@ -432,10 +426,6 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
                 for image in images
             ]
 
-        print("Mean of image after rescaling:")
-        for image in images:
-            print(image.mean())
-
         if do_pad:
             images = [self.pad_image(image=image, input_data_format=input_data_format) for image in images]
 
@@ -451,6 +441,10 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
                 )
                 for image in images
             ]
+
+        print("Shape after resizing:")
+        for i in images:
+            print(i.shape)
 
         if do_normalize:
             images = [

@@ -407,7 +407,7 @@ def log_binom(n, k, eps=1e-7):
     return n * torch.log(n) - k * torch.log(k) - (n - k) * torch.log(n - k + eps)
 
 
-class LogBinomial(nn.Module):
+class LogBinomialSoftmax(nn.Module):
     def __init__(self, n_classes=256, act=torch.softmax):
         """Compute log binomial distribution for n_classes
 
@@ -451,7 +451,7 @@ class LogBinomial(nn.Module):
         return self.act(y / temperature, dim=1)
 
 
-class ZoeDepthConditionalLogBinomial(nn.Module):
+class ZoeDepthConditionalLogBinomialSoftmax(nn.Module):
     def __init__(
         self,
         in_features,
@@ -463,7 +463,7 @@ class ZoeDepthConditionalLogBinomial(nn.Module):
         min_temp=1e-7,
         act=torch.softmax,
     ):
-        """Per-pixel MLP followed by a Conditional Log Binomial distribution.
+        """Per-pixel MLP followed by a Conditional Log Binomial softmax.
 
         Args:
             in_features (`int`):
@@ -498,7 +498,7 @@ class ZoeDepthConditionalLogBinomial(nn.Module):
         self.p_eps = p_eps
         self.max_temp = max_temp
         self.min_temp = min_temp
-        self.log_binomial_transform = LogBinomial(n_classes, act=act)
+        self.log_binomial_transform = LogBinomialSoftmax(n_classes, act=act)
 
     def forward(self, main_feature, condition_feature):
         """
@@ -1000,7 +1000,7 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         # conditional log binomial for each bin configuration
         self.conditional_log_binomial = nn.ModuleDict(
             {
-                configuration["name"]: ZoeDepthConditionalLogBinomial(
+                configuration["name"]: ZoeDepthConditionalLogBinomialSoftmax(
                     last_in,
                     bin_embedding_dim,
                     configuration["n_bins"],
@@ -1124,7 +1124,7 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
         last_in = N_MIDAS_OUT + 1  # +1 for relative depth
 
         # use log binomial instead of softmax
-        self.conditional_log_binomial = ZoeDepthConditionalLogBinomial(
+        self.conditional_log_binomial = ZoeDepthConditionalLogBinomialSoftmax(
             last_in, bin_embedding_dim, n_classes=n_bins, min_temp=min_temp, max_temp=max_temp
         )
 
