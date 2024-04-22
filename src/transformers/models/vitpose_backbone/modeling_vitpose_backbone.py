@@ -241,7 +241,7 @@ class ViTPoseBackboneMoEMLP(nn.Module):
         part_features = config.part_features
 
         self.part_features = part_features
-        self.fc1 = nn.Linear(config.hidden_size, hidden_features)
+        self.fc1 = nn.Linear(in_features, hidden_features)
         self.act = ACT2FN[config.hidden_act]
         self.fc2 = nn.Linear(hidden_features, out_features - part_features)
         self.drop = nn.Dropout(config.hidden_dropout_prob)
