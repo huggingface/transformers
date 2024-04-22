@@ -1608,7 +1608,7 @@ class TokenizerTesterMixin:
                     with self.subTest(f"{(chunk/len(input_full_vocab_string))*100}%"):
                         slow_encode = slow_tokenizer.encode(string_to_check)
                         fast_encode = rust_tokenizer.encode(string_to_check)
-                        self.assertEquals(
+                        self.assertEqual(
                             slow_encode,
                             fast_encode,
                             "Hint: the following tokenization diff were obtained for slow vs fast:\n "
@@ -1620,7 +1620,7 @@ class TokenizerTesterMixin:
                 for chunk in range(0, len(input_full_vocab_ids) - 100, 100):
                     ids_to_decode = input_full_vocab_ids[chunk : chunk + 100]
                     with self.subTest(f"{(chunk/len(input_full_vocab_string))*100}%"):
-                        self.assertEquals(
+                        self.assertEqual(
                             slow_tokenizer.decode(
                                 ids_to_decode,
                                 space_between_special_tokens=False,
