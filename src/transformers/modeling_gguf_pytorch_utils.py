@@ -15,7 +15,6 @@
 # limitations under the License.
 
 import numpy as np
-import torch
 from tqdm import tqdm
 
 from .integrations import (
@@ -25,8 +24,12 @@ from .integrations import (
     _gguf_parse_value,
     load_dequant_gguf_tensor,
 )
+from .utils import is_torch_available
 from .utils.logging import get_logger
 
+
+if is_torch_available():
+    import torch
 
 logger = get_logger(__name__)
 
