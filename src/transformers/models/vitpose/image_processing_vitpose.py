@@ -421,8 +421,43 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
+    def post_process_pose_estimation(self, outputs, centers, scales, kernel_size=11, use_udp=False):
+        """
+        Transform the heatmaps into keypoint predictions and transform them back to the image.
+
+        Args:
+            outputs (torch.Tensor):
+                Model outputs.
+            centers (torch.Tensor of shape [batch_size, 2]):
+                Center of each bounding box (x, y).
+            scales (torch.Tensor of shape [batch_size, 2]):
+                Scale of each bounding box.
+            kernel_size (`int`, *optional*, defaults to 11):
+                Gaussian kernel size (K) for modulation.
+            use_udp (`bool`, *optional*, defaults to `False`):
+                Whether to use unbiased data processing.
+        """
+
+        # Avoid being affected
+        heatmaps = outputs.heatmaps.numpy().copy()
+
+        batch_size, num_keypoints, height, width = heatmaps.shape
+
+        preds, maxvals = _get_max_preds(heatmaps)
+
+        preds = post_dark_udp(preds, heatmaps, kernel=kernel_size)
+
+        # Transform back to the image
+        for i in range(batch_size):
+            preds[i] = transform_preds(preds[i], centers[i], scales[i], [width, height], use_udp=use_udp)
+
+        # Concatenate along the final dimension
+        preds = np.concatenate([preds, maxvals], axis=-1)
+
+        return preds
+
     # TODO originally called keypoints_from_heatmaps
-    def post_process_pose_estimation(
+    def keypoints_from_heatmaps(
         self,
         heatmaps,
         center,
@@ -441,26 +476,29 @@ class ViTPoseImageProcessor(BaseImageProcessor):
             - heatmap width: W
 
         Args:
-            heatmaps (np.ndarray[N, K, H, W]): model predicted heatmaps.
-            center (np.ndarray[N, 2]): Center of the bounding box (x, y).
-            scale (np.ndarray[N, 2]): Scale of the bounding box
-                wrt height/width.
-            post_process (str/None): Choice of methods to post-process
-                heatmaps. Currently supported: None, 'default', 'unbiased',
-                'megvii'.
-            unbiased (bool): Option to use unbiased decoding. Mutually
-                exclusive with megvii.
+            heatmaps (np.ndarray[N, K, H, W]):
+                Model predicted heatmaps.
+            center (np.ndarray[N, 2]):
+                Center of the bounding box (x, y).
+            scale (np.ndarray[N, 2]):
+                Scale of the bounding box wrt height/width.
+            post_process (str/None):
+                Choice of methods to post-process heatmaps.
+                Currently supported: None, 'default', 'unbiased', 'megvii'.
+            unbiased (bool)
+                Option to use unbiased decoding. Mutually exclusive with megvii.
                 Note: this arg is deprecated and unbiased=True can be replaced
-                by post_process='unbiased'
-                Paper ref: Zhang et al. Distribution-Aware Coordinate
+                by post_process='unbiased'. Paper ref: Zhang et al. Distribution-Aware Coordinate
                 Representation for Human Pose Estimation (CVPR 2020).
-            kernel (int): Gaussian kernel size (K) for modulation, which should
-                match the heatmap gaussian sigma when training.
+            kernel (int):
+                aussian kernel size (K) for modulation, which should match the heatmap gaussian sigma when training.
                 K=17 for sigma=3 and k=11 for sigma=2.
-            valid_radius_factor (float): The radius factor of the positive area
-                in classification heatmap for UDP.
-            use_udp (bool): Use unbiased data processing.
-            target_type (str): 'GaussianHeatmap' or 'CombinedTarget'.
+            valid_radius_factor (float):
+                The radius factor of the positive area in classification heatmap for UDP.
+            use_udp (bool):
+                Use unbiased data processing.
+            target_type (str):
+                'GaussianHeatmap' or 'CombinedTarget'.
                 GaussianHeatmap: Classification target with gaussian distribution.
                 CombinedTarget: The combination of classification target
                 (response map) and regression target (offset map).
@@ -491,8 +529,5 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         # Transform back to the image
         for i in range(batch_size):
             preds[i] = transform_preds(preds[i], center[i], scale[i], [width, height], use_udp=use_udp)
-
-        print("Shape of preds:", preds.shape)
-        print("Shape of maxvals:", maxvals.shape)
 
         return preds, maxvals

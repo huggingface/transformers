@@ -197,63 +197,48 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     with torch.no_grad():
         # first forward pass
         outputs = model(pixel_values)
-        output_heatmap = outputs.logits
-
-        print("Type of output_heatmap:", type(output_heatmap))
-
-        # TODO assert logits (output heatmap)
-        print("Shape of heatmap:", output_heatmap.shape)
-        print("Mean value of heatmap:", output_heatmap.numpy().mean())
-
-        print("----------------")
+        output_heatmap = outputs.heatmaps
 
         # second forward pass (flipped)
+        # this is done since the model uses `flip_test=True` in its test config
         pixel_values_flipped = torch.flip(pixel_values, [3])
-        print("Mean of pixel_values_flipped:", pixel_values_flipped.mean())
         outputs_flipped = model(
             pixel_values_flipped, flip_pairs=[[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16]]
         )
-        output_flipped_heatmap = outputs_flipped.logits
-
-        print("Shape of flipped heatmap:", output_flipped_heatmap.shape)
-        print("Mean value of flipped heatmap:", output_flipped_heatmap.mean())
+        output_flipped_heatmap = outputs_flipped.heatmaps
 
     output_heatmap = (output_heatmap + output_flipped_heatmap) * 0.5
 
-    print("Mean of final output_heatmap:", output_heatmap.mean())
-
     # TODO verify postprocessing
     batch_size = pixel_values.shape[0]
-    heatmaps = output_heatmap.cpu().numpy()
 
-    c = np.zeros((batch_size, 2), dtype=np.float32)
-    s = np.zeros((batch_size, 2), dtype=np.float32)
-    image_paths = []
+    centers = np.zeros((batch_size, 2), dtype=np.float32)
+    scales = np.zeros((batch_size, 2), dtype=np.float32)
     score = np.ones(batch_size)
     for i in range(batch_size):
-        c[i, :] = img_metas[i]["center"]
-        s[i, :] = img_metas[i]["scale"]
-        image_paths.append(img_metas[i]["image_file"])
+        centers[i, :] = img_metas[i]["center"]
+        scales[i, :] = img_metas[i]["scale"]
 
         if "bbox_score" in img_metas[i]:
             score[i] = np.array(img_metas[i]["bbox_score"]).reshape(-1)
 
-    preds, maxvals = image_processor.post_process_pose_estimation(output_heatmap, center=c, scale=s, use_udp=True)
+    preds, maxvals = image_processor.keypoints_from_heatmaps(
+        output_heatmap, center=centers, scale=scales, use_udp=True
+    )
 
     all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
     all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
     all_preds[:, :, 0:2] = preds[:, :, 0:2]
     all_preds[:, :, 2:3] = maxvals
-    all_boxes[:, 0:2] = c[:, 0:2]
-    all_boxes[:, 2:4] = s[:, 0:2]
-    all_boxes[:, 4] = np.prod(s * 200.0, axis=1)
+    all_boxes[:, 0:2] = centers[:, 0:2]
+    all_boxes[:, 2:4] = scales[:, 0:2]
+    all_boxes[:, 4] = np.prod(scales * 200.0, axis=1)
     all_boxes[:, 5] = score
 
     result = {}
 
     result["preds"] = all_preds
     result["boxes"] = all_boxes
-    result["image_paths"] = image_paths
     result["output_heatmap"] = None  # return_heatmap = False for inference in mmpose
 
     # print(result)
@@ -272,7 +257,7 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         pose_result["bbox"] = bbox_xyxy
         pose_results.append(pose_result)
 
-    print("Pose results:", pose_results)
+    # print("Pose results:", pose_results)
 
     # Verify pose_results
     # This is a list of dictionaries, containing the bounding box and keypoints per detected person
@@ -291,11 +276,14 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
             torch.tensor([3.98180511e02, 1.81808380e02, 8.66642594e-01]),
         )
     elif model_name == "vitpose-base":
-        # TODO not sure this is right
         assert torch.allclose(
             torch.from_numpy(pose_results[1]["keypoints"][0, :3]),
             torch.tensor([3.9807913e02, 1.8182812e02, 8.8235235e-01]),
         )
+
+    # test post_process_pose_estimation
+    results = image_processor.post_process_pose_estimation(outputs, centers=centers, scales=scales, use_udp=True)
+    print("Shape of results:", results.shape)
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
