@@ -16,7 +16,7 @@ limitations under the License.
 
 # Object detection examples
 
-This directory contains 2 scripts that showcase how to fine-tune any model supported by the [`AutoModelForObjectDetection` API](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForObjectDetection) (such as [DETR](https://huggingface.co/docs/transformers/main/en/model_doc/detr), [DETA](https://huggingface.co/docs/transformers/main/en/model_doc/deta), [Deformable DETR](https://huggingface.co/docs/transformers/main/en/model_doc/deformable_detr) using PyTorch.
+This directory contains 2 scripts that showcase how to fine-tune any model supported by the [`AutoModelForObjectDetection` API](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForObjectDetection) (such as [DETR](https://huggingface.co/docs/transformers/main/en/model_doc/detr), [DETA](https://huggingface.co/docs/transformers/main/en/model_doc/deta), [Deformable DETR](https://huggingface.co/docs/transformers/main/en/model_doc/deformable_detr)) using PyTorch.
 
 Content:
 * [Note on custom data](#note-on-custom-data)
@@ -137,7 +137,7 @@ python run_object_detection.py \
 The resulting model can be seen here: https://huggingface.co/qubvel-hf/qubvel-hf/detr-resnet-50-finetuned-10k-cppe5. The corresponding Weights and Biases report [here](https://api.wandb.ai/links/qubvel-hf-co/bnm0r5ex). Note that it's always advised to check the original paper to know the details regarding training hyperparameters. Hyperparameters for current example were not tuned. To improve model quality you could try:
  - changing image size parameters (`--shortest_edge`/`--longest_edge`)
  - changing training parameters, such as learning rate, batch size, warmup, optimizer and many more (see [TrainingArguments](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments))
- - adding more image augmentations (we created a helpful HF Space to choose some)
+ - adding more image augmentations (we created a helpful [HF Space](https://huggingface.co/spaces/qubvel-hf/albumentations-demo) to choose some)
 
 Note that you can replace the model and dataset by simply setting the `model_name_or_path` and `dataset_name` arguments respectively, with model or dataset from the [hub](https://huggingface.co/). 
 For dataset, make sure it provides labels in the same format as [CPPE-5](https://huggingface.co/datasets/cppe-5) dataset and boxes are provided in [YOLO format](https://albumentations.ai/docs/getting_started/bounding_boxes_augmentation/#yolo).
@@ -166,6 +166,7 @@ that will check everything is ready for training. Finally, you can launch traini
 ```bash
 accelerate launch run_object_detection_no_trainer.py \
     --model_name_or_path "facebook/detr-resnet-50" \
+    --dataset_name cppe-5 \
     --output_dir "detr-resnet-50-finetuned" \
     --num_train_epochs 100 \
     --shortest_edge 600 \
@@ -174,17 +175,15 @@ accelerate launch run_object_detection_no_trainer.py \
     --per_device_eval_batch_size 8 \
     --checkpointing_steps epoch \
     --learning_rate 5e-5 \
-    --ignore_mismatched_sizes
-    --with_tracking 
+    --ignore_mismatched_sizes \
+    --with_tracking \
     --push_to_hub
 ```
 
 and boom, you're training, possibly on multiple GPUs, logging everything to all trackers found in your environment (like Weights and Biases, Tensorboard) and regularly pushing your model to the hub (with the repo name being equal to `args.output_dir` at your HF username) 🤗
 
-With the default settings, the script fine-tunes a [DETR](https://huggingface.co/facebook/detr-resnet-50) model on the [CPPE-5](https://huggingface.co/datasets/cppe-5) dataset.
+With the default settings, the script fine-tunes a [DETR](https://huggingface.co/facebook/detr-resnet-50) model on the [CPPE-5](https://huggingface.co/datasets/cppe-5) dataset. The resulting model can be seen here: https://huggingface.co/qubvel-hf/detr-resnet-50-finetuned-10k-cppe5-no-trainer. 
 
-# TODO
-The resulting model can be seen here: https://huggingface.co/nielsr/segformer-finetuned-sidewalk. Note that the script usually requires quite a few epochs to achieve great results, e.g. the SegFormer authors fine-tuned their model for 160k steps (batches) on [`scene_parse_150`](https://huggingface.co/datasets/scene_parse_150).
 
 ## Reload and perform inference
 
@@ -204,7 +203,7 @@ image_processor = AutoImageProcessor.from_pretrained(model_name)
 model = AutoModelForObjectDetection.from_pretrained(model_name)
 
 # Load image for inference
-url = "https://images.pexels.com/photos/8413299/pexels-photo-8413299.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"
+url = "https://images.pexels.com/photos/8413299/pexels-photo-8413299.jpeg?auto=compress&cs=tinysrgb&w=630&h=375&dpr=2"
 image = Image.open(requests.get(url, stream=True).raw)
 
 # Prepare image for the model
@@ -217,7 +216,7 @@ with torch.no_grad():
 # this include conversion to Pascal VOC format and filtering non confident boxes
 width, height = image.size
 target_sizes = torch.tensor([height, width]).unsqueeze(0)  # add batch dim
-results = image_processor.post_process_object_detection(outputs, threshold=0.55, target_sizes=target_sizes)[0]
+results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[0]
 
 for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
     box = [round(i, 2) for i in box.tolist()]
