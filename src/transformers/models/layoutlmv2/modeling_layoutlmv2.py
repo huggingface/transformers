@@ -503,6 +503,9 @@ class LayoutLMv2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, LayoutLMv2Model):
+            if hasattr(module, "visual_segment_embedding"):
+                module.visual_segment_embedding.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 def my_convert_sync_batchnorm(module, process_group=None):
@@ -700,7 +703,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
             # For `nn.Parameter`, we need to give it an initialized weight in order to keep reproducibility.
             # Otherwise, since `_fast_init` is used in `modeling_utils.py`, the layer `nn.Embedding` is not initialized,
             # and `_init_weights` is not designed to deal with `nn.Parameter`.
-            self.visual_segment_embedding.data.normal_(mean=0.0, std=self.config.initializer_range)
+            ### self.visual_segment_embedding.data.normal_(mean=0.0, std=self.config.initializer_range)
         self.visual_LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.visual_dropout = nn.Dropout(config.hidden_dropout_prob)
 
