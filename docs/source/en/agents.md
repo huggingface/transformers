@@ -56,6 +56,21 @@ The agent can be programmed to:
 - devise a series of actions/tools and run them all at once like the `CodeAgent` for example
 - plan and execute actions/tools one by one and wait for the outcome of each action before launching the next one like the `ReactJSONAgent` for example
 
+### Types of agents
+
+#### Code agent
+
+This agent has a planning step, then generates python code to execute all its actions at once. It natively handles different input and output types for its tools, thus it is the recommended choice for multimodal tasks.
+
+#### React agents
+
+This is the go-to agent to solve reasoning tasks, since the ReAct framework ([Yao et al., 2022](https://huggingface.co/papers/2210.03629)) makes it really efficient to think on the basis of its previous observations.
+
+We implement two versions of ReactJSONAgent: 
+- [`~ReactJSONAgent`] generates tool calls as a JSON in its output.
+- [`~ReactCodeAgent`] is a new type of ReactJSONAgent that generates its tool calls as blobs of code, which works really well for LLMs that have strong coding performance.
+
+
 ![Framework of a React Agent](Doc%20agents%20ac753b9a3b934eaba22f659ba994c4bd/Untitled.png)
 
 Read [our blog post](https://huggingface.co/blog/open-source-llms-as-agents) to learn more.
@@ -143,9 +158,9 @@ You could use any other `llm_engine` method, as long as:
 - it takes a `str` as input and returns a `str`
 - it will stop generating output _before_ the sequences passed in argument `stop`
 
-You also need a `tools` argument, as a list of `Tools`. We can start with an empty one but specify `add_base_tools` to start from a default set of arguments.
+You also need a `tools` argument which accepts a list of `Tools`. If you leave `tools` empty, the agent uses the tools provided in the default toolbox.
 
-Then you can define your agent and run it.
+Now you can create an agent, like `CodeAgent,` and run it.
 
 ```python
 from transformers import CodeAgent
@@ -155,47 +170,31 @@ agent = CodeAgent(llm_engine=llm_engine, tools=[], add_base_tools=True)
 agent.run("Draw me a picture of rivers and lakes")
 ```
 
-The prompt and output parser were automatically defined here, but you can easily inspect them.
+The prompt and output parser were automatically defined, but you can easily inspect them by calling the `system_prompt_template` on your agent.
 
 ![Untitled](Doc%20agents%20ac753b9a3b934eaba22f659ba994c4bd/Untitled%201.png)
 
 ```python
-agent.prompt_template
+agent.system_prompt_template
 ```
 
-Note that your agent is powered by a LLM, so small variations in your prompt might yield completely different results. It's important to explain as clearly as possible the task you want to perform. We go more in-depth on how to write good prompts [here](custom_tools#writing-good-user-inputs).
+It's important to explain as clearly as possible the task you want to perform.
+Every [`~Agent.run`] operation is independent, and since an agent is powered by an LLM, minor variations in your prompt might yield completely different results.
+You can also run an agent consecutively for different tasks.
 
-Every [`~Agent.run`] operation is independent, so you can run it several times in a row with different tasks.
 
+#### Code execution
 
-### Implementation of agents
+A Python interpreter executes the code on a set of inputs passed along with your tools.
+This should be safe because the only functions that can be called are the tools you provided (especially if it's only tools by Hugging Face) and the print function, so you're already limited in what can be executed.
 
-#### ReactAgent
+The Python interpreter also doesn't allow any attribute lookup or imports (which shouldn't be needed for passing inputs/outputs to a small set of functions) so all the most obvious attacks shouldn't be an issue.
 
-This is the go-to agent to solve reasoning tasks, since the ReAct framework ([Yao et al., 2022](https://huggingface.co/papers/2210.03629)) makes it really efficient to think on the basis of its previous observations.
-
-We implement two versions of ReactAgent: 
-- [`~ReactJSONAgent`] generates tool calls as a JSON in its output.
-- [`~ReactCodeAgent`] is a new type of ReactAgent that generates its tool calls as blobs of code, which works really well for LLMs that have strong coding performance.
-
-#### CodeAgent
-
-This agent has a planning step, then generates python code to execute all its actions at once. It natively handles different input and output types for its tools, thus it is the recommended choice for multimodal tasks.
-
-##### Code execution?!
-
-This code is then executed with our small Python interpreter on the set of inputs passed along with your tools. We hear you screaming "Arbitrary code execution!" in the back, but let us explain why that is not the case.
-
-The only functions that can be called are the tools you provided and the print function, so you're already limited in what can be executed. You should be safe if it's limited to Hugging Face tools. 
-
-Then, we don't allow any attribute lookup or imports (which shouldn't be needed anyway for passing along  inputs/outputs to a small set of functions) so all the most obvious attacks (and you'd need to prompt the LLM  to output them anyway) shouldn't be an issue.
-
-The execution will stop at any line trying to perform an illegal operation or if there is a regular Python error with the code generated by the agent.
-
+The execution will stop at any code trying to perform an illegal operation or if there is a regular Python error with the code generated by the agent.
 
 ### The system prompt
 
-As we’ve seen above, the LLM generates its output based on a prompt. Let’s take a look at our system prompt for the React agent:
+An agent, or rather the LLM that drives the agent, generates an output based on the system prompt. The system prompt can be customized and tailored to the intended task. For example, check out the system prompt of the ReAct agent.
 
 ```python
 Solve the following task as best you can. You have access to the following tools:
@@ -238,23 +237,22 @@ To provide the final answer to the task, use an action blob with "action": 'fina
 Now begin!
 ```
 
-The prompt has these parts:
+The system prompt includes:
+- An *introduction* that explains how the agent should behave and what tools are.
+- A description of all the tools that is defined by a `<<tool_descriptions>>` token that is dynamically replaced at runtime with the tools defined/chosen by the user.
+    - The tool description comes from the tool attributes, `name`, `description`, `inputs` and `output_type`,  and a simple `jinja2` template that you can refine.
+- The expected output format.
+- An explanation of the task to perform.
 
-- Introduction: how the agent should behave, explanation of the concept of tools.
-- Description of all the tools. This is defined by a `<<tool_descriptions>>` token that is dynamically replaced at runtime with the tools defined/chosen by the user.
-    - The description is built based on the tool attributes `name`, `description`, `inputs` and `output_type`  with a simple `jinja2` template, that you can refine.
-- Clarifications on the output format
-- Introduction of the task at hand.
-
-This could be improved: for instance by adding explanations of the output format.
+You could improve the system prompt, for example, by adding an explanation of the output format.
 
 For maximum flexibility, you can overwrite the whole prompt template as explained above by passing your custom prompt as an argument:
 
 ```python
-from transformers import ReactAgent
+from transformers import ReactJSONAgent
 from transformers.tools import CalculatorTool
 
-agent = ReactAgent(llm_engine, tools = [CalculatorTool()], system_prompt="{your_custom_prompt}")
+agent = ReactJSONAgent(llm_engine, tools = [CalculatorTool()], system_prompt="{your_custom_prompt}")
 ```
 
 <Tip warning={true}>
@@ -277,20 +275,17 @@ It has a name, a description, input and output descriptions, and a __call__ meth
 
 ### Default toolbox
 
-We curated a set of tools that can empower agents. Here is an updated list of the tools we have integrated in `transformers`:
+Transformers comes with a default toolbox for empowering agents, that you can add to your agent upon initialization with argument `add_default_toolbox = True`:
 
 - **Document question answering**: given a document (such as a PDF) in image format, answer a question on this document ([Donut](./model_doc/donut))
-- **Text question answering**: given a long text and a question, answer the question in the text ([Flan-T5](./model_doc/flan-t5))
-- **Unconditional image captioning**: Caption the image! ([BLIP](./model_doc/blip))
+- **Image captioning**: Caption the image! ([BLIP](./model_doc/blip))
 - **Image question answering**: given an image, answer a question on this image ([VILT](./model_doc/vilt))
 - **Image segmentation**: given an image and a prompt, output the segmentation mask of that prompt ([CLIPSeg](./model_doc/clipseg))
 - **Speech to text**: given an audio recording of a person talking, transcribe the speech into text ([Whisper](./model_doc/whisper))
 - **Text to speech**: convert text to speech ([SpeechT5](./model_doc/speecht5))
-- **Zero-shot text classification**: given a text and a list of labels, identify to which label the text corresponds the most ([BART](./model_doc/bart))
-- **Text summarization**: summarize a long text in one or a few sentences ([BART](./model_doc/bart))
-- **Translation**: translate the text into a given language ([NLLB](./model_doc/nllb))
 
-These tools can be used manually as well, for example:
+You can manually use a tool by calling the [`load_tool`] function and a task to perform.
+
 
 ```python
 from transformers import load_tool
