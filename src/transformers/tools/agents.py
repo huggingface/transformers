@@ -324,7 +324,7 @@ def get_clean_message_list(message_list: List[Dict[str, str]], role_conversions:
             message["role"] = role_conversions[role]
 
         if len(final_message_list) > 0 and message["role"] == final_message_list[-1]["role"]:
-            final_message_list[-1]["content"] += "\n" + message["content"]
+            final_message_list[-1]["content"] += "\n============\n" + message["content"]
         else:
             final_message_list.append(message)
     return final_message_list
@@ -378,11 +378,9 @@ class Agent:
         self.log = logger
         self.tool_parser = tool_parser
 
-        print(tools)
         self._toolbox = Toolbox(tools, add_base_tools=add_base_tools)
 
         self.system_prompt = format_prompt(self._toolbox, self.system_prompt_template, self.tool_description_template)
-        self.messages = []
         self.prompt = None
         self.logs = []
 
@@ -396,9 +394,10 @@ class Agent:
         return self._toolbox
 
 
-    def get_inner_memory_from_logs(self) -> str:
+    def write_inner_memory_from_logs(self) -> List[Dict[str, str]]:
         """
-        Reads past llm_outputs, actions, and observations or errors from the logs.
+        Reads past llm_outputs, actions, and observations or errors from the logs into a series of messages
+        that can be used as input to the LLM.
         """
         prompt_message = {
             "role": MessageRole.SYSTEM,
@@ -409,7 +408,7 @@ class Agent:
             "content": "Task: " + self.logs[0]["task"],
         }
         memory  = [prompt_message, task_message]
-        
+
         for step_log in self.logs[1:]:
             thought_message = {
                 "role": MessageRole.ASSISTANT,
@@ -418,7 +417,11 @@ class Agent:
             memory.append(thought_message)
 
             if 'error' in step_log:
-                message_content = "Error: " + str(step_log["error"]) + "\nNow let's retry: take care not to repeat previous errors! Try to adopt different approaches if you can.\n"
+                message_content = (
+                    "Error: "
+                    + str(step_log["error"])
+                    + "\nNow let's retry: take care not to repeat previous errors! Try to adopt different approaches if you can.\n"
+                )
             else:
                 message_content = f"Observation: {step_log['observation']}"
             tool_response_message = {
@@ -558,7 +561,7 @@ class CodeAgent(Agent):
 
         self.logs.append({"task": task_message, "system_prompt": self.system_prompt})
         
-        memory = self.get_inner_memory_from_logs()
+        memory = self.write_inner_memory_from_logs()
 
         self.log.info("====Executing with these messages====")
         self.log.info(memory)
@@ -597,9 +600,9 @@ class CodeAgent(Agent):
 
 class ReactAgent(Agent):
     """
-    A class for an agent that solves the given task step by step, using the ReAct framework.
+    This agent that solves the given task step by step, using the ReAct framework.
     While the objective is not reached, the agent will perform a cycle of thinking and acting.
-    The action will be parsed from the LLM output, it will be the call of a tool from the toolbox, with arguments provided by the LLM.
+    The action will be parsed from the LLM output, it consists in calls to tools from the toolbox, with arguments chosen by the LLM engine.
     """
     def __init__(
             self, 
@@ -714,7 +717,7 @@ class ReactJSONAgent(ReactAgent):
         """
         Runs agent step with the current prompt (task + state).
         """
-        agent_memory = self.get_inner_memory_from_logs()
+        agent_memory = self.write_inner_memory_from_logs()
         self.logs[-1]["agent_memory"] = agent_memory.copy()
 
         self.prompt = agent_memory
@@ -786,9 +789,9 @@ class ReactJSONAgent(ReactAgent):
 
 class ReactCodeAgent(ReactAgent):
     """
-    A class for an agent that solves the given task step by step, using the ReAct framework.
-    While the objective is not reached, the agent will perform a cycle of thinking and acting.
-    Contrary to the standard ReAct Agent, this agent can execute a whole blob of code, thus performing many actions at a time.
+    This agent that solves the given task step by step, using the ReAct framework:
+    while the objective is not reached, the agent will perform a cycle of thinking and acting.
+    To run its actions, this agent can execute a whole blob of code, thus performing many actions at a time.
     """
     def __init__(
             self, 
@@ -814,7 +817,7 @@ class ReactCodeAgent(ReactAgent):
         """
         Runs agent step with the current prompt (task + state).
         """
-        agent_memory = self.get_inner_memory_from_logs()
+        agent_memory = self.write_inner_memory_from_logs()
         self.logs[-1]["agent_memory"] = agent_memory.copy()
 
         self.prompt = agent_memory
