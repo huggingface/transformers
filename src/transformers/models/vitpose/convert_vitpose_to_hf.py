@@ -27,7 +27,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import ViTPoseConfig, ViTPoseForPoseEstimation, ViTPoseImageProcessor
+from transformers import ViTPoseBackboneConfig, ViTPoseConfig, ViTPoseForPoseEstimation, ViTPoseImageProcessor
 
 
 def _xywh2xyxy(bbox_xywh):
@@ -48,31 +48,31 @@ def _xywh2xyxy(bbox_xywh):
 
 
 def get_config(model_name):
-    use_simple_decoder = "simple" in model_name
-    config = ViTPoseConfig(num_labels=17, use_simple_decoder=use_simple_decoder)
+    backbone_config = ViTPoseBackboneConfig(out_indices=[12])
     # size of the architecture
     if "small" in model_name:
-        config.hidden_size = 768
-        config.intermediate_size = 2304
-        config.num_hidden_layers = 8
-        config.num_attention_heads = 8
+        backbone_config.hidden_size = 768
+        backbone_config.intermediate_size = 2304
+        backbone_config.num_hidden_layers = 8
+        backbone_config.num_attention_heads = 8
     elif "large" in model_name:
-        config.hidden_size = 1024
-        config.intermediate_size = 4096
-        config.num_hidden_layers = 24
-        config.num_attention_heads = 16
+        backbone_config.hidden_size = 1024
+        backbone_config.intermediate_size = 4096
+        backbone_config.num_hidden_layers = 24
+        backbone_config.num_attention_heads = 16
     elif "huge" in model_name:
-        config.hidden_size = 1280
-        config.intermediate_size = 5120
-        config.num_hidden_layers = 32
-        config.num_attention_heads = 16
+        backbone_config.hidden_size = 1280
+        backbone_config.intermediate_size = 5120
+        backbone_config.num_hidden_layers = 32
+        backbone_config.num_attention_heads = 16
+
+    use_simple_decoder = "simple" in model_name
+    config = ViTPoseConfig(backbone_config=backbone_config, num_labels=17, use_simple_decoder=use_simple_decoder)
 
     return config
 
 
 def rename_key(name, config):
-    if "backbone" in name:
-        name = name.replace("backbone", "vit")
     if "patch_embed.proj" in name:
         name = name.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
     if "pos_embed" in name:
@@ -127,15 +127,17 @@ def convert_state_dict(orig_state_dict, dim, config):
             key_split = key.split(".")
             layer_num = int(key_split[2])
             if "weight" in key:
-                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.query.weight"] = val[:dim, :]
-                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.key.weight"] = val[
+                orig_state_dict[f"backbone.encoder.layer.{layer_num}.attention.attention.query.weight"] = val[:dim, :]
+                orig_state_dict[f"backbone.encoder.layer.{layer_num}.attention.attention.key.weight"] = val[
                     dim : dim * 2, :
                 ]
-                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
+                orig_state_dict[f"backbone.encoder.layer.{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
             else:
-                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.query.bias"] = val[:dim]
-                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
-                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.value.bias"] = val[-dim:]
+                orig_state_dict[f"backbone.encoder.layer.{layer_num}.attention.attention.query.bias"] = val[:dim]
+                orig_state_dict[f"backbone.encoder.layer.{layer_num}.attention.attention.key.bias"] = val[
+                    dim : dim * 2
+                ]
+                orig_state_dict[f"backbone.encoder.layer.{layer_num}.attention.attention.value.bias"] = val[-dim:]
         else:
             orig_state_dict[rename_key(key, config)] = val
 
@@ -176,7 +178,7 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     #     print(name, param.shape)
 
     # rename some keys
-    new_state_dict = convert_state_dict(state_dict, dim=config.hidden_size, config=config)
+    new_state_dict = convert_state_dict(state_dict, dim=config.backbone_config.hidden_size, config=config)
     model.load_state_dict(new_state_dict)
 
     # create image processor
@@ -257,8 +259,6 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         pose_result["bbox"] = bbox_xyxy
         pose_results.append(pose_result)
 
-    # print("Pose results:", pose_results)
-
     # Verify pose_results
     # This is a list of dictionaries, containing the bounding box and keypoints per detected person
     assert torch.allclose(
@@ -282,7 +282,7 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         )
 
     # test post_process_pose_estimation
-    target_sizes = [(426, 640)]
+    target_sizes = [image.size[::-1]]
     results = image_processor.post_process_pose_estimation(
         outputs, boxes=boxes[0], target_sizes=target_sizes, use_udp=True
     )

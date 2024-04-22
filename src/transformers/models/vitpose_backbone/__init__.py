@@ -17,19 +17,10 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_vitpose": ["ViTPoseConfig"]}
-
-
-try:
-    if not is_vision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["image_processing_vitpose"] = ["ViTPoseImageProcessor"]
+_import_structure = {"configuration_vitpose_backbone": ["ViTPoseBackboneConfig"]}
 
 
 try:
@@ -38,21 +29,13 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_vitpose"] = [
-        "ViTPosePreTrainedModel",
-        "ViTPoseForPoseEstimation",
+    _import_structure["modeling_vitpose_backbone"] = [
+        "ViTPoseBackbonePreTrainedModel",
+        "ViTPoseBackbone",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_vitpose import ViTPoseConfig
-
-    try:
-        if not is_vision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .image_processing_vitpose import ViTPoseImageProcessor
+    from .configuration_vitpose_backbone import ViTPoseBackboneConfig
 
     try:
         if not is_torch_available():
@@ -60,9 +43,9 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_vitpose import (
-            ViTPoseForPoseEstimation,
-            ViTPosePreTrainedModel,
+        from .modeling_vitpose_backbone import (
+            ViTPoseBackbone,
+            ViTPoseBackbonePreTrainedModel,
         )
 
 else:

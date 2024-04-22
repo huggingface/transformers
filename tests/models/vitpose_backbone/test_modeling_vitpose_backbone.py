@@ -12,16 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ViTPose model. """
+""" Testing suite for the PyTorch ViTPose backbone model. """
 
 
 import inspect
 import unittest
 
 from transformers import ViTPoseConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch
+from transformers.utils import is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -29,16 +30,14 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     from torch import nn
 
-    from transformers import ViTPoseForPoseEstimation
+    from transformers import ViTPoseBackbone
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
 
-
-class ViTPoseModelTester:
+class ViTPoseBackboneModelTester:
     def __init__(
         self,
         parent,
@@ -113,19 +112,6 @@ class ViTPoseModelTester:
             scale_factor=self.scale_factor,
         )
 
-    def create_and_check_for_pose_estimation(self, config, pixel_values, labels):
-        model = ViTPoseForPoseEstimation(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-
-        expected_height = (self.image_size[0] // self.patch_size[0]) * self.scale_factor
-        expected_width = (self.image_size[1] // self.patch_size[1]) * self.scale_factor
-
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, expected_height, expected_width)
-        )
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -144,7 +130,7 @@ class ViTPoseModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (ViTPoseForPoseEstimation,) if is_torch_available() else ()
+    all_model_classes = (ViTPoseBackbone,) if is_torch_available() else ()
     fx_compatible = False
 
     test_pruning = False
@@ -152,7 +138,7 @@ class ViTPoseModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = ViTPoseModelTester(self)
+        self.model_tester = ViTPoseBackboneModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ViTPoseConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
@@ -199,16 +185,6 @@ class ViTPoseModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_for_pose_estimation(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_pose_estimation(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = ""
-        model = ViTPoseForPoseEstimation.from_pretrained(model_name)
-        self.assertIsNotNone(model)
-
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -217,14 +193,11 @@ def prepare_img():
 
 
 @require_torch
-@require_vision
-class ViTPoseModelIntegrationTest(unittest.TestCase):
-    @cached_property
-    def default_feature_extractor(self):
-        return (
-            ViTFeatureExtractor.from_pretrained("google/vitpose-base-patch16-224") if is_vision_available() else None
-        )
+class ViTPoseBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (ViTPoseBackbone,) if is_torch_available() else ()
+    config_class = ViTPoseConfig
 
-    @slow
-    def test_inference_pose_estimation_head(self):
-        raise NotImplementedError("To do")
+    has_attentions = False
+
+    def setUp(self):
+        self.model_tester = ViTPoseBackboneModelTester(self)

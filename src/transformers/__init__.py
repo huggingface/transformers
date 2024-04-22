@@ -933,7 +933,8 @@ _import_structure = {
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
     "models.vitdet": ["VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitDetConfig"],
     "models.vitmatte": ["VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitMatteConfig"],
-    "models.vitpose": ["VITPOSE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTPoseConfig"],
+    "models.vitpose": ["ViTPoseConfig"],
+    "models.vitpose_backbone": ["ViTPoseBackboneConfig"],
     "models.vits": [
         "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VitsConfig",
@@ -3699,10 +3700,14 @@ else:
     )
     _import_structure["models.vitpose"].extend(
         [
-            "VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ViTPoseForPoseEstimation",
-            "ViTPoseModel",
             "ViTPosePreTrainedModel",
+        ]
+    )
+    _import_structure["models.vitpose_backbone"].extend(
+        [
+            "ViTPoseBackbone",
+            "ViTPoseBackbonePreTrainedModel",
         ]
     )
     _import_structure["models.vits"].extend(
@@ -5885,7 +5890,8 @@ if TYPE_CHECKING:
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
     from .models.vitdet import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP, VitDetConfig
     from .models.vitmatte import VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP, VitMatteConfig
-    from .models.vitpose import VITPOSE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTPoseConfig
+    from .models.vitpose import ViTPoseConfig
+    from .models.vitpose_backbone import ViTPoseBackboneConfig
     from .models.vits import (
         VITS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         VitsConfig,
@@ -8227,11 +8233,10 @@ if TYPE_CHECKING:
             VitMattePreTrainedModel,
         )
         from .models.vitpose import (
-            VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViTPoseForPoseEstimation,
-            ViTPoseModel,
             ViTPosePreTrainedModel,
         )
+        from .models.vitpose_backbone import ViTPoseBackbone, ViTPoseBackbonePreTrainedModel
         from .models.vits import (
             VITS_PRETRAINED_MODEL_ARCHIVE_LIST,
             VitsModel,

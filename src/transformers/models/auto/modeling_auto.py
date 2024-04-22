@@ -244,7 +244,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vit_mae", "ViTMAEModel"),
         ("vit_msn", "ViTMSNModel"),
         ("vitdet", "VitDetModel"),
-        ("vitpose", "ViTPoseModel"),
         ("vits", "VitsModel"),
         ("vivit", "VivitModel"),
         ("wav2vec2", "Wav2Vec2Model"),
@@ -1235,6 +1234,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("swinv2", "Swinv2Backbone"),
         ("timm_backbone", "TimmBackbone"),
         ("vitdet", "VitDetBackbone"),
+        ("vitpose_backbone", "ViTPoseBackbone"),
     ]
 )
 

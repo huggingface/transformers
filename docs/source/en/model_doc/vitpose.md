@@ -35,11 +35,6 @@ The original code can be found [here](https://github.com/ViTAE-Transformer/ViTPo
 
 [[autodoc]] ViTPoseConfig
 
-## ViTPoseModel
-
-[[autodoc]] ViTPoseModel
-    - forward
-
 ## ViTPoseForPoseEstimation
 
 [[autodoc]] ViTPoseForPoseEstimation

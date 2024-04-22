@@ -9177,9 +9177,6 @@ class VitMattePreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
 class ViTPoseForPoseEstimation(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -9187,14 +9184,21 @@ class ViTPoseForPoseEstimation(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class ViTPoseModel(metaclass=DummyObject):
+class ViTPosePreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class ViTPosePreTrainedModel(metaclass=DummyObject):
+class ViTPoseBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ViTPoseBackbonePreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
