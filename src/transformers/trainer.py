@@ -2141,9 +2141,9 @@ class Trainer:
         grad_norm: Optional[float] = None
         # LOMO has a slightly different optimizer API, see: https://github.com/OpenLMLab/LOMO/issues/73#issuecomment-2049612639
         if use_accelerator_prepare:
-            _is_lomo_optimizer = is_lomo_available() and isinstance(self.optimizer.optimizer, (Lomo, AdaLomo))
+            self._is_lomo_optimizer = is_lomo_available() and isinstance(self.optimizer.optimizer, (Lomo, AdaLomo))
         else:
-            _is_lomo_optimizer = is_lomo_available() and isinstance(self.optimizer, (Lomo, AdaLomo))
+            self._is_lomo_optimizer = is_lomo_available() and isinstance(self.optimizer, (Lomo, AdaLomo))
 
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
 
@@ -2232,7 +2232,7 @@ class Trainer:
                     self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
                 with self.accelerator.accumulate(model):
-                    tr_loss_step = self.training_step(model, inputs, is_lomo_optimizer=_is_lomo_optimizer)
+                    tr_loss_step = self.training_step(model, inputs)
 
                 if (
                     args.logging_nan_inf_filter
@@ -3163,7 +3163,16 @@ class Trainer:
         """
         model.train()
         inputs = self._prepare_inputs(inputs)
-        is_lomo_optimizer = kwargs.pop("is_lomo_optimizer", False)
+        _is_lomo = False
+
+        if is_lomo_available():
+            from lomo_optim import AdaLomo, Lomo
+
+            _is_lomo = isinstance(self.optimizer.optimizer, (Lomo, AdaLomo))
+
+        # For LOMO optimizers you need to explicitly use the learnign rate
+        if _is_lomo:
+            kwargs["learning_rate"] = self._get_learning_rate()
 
         if is_sagemaker_mp_enabled():
             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
@@ -3179,10 +3188,7 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
-            if not is_lomo_optimizer:
-                self.accelerator.backward(loss)
-            else:
-                self.optimizer.optimizer.fused_backward(loss, self._get_learning_rate())
+            self.accelerator.backward(loss, **kwargs)
 
         return loss.detach() / self.args.gradient_accumulation_steps
 
