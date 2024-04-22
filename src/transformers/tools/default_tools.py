@@ -16,9 +16,9 @@
 # limitations under the License.
 import math
 
+from .agents import BASE_PYTHON_TOOLS
 from .base import Tool
 from .python_interpreter import evaluate_python_code
-from .agents import BASE_PYTHON_TOOLS
 
 
 class CalculatorTool(Tool):

@@ -147,7 +147,7 @@ def evaluate_augassign(expression: ast.AugAssign, state: Dict[str, Any], tools: 
         var_name = expression.target.id
         current_value = state.get(var_name, 0)  # Assuming default of 0 if not in state
         value_to_add = evaluate_ast(expression.value, state, tools)
-        
+
         # Determine the operation and apply it
         if isinstance(expression.op, ast.Add):
             updated_value = current_value + value_to_add

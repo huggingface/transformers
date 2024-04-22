@@ -18,14 +18,25 @@ import importlib.util
 import re
 from ast import literal_eval
 from dataclasses import dataclass
-from typing import Dict, Union, List, Optional
-from huggingface_hub import hf_hub_download, list_spaces
 from math import sqrt
+from typing import Dict, List, Union
+
+from huggingface_hub import hf_hub_download, list_spaces
 
 from ..utils import is_offline_mode, logging
-from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, get_tool_description_with_args, load_tool, supports_remote, OPENAI_TOOL_DESCRIPTION_TEMPLATE,DEFAULT_TOOL_DESCRIPTION_TEMPLATE
-from .prompts import DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT
+from .base import (
+    DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+    OPENAI_TOOL_DESCRIPTION_TEMPLATE,
+    TASK_MAPPING,
+    TOOL_CONFIG_FILE,
+    Tool,
+    get_tool_description_with_args,
+    load_tool,
+    supports_remote,
+)
+from .prompts import DEFAULT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_SYSTEM_PROMPT
 from .python_interpreter import evaluate_python_code
+
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -149,7 +160,6 @@ def clean_code_for_run(code):
         code_lines = code_lines[:-1]
     code = "\n".join(code_lines)
     return code
-import json
 def parse_json_blob(json_blob: str):
     try:
         first_accolade_index =  json_blob.find("{")
@@ -261,8 +271,8 @@ class Toolbox():
 
 class Agent:
     def __init__(
-            self, 
-            llm_engine,  
+            self,
+            llm_engine,
             tools: List[Tool],
             system_prompt=DEFAULT_REACT_SYSTEM_PROMPT,
             tool_description_template=None,
@@ -271,7 +281,7 @@ class Agent:
             tool_parser=parse_json_tool_call,
             add_base_tools: bool = False,
         ):
-        
+
         self.agent_name = self.__class__.__name__
         self.llm_engine = llm_engine
         self.system_prompt_template = system_prompt
@@ -292,10 +302,10 @@ class Agent:
     def toolbox(self) -> Dict[str, Tool]:
         """Get the toolbox currently available to the agent"""
         return self._toolbox
-    
+
     def show_memory(self):
         self.log.info('\n'.join(self.memory))
-    
+
     def extract_action(self, llm_output: str, split_token: str) -> str:
         """
         Parse action from the LLM output
@@ -312,7 +322,7 @@ class Agent:
             self.log.error(e, exc_info=1)
             raise RuntimeError(f"Error: No '{split_token}' token provided in your output:///\n{llm_output}\n///. Be sure to include an action, prefaced with '{split_token}'!")
         return action
-     
+
     def execute(self, tool_name: str, arguments: Dict[str, str]) -> None:
         """
         Execute tool with the provided input and append the result to the memory
@@ -327,7 +337,7 @@ class Agent:
             error_msg = f"Error: unknown tool {tool_name}, should be instead one of {[tool_name for tool_name in self.toolbox.tools.keys()]}."
             self.log.error(error_msg, exc_info=1)
             raise KeyError(error_msg)
-        
+
         self.log.info("\n\n==Result==")
         try:
             if isinstance(arguments, str):
@@ -342,7 +352,7 @@ class Agent:
                 f"Error in tool call execution: {e}. Make sure to re-read the tool arguments again and adapt your input."
                 f"As a reminder, this tool description is the following:\n{get_tool_description_with_args(self.toolbox.tools[tool_name])}"
             )
-    
+
     def run(self, **kwargs):
         """To be implemented in the child class"""
         pass
@@ -353,15 +363,15 @@ class CodeAgent(Agent):
     A class for an agent that solves the given task using a single block of code. This is a one-shot agent: it won't be able to act step-by-step.
     """
     def __init__(
-            self, 
-            llm_engine, 
-            system_prompt=DEFAULT_CODE_SYSTEM_PROMPT, 
+            self,
+            llm_engine,
+            system_prompt=DEFAULT_CODE_SYSTEM_PROMPT,
             tool_description_template=None,
             **kwargs
         ):
-        
+
         super().__init__(
-            llm_engine, 
+            llm_engine,
             system_prompt=system_prompt,
             tool_description_template=tool_description_template if tool_description_template else self.default_tool_description_template,
             **kwargs
@@ -379,14 +389,14 @@ class CodeAgent(Agent):
             "your model, please set `tokenizer.tool_description_template` to an appropriate template. "
         )
         return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
-    
+
     def clean_code_for_run(self, result):
         """
         Override this method if you want to change the way the code is
         cleaned for the `run` method.
         """
         return clean_code_for_run(result)
-    
+
 
     def run(self, task, return_generated_code=False, **kwargs):
         """
@@ -424,8 +434,8 @@ class CodeAgent(Agent):
             llm_output=llm_output,
             split_token="Answer:"
         )
-        
-        try: 
+
+        try:
             code_action = self.clean_code_for_run(code_action)
         except Exception as e:
             error_msg = f"Error in code parsing: {e}. Be sure to provide correct code"
@@ -433,10 +443,10 @@ class CodeAgent(Agent):
             return error_msg
 
         # Execute
-        try: 
+        try:
             self.log.info("\n\n==Executing the code below:==")
             self.log.info(code_action)
-            available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools} 
+            available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
             # NOTE: The base python tools are not added to toolbox, since they do not have the proper attributes for a description
             return evaluate_python_code(code_action, available_tools, state=kwargs.copy())
         except Exception as e:
@@ -452,17 +462,17 @@ class ReactAgent(Agent):
     The action will be parsed from the LLM output, it will be the call of a tool from the toolbox, with arguments provided by the LLM.
     """
     def __init__(
-            self, 
-            llm_engine, 
-            system_prompt=DEFAULT_REACT_SYSTEM_PROMPT, 
+            self,
+            llm_engine,
+            system_prompt=DEFAULT_REACT_SYSTEM_PROMPT,
             tool_description_template=None,
             max_iterations=5,
             llm_engine_grammar=None,
             **kwargs
         ):
-        
+
         super().__init__(
-            llm_engine, 
+            llm_engine,
             system_prompt=system_prompt,
             tool_description_template=tool_description_template if tool_description_template else self.default_tool_description_template,
             max_iterations=max_iterations,
@@ -482,7 +492,7 @@ class ReactAgent(Agent):
             "your model, please set `tokenizer.tool_description_template` to an appropriate template. "
         )
         return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
-    
+
 
     def run(self, task):
         """
@@ -525,13 +535,13 @@ class ReactAgent(Agent):
                 self.memory.append(error_message)
             finally:
                 iteration += 1
-        
+
         if not final_answer and iteration == self.max_iterations:
             self.log.error("Failed by reaching max iterations.")
             final_answer = "Failed by reaching max iterations."
 
         return final_answer
-    
+
 
     def step(self):
         """
@@ -565,7 +575,7 @@ class ReactAgent(Agent):
             tool_name, arguments = self.tool_parser(action)
         except Exception as e:
             raise RuntimeError(f"Could not parse the given action: {e}.")
-    
+
         # Execute
         if tool_name == "final_answer":
             if isinstance(arguments, dict):

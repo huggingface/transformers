@@ -56,6 +56,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
+        from .default_tools import CalculatorTool, PythonEvaluatorTool
         from .document_question_answering import DocumentQuestionAnsweringTool
         from .image_captioning import ImageCaptioningTool
         from .image_question_answering import ImageQuestionAnsweringTool
@@ -66,7 +67,6 @@ if TYPE_CHECKING:
         from .text_summarization import TextSummarizationTool
         from .text_to_speech import TextToSpeechTool
         from .translation import TranslationTool
-        from .default_tools import CalculatorTool, PythonEvaluatorTool
 else:
     import sys
 
