@@ -561,7 +561,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             new_token_positions = torch.cumsum((special_image_len_mask + 1), -1) - 1
             if left_padding:
                 # shift right token positions so that they are ending at the same number
-                new_token_positions += new_token_positions[:, -1].max() - new_token_positions[:, -1:]
+                new_token_positions +=  max_embed_dim - 1 - new_token_positions[:, -1:]
+                # the below line was incorrect?
+                # new_token_positions += new_token_positions[:, -1].max() - new_token_positions[:, -1:]
 
             text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
 
