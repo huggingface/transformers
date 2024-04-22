@@ -44,7 +44,26 @@ for the LLM*
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- We advise users to use padding_side="left" when computing batched generation as it leads to more accurate results. Simply make sure to call processor.tokenizer.padding_side = "left" before generating.
+
+- Note the model has not been explicitly trained to process multiple images/videos in the same prompt, although this is technically possible, you may experience inaccurate results.
+
+- For better results, we recommend users to prompt the model with the correct prompt format:
+
+
+```bash
+"USER: <video>\n<prompt> ASSISTANT:"
+```
+
+For multiple turns conversation:
+
+```bash
+"USER: <video>\n<prompt1> ASSISTANT: <answer1></s>USER: <prompt2> ASSISTANT: <answer2></s>USER: <prompt3> ASSISTANT:"
+```
+
+- Note that the video inputs should have exactly 8 frames at the input, since the models was trained in that setting.
+
+
 
 This model was contributed by [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
 The original code can be found [here](https://github.com/PKU-YuanGroup/Video-LLaVA).

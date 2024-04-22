@@ -127,7 +127,6 @@ class VideoLlavaPreTrainedModel(PreTrainedModel):
     config_class = VideoLlavaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["CLIPAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
 
@@ -172,10 +171,14 @@ VIDEO_LLAVA_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+        pixel_values_images (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`VideoLlavaImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
             [`VideoLlavaImageProcessor`] for processing images).
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, image_size, image_size)):
+            The tensors corresponding to the input video. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`VideoLlavaImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
+            [`VideoLlavaImageProcessor`] for processing videos).
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -431,20 +434,42 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
         >>> import numpy as np
-        >>> from decord import VideoReader
+        >>> import av
         >>> from huggingface_hub import hf_hub_download
         >>> from transformers import VideoLlavaProcessor, VideoLlavaForConditionalGeneration
+
+
+        >>> def read_video_pyav(container, indices):
+        ...     '''
+        ...     Decode the video with PyAV decoder.
+        ...     Args:
+        ...         container (`av.container.input.InputContainer`): PyAV container.
+        ...         indices (`List[int]`): List of frame indices to decode.
+        ...     Returns:
+        ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
+        ...     '''
+        ...     frames = []
+        ...     container.seek(0)
+        ...     start_index = indices[0]
+        ...     end_index = indices[-1]
+        ...     for i, frame in enumerate(container.decode(video=0)):
+        ...         if i > end_index:
+        ...             break
+        ...         if i >= start_index and i in indices:
+        ...             frames.append(frame)
+        ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
         >>> model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B")
         >>> processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B")
 
         >>> prompt = "USER: <image><image><image><image><image><image><image><image>Why is this video funny? ASSISTANT:"
         >>> video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")
-        >>> vr = VideoReader(uri=video_path, height=224, width=224)
+        >>> container = av.open(video_path)
 
         >>> # sample uniformly 8 frames from the video
-        >>> indices = np.arange(0, len(vr), len(vr) / 8).astype(int)
-        >>> frames = vr.get_batch(indices).asnumpy()
+        >>> total_frames = container.streams.video[0].frames
+        >>> indices = np.arange(0, total_frames, total_frames / 8).astype(int)
+        >>> clip = read_video_pyav(container, indices)
 
         >>> inputs = processor(text=prompt, visual_inputs=clip, return_tensors="pt")
 

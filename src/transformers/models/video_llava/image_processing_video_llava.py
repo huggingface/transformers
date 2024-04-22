@@ -31,6 +31,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    VideoInput,
     infer_channel_dimension_format,
     is_scaled_image,
     is_valid_image,
@@ -40,7 +41,7 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_torch_available, is_vision_available, logging
+from ...utils import TensorType, is_vision_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -50,7 +51,7 @@ if is_vision_available():
     import PIL
 
 
-def make_batched_videos(videos) -> List[List[ImageInput]]:
+def make_batched_videos(videos) -> List[VideoInput]:
     if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
         return videos
 
@@ -205,8 +206,8 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images: ImageInput,
-        videos: VideoInput,
+        images: List[ImageInput],
+        videos: List[VideoInput],
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -288,30 +289,20 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        if not isinstance(visual_inputs, list):
-            visual_inputs = [visual_inputs]
-
-        images, videos = [], []
-        for visual in visual_inputs:
-            if not isinstance(visual, PIL.Image.Image) and len(visual.shape) == 4:
-                videos.append(visual)
-            else:
-                images.append(visual)
-
-        if len(images) > 0:
+        if images is not None:
             images = make_list_of_images(images)
-        elif len(videos) > 0:
+        if videos is not None:
             videos = make_batched_videos(videos)
 
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
-        if not valid_images(videos) or not valid_images(images):
+        if (videos is not None and not valid_images(videos)) or (images is not None and not valid_images(images)):
             raise ValueError(
                 "Invalid input type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if len(videos) > 0:
+        if videos is not None:
             pixel_values_videos = [
                 [
                     self._preprocess_image(
@@ -335,7 +326,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
                 for video in videos
             ]
 
-        if len(images) > 0:
+        if images is not None:
             pixel_values_images = [
                 self._preprocess_image(
                     image=image,
@@ -356,7 +347,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
                 for image in images
             ]
 
-        if len(images) > 0 and len(videos) > 0:
+        if images is not None and videos is not None:
             encoded_outputs = BatchFeature(
                 data={
                     "pixel_values_videos": pixel_values_videos,
@@ -364,12 +355,12 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
                 },
                 tensor_type=return_tensors,
             )
-        elif len(images) > 0:
+        elif images is not None:
             encoded_outputs = BatchFeature(
                 data={"pixel_values_images": pixel_values_images},
                 tensor_type=return_tensors,
             )
-        elif len(videos) > 0:
+        elif videos is not None:
             encoded_outputs = BatchFeature(
                 data={"pixel_values_videos": pixel_values_videos},
                 tensor_type=return_tensors,

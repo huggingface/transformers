@@ -50,7 +50,8 @@ class VideoLlavaProcessor(ProcessorMixin):
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        visual_inputs: ImageInput = None,
+        images: ImageInput = None,
+        videos: ImageInput = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length=None,
@@ -64,7 +65,7 @@ class VideoLlavaProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -106,10 +107,8 @@ class VideoLlavaProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-        if visual_inputs is not None:
-            image_kwargs = self.image_processor(
-                visual_inputs=visual_inputs, images=None, return_tensors=return_tensors
-            )
+        if images is not None or videos is not None:
+            image_kwargs = self.image_processor(images=images, videos=videos, return_tensors=return_tensors)
         else:
             image_kwargs = {}
         text_inputs = self.tokenizer(

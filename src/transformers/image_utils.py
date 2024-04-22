@@ -65,6 +65,9 @@ ImageInput = Union[
 ]  # noqa
 
 
+VideoInput = Union[np.ndarray, "torch.Tensor", List[np.ndarray], List["torch.Tensor"]]  # noqa
+
+
 class ChannelDimension(ExplicitEnum):
     FIRST = "channels_first"
     LAST = "channels_last"

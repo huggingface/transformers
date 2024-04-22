@@ -359,7 +359,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         prompts = [
-            "USER: <image>How many cats are there in the image? ASSISTANT:",
+            "USER: <image>What are the cats in the image doing? ASSISTANT:",
             "USER: <video>Why is this video funny? ASSISTANT:",
         ]
         video_file = hf_hub_download(
@@ -373,7 +373,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, do_sample=False, max_new_tokens=20)
 
         EXPECTED_DECODED_TEXT = [
-            'USER:  How many cats are there in the image? ASSISTANT: There are two cats in the image. hopefully, they are both sleeping.',
+            'USER:  What are the cats in the image doing? ASSISTANT: The cats in the image are lying down on a red couch, possibly sleeping or rest',
             'USER:  Why is this video funny? ASSISTANT: The video is funny because the baby is playing with a Wii remote while sitting on a bed'
             ]  # fmt: skip
 
@@ -519,7 +519,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             dtype=torch.float,
             device=torch_device,
         )
-	# fmt: off
+        # fmt: off
         input_ids = torch.tensor(
             [
                 [
