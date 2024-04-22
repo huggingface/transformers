@@ -52,9 +52,8 @@ An agent is a system that uses an LLM as its engine, and it has access to functi
 
 These *tools* are functions for performing a task, and they contain all necessary description for the agent to properly use them.
 
-The agent can be programmed to:
-- devise a series of actions/tools and run them all at once like the `CodeAgent` for example
-- plan and execute actions/tools one by one and wait for the outcome of each action before launching the next one like the `ReactJSONAgent` for example
+- devise a series of actions/tool calls and run them all at once, like our `CodeAgent`
+- or plan and execute them one by one to wait for the outcome of the each action before launching the next one, thus following a Reflexion ⇒ Action ⇒ Perception cycle. Our `ReactJSONAgent` implements this latter framework.
 
 ### Types of agents
 
@@ -461,12 +460,12 @@ Before finally generating the image:
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rabbit.png">
 
-This also works with its sibling `ReactAgent`:
+This also works with its sibling `ReactJSONAgent`:
 
 ```python
-from transformers import ReactAgent
+from transformers import ReactJSONAgent
 
-agent = ReactAgent(llm_engine, tools=[tool], add_base_tools=True)
+agent = ReactJSONAgent(llm_engine, tools=[tool], add_base_tools=True)
 
 agent.run("Improve this prompt, then generate an image of it.", prompt="A rabbit wearing a space suit")
 ```
