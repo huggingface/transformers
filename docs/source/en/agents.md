@@ -136,27 +136,27 @@ To start with, please install the `agents` extras in order to install all defaul
 pip install transformers[agents]
 ```
 
-To build your LLM engine, you have to define a `llm_engine` method, that will be given text and return text. This callable needs to accept a `stop` argument defining stop sequences indicating when to stop generating its output. For instance as follows:
+Build your LLM engine by defining a `llm_engine` method which accepts a list of [messages](./chat_templating.) and returns text. This callable also needs to accept a `stop` argument that indicates when to stop generating.
 
 ```python
 from huggingface_hub import login, InferenceClient
 
 login("<YOUR_HUGGINGFACEHUB_API_TOKEN>")
 
-client = InferenceClient(model="mistralai/Mixtral-8x7B-Instruct-v0.1")
+client = InferenceClient(model="meta-llama/Meta-Llama-3-70B-Instruct")
 
-def llm_engine(query: str, stop=["Task"]) -> str:
-    response = client.text_generation(query, stop_sequences=stop, return_full_text=False, max_new_tokens=1000)
+def llm_engine(messages: List[Dict[str, str, ]], stop=["Task"]) -> str:
+    response = client.chat_completion(messages, stop_sequences=stop, return_full_text=False, max_new_tokens=1000)
+    answer = response.choices[0].message.content
     for stop_seq in stop:
-        if response[-len(stop_seq) :] == stop_seq:
-            response = response[: -len(stop_seq)]
-    return response
+        if answer[-len(stop_seq) :] == stop_seq:
+            answer = answer[: -len(stop_seq)]
+    return answer
 ```
 
-You could use any other `llm_engine` method, as long as:
-
-- it takes a `str` as input and returns a `str`
-- it will stop generating output _before_ the sequences passed in argument `stop`
+You could use any `llm_engine` method as long as:
+1. it follows the [messages format](./chat_templating.) for its input (`List[Dict[str, str]]`) and returns a `str`
+2. it stops generating outputs *before* the sequences passed in the argument `stop`
 
 You also need a `tools` argument which accepts a list of `Tools`. If you leave `tools` empty, the agent uses the tools provided in the default toolbox.
 
@@ -265,13 +265,11 @@ of the tools, it has available to it.
 
 ## Tools
 
-### What is a tool?
-
 A tool is an atomic function to be used by an agent.
 
-You can for instance check the [~CalculatorTool], which we use below.
+You can for instance check the [~CalculatorTool]: it has a name, a description, input descriptions, an output type, and a `__call__` method to perform the action.
 
-It has a name, a description, input and output descriptions, and a __call__ method that will perform the action.
+When the agent is initialized, the tool attributes are used to generate a tool description which is baked into the agent's system prompt. This lets the agent know which tools it can use and why.
 
 ### Default toolbox
 
