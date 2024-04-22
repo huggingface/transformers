@@ -118,6 +118,7 @@ jobs:
       steps:
         - name: Check test status
           shell: bash
+          # Mark the previous job `run_test` as successful even if it is skipped (e.g. when it is not a new model PR)
           run: |
             echo "${{ needs.run_test.result }}"
             if [ "${{ needs.run_test.result }}" = "failure" ]; then echo "failure"; exit -1; else echo "pass"; fi;

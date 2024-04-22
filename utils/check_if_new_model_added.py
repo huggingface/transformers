@@ -22,8 +22,8 @@ python utils/check_if_new_model_added.py
 ```
 """
 
-from pathlib import Path
 import re
+from pathlib import Path
 from typing import List
 
 from git import Repo
@@ -67,8 +67,10 @@ def get_new_python_files() -> List[str]:
     repo = Repo(PATH_TO_REPO)
 
     try:
+        # For the cases where the main branch exists locally
         main = repo.refs.main
-    except:
+    except AttributeError:
+        # On GitHub Actions runners, it doesn't have local main branch
         main = repo.remotes.origin.refs.main
 
     print(f"main is at {main.commit}")
