@@ -441,9 +441,10 @@ from transformers import CodeAgent
 agent = CodeAgent(llm_engine, tools=[tool], add_base_tools=True)
 
 agent.run(
-    "Improve this prompt: 'A rabbit wearing a space suit', then generate an image of it.",
+    "Improve this prompt, then generate an image of it.", prompt="A cat in the forest."
 )
 ```
+
 
 The model adequately leverages the tool:
 ```text
@@ -459,6 +460,16 @@ image = image_generator(improved_prompt)
 Before finally generating the image:
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rabbit.png">
+
+This also works with its sibling `ReactAgent`:
+
+```python
+from transformers import ReactAgent
+
+agent = ReactAgent(llm_engine, tools=[tool], add_base_tools=True)
+
+agent.run("Improve this prompt, then generate an image of it.", prompt="A rabbit wearing a space suit")
+```
 
 > [!WARNING]
 > gradio-tools require *textual* inputs and outputs even when working with different modalities like image and audio objects. Image and audio inputs and outputs are currently incompatible.
