@@ -49,9 +49,6 @@ logger = logging.get_logger(__name__)
 if is_vision_available():
     import PIL
 
-if is_torch_available():
-    pass
-
 
 def make_batched_videos(videos) -> List[List[ImageInput]]:
     if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
