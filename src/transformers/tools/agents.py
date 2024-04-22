@@ -44,7 +44,7 @@ from .python_interpreter import evaluate_python_code
 from PIL import Image
 
 
-logging.set_verbosity_info()
+# logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 _tools_are_initialized = False
@@ -526,7 +526,7 @@ class CodeAgent(Agent):
         """
         This template is taking can desbribe a tool as it is expected by the model
         """
-        logger.warning_once(
+        logger.info_once(
             "\nNo tool description template is defined for this tokenizer - using a default tool description template "
             "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
             "your model, please set `tokenizer.tool_description_template` to an appropriate template. "
