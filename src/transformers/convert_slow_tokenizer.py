@@ -23,6 +23,7 @@ import warnings
 from typing import Dict, List, Tuple
 
 from packaging import version
+
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
@@ -1399,11 +1400,12 @@ class LlamaConverter(SpmConverter):
                 sequence += [normalizers.Prepend(prepend="▁")]
             sequence += [normalizers.Replace(pattern=" ", content="▁")]
             return normalizers.Sequence(sequence)
-        return None # non-legacy, no normalizer
+        return None  # non-legacy, no normalizer
 
     def pre_tokenizer(self, replacement, add_prefix_space):
-        if not self.original_tokenizer.legacy: # non-legacy, we need a replace
-            return super().pre_tokenizer(replacement, add_prefix_space)
+        if not self.original_tokenizer.legacy:  # non-legacy, we need a replace
+            prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
+            return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
         return None
 
     def post_processor(self):
