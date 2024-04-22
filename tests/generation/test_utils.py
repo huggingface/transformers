@@ -1152,6 +1152,9 @@ class GenerationTesterMixin:
             }
             output_greedy = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 
+            # test with the same assistant model or randomly init one
+            # in the first case all candidate tokens are accepted, in the second none is accepted
+            # case when some are accepted and some not is hard to reproduce, so let's hope this catches most errors :)
             if assistant_type == "random":
                 assistant_model = model_class(config).to(torch_device).eval()
             else:
