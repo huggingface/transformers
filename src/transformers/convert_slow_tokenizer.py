@@ -1069,7 +1069,7 @@ class SiglipConverter(SpmConverter):
 
         if self.original_tokenizer.do_lower_case:
             list_normalizers.append(normalizers.Lowercase())
-            list_normalizers.extend([normalizers.Replace(i, "") for i in re.escape(string.punctuation)])
+            list_normalizers.append(normalizers.Replace(Regex(r"[" + re.escape(string.punctuation) + "]"), ""))
             list_normalizers.extend(
                 [
                     normalizers.Replace(Regex(r"\s+"), " "),
