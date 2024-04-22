@@ -645,6 +645,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
     ) -> Union[tuple, ImageClassifierOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        loss = None
         if labels is not None:
             raise NotImplementedError("Training is not yet supported")
 
@@ -666,10 +667,6 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         )
 
         heatmaps = self.head(sequence_output, flip_pairs=flip_pairs)
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("To do")
 
         if not return_dict:
             output = (heatmaps,) + outputs[1:]

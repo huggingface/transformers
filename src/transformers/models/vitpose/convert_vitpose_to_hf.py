@@ -196,7 +196,10 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     print("Shape of pixel values:", pixel_values.shape)
     with torch.no_grad():
         # first forward pass
-        output_heatmap = model(pixel_values).logits
+        outputs = model(pixel_values)
+        output_heatmap = outputs.logits
+
+        print("Type of output_heatmap:", type(output_heatmap))
 
         # TODO assert logits (output heatmap)
         print("Shape of heatmap:", output_heatmap.shape)
@@ -207,9 +210,10 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         # second forward pass (flipped)
         pixel_values_flipped = torch.flip(pixel_values, [3])
         print("Mean of pixel_values_flipped:", pixel_values_flipped.mean())
-        output_flipped_heatmap = model(
+        outputs_flipped = model(
             pixel_values_flipped, flip_pairs=[[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16]]
-        ).logits
+        )
+        output_flipped_heatmap = outputs_flipped.logits
 
         print("Shape of flipped heatmap:", output_flipped_heatmap.shape)
         print("Mean value of flipped heatmap:", output_flipped_heatmap.mean())
@@ -222,11 +226,6 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     batch_size = pixel_values.shape[0]
     heatmaps = output_heatmap.cpu().numpy()
 
-    if "bbox_id" in img_metas[0]:
-        bbox_ids = []
-    else:
-        bbox_ids = None
-
     c = np.zeros((batch_size, 2), dtype=np.float32)
     s = np.zeros((batch_size, 2), dtype=np.float32)
     image_paths = []
@@ -238,10 +237,8 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
         if "bbox_score" in img_metas[i]:
             score[i] = np.array(img_metas[i]["bbox_score"]).reshape(-1)
-        if bbox_ids is not None:
-            bbox_ids.append(img_metas[i]["bbox_id"])
 
-    preds, maxvals = image_processor.keypoints_from_heatmaps(heatmaps, center=c, scale=s, use_udp=True)
+    preds, maxvals = image_processor.post_process_pose_estimation(output_heatmap, center=c, scale=s, use_udp=True)
 
     all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
     all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
@@ -257,7 +254,6 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     result["preds"] = all_preds
     result["boxes"] = all_boxes
     result["image_paths"] = image_paths
-    result["bbox_ids"] = bbox_ids
     result["output_heatmap"] = None  # return_heatmap = False for inference in mmpose
 
     # print(result)

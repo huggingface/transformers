@@ -421,8 +421,8 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
-    # TODO rename to post_process_keypoint_detection?
-    def keypoints_from_heatmaps(
+    # TODO originally called keypoints_from_heatmaps
+    def post_process_pose_estimation(
         self,
         heatmaps,
         center,
@@ -430,7 +430,8 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         kernel=11,
         use_udp=False,
     ):
-        """Get final keypoint predictions from heatmaps and transform them back to
+        """
+        Get final keypoint predictions from heatmaps and transform them back to
         the image.
 
         Note:
@@ -469,24 +470,29 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         Returns:
             tuple: A tuple containing keypoint predictions and scores.
 
-            - preds (np.ndarray[N, K, 2]): Predicted keypoint location in images.
-            - maxvals (np.ndarray[N, K, 1]): Scores (confidence) of the keypoints.
+            - preds (np.ndarray[batch_size, num_keypoints, 2]):
+                Predicted keypoint location in images.
+            - maxvals (np.ndarray[batch_size, num_keypoints, 1]):
+                Scores (confidence) of the keypoints.
         """
         # Avoid being affected
-        heatmaps = heatmaps.copy()
+        heatmaps = heatmaps.numpy().copy()
 
-        N, K, H, W = heatmaps.shape
+        batch_size, num_keypoints, height, width = heatmaps.shape
 
-        print("Mean of heatmaps before _get_max_preds:", np.mean(heatmaps))
+        # print("Mean of heatmaps before _get_max_preds:", np.mean(heatmaps))
 
         preds, maxvals = _get_max_preds(heatmaps)
 
-        print("Preds after _get_max_preds:", preds)
+        # print("Preds after _get_max_preds:", preds)
 
         preds = post_dark_udp(preds, heatmaps, kernel=kernel)
 
         # Transform back to the image
-        for i in range(N):
-            preds[i] = transform_preds(preds[i], center[i], scale[i], [W, H], use_udp=use_udp)
+        for i in range(batch_size):
+            preds[i] = transform_preds(preds[i], center[i], scale[i], [width, height], use_udp=use_udp)
+
+        print("Shape of preds:", preds.shape)
+        print("Shape of maxvals:", maxvals.shape)
 
         return preds, maxvals
