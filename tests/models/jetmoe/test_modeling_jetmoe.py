@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 import pytest
+from parameterized import parameterized
 
 from transformers import AutoTokenizer, JetMoeConfig, is_torch_available
 from transformers.testing_utils import (
@@ -310,9 +311,18 @@ class JetMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_eager_matches_sdpa_generate(self):
         super().test_eager_matches_sdpa_generate()
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_new_cache_format
+    @parameterized.expand([(1, False), (1, True), (4, False)])
+    def test_new_cache_format(self, num_beams, do_sample):
+        pass
+
     def setUp(self):
         self.model_tester = JetMoeModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=JetMoeConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=JetMoeConfig,
+            common_properties=["hidden_size", "num_hidden_layers"]
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()

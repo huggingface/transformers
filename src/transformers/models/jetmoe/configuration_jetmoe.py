@@ -79,6 +79,8 @@ class JetMoeConfig(PretrainedConfig):
             The epsilon used by the rms normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.01):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
 
     ```python
     >>> from transformers import JetMoeModel, JetMoeConfig
@@ -119,11 +121,13 @@ class JetMoeConfig(PretrainedConfig):
         rope_theta=10000.0,
         rms_norm_eps=1e-6,
         initializer_range=0.01,
+        attention_dropout=0.0,
         **kwargs,
     ):
         if num_experts_per_tok > num_local_experts:
             raise ValueError("`num_experts_per_tok` must be less than or equal to `num_local_experts`")
         if num_attention_heads != num_key_value_heads * num_experts_per_tok:
+            print(num_attention_heads, num_key_value_heads, num_experts_per_tok)
             raise ValueError("`num_attention_heads` must be equal to `num_key_value_heads` * `num_experts_per_tok`")
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -140,6 +144,7 @@ class JetMoeConfig(PretrainedConfig):
         self.aux_loss_coef = aux_loss_coef
         self.use_cache = use_cache
         self.initializer_range = initializer_range
+        self.attention_dropout = attention_dropout
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id

@@ -671,7 +671,7 @@ class JetMoeAttention(nn.Module):
             )
 
         self.top_k = config.num_experts_per_tok
-
+        self.attention_dropout = config.attention_dropout
         self.kv_projection_size = config.kv_channels * config.num_key_value_heads
         self.num_key_value_heads = config.num_key_value_heads
         self.num_heads = config.num_attention_heads
@@ -785,6 +785,7 @@ class JetMoeSdpaAttention(JetMoeAttention):
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
+                cache_position=cache_position,
             )
 
         bsz, q_len, _ = hidden_states.size()
@@ -878,14 +879,13 @@ class JetMoeFlashAttention2(JetMoeAttention):
         Returns:
             Union[Tuple[torch.Tensor, Tuple[torch.Tensor]], Optional[Tuple[...]]]: Tuple containing outputs.
         """
-        # assert attention_mask is None, "attention_mask is not supported"
-        assert output_attentions is False, "output_attentions is not supported"
+        output_attentions = False
 
         bsz, q_len, C = hidden_states.size()  # batch size, sequence length, embedding dimensionality (hidden_size)
 
         # calculate query, key, values
-        query_layer, router_logits = self.experts.map(hidden_states)
-        key_layer, value_layer = self.kv_proj(hidden_states).chunk(2, dim=-1)
+        query_states, router_logits = self.experts.map(hidden_states)
+        key_states, value_states = self.kv_proj(hidden_states).chunk(2, dim=-1)
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -901,16 +901,18 @@ class JetMoeFlashAttention2(JetMoeAttention):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        # query_layer = query_layer.contiguous()
-        # expand the key_layer and value_layer [sk, b, ng, hn] -> [sk, b, np, hn]
-        key_layer = key_layer.repeat(1, 1, self.top_k, 1)
-        value_layer = value_layer.repeat(1, 1, self.top_k, 1)
+        # query_states = query_states.contiguous()
+        # expand the key_states and value_states [sk, b, ng, hn] -> [sk, b, np, hn]
+        key_states = key_states.repeat(1, 1, self.top_k, 1)
+        value_states = value_states.repeat(1, 1, self.top_k, 1)
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
+
+        dropout_rate = self.attention_dropout if self.training else 0.0
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -926,7 +928,7 @@ class JetMoeFlashAttention2(JetMoeAttention):
             elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
             else:
-                target_dtype = self.q_proj.weight.dtype
+                target_dtype = self.kv_proj.weight.dtype
 
             logger.warning_once(
                 f"The input hidden states seems to be silently casted in float32, this might be related to"
@@ -939,8 +941,8 @@ class JetMoeFlashAttention2(JetMoeAttention):
             value_states = value_states.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len
-        )
+            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
+        ).to(input_dtype)
 
         # output projection
         attn_output = self.experts.reduce(attn_output.reshape(bsz, q_len, self.top_k, self.kv_projection_size))
@@ -1363,6 +1365,14 @@ class JetMoeModel(JetMoePreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
+        if attention_mask is not None and self._attn_implementation == "flash_attention_2" and use_cache:
+            is_padding_right = attention_mask[:, -1].sum().item() != batch_size
+            if is_padding_right:
+                raise ValueError(
+                    "You are attempting to perform batched generation with padding_side='right'"
+                    " this may lead to unexpected behaviour for Flash Attention version of JetMoe. Make sure to "
+                    " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
+                )
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_seen_tokens)
 
         hidden_states = inputs_embeds
