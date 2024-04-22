@@ -54,7 +54,7 @@ def read_field(reader, field):
     return [_gguf_parse_value(value.parts[_data_index], value.types) for _data_index in value.data]
 
 
-def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=True):
+def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
     """
     Load a GGUF file and return a dictionary of parsed parameters containing tensors, the parsed
     tokenizer and config attributes.

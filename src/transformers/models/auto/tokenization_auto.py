@@ -824,7 +824,7 @@ class AutoTokenizer:
                     )
                 else:
                     gguf_path = cached_file(pretrained_model_name_or_path, from_gguf, **kwargs)
-                    config_dict = load_gguf_checkpoint(gguf_path, return_tensors=True)["config"]
+                    config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
                     config = AutoConfig.for_model(**config_dict)
             config_tokenizer_class = config.tokenizer_class
             if hasattr(config, "auto_map") and "AutoTokenizer" in config.auto_map:
