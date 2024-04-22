@@ -1,15 +1,13 @@
-import json
-import torch
 import albumentations as A
-import torchvision
 import numpy as np
-from transformers import AutoModelForObjectDetection, AutoImageProcessor
+import torch
 from datasets import load_dataset
-from pathlib import Path
 from torch.utils.data import DataLoader
-from transformers import DetrImageProcessor, DetrForObjectDetection, Trainer
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
+
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
 from transformers.image_transforms import center_to_corners_format
+
 
 checkpoint = "/home/ubuntu/projects/transformers/examples/pytorch/object-detection/detr-resnet-50_finetuned_cppe5_v11/checkpoint-10600"
 
@@ -50,18 +48,13 @@ def format_image_annotations_as_coco(image_id, category, area, bbox):
 
 
 def augment_and_transform_batch(examples):
-
     images = []
     annotations = []
-    for image_id, image, objects in zip(
-        examples["image_id"], examples["image"], examples["objects"]
-    ):
+    for image_id, image, objects in zip(examples["image_id"], examples["image"], examples["objects"]):
         image = np.array(image.convert("RGB"))
 
         # apply augmentations
-        output = eval_transform(
-            image=image, bboxes=objects["bbox"], category=objects["category"]
-        )
+        output = eval_transform(image=image, bboxes=objects["bbox"], category=objects["category"])
         images.append(output["image"])
 
         # format annotations in COCO format
@@ -73,6 +66,7 @@ def augment_and_transform_batch(examples):
     # apply the image processor transformations: resizing, rescaling, normalization, ...
     result = image_processor(images=images, annotations=annotations, return_tensors="pt")
     return result
+
 
 eval_dataset = eval_dataset.with_transform(augment_and_transform_batch)
 
@@ -99,12 +93,12 @@ def convert_to_absolute_coordinates(boxes: torch.Tensor, image_size: torch.Tenso
     height, width = image_size
     scale_factor = torch.stack([width, height, width, height])
     # convert shape for multiplication: (4,) -> (1, 4)
-    scale_factor = scale_factor.unsqueeze(0).to(boxes.device)  
+    scale_factor = scale_factor.unsqueeze(0).to(boxes.device)
     boxes = boxes * scale_factor
     return boxes
 
 
- # Define our compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
+# Define our compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
 # predictions and label_ids field) and has to return a dictionary string to float.
 # @torch.no_grad()
 # def compute_metrics(eval_pred):
@@ -119,16 +113,15 @@ def convert_to_absolute_coordinates(boxes: torch.Tensor, image_size: torch.Tenso
 # trainer.evaluate(eval_dataset=eval_dataset)
 
 for batch in dataloader:
-
     with torch.no_grad():
-        # model predict boxes in YOLO format (center_x, center_y, width, height) 
+        # model predict boxes in YOLO format (center_x, center_y, width, height)
         # with coordinates *normalized* to [0..1] (relative coordinates)
         output = model(batch["pixel_values"].cpu())
-    
+
     # For metric computation we need to collect ground truth and predicted boxes in the same format
-    
+
     # 1. Collect predicted boxes, classes, scores
-    # image_processor convert boxes from YOLO format to Pascal VOC format (x_min, y_min, x_max, y_max) 
+    # image_processor convert boxes from YOLO format to Pascal VOC format (x_min, y_min, x_max, y_max)
     # in coordinate system of an image (absolute coordinates).
     image_size = torch.stack([example["size"] for example in batch["labels"]], dim=0)
     predictions = image_processor.post_process_object_detection(output, threshold=0.1, target_sizes=image_size)
@@ -157,6 +150,8 @@ for class_id, class_map, class_mar in zip(classes, map_per_class, mar_100_per_cl
 results = {k: round(v.item(), 4) for k, v in results.items()}
 
 from pprint import pprint
+
+
 pprint(results)
 
 # def get_annotations_in_coco_format(dataset):
@@ -198,7 +193,6 @@ pprint(results)
 #     return coco_dataset
 
 
-
 # # id2label = {index: x for index, x in enumerate(categories.names)}
 # # label2id = {v: k for k, v in id2label.items()}
 
@@ -230,7 +224,7 @@ pprint(results)
 # dataset_save_path.parent.mkdir(parents=True, exist_ok=True)
 # dataset_save_path.write_text(json.dumps(coco_dataset, indent=True))
 
-# test_dataset_coco_format = 
+# test_dataset_coco_format =
 
 # print("")
 # #test_ds_coco_format = CocoDetection(path_output_cppe5, image_processor, path_anno)
