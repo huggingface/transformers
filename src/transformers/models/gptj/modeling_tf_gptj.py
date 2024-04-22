@@ -447,7 +447,7 @@ class TFGPTJMainLayer(keras.layers.Layer):
 
         if position_ids is None:
             if attention_mask is not None:
-                position_ids = tf.cumsum(tf.cast(attention_mask, tf.int64), axis=-1) - 1
+                position_ids = tf.cumsum(attention_mask, axis=-1) - 1
                 position_ids = tf.where(attention_mask == 0, 1, position_ids)
                 position_ids = position_ids[..., -input_shape[-1] :]
                 position_ids = tf.reshape(position_ids, (-1, input_shape[-1]))
@@ -777,7 +777,7 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
         attention_mask = kwargs.get("attention_mask", None)
 
         if attention_mask is not None and position_ids is None:
-            position_ids = tf.cumsum(tf.cast(attention_mask, tf.int64), axis=-1) - 1
+            position_ids = tf.cumsum(attention_mask, axis=-1) - 1
             position_ids = tf.where(attention_mask == 0, 1, position_ids)
             if past_key_values:
                 position_ids = tf.expand_dims(position_ids[:, -1], -1)
