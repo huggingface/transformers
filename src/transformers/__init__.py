@@ -5482,8 +5482,8 @@ if TYPE_CHECKING:
         InstructBlipQFormerConfig,
         InstructBlipVisionConfig,
     )
-    from .models.jetmoe import JetMoeConfig
     from .models.jamba import JambaConfig
+    from .models.jetmoe import JetMoeConfig
     from .models.jukebox import (
         JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP,
         JukeboxConfig,
@@ -7272,17 +7272,17 @@ if TYPE_CHECKING:
             InstructBlipQFormerModel,
             InstructBlipVisionModel,
         )
-        from .models.jetmoe import (
-            JetMoeForCausalLM,
-            JetMoeForSequenceClassification,
-            JetMoeModel,
-            JetMoePreTrainedModel,
-        )
         from .models.jamba import (
             JambaForCausalLM,
             JambaForSequenceClassification,
             JambaModel,
             JambaPreTrainedModel,
+        )
+        from .models.jetmoe import (
+            JetMoeForCausalLM,
+            JetMoeForSequenceClassification,
+            JetMoeModel,
+            JetMoePreTrainedModel,
         )
         from .models.jukebox import (
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,

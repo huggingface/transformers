@@ -26,16 +26,13 @@ from torch.nn import functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_attn_mask_utils import (
-    _prepare_4d_causal_attention_mask,
-    _prepare_4d_causal_attention_mask_for_sdpa,
+    AttentionMaskConverter,
 )
 from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
     SequenceClassifierOutputWithPast,
-    dataclass,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -1441,7 +1438,7 @@ class JetMoeModel(JetMoePreTrainedModel):
             attentions=all_self_attns,
             router_logits=all_router_logits,
         )
-    
+
     # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
         self,
@@ -1641,12 +1638,12 @@ class JetMoeForCausalLM(JetMoePreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, 
-        input_ids, 
-        past_key_values=None, 
-        attention_mask=None, 
-        inputs_embeds=None, 
-        cache_position=None, 
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        cache_position=None,
         output_router_logits=False,
         **kwargs
     ):
