@@ -199,7 +199,9 @@ class ViTPoseClassicDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.deconv1 = nn.ConvTranspose2d(config.hidden_size, 256, kernel_size=4, stride=2, padding=1, bias=False)
+        self.deconv1 = nn.ConvTranspose2d(
+            config.backbone_hidden_size, 256, kernel_size=4, stride=2, padding=1, bias=False
+        )
         self.batchnorm1 = nn.BatchNorm2d(256)
         self.relu1 = nn.ReLU()
 
@@ -242,8 +244,10 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
 
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        flip_pairs: Optional = None,
+        pixel_values: torch.Tensor,
+        dataset_index: Optional[torch.Tensor] = None,
+        # TODO flip_pairs must be a tensor instead of a lists of lists
+        flip_pairs: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -257,6 +261,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
 
         outputs = self.backbone.forward_with_filtered_kwargs(
             pixel_values,
+            dataset_index=dataset_index,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
             return_dict=return_dict,

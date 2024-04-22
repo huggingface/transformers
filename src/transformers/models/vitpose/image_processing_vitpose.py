@@ -451,9 +451,6 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         scales = np.zeros((batch_size, 2), dtype=np.float32)
 
         for idx, (box, (height, width)) in enumerate(zip(boxes, target_sizes)):
-            print("Box:", box)
-            print("Height:", height)
-            print("Width:", width)
             center, scale = _box2cs(box, width, height)
             centers[idx, :] = center
             scales[idx, :] = scale

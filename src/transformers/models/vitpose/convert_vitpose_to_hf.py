@@ -67,7 +67,16 @@ def get_config(model_name):
         backbone_config.num_attention_heads = 16
 
     use_simple_decoder = "simple" in model_name
-    config = ViTPoseConfig(backbone_config=backbone_config, num_labels=17, use_simple_decoder=use_simple_decoder)
+    num_experts = 6 if model_name == "vitpose-base-coco-aic-mpii" else None
+    part_features = 192 if model_name == "vitpose-base-coco-aic-mpii" else None
+
+    config = ViTPoseConfig(
+        backbone_config=backbone_config,
+        num_labels=17,
+        use_simple_decoder=use_simple_decoder,
+        num_experts=num_experts,
+        part_features=part_features,
+    )
 
     return config
 
@@ -87,10 +96,6 @@ def rename_key(name, config):
         name = name.replace("norm1", "layernorm_before")
     if "norm2" in name:
         name = name.replace("norm2", "layernorm_after")
-    if "mlp.fc1" in name:
-        name = name.replace("mlp.fc1", "intermediate.dense")
-    if "mlp.fc2" in name:
-        name = name.replace("mlp.fc2", "output.dense")
     if "last_norm" in name:
         name = name.replace("last_norm", "layernorm")
 
@@ -154,6 +159,7 @@ def prepare_img():
 name_to_path = {
     "vitpose-base-simple": "/Users/nielsrogge/Documents/ViTPose/vitpose-b-simple.pth",
     "vitpose-base": "/Users/nielsrogge/Documents/ViTPose/vitpose-b.pth",
+    "vitpose-base-coco-aic-mpii": "/Users/nielsrogge/Documents/ViTPose/vitpose_base_coco_aic_mpii.pth",
 }
 
 
@@ -179,7 +185,16 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     # rename some keys
     new_state_dict = convert_state_dict(state_dict, dim=config.backbone_config.hidden_size, config=config)
-    model.load_state_dict(new_state_dict)
+    missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
+
+    # TODO add associate_heads to the MoE models
+    if model_name in ["vitpose-base", "vitpose-base-simple"]:
+        assert missing_keys == []
+        assert unexpected_keys == []
+    elif model_name == "vitpose-base-coco-aic-mpii":
+        for key in unexpected_keys:
+            if key != "backbone.cls_token":
+                assert "associate_heads" in key
 
     # create image processor
     image_processor = ViTPoseImageProcessor()
@@ -198,14 +213,16 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     print("Shape of pixel values:", pixel_values.shape)
     with torch.no_grad():
         # first forward pass
-        outputs = model(pixel_values)
+        outputs = model(pixel_values, dataset_index=0)
         output_heatmap = outputs.heatmaps
 
         # second forward pass (flipped)
         # this is done since the model uses `flip_test=True` in its test config
         pixel_values_flipped = torch.flip(pixel_values, [3])
         outputs_flipped = model(
-            pixel_values_flipped, flip_pairs=[[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16]]
+            pixel_values_flipped,
+            dataset_index=0,
+            flip_pairs=[[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16]],
         )
         output_flipped_heatmap = outputs_flipped.heatmaps
 
@@ -279,6 +296,11 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         assert torch.allclose(
             torch.from_numpy(pose_results[1]["keypoints"][0, :3]),
             torch.tensor([3.9807913e02, 1.8182812e02, 8.8235235e-01]),
+        )
+    elif model_name == "vitpose-base-coco-aic-mpii":
+        assert torch.allclose(
+            torch.from_numpy(pose_results[1]["keypoints"][0, :3]),
+            torch.tensor([3.98305542e02, 1.81741592e02, 8.69966745e-01]),
         )
 
     # test post_process_pose_estimation

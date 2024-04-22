@@ -50,8 +50,12 @@ class ViTPoseBackboneConfig(BackboneConfigMixin, PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        mlp_ratio (`int`, *optional*, defaults to 4):
+            The ratio of the hidden size in the feedforward network to the hidden size in the attention layers.
+        num_experts (`int`, *optional*):
+            The number of experts in the MoE layer.
+        part_features (`int`, *optional*
+            The number of part features to output. Only used in case `num_experts` is greater than 1.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
@@ -101,7 +105,9 @@ class ViTPoseBackboneConfig(BackboneConfigMixin, PretrainedConfig):
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
-        intermediate_size=3072,
+        mlp_ratio=4,
+        num_experts=1,
+        part_features=None,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
@@ -117,7 +123,9 @@ class ViTPoseBackboneConfig(BackboneConfigMixin, PretrainedConfig):
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
+        self.mlp_ratio = mlp_ratio
+        self.num_experts = num_experts
+        self.part_features = part_features
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
