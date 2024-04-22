@@ -656,7 +656,6 @@ class LlamaSdpaAttention(LlamaAttention):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         causal_mask = attention_mask
-        # if attention_mask is not None and cache_position is not None:
         if attention_mask is not None:
             causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
 
@@ -667,12 +666,15 @@ class LlamaSdpaAttention(LlamaAttention):
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
+        # In case we are not compiling, we may set `causal_mask` to None, which is required to dispatch to SDPA's Flash Attention 2 backend, rather
+        # relying on the `is_causal` argument.
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
+            is_causal=causal_mask is None and q_len > 1,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -987,9 +989,7 @@ class LlamaModel(LlamaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_seen_tokens + inputs_embeds.shape[1]
-        )
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_seen_tokens)
 
         # embed positions
         hidden_states = inputs_embeds
@@ -1053,15 +1053,30 @@ class LlamaModel(LlamaPreTrainedModel):
             attentions=all_self_attns,
         )
 
-    # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
-    # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
-    # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
-    # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
-    def _update_causal_mask(self, attention_mask, input_tensor, cache_position, current_length):
+    def _update_causal_mask(
+        self,
+        attention_mask: torch.Tensor,
+        input_tensor: torch.Tensor,
+        cache_position: torch.Tensor,
+        past_seen_tokens: int,
+    ):
+        # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
+        # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
+        # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
+        # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
+
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
+
+        if self.config._attn_implementation == "sdpa":
+            # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument,
+            # in order to dispatch on Flash Attention 2.
+            if AttentionMaskConverter._ignore_causal_mask_sdpa(
+                attention_mask, inputs_embeds=input_tensor, past_key_values_length=past_seen_tokens
+            ):
+                return None
 
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
@@ -1070,7 +1085,9 @@ class LlamaModel(LlamaPreTrainedModel):
             target_length = self.config.max_position_embeddings
         else:  # dynamic cache
             target_length = (
-                attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else current_length + 1
+                attention_mask.shape[-1]
+                if isinstance(attention_mask, torch.Tensor)
+                else past_seen_tokens + sequence_length + 1
             )
 
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
@@ -1236,7 +1253,14 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, cache_position=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        cache_position=None,
+        use_cache=True,
+        **kwargs,
     ):
         # With static cache, the `past_key_values` is None
         # TODO joao: standardize interface for the different Cache classes and remove of this if
@@ -1300,7 +1324,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
         if cache_position is None:
             cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
-        else:
+        elif use_cache:
             cache_position = cache_position[-input_length:]
 
         if has_static_cache:
@@ -1311,7 +1335,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
                 "position_ids": position_ids,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
+                "use_cache": use_cache,
                 "attention_mask": attention_mask,
             }
         )

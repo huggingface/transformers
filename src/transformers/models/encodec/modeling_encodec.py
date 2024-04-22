@@ -776,7 +776,7 @@ class EncodecModel(EncodecPreTrainedModel):
         >>> from datasets import load_dataset
         >>> from transformers import AutoProcessor, EncodecModel
 
-        >>> dataset = load_dataset("ashraq/esc50")
+        >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
         >>> model_id = "facebook/encodec_24khz"

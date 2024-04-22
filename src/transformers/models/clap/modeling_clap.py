@@ -1726,7 +1726,7 @@ class ClapAudioModel(ClapPreTrainedModel):
         >>> from datasets import load_dataset
         >>> from transformers import AutoProcessor, ClapAudioModel
 
-        >>> dataset = load_dataset("ashraq/esc50")
+        >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
         >>> model = ClapAudioModel.from_pretrained("laion/clap-htsat-fused")
@@ -2072,7 +2072,7 @@ class ClapModel(ClapPreTrainedModel):
         >>> from datasets import load_dataset
         >>> from transformers import AutoProcessor, ClapModel
 
-        >>> dataset = load_dataset("ashraq/esc50")
+        >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
         >>> model = ClapModel.from_pretrained("laion/clap-htsat-unfused")
@@ -2265,7 +2265,7 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
         >>> model = ClapAudioModelWithProjection.from_pretrained("laion/clap-htsat-fused")
         >>> processor = ClapProcessor.from_pretrained("laion/clap-htsat-fused")
 
-        >>> dataset = load_dataset("ashraq/esc50")
+        >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
         >>> inputs = processor(audios=audio_sample, return_tensors="pt")

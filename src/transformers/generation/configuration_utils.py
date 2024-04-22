@@ -115,6 +115,8 @@ class GenerationConfig(PushToHubMixin):
         max_time(`float`, *optional*):
             The maximum amount of time you allow the computation to run for in seconds. generation will still finish
             the current pass after allocated time has been passed.
+        stop_strings(`str or List[str]`, *optional*):
+            A string or a list of strings that should terminate generation if the model outputs them.
 
         > Parameters that control the generation strategy used
 
@@ -306,6 +308,7 @@ class GenerationConfig(PushToHubMixin):
         self.min_new_tokens = kwargs.pop("min_new_tokens", None)
         self.early_stopping = kwargs.pop("early_stopping", False)
         self.max_time = kwargs.pop("max_time", None)
+        self.stop_strings = kwargs.pop("stop_strings", None)
 
         # Parameters that control the generation strategy used
         self.do_sample = kwargs.pop("do_sample", False)
@@ -472,6 +475,11 @@ class GenerationConfig(PushToHubMixin):
             raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
         if self.max_new_tokens is not None and self.max_new_tokens <= 0:
             raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
+        if self.pad_token_id is not None and self.pad_token_id < 0:
+            warnings.warn(
+                f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch generating, if there is padding. "
+                "Please set `pas_token_id` explicitly by `model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation, and ensure your `input_ids` input does not have negative values."
+            )
 
         # Validation of attribute relations:
         fix_location = ""

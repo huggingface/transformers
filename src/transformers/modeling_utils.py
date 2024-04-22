@@ -109,6 +109,7 @@ if is_accelerate_available():
     from accelerate.hooks import add_hook_to_module
     from accelerate.utils import (
         check_tied_parameters_on_same_device,
+        extract_model_from_parallel,
         find_tied_parameters,
         get_balanced_memory,
         get_max_memory,
@@ -2225,7 +2226,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             self._set_gradient_checkpointing(enable=True, gradient_checkpointing_func=gradient_checkpointing_func)
         else:
             self.apply(partial(self._set_gradient_checkpointing, value=True))
-            logger.warn(
+            logger.warning(
                 "You are using an old version of the checkpointing format that is deprecated (We will also silently ignore `gradient_checkpointing_kwargs` in case you passed it)."
                 "Please update to the new format on your modeling file. To use the new format, you need to completely remove the definition of the method `_set_gradient_checkpointing` in your model."
             )
@@ -2273,7 +2274,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if not _is_using_old_format:
                 self._set_gradient_checkpointing(enable=False)
             else:
-                logger.warn(
+                logger.warning(
                     "You are using an old version of the checkpointing format that is deprecated (We will also silently ignore `gradient_checkpointing_kwargs` in case you passed it)."
                     "Please update to the new format on your modeling file. To use the new format, you need to completely remove the definition of the method `_set_gradient_checkpointing` in your model."
                 )
@@ -3145,7 +3146,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             config = copy.deepcopy(config)
 
             kwarg_attn_imp = kwargs.pop("attn_implementation", None)
-            if kwarg_attn_imp is not None and config._attn_implementation != kwarg_attn_imp:
+            if kwarg_attn_imp is not None:
                 config._attn_implementation = kwarg_attn_imp
             model_kwargs = kwargs
 
@@ -4805,18 +4806,34 @@ class SequenceSummary(nn.Module):
         return output
 
 
-def unwrap_model(model: nn.Module) -> nn.Module:
+def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module:
     """
     Recursively unwraps a model from potential containers (as used in distributed training).
 
     Args:
         model (`torch.nn.Module`): The model to unwrap.
+        recursive (`bool`, *optional*, defaults to `False`):
+            Whether to recursively extract all cases of `module.module` from `model` as well as unwrap child sublayers
+            recursively, not just the top-level distributed containers.
     """
-    # since there could be multiple levels of wrapping, unwrap recursively
-    if hasattr(model, "module"):
-        return unwrap_model(model.module)
+    # Use accelerate implementation if available (should always be the case when using torch)
+    # This is for pytorch, as we also have to handle things like dynamo
+    if is_accelerate_available():
+        kwargs = {}
+        if recursive:
+            if not is_accelerate_available("0.29.0"):
+                raise RuntimeError(
+                    "Setting `recursive=True` to `unwrap_model` requires `accelerate` v0.29.0. Please upgrade your version of accelerate"
+                )
+            else:
+                kwargs["recursive"] = recursive
+        return extract_model_from_parallel(model, **kwargs)
     else:
-        return model
+        # since there could be multiple levels of wrapping, unwrap recursively
+        if hasattr(model, "module"):
+            return unwrap_model(model.module)
+        else:
+            return model
 
 
 def expand_device_map(device_map, param_names, start_prefix):

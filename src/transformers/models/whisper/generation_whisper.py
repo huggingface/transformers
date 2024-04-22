@@ -422,7 +422,7 @@ class WhisperGenerationMixin:
 
         >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
         >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-        >>> model.cuda()
+        >>> model.cuda()  # doctest: +IGNORE_RESULT
 
         >>> # load audios > 30 seconds
         >>> ds = load_dataset("distil-whisper/meanwhile", "default")["test"]
@@ -441,7 +441,7 @@ class WhisperGenerationMixin:
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)
         >>> transcription[0]
-        ' Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct dennies. set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile!'
+        " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct dennies. set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile."
         ```
 
         - *Shortform transcription*: If passed mel input features are < 30 seconds, the whole audio will be transcribed with a single call to generate.
@@ -985,16 +985,18 @@ class WhisperGenerationMixin:
             "{}, but will be ignored."
         )
         if condition_on_prev_tokens is not None:
-            logger.warn(warning_prefix.format(f"condition_on_prev_tokens is set to {condition_on_prev_tokens}"))
+            logger.warning(warning_prefix.format(f"condition_on_prev_tokens is set to {condition_on_prev_tokens}"))
 
         if compression_ratio_threshold is not None:
-            logger.warn(warning_prefix.format(f"compression_ratio_threshold is set to {compression_ratio_threshold}"))
+            logger.warning(
+                warning_prefix.format(f"compression_ratio_threshold is set to {compression_ratio_threshold}")
+            )
 
         if logprob_threshold is not None:
-            logger.warn(warning_prefix.format(f"logprob_threshold is set to {logprob_threshold}"))
+            logger.warning(warning_prefix.format(f"logprob_threshold is set to {logprob_threshold}"))
 
         if no_speech_threshold is not None:
-            logger.warn(warning_prefix.format(f"no_speech_threshold is set to {no_speech_threshold}"))
+            logger.warning(warning_prefix.format(f"no_speech_threshold is set to {no_speech_threshold}"))
 
         # when passing temperature as a list it cannot just be ignored => throw error in this case
         if isinstance(temperature, (list, tuple)):

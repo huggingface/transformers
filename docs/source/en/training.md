@@ -128,12 +128,12 @@ Call [`~evaluate.compute`] on `metric` to calculate the accuracy of your predict
 ...     return metric.compute(predictions=predictions, references=labels)
 ```
 
-If you'd like to monitor your evaluation metrics during fine-tuning, specify the `evaluation_strategy` parameter in your training arguments to report the evaluation metric at the end of each epoch:
+If you'd like to monitor your evaluation metrics during fine-tuning, specify the `eval_strategy` parameter in your training arguments to report the evaluation metric at the end of each epoch:
 
 ```py
 >>> from transformers import TrainingArguments, Trainer
 
->>> training_args = TrainingArguments(output_dir="test_trainer", evaluation_strategy="epoch")
+>>> training_args = TrainingArguments(output_dir="test_trainer", eval_strategy="epoch")
 ```
 
 ### Trainer
