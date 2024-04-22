@@ -154,10 +154,6 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
             "input_data_format",
         ]
 
-        # for backwards compatibility of KOSMOS-2
-        if "use_square_size" in kwargs:
-            self.size = {"height": size["shortest_edge"], "width": size["shortest_edge"]}
-
     def resize(
         self,
         image: np.ndarray,
