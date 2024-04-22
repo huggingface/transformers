@@ -1377,7 +1377,7 @@ class Trainer:
                 )
 
             if model is None:
-                raise ValueError("You need to pass a model in order to correctly initialize a LOMO optimizer.")
+                raise ValueError("You need to pass a `model` in order to correctly initialize a LOMO optimizer.")
 
             from lomo_optim import AdaLomo, Lomo
 
@@ -2135,7 +2135,7 @@ class Trainer:
         self._globalstep_last_logged = self.state.global_step
         model.zero_grad()
         grad_norm: Optional[float] = None
-        # LOMO has a slightly different opitmizer API, see: https://github.com/OpenLMLab/LOMO/issues/73#issuecomment-2049612639
+        # LOMO has a slightly different optimizer API, see: https://github.com/OpenLMLab/LOMO/issues/73#issuecomment-2049612639
         _is_lomo_optimizer = "Lomo" in self.optimizer.optimizer.__class__.__name__
 
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
