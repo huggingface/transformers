@@ -434,10 +434,6 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
                 for image in images
             ]
 
-        print("Shape after resizing:")
-        for i in images:
-            print(i.shape)
-
         if do_normalize:
             images = [
                 self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
