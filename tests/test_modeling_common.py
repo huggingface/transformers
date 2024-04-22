@@ -3804,6 +3804,7 @@ class ModelTesterMixin:
                 self.skipTest(f"{model_class.__name__} does not support SDPA")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             if config.model_type in ["llava", "llava_next", "vipllava"]:
                 self.skipTest("Llava-like models currently (transformers==4.39.1) requires an attention_mask input")
             if config.model_type in ["idefics"]:
