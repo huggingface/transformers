@@ -46,8 +46,11 @@ GGML_BLOCK_SIZES = {
     "Q4_K": 144,
     "Q4_0": 2
     + 16,  # Q4_0 uses a blocksize of 32 but the 4-bit tensors are packed into 8-bit tensors + 2 bytes for the scales
-    "Q6_K": 210, 
-    "Q2_K":256 // 16 + 256 // 4 + 2 + 2, # See: https://github.com/99991/pygguf/commit/a417edbfc029a1bc270f984a694f9128c5afa8b9
+    "Q6_K": 210,
+    "Q2_K": 256 // 16
+    + 256 // 4
+    + 2
+    + 2,  # See: https://github.com/99991/pygguf/commit/a417edbfc029a1bc270f984a694f9128c5afa8b9
     "Q3_K": 256 // 8 + 256 // 4 + 12 + 2,
     "Q5_K": 2 + 2 + 12 + 256 // 8 + 256 // 2,
 }
@@ -304,6 +307,7 @@ def dequantize_q8_0(data):
 
     return scales * qs
 
+
 def dequantize_q2_k(data):
     # C implementation
     # https://github.com/ggerganov/ggml/blob/fca1caafea7de9fbd7efc733b9818f9cf2da3050/src/ggml-quants.c#L1547
@@ -319,26 +323,30 @@ def dequantize_q2_k(data):
     scales = data_u8[:, :16].reshape(num_blocks, 16, 1)
     qs = data_u8[:, 16:80].reshape(num_blocks, 64)
 
-    tmp = np.stack([
-        qs[:, 00:16] >> 0,
-        qs[:, 16:32] >> 0,
-        qs[:, 00:16] >> 2,
-        qs[:, 16:32] >> 2,
-        qs[:, 00:16] >> 4,
-        qs[:, 16:32] >> 4,
-        qs[:, 00:16] >> 6,
-        qs[:, 16:32] >> 6,
-        qs[:, 32:48] >> 0,
-        qs[:, 48:64] >> 0,
-        qs[:, 32:48] >> 2,
-        qs[:, 48:64] >> 2,
-        qs[:, 32:48] >> 4,
-        qs[:, 48:64] >> 4,
-        qs[:, 32:48] >> 6,
-        qs[:, 48:64] >> 6,
-    ], axis=1)
+    tmp = np.stack(
+        [
+            qs[:, 00:16] >> 0,
+            qs[:, 16:32] >> 0,
+            qs[:, 00:16] >> 2,
+            qs[:, 16:32] >> 2,
+            qs[:, 00:16] >> 4,
+            qs[:, 16:32] >> 4,
+            qs[:, 00:16] >> 6,
+            qs[:, 16:32] >> 6,
+            qs[:, 32:48] >> 0,
+            qs[:, 48:64] >> 0,
+            qs[:, 32:48] >> 2,
+            qs[:, 48:64] >> 2,
+            qs[:, 32:48] >> 4,
+            qs[:, 48:64] >> 4,
+            qs[:, 32:48] >> 6,
+            qs[:, 48:64] >> 6,
+        ],
+        axis=1,
+    )
 
     return d * (scales & 15) * (tmp & 3) - dmin * (scales >> 4)
+
 
 def dequantize_q3_k(data):
     # C implementation
@@ -353,8 +361,8 @@ def dequantize_q3_k(data):
     d = data_f16[:, -1].reshape(num_blocks, 1, 1).astype(np.float32)
     bits = np.unpackbits(data_u8[:, :32].reshape(num_blocks, 32, 1), axis=-1, bitorder="little")
     bits = 4 ^ (bits << 2)
-    qs = data_u8[:, 32:32 + 64].astype(np.int16)
-    a, b, c = data_u8[:, 96: 96 + 12].reshape(num_blocks, 3, 4).transpose(1, 0, 2)
+    qs = data_u8[:, 32 : 32 + 64].astype(np.int16)
+    a, b, c = data_u8[:, 96 : 96 + 12].reshape(num_blocks, 3, 4).transpose(1, 0, 2)
     scales = np.zeros((num_blocks, 4, 4), dtype=np.uint8)
     scales[:, 0] = (a & 15) | ((c & 3) << 4)
     scales[:, 1] = (b & 15) | (((c >> 2) & 3) << 4)
@@ -362,24 +370,31 @@ def dequantize_q3_k(data):
     scales[:, 3] = (b >> 4) | ((c >> 6) << 4)
     scales = scales.reshape(num_blocks, 16, 1).astype(np.int16)
 
-    return d * (scales - 32) * np.stack([
-        (((qs[:, 00:16] >> 0) & 3) - bits[:, :16, 0]),
-        (((qs[:, 16:32] >> 0) & 3) - bits[:, 16:, 0]),
-        (((qs[:, 00:16] >> 2) & 3) - bits[:, :16, 1]),
-        (((qs[:, 16:32] >> 2) & 3) - bits[:, 16:, 1]),
-        (((qs[:, 00:16] >> 4) & 3) - bits[:, :16, 2]),
-        (((qs[:, 16:32] >> 4) & 3) - bits[:, 16:, 2]),
-        (((qs[:, 00:16] >> 6) & 3) - bits[:, :16, 3]),
-        (((qs[:, 16:32] >> 6) & 3) - bits[:, 16:, 3]),
-        (((qs[:, 32:48] >> 0) & 3) - bits[:, :16, 4]),
-        (((qs[:, 48:64] >> 0) & 3) - bits[:, 16:, 4]),
-        (((qs[:, 32:48] >> 2) & 3) - bits[:, :16, 5]),
-        (((qs[:, 48:64] >> 2) & 3) - bits[:, 16:, 5]),
-        (((qs[:, 32:48] >> 4) & 3) - bits[:, :16, 6]),
-        (((qs[:, 48:64] >> 4) & 3) - bits[:, 16:, 6]),
-        (((qs[:, 32:48] >> 6) & 3) - bits[:, :16, 7]),
-        (((qs[:, 48:64] >> 6) & 3) - bits[:, 16:, 7])
-    ], axis=1)
+    return (
+        d
+        * (scales - 32)
+        * np.stack(
+            [
+                (((qs[:, 00:16] >> 0) & 3) - bits[:, :16, 0]),
+                (((qs[:, 16:32] >> 0) & 3) - bits[:, 16:, 0]),
+                (((qs[:, 00:16] >> 2) & 3) - bits[:, :16, 1]),
+                (((qs[:, 16:32] >> 2) & 3) - bits[:, 16:, 1]),
+                (((qs[:, 00:16] >> 4) & 3) - bits[:, :16, 2]),
+                (((qs[:, 16:32] >> 4) & 3) - bits[:, 16:, 2]),
+                (((qs[:, 00:16] >> 6) & 3) - bits[:, :16, 3]),
+                (((qs[:, 16:32] >> 6) & 3) - bits[:, 16:, 3]),
+                (((qs[:, 32:48] >> 0) & 3) - bits[:, :16, 4]),
+                (((qs[:, 48:64] >> 0) & 3) - bits[:, 16:, 4]),
+                (((qs[:, 32:48] >> 2) & 3) - bits[:, :16, 5]),
+                (((qs[:, 48:64] >> 2) & 3) - bits[:, 16:, 5]),
+                (((qs[:, 32:48] >> 4) & 3) - bits[:, :16, 6]),
+                (((qs[:, 48:64] >> 4) & 3) - bits[:, 16:, 6]),
+                (((qs[:, 32:48] >> 6) & 3) - bits[:, :16, 7]),
+                (((qs[:, 48:64] >> 6) & 3) - bits[:, 16:, 7]),
+            ],
+            axis=1,
+        )
+    )
 
 
 def dequantize_q5_k(data):
@@ -395,8 +410,8 @@ def dequantize_q5_k(data):
     d = data_f16[:, 0].reshape(num_blocks, 1).astype(np.float32)
     dmin = data_f16[:, 1].reshape(num_blocks, 1).astype(np.float32)
     scales = data_u8[:, 4:16].reshape(num_blocks, 12, 1)
-    qh = data_u8[:, 16: 16 + 32].reshape(num_blocks, 32, 1)
-    qs = data_u8[:, 48: 48 + 128].reshape(num_blocks, 4, 32)
+    qh = data_u8[:, 16 : 16 + 32].reshape(num_blocks, 32, 1)
+    qs = data_u8[:, 48 : 48 + 128].reshape(num_blocks, 4, 32)
 
     bits = np.unpackbits(qh, axis=-1, bitorder="little")
 
@@ -426,16 +441,19 @@ def dequantize_q5_k(data):
     d7 = d * (scales_lo_4[:, 2] | (scales_hi_6[:, 2] << 4))
     d8 = d * (scales_lo_4[:, 3] | (scales_hi_6[:, 3] << 4))
 
-    return np.concatenate([
-        d1 * (qs_lo_4[:, 0] + (bits[:, :, 0] << 4)) - m1,
-        d2 * (qs_hi_4[:, 0] + (bits[:, :, 1] << 4)) - m2,
-        d3 * (qs_lo_4[:, 1] + (bits[:, :, 2] << 4)) - m3,
-        d4 * (qs_hi_4[:, 1] + (bits[:, :, 3] << 4)) - m4,
-        d5 * (qs_lo_4[:, 2] + (bits[:, :, 4] << 4)) - m5,
-        d6 * (qs_hi_4[:, 2] + (bits[:, :, 5] << 4)) - m6,
-        d7 * (qs_lo_4[:, 3] + (bits[:, :, 6] << 4)) - m7,
-        d8 * (qs_hi_4[:, 3] + (bits[:, :, 7] << 4)) - m8,
-    ], axis=1)
+    return np.concatenate(
+        [
+            d1 * (qs_lo_4[:, 0] + (bits[:, :, 0] << 4)) - m1,
+            d2 * (qs_hi_4[:, 0] + (bits[:, :, 1] << 4)) - m2,
+            d3 * (qs_lo_4[:, 1] + (bits[:, :, 2] << 4)) - m3,
+            d4 * (qs_hi_4[:, 1] + (bits[:, :, 3] << 4)) - m4,
+            d5 * (qs_lo_4[:, 2] + (bits[:, :, 4] << 4)) - m5,
+            d6 * (qs_hi_4[:, 2] + (bits[:, :, 5] << 4)) - m6,
+            d7 * (qs_lo_4[:, 3] + (bits[:, :, 6] << 4)) - m7,
+            d8 * (qs_hi_4[:, 3] + (bits[:, :, 7] << 4)) - m8,
+        ],
+        axis=1,
+    )
 
 
 def load_dequant_gguf_tensor(shape, ggml_type, data):
