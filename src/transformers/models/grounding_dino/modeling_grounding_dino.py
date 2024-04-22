@@ -818,7 +818,7 @@ class GroundingDinoTextEnhancerLayer(nn.Module):
             attention_masks = attention_masks[:, None, :, :]
             attention_masks = attention_masks.repeat(1, self.num_heads, 1, 1)
 
-            dtype = torch.float16
+            dtype = hidden_states.dtype
             attention_masks = attention_masks.to(dtype=dtype)  # fp16 compatibility
             attention_masks = (1.0 - attention_masks) * torch.finfo(dtype).min
 
@@ -1432,7 +1432,7 @@ class GroundingDinoDecoderLayer(nn.Module):
             1, self.num_attention_heads, self.num_queries, 1
         )
 
-        dtype = torch.float16
+        dtype = text_encoder_hidden_states.dtype
         text_encoder_attention_mask = text_encoder_attention_mask.to(dtype=dtype)  # fp16 compatibility
         text_encoder_attention_mask = text_encoder_attention_mask * torch.finfo(dtype).min
 
