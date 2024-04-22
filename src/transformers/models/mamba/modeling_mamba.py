@@ -402,7 +402,7 @@ class MambaPreTrainedModel(PreTrainedModel):
                     # Having just p *= scale would repeatedly scale it down
                     nn.init.kaiming_uniform_(p, a=math.sqrt(5))
                     with torch.no_grad():
-                        p /= math.sqrt(self.config.num_layers)
+                        p /= math.sqrt(self.config.num_hidden_layers)
 
 
 @dataclass
