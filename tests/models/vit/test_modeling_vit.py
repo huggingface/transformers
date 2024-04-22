@@ -39,7 +39,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import ViTForImageClassification, ViTForMaskedImageModeling, ViTModel
-    from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -237,9 +236,9 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ViTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/vit-base-patch16-224"
+        model = ViTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

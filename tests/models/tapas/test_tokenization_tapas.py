@@ -1268,10 +1268,6 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(column_ids.tolist(), expected_results["column_ids"])
         self.assertListEqual(row_ids.tolist(), expected_results["row_ids"])
 
-    @unittest.skip("Skip this test while all models are still to be uploaded.")
-    def test_pretrained_model_lists(self):
-        pass
-
     @unittest.skip("Doesn't support another framework than PyTorch")
     def test_np_encode_plus_sent_to_model(self):
         pass

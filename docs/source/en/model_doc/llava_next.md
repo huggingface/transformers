@@ -98,16 +98,16 @@ print(processor.decode(output[0], skip_special_tokens=True))
 
 ### Quantization using Bitsandbytes
 
-The model can be loaded in 8 or 4 bits, greatly reducing the memory requirements while maintaining the performance of the original model. First make sure to install bitsandbytes, `pip install bitsandbytes`` and make sure to have access to a CUDA compatible GPU device. Simply change the snippet above with:
+The model can be loaded in 8 or 4 bits, greatly reducing the memory requirements while maintaining the performance of the original model. First make sure to install bitsandbytes, `pip install bitsandbytes` and make sure to have access to a CUDA compatible GPU device. Simply change the snippet above with:
 
 ```python
-from transformers import LlavaNextForConditionalGeneration, BitsandBytesConfig
+from transformers import LlavaNextForConditionalGeneration, BitsAndBytesConfig
 
 # specify how to quantize the model
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype="torch.float16",
+    bnb_4bit_compute_dtype=torch.float16,
 )
 
 model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", quantization_config=quantization_config, device_map="auto")

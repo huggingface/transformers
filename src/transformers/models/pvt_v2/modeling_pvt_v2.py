@@ -49,17 +49,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 256, 7, 7]
 _IMAGE_CLASS_CHECKPOINT = "OpenGVLab/pvt_v2_b0"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_281"  # ImageNet ID for "tabby, tabby cat"
 
-PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "OpenGVLab/pvt_v2_b0",
-    "OpenGVLab/pvt_v2_b1",
-    "OpenGVLab/pvt_v2_b2",
-    "OpenGVLab/pvt_v2_b2_linear",
-    "OpenGVLab/pvt_v2_b3",
-    "OpenGVLab/pvt_v2_b4",
-    "OpenGVLab/pvt_v2_b5",
-    # See all PVT models at https://huggingface.co/models?filter=pvt_v2
-]
-
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
 def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:

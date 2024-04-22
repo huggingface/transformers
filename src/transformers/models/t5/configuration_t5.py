@@ -22,13 +22,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-T5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google-t5/t5-small": "https://huggingface.co/google-t5/t5-small/resolve/main/config.json",
-    "google-t5/t5-base": "https://huggingface.co/google-t5/t5-base/resolve/main/config.json",
-    "google-t5/t5-large": "https://huggingface.co/google-t5/t5-large/resolve/main/config.json",
-    "google-t5/t5-3b": "https://huggingface.co/google-t5/t5-3b/resolve/main/config.json",
-    "google-t5/t5-11b": "https://huggingface.co/google-t5/t5-11b/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import T5_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class T5Config(PretrainedConfig):

@@ -34,16 +34,6 @@ VOCAB_FILES_NAMES = {
     "tokenizer_config_file": "tokenizer_config.json",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/vocab.json"},
-    "merges_file": {"facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/merges.txt"},
-    "tokenizer_config_file": {
-        "facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/tokenizer_config.json"
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/blenderbot-3B": 128}
-
 
 @lru_cache()
 # Copied from transformers.models.roberta.tokenization_roberta.bytes_to_unicode
@@ -166,8 +156,6 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.__init__ with Roberta->Blenderbot, RoBERTa->Blenderbot
@@ -424,10 +412,11 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
         A very simple chat template that just adds whitespace between messages.
         """
         logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using the default template "
-            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+            "No chat template is set for this tokenizer, falling back to a default class-level template. "
+            "This is very error-prone, because models are often trained with templates different from the class "
+            "default! Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
+            "point any code depending on them will stop working. We recommend setting a valid chat template before "
+            "then to ensure that this model continues working without issues."
         )
         return (
             "{% for message in messages %}"

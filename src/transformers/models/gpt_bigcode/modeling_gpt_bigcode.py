@@ -52,10 +52,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "bigcode/gpt_bigcode-santacoder"
 _CONFIG_FOR_DOC = "GPTBigCodeConfig"
 
-GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "bigcode/gpt_bigcode-santacoder",
-    # See all GPTBigCode models at https://huggingface.co/models?filter=gpt_bigcode
-]
+
+from ..deprecated._archive_maps import GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Fused kernels

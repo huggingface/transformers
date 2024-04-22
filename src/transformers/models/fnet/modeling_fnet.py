@@ -59,11 +59,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "google/fnet-base"
 _CONFIG_FOR_DOC = "FNetConfig"
 
-FNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/fnet-base",
-    "google/fnet-large",
-    # See all FNet models at https://huggingface.co/models?filter=fnet
-]
+
+from ..deprecated._archive_maps import FNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Adapted from https://github.com/google-research/google-research/blob/master/f_net/fourier.py

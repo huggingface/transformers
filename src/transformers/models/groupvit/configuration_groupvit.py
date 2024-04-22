@@ -30,9 +30,8 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "nvidia/groupvit-gcc-yfcc": "https://huggingface.co/nvidia/groupvit-gcc-yfcc/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class GroupViTTextConfig(PretrainedConfig):

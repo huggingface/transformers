@@ -19,28 +19,6 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "AI-Sweden-Models/gpt-sw3-126m": "https://huggingface.co/AI-Sweden-Models/gpt-sw3-126m/resolve/main/spiece.model",
-        "AI-Sweden-Models/gpt-sw3-356m": "https://huggingface.co/AI-Sweden-Models/gpt-sw3-356m/resolve/main/spiece.model",
-        "AI-Sweden-Models/gpt-sw3-1.3b": "https://huggingface.co/AI-Sweden-Models/gpt-sw3-1.3b/resolve/main/spiece.model",
-        "AI-Sweden-Models/gpt-sw3-6.7b": "https://huggingface.co/AI-Sweden-Models/gpt-sw3-6.7b/resolve/main/spiece.model",
-        "AI-Sweden-Models/gpt-sw3-6.7b-v2": "https://huggingface.co/AI-Sweden-Models/gpt-sw3-6.7b-v2/resolve/main/spiece.model",
-        "AI-Sweden-Models/gpt-sw3-20b": "https://huggingface.co/AI-Sweden-Models/gpt-sw3-20b/resolve/main/spiece.model",
-        "AI-Sweden-Models/gpt-sw3-40b": "https://huggingface.co/AI-Sweden-Models/gpt-sw3-20b/resolve/main/spiece.model",
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "AI-Sweden-Models/gpt-sw3-126m": 2048,
-    "AI-Sweden-Models/gpt-sw3-356m": 2048,
-    "AI-Sweden-Models/gpt-sw3-1.3b": 2048,
-    "AI-Sweden-Models/gpt-sw3-6.7b": 2048,
-    "AI-Sweden-Models/gpt-sw3-6.7b-v2": 2048,
-    "AI-Sweden-Models/gpt-sw3-20b": 2048,
-    "AI-Sweden-Models/gpt-sw3-40b": 2048,
-}
-
 
 class GPTSw3Tokenizer(PreTrainedTokenizer):
     """
@@ -105,8 +83,6 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -326,10 +302,11 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         preceding messages. BOS tokens are added between all messages.
         """
         logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using the default template "
-            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+            "No chat template is set for this tokenizer, falling back to a default class-level template. "
+            "This is very error-prone, because models are often trained with templates different from the class "
+            "default! Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
+            "point any code depending on them will stop working. We recommend setting a valid chat template before "
+            "then to ensure that this model continues working without issues."
         )
         return (
             "{{ eos_token }}{{ bos_token }}"

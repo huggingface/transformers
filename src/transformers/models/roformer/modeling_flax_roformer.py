@@ -43,16 +43,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "junnyu/roformer_chinese_base"
 _CONFIG_FOR_DOC = "RoFormerConfig"
 
-FLAX_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "junnyu/roformer_chinese_small",
-    "junnyu/roformer_chinese_base",
-    "junnyu/roformer_chinese_char_small",
-    "junnyu/roformer_chinese_char_base",
-    "junnyu/roformer_small_discriminator",
-    "junnyu/roformer_small_generator",
-    # See all RoFormer models at https://huggingface.co/models?filter=roformer
-]
-
 
 ROFORMER_START_DOCSTRING = r"""
 

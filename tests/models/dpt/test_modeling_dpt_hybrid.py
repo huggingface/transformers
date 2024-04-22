@@ -32,7 +32,6 @@ if is_torch_available():
 
     from transformers import DPTForDepthEstimation, DPTForSemanticSegmentation, DPTModel
     from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
-    from transformers.models.dpt.modeling_dpt import DPT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -295,9 +294,9 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DPT_PRETRAINED_MODEL_ARCHIVE_LIST[1:]:
-            model = DPTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Intel/dpt-hybrid-midas"
+        model = DPTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_raise_readout_type(self):
         # We do this test only for DPTForDepthEstimation since it is the only model that uses readout_type

@@ -41,18 +41,8 @@ from .configuration_xmod import XmodConfig
 
 logger = logging.get_logger(__name__)
 
-XMOD_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/xmod-base",
-    "facebook/xmod-large-prenorm",
-    "facebook/xmod-base-13-125k",
-    "facebook/xmod-base-30-125k",
-    "facebook/xmod-base-30-195k",
-    "facebook/xmod-base-60-125k",
-    "facebook/xmod-base-60-265k",
-    "facebook/xmod-base-75-125k",
-    "facebook/xmod-base-75-269k",
-    # See all X-MOD models at https://huggingface.co/models?filter=xmod
-]
+
+from ..deprecated._archive_maps import XMOD_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->Xmod

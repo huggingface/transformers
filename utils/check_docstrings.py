@@ -697,6 +697,8 @@ OBJECTS_TO_IGNORE = [
     "TFSegformerModel",
     "TFSpeech2TextForConditionalGeneration",
     "TFSpeech2TextModel",
+    "TFSwiftFormerForImageClassification",
+    "TFSwiftFormerModel",
     "TFSwinForImageClassification",
     "TFSwinForMaskedImageModeling",
     "TFSwinModel",

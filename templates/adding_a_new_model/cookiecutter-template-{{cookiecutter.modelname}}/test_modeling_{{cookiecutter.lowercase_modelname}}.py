@@ -40,8 +40,7 @@ if is_torch_available():
         {{cookiecutter.camelcase_modelname}}Model,
     )
     from transformers.models.{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_modelname}} import (
-        {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
+        {{cookiecutter.uppercase_modelname}}    )
 
 
 class {{cookiecutter.camelcase_modelname}}ModelTester:
@@ -453,9 +452,9 @@ class {{cookiecutter.camelcase_modelname}}ModelTest(ModelTesterMixin, unittest.T
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = {{cookiecutter.camelcase_modelname}}Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "{{coockiecutter.checkpoint_identifier}}"
+        model = {{cookiecutter.camelcase_modelname}}Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

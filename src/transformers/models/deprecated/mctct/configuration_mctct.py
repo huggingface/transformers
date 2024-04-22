@@ -20,10 +20,8 @@ from ....utils import logging
 
 logger = logging.get_logger(__name__)
 
-MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "speechbrain/m-ctc-t-large": "https://huggingface.co/speechbrain/m-ctc-t-large/resolve/main/config.json",
-    # See all M-CTC-T models at https://huggingface.co/models?filter=mctct
-}
+
+from .._archive_maps import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class MCTCTConfig(PretrainedConfig):

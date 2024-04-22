@@ -43,10 +43,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "edbeeching/decision-transformer-gym-hopper-medium"
 _CONFIG_FOR_DOC = "DecisionTransformerConfig"
 
-DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "edbeeching/decision-transformer-gym-hopper-medium",
-    # See all DecisionTransformer models at https://huggingface.co/models?filter=decision_transformer
-]
+
+from ..deprecated._archive_maps import DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.gpt2.modeling_gpt2.load_tf_weights_in_gpt2
@@ -110,7 +108,7 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
 class DecisionTransformerGPT2Attention(nn.Module):
     def __init__(self, config, is_cross_attention=False, layer_idx=None):
         super().__init__()
-
+        self.config = config
         max_positions = config.max_position_embeddings
         self.register_buffer(
             "bias",
@@ -148,6 +146,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
+        self.is_causal = True
 
         self.pruned_heads = set()
 
@@ -348,6 +347,7 @@ class DecisionTransformerGPT2MLP(nn.Module):
 
 # Copied from transformers.models.gpt2.modeling_gpt2.GPT2Block with GPT2->DecisionTransformerGPT2
 class DecisionTransformerGPT2Block(nn.Module):
+    # Ignore copy
     def __init__(self, config, layer_idx=None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -499,7 +499,6 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
-    # Copied from transformers.models.gpt2.modeling_gpt2.GPT2Model.forward
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -550,7 +549,7 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)
 
-        # GPT2Attention mask.
+        # Attention mask.
         if attention_mask is not None:
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")

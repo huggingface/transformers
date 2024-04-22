@@ -22,10 +22,8 @@ from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
 
-PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ibm/patchtst-base": "https://huggingface.co/ibm/patchtst-base/resolve/main/config.json",
-    # See all PatchTST models at https://huggingface.co/ibm/models?filter=patchtst
-}
+
+from ..deprecated._archive_maps import PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class PatchTSTConfig(PretrainedConfig):

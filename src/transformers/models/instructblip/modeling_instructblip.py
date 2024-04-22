@@ -47,10 +47,8 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "Salesforce/instructblip-flan-t5-xl"
 
-INSTRUCTBLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Salesforce/instructblip-flan-t5-xl",
-    # See all InstructBLIP models at https://huggingface.co/models?filter=instructblip
-]
+
+from ..deprecated._archive_maps import INSTRUCTBLIP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass

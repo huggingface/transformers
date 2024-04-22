@@ -27,7 +27,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -76,7 +76,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -113,7 +113,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -145,7 +145,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -181,7 +181,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -198,41 +198,44 @@ jobs:
           push: true
           tags: huggingface/transformers-pytorch-gpu
 
-# Need to be fixed with the help from Guillaume.
-#  latest-pytorch-amd:
-#    name: "Latest PyTorch (AMD) [dev]"
-#    runs-on: [self-hosted, docker-gpu, amd-gpu, single-gpu, mi210]
-#    steps:
-#      - name: Set up Docker Buildx
-#        uses: docker/setup-buildx-action@v3
-#      - name: Check out code
-#        uses: actions/checkout@v3
-#      - name: Login to DockerHub
-#        uses: docker/login-action@v3
-#        with:
-#          username: ${{ secrets.DOCKERHUB_USERNAME }}
-#          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-#      - name: Build and push
-#        uses: docker/build-push-action@v5
-#        with:
-#          context: ./docker/transformers-pytorch-amd-gpu
-#          build-args: |
-#            REF=main
-#          push: true
-#          tags: huggingface/transformers-pytorch-amd-gpu${{ inputs.image_postfix }}
-#      # Push CI images still need to be re-built daily
-#      -
-#        name: Build and push (for Push CI) in a daily basis
-#        # This condition allows `schedule` events, or `push` events that trigger this workflow NOT via `workflow_call`.
-#        # The later case is useful for manual image building for debugging purpose. Use another tag in this case!
-#        if: inputs.image_postfix != '-push-ci'
-#        uses: docker/build-push-action@v5
-#        with:
-#          context: ./docker/transformers-pytorch-amd-gpu
-#          build-args: |
-#            REF=main
-#          push: true
-#          tags: huggingface/transformers-pytorch-amd-gpu-push-ci
+  latest-pytorch-amd:
+    name: "Latest PyTorch (AMD) [dev]"
+    runs-on: [intel-cpu, 8-cpu, ci]
+    steps:
+      - 
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - 
+        name: Check out code
+        uses: actions/checkout@v4
+      - 
+        name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - 
+        name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker/transformers-pytorch-amd-gpu
+          build-args: |
+            REF=main
+          push: true
+          tags: huggingface/transformers-pytorch-amd-gpu${{ inputs.image_postfix }}
+      # Push CI images still need to be re-built daily
+      -
+        name: Build and push (for Push CI) in a daily basis
+        # This condition allows `schedule` events, or `push` events that trigger this workflow NOT via `workflow_call`.
+        # The later case is useful for manual image building for debugging purpose. Use another tag in this case!
+        if: inputs.image_postfix != '-push-ci'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker/transformers-pytorch-amd-gpu
+          build-args: |
+            REF=main
+          push: true
+          tags: huggingface/transformers-pytorch-amd-gpu-push-ci
 
   latest-tensorflow:
     name: "Latest TensorFlow [dev]"
@@ -245,7 +248,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
         uses: docker/login-action@v3
@@ -262,41 +265,44 @@ jobs:
           push: true
           tags: huggingface/transformers-tensorflow-gpu
 
-  # latest-pytorch-deepspeed-amd:
-  #   name: "PyTorch + DeepSpeed (AMD) [dev]"
-
-  #   runs-on: [self-hosted, docker-gpu, amd-gpu, single-gpu, mi210]
-  #   steps:
-  #     - name: Set up Docker Buildx
-  #       uses: docker/setup-buildx-action@v3
-  #     - name: Check out code
-  #       uses: actions/checkout@v3
-  #     - name: Login to DockerHub
-  #       uses: docker/login-action@v3
-  #       with:
-  #         username: ${{ secrets.DOCKERHUB_USERNAME }}
-  #         password: ${{ secrets.DOCKERHUB_PASSWORD }}
-  #     - name: Build and push
-  #       uses: docker/build-push-action@v5
-  #       with:
-  #         context: ./docker/transformers-pytorch-deepspeed-amd-gpu
-  #         build-args: |
-  #           REF=main
-  #         push: true
-  #         tags: huggingface/transformers-pytorch-deepspeed-amd-gpu${{ inputs.image_postfix }}
-  #     # Push CI images still need to be re-built daily
-  #     -
-  #       name: Build and push (for Push CI) in a daily basis
-  #       # This condition allows `schedule` events, or `push` events that trigger this workflow NOT via `workflow_call`.
-  #       # The later case is useful for manual image building for debugging purpose. Use another tag in this case!
-  #       if: inputs.image_postfix != '-push-ci'
-  #       uses: docker/build-push-action@v5
-  #       with:
-  #         context: ./docker/transformers-pytorch-deepspeed-amd-gpu
-  #         build-args: |
-  #           REF=main
-  #         push: true
-  #         tags: huggingface/transformers-pytorch-deepspeed-amd-gpu-push-ci
+  latest-pytorch-deepspeed-amd:
+    name: "PyTorch + DeepSpeed (AMD) [dev]"
+    runs-on: [intel-cpu, 8-cpu, ci]
+    steps:
+      - 
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - 
+        name: Check out code
+        uses: actions/checkout@v4
+      - 
+        name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - 
+        name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker/transformers-pytorch-deepspeed-amd-gpu
+          build-args: |
+            REF=main
+          push: true
+          tags: huggingface/transformers-pytorch-deepspeed-amd-gpu${{ inputs.image_postfix }}
+      # Push CI images still need to be re-built daily
+      -
+        name: Build and push (for Push CI) in a daily basis
+        # This condition allows `schedule` events, or `push` events that trigger this workflow NOT via `workflow_call`.
+        # The later case is useful for manual image building for debugging purpose. Use another tag in this case!
+        if: inputs.image_postfix != '-push-ci'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker/transformers-pytorch-deepspeed-amd-gpu
+          build-args: |
+            REF=main
+          push: true
+          tags: huggingface/transformers-pytorch-deepspeed-amd-gpu-push-ci
 
   latest-quantization-torch-docker:
     name: "Latest Pytorch + Quantization [dev]"
@@ -309,7 +315,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
         uses: docker/login-action@v3

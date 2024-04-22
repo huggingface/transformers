@@ -19,9 +19,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/switch-base-8": "https://huggingface.co/google/switch-base-8/blob/main/config.json",
-}
+
+from ..deprecated._archive_maps import SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class SwitchTransformersConfig(PretrainedConfig):

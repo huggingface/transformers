@@ -30,7 +30,6 @@ if is_torch_available():
     import torch
 
     from transformers import MODEL_MAPPING, PoolFormerConfig, PoolFormerForImageClassification, PoolFormerModel
-    from transformers.models.poolformer.modeling_poolformer import POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -209,9 +208,9 @@ class PoolFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = PoolFormerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "sail/poolformer_s12"
+        model = PoolFormerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

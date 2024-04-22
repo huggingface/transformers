@@ -20,10 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/canine-s": "https://huggingface.co/google/canine-s/resolve/main/config.json",
-    # See all CANINE models at https://huggingface.co/models?filter=canine
-}
+
+from ..deprecated._archive_maps import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class CanineConfig(PretrainedConfig):

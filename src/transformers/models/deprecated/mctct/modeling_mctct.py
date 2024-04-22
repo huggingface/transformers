@@ -52,10 +52,7 @@ _CTC_EXPECTED_OUTPUT = '"Mr. Quilter is the apostle of the middle classes, and w
 _CTC_EXPECTED_LOSS = 1885.65
 
 
-MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "speechbrain/m-ctc-t-large",
-    # See all M-CTC-T models at https://huggingface.co/models?filter=mctct
-]
+from .._archive_maps import MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class MCTCTConv1dSubsampler(nn.Module):

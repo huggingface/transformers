@@ -358,7 +358,7 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 >>> args = TrainingArguments(
 ...     new_model_name,
 ...     remove_unused_columns=False,
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     save_strategy="epoch",
 ...     learning_rate=5e-5,
 ...     per_device_train_batch_size=batch_size,

@@ -27,9 +27,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "kakaobrain/align-base": "https://huggingface.co/kakaobrain/align-base/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class AlignTextConfig(PretrainedConfig):

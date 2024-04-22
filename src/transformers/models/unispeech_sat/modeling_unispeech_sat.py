@@ -72,9 +72,8 @@ _FRAME_EXPECTED_OUTPUT = [0, 0]
 _XVECTOR_CHECKPOINT = "microsoft/unispeech-sat-base-plus-sv"
 _XVECTOR_EXPECTED_OUTPUT = 0.97
 
-UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # See all UniSpeechSat models at https://huggingface.co/models?filter=unispeech_sat
-]
+
+from ..deprecated._archive_maps import UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -1109,7 +1108,7 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
         self.feature_extractor = UniSpeechSatFeatureEncoder(config)
         self.feature_projection = UniSpeechSatFeatureProjection(config)
 
-        self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+        self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
 
         if config.do_stable_layer_norm:
             self.encoder = UniSpeechSatEncoderStableLayerNorm(config)

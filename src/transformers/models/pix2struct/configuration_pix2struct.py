@@ -23,11 +23,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/pix2struct-textcaps-base": (
-        "https://huggingface.co/google/pix2struct-textcaps-base/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class Pix2StructTextConfig(PretrainedConfig):

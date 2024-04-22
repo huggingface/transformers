@@ -3,13 +3,19 @@ from typing import List, Union
 
 import requests
 
-from ..utils import add_end_docstrings, is_decord_available, is_torch_available, logging, requires_backends
+from ..utils import (
+    add_end_docstrings,
+    is_av_available,
+    is_torch_available,
+    logging,
+    requires_backends,
+)
 from .base import Pipeline, build_pipeline_init_args
 
 
-if is_decord_available():
+if is_av_available():
+    import av
     import numpy as np
-    from decord import VideoReader
 
 
 if is_torch_available():
@@ -33,7 +39,7 @@ class VideoClassificationPipeline(Pipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        requires_backends(self, "decord")
+        requires_backends(self, "av")
         self.check_model_type(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES)
 
     def _sanitize_parameters(self, top_k=None, num_frames=None, frame_sampling_rate=None):
@@ -90,14 +96,13 @@ class VideoClassificationPipeline(Pipeline):
         if video.startswith("http://") or video.startswith("https://"):
             video = BytesIO(requests.get(video).content)
 
-        videoreader = VideoReader(video)
-        videoreader.seek(0)
+        container = av.open(video)
 
         start_idx = 0
         end_idx = num_frames * frame_sampling_rate - 1
         indices = np.linspace(start_idx, end_idx, num=num_frames, dtype=np.int64)
 
-        video = videoreader.get_batch(indices).asnumpy()
+        video = read_video_pyav(container, indices)
         video = list(video)
 
         model_inputs = self.image_processor(video, return_tensors=self.framework)
@@ -120,3 +125,16 @@ class VideoClassificationPipeline(Pipeline):
         scores = scores.tolist()
         ids = ids.tolist()
         return [{"score": score, "label": self.model.config.id2label[_id]} for score, _id in zip(scores, ids)]
+
+
+def read_video_pyav(container, indices):
+    frames = []
+    container.seek(0)
+    start_index = indices[0]
+    end_index = indices[-1]
+    for i, frame in enumerate(container.decode(video=0)):
+        if i > end_index:
+            break
+        if i >= start_index and i in indices:
+            frames.append(frame)
+    return np.stack([x.to_ndarray(format="rgb24") for x in frames])

@@ -35,6 +35,7 @@ from .utils import (
     is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
+    is_torch_mlu_available,
     is_torch_mps_available,
     is_torch_npu_available,
     is_torch_xla_available,
@@ -100,6 +101,8 @@ def set_seed(seed: int, deterministic: bool = False):
         # ^^ safe to call this function even if cuda is not available
         if deterministic:
             torch.use_deterministic_algorithms(True)
+    if is_torch_mlu_available():
+        torch.mlu.manual_seed_all(seed)
     if is_torch_npu_available():
         torch.npu.manual_seed_all(seed)
     if is_torch_xpu_available():
@@ -408,6 +411,7 @@ class SchedulerType(ExplicitEnum):
     CONSTANT_WITH_WARMUP = "constant_with_warmup"
     INVERSE_SQRT = "inverse_sqrt"
     REDUCE_ON_PLATEAU = "reduce_lr_on_plateau"
+    COSINE_WITH_MIN_LR = "cosine_with_min_lr"
 
 
 class TrainerMemoryTracker:
@@ -454,7 +458,7 @@ class TrainerMemoryTracker:
 
         import psutil  # noqa
 
-        if is_torch_cuda_available():
+        if is_torch_cuda_available() or is_torch_mlu_available():
             import torch
 
             self.torch = torch
@@ -527,6 +531,9 @@ class TrainerMemoryTracker:
             if torch.cuda.is_available():
                 self.torch.cuda.reset_peak_memory_stats()
                 self.torch.cuda.empty_cache()
+            elif is_torch_mlu_available():
+                self.torch.mlu.reset_peak_memory_stats()
+                self.torch.mlu.empty_cache()
             elif is_torch_xpu_available():
                 self.torch.xpu.reset_peak_memory_stats()
                 self.torch.xpu.empty_cache()
@@ -540,6 +547,8 @@ class TrainerMemoryTracker:
         if self.torch is not None:
             if torch.cuda.is_available():
                 self.gpu_mem_used_at_start = self.torch.cuda.memory_allocated()
+            elif is_torch_mlu_available():
+                self.gpu_mem_used_at_start = self.torch.mlu.memory_allocated()
             elif is_torch_xpu_available():
                 self.gpu_mem_used_at_start = self.torch.xpu.memory_allocated()
             elif is_torch_npu_available():
@@ -571,6 +580,8 @@ class TrainerMemoryTracker:
         if self.torch is not None:
             if torch.cuda.is_available():
                 self.torch.cuda.empty_cache()
+            elif is_torch_mlu_available():
+                self.torch.mlu.empty_cache()
             elif is_torch_xpu_available():
                 self.torch.xpu.empty_cache()
             elif is_torch_npu_available():
@@ -588,6 +599,9 @@ class TrainerMemoryTracker:
             if torch.cuda.is_available():
                 self.gpu_mem_used_now = self.torch.cuda.memory_allocated()
                 self.gpu_mem_used_peak = self.torch.cuda.max_memory_allocated()
+            elif is_torch_mlu_available():
+                self.gpu_mem_used_now = self.torch.mlu.memory_allocated()
+                self.gpu_mem_used_peak = self.torch.mlu.max_memory_allocated()
             elif is_torch_xpu_available():
                 self.gpu_mem_used_now = self.torch.xpu.memory_allocated()
                 self.gpu_mem_used_peak = self.torch.xpu.max_memory_allocated()

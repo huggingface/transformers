@@ -40,9 +40,6 @@ if is_tf_available():
         TFData2VecVisionModel,
     )
     from transformers.modeling_tf_utils import keras
-    from transformers.models.data2vec.modeling_tf_data2vec_vision import (
-        TF_DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
 
 if is_vision_available():
     from PIL import Image
@@ -455,9 +452,9 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittes
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFData2VecVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/data2vec-vision-base-ft1k"
+        model = TFData2VecVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

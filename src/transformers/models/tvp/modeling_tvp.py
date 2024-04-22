@@ -34,11 +34,8 @@ from .configuration_tvp import TvpConfig
 
 logger = logging.get_logger(__name__)
 
-TVP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Intel/tvp-base",
-    "Intel/tvp-base-ANet",
-    # See all Tvp models at https://huggingface.co/models?filter=tvp
-]
+
+from ..deprecated._archive_maps import TVP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass

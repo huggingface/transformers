@@ -20,10 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google-bert/bert-base-uncased": "https://huggingface.co/google-bert/bert-base-uncased/resolve/main/config.json",
-    # QDQBERT models can be loaded from any BERT checkpoint, available at https://huggingface.co/models?filter=bert
-}
+
+from ..deprecated._archive_maps import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class QDQBertConfig(PretrainedConfig):

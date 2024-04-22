@@ -153,10 +153,6 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_subword_regularization_tokenizer(self):
         pass
 
-    @unittest.skip("This test will be removed from main @LysandreJik")
-    def test_pretrained_model_lists(self):
-        pass
-
     @unittest.skip("Skipping")
     def test_torch_encode_plus_sent_to_model(self):
         pass

@@ -29,7 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import SplinterConfig, SplinterForPreTraining, SplinterForQuestionAnswering, SplinterModel
-    from transformers.models.splinter.modeling_splinter import SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class SplinterModelTester:
@@ -328,9 +327,9 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SplinterModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "tau/splinter-base"
+        model = SplinterModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     # overwrite from common since `SplinterForPreTraining` could contain different number of question tokens in inputs.
     # When the batch is distributed to multiple devices, each replica could get different values for the maximal number
