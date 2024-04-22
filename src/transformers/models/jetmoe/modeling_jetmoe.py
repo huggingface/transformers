@@ -408,7 +408,7 @@ class JetMoeMoA(nn.Module):
         y_list = []
         for i in range(self.top_k):
             expert_idx = top_k_indices[0, i]
-            y = F.linear(x, input_linear.weight[expert_idx])
+            y = F.linear(x, self.input_linear.weight[expert_idx])
             y_list.append(y)
         y = torch.cat(y_list, dim=0)
         y = y.view(bsz, length, self.top_k, -1)
