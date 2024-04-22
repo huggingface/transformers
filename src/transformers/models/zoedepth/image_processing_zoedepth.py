@@ -227,12 +227,8 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
 
         height, width = output_size
 
-        print("Shape of input image for resizing:", image.shape)
-        print("Input data format:", input_data_format)
-
         torch_image = torch.from_numpy(image).unsqueeze(0)
         torch_image = torch_image.permute(0, 3, 1, 2) if input_data_format == "channels_last" else torch_image
-        print(torch_image.shape)
 
         # TODO support align_corners=True in image_transforms.resize
         resample_to_mode = {PILImageResampling.BILINEAR: "bilinear", PILImageResampling.BICUBIC: "bicubic"}
@@ -246,11 +242,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             else resized_image.squeeze().numpy()
         )
 
-        print("Shape of resized image:", resized_image.shape)
-
         resized_image = to_channel_dimension_format(resized_image, data_format, input_channel_dim=input_data_format)
-
-        print("Shape after channel dimension format:", resized_image.shape)
 
         return resized_image
 
