@@ -745,6 +745,7 @@ def main():
                     repo_id=repo_id,
                     repo_type="model",
                     token=args.hub_token,
+                    ignore_patterns=["epoch_*"],
                 )
 
 
