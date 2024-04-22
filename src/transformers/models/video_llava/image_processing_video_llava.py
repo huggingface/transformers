@@ -205,8 +205,8 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images,
-        visual_inputs: List[ImageInput],
+        images: ImageInput,
+        videos: VideoInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
