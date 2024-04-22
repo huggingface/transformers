@@ -50,6 +50,7 @@ on the Hub.
 - Q3_K
 - Q4_0
 - Q4_K
+- Q5_K
 - Q6_K
 - Q8_0
 
