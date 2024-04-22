@@ -1762,7 +1762,7 @@ class ModelTesterMixin:
             if self.model_tester.is_training is False:
                 model.eval()
 
-            model_vocab_size = config.vocab_size
+            model_vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
             # Retrieve the embeddings and clone theme
             model_embed = model.resize_token_embeddings(model_vocab_size)
             cloned_embeddings = model_embed.weight.clone()
@@ -1802,7 +1802,7 @@ class ModelTesterMixin:
             model = model_class(config)
             model.to(torch_device)
 
-            model_vocab_size = config.vocab_size
+            model_vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
             model.resize_token_embeddings(model_vocab_size + 10, pad_to_multiple_of=1)
             self.assertTrue(model.config.vocab_size + 10, model_vocab_size)
 
@@ -1849,7 +1849,7 @@ class ModelTesterMixin:
                 continue
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
-            model_vocab_size = config.vocab_size
+            model_vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
             model.resize_token_embeddings(model_vocab_size + 10)
             self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
             output_embeds = model.get_output_embeddings()
@@ -1949,7 +1949,8 @@ class ModelTesterMixin:
             # self.assertTrue(check_same_values(embeddings, decoding))
 
             # Check that after resize they remain tied.
-            model_tied.resize_token_embeddings(config.vocab_size + 10)
+            vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
+            model_tied.resize_token_embeddings(vocab_size + 10)
             params_tied_2 = list(model_tied.parameters())
             self.assertEqual(len(params_tied_2), len(params_tied))
 

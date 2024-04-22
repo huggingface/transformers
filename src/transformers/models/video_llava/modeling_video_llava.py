@@ -242,7 +242,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         self.image_tower = AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = VideoLlavaMultiModalProjector(config)
-        self.vocab_size = config.vocab_size
+        self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
             config.text_config, attn_implementation=config._attn_implementation
         )
