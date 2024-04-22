@@ -64,7 +64,7 @@ print(response[0]['generated_text'][-1]['content'])
 
 And you'll get:
 
-```
+```text
 (sigh) Oh boy, you're asking me for advice? You're gonna need a map, pal! Alright, 
 alright, I'll give you the lowdown. But don't say I didn't warn you, I'm a robot, not a tour guide!
 
@@ -102,7 +102,7 @@ print(response[0]['generated_text'][-1]['content'])
 
 And you'll get:
 
-```
+```text
 (laughs) Oh, you're killin' me, pal! You don't get it, do you? Warhol's soup cans are like, art, man! 
 It's like, he took something totally mundane, like a can of soup, and turned it into a masterpiece. It's 
 like, "Hey, look at me, I'm a can of soup, but I'm also a work of art!" 
@@ -190,11 +190,11 @@ decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
 There's a lot in here, each piece of which could be its own document! Rather than going into too much detail, I'll cover
 the broad ideas, and leave the details for the linked documents. The key steps are:
 
-1) [Models](https://huggingface.co/learn/nlp-course/en/chapter2/3) and [Tokenizers](https://huggingface.co/learn/nlp-course/en/chapter2/4?fw=pt) are loaded from the Hugging Face Hub.
-2) The chat is formatted using the tokenizer's [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
-3) The formatted chat is [tokenized](https://huggingface.co/learn/nlp-course/en/chapter2/4) using the tokenizer.
-4) We [generate](https://huggingface.co/docs/transformers/en/llm_tutorial) a response from the model.
-5) The tokens output by the model are decoded back to a string (TODO: Is there a link for detokenization? Just the tokenization docs again?)
+1. [Models](https://huggingface.co/learn/nlp-course/en/chapter2/3) and [Tokenizers](https://huggingface.co/learn/nlp-course/en/chapter2/4?fw=pt) are loaded from the Hugging Face Hub.
+2. The chat is formatted using the tokenizer's [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
+3. The formatted chat is [tokenized](https://huggingface.co/learn/nlp-course/en/chapter2/4) using the tokenizer.
+4. We [generate](https://huggingface.co/docs/transformers/en/llm_tutorial) a response from the model.
+5. The tokens output by the model are decoded back to a string (TODO: Is there a link for detokenization? Just the tokenization docs again?)
 
 ## Advanced: Performance, memory and hardware
 
