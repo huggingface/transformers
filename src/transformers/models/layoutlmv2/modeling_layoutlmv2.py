@@ -700,10 +700,6 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         self.visual_proj = nn.Linear(config.image_feature_pool_shape[-1], config.hidden_size)
         if self.has_visual_segment_embedding:
             self.visual_segment_embedding = nn.Parameter(nn.Embedding(1, config.hidden_size).weight[0])
-            # For `nn.Parameter`, we need to give it an initialized weight in order to keep reproducibility.
-            # Otherwise, since `_fast_init` is used in `modeling_utils.py`, the layer `nn.Embedding` is not initialized,
-            # and `_init_weights` is not designed to deal with `nn.Parameter`.
-            ### self.visual_segment_embedding.data.normal_(mean=0.0, std=self.config.initializer_range)
         self.visual_LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.visual_dropout = nn.Dropout(config.hidden_dropout_prob)
 
