@@ -42,7 +42,7 @@ class CalculatorTool(Tool):
         local_dict = {"pi": math.pi, "e": math.e}
         output = str(
             self.numexpr.evaluate(
-                expression.strip(),
+                expression.strip().replace("^", "**"),
                 global_dict={},  # restrict access to globals
                 local_dict=local_dict,  # add common mathematical functions
             )

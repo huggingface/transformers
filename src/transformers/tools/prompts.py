@@ -158,8 +158,9 @@ $ACTION_JSON_BLOB
 Observation: the result of the action
 ... (this Thought/Action/Observation can repeat N times, you should take several steps when needed. The $ACTION_JSON_BLOB must only use a SINGLE action at a time.)
 
-ALWAYS provide a 'Thought:' and an 'Action:' part. You MUST provide at least the 'Action:' part to move forward.
-To provide the final answer to the task, use an action blob with "action": 'final_answer' tool.It is the only way to complete the task, else you will be stuck on a loop. So your final output should look like this:
+ALWAYS provide a 'Thought:' and an 'Action:' sequence. You MUST provide at least the 'Action:' sequence to move forward.
+To provide the final answer to the task, use an action blob with "action": 'final_answer' tool. It is the only way to complete the task, else you will be stuck on a loop. So your final output should look like this:
+Action:
 {
   "action": 'final_answer',
   "action_input": "insert your final answer here"
