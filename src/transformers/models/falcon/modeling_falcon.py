@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
+from ...activations import get_activation
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
     _prepare_4d_causal_attention_mask,
@@ -739,9 +740,9 @@ class FalconMLP(nn.Module):
         super().__init__()
         hidden_size = config.hidden_size
 
-        self.dense_h_to_4h = FalconLinear(hidden_size, 4 * hidden_size, bias=config.bias)
-        self.act = nn.GELU()
-        self.dense_4h_to_h = FalconLinear(4 * hidden_size, hidden_size, bias=config.bias)
+        self.dense_h_to_4h = FalconLinear(hidden_size, config.ffn_hidden_size, bias=config.bias)
+        self.act = get_activation(config.activation)
+        self.dense_4h_to_h = FalconLinear(config.ffn_hidden_size, hidden_size, bias=config.bias)
         self.hidden_dropout = config.hidden_dropout
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -1098,27 +1099,23 @@ class FalconModel(FalconPreTrainedModel):
             elif head_mask is None:
                 alibi = alibi.reshape(batch_size, -1, *alibi.shape[1:])
 
-                attention_mask_2d = attention_mask
                 # We don't call _prepare_4d_causal_attention_mask_for_sdpa as we need to mask alibi using the 4D attention_mask untouched.
                 attention_mask = _prepare_4d_causal_attention_mask(
                     attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
                 )
 
                 # We take care to integrate alibi bias in the attention_mask here.
-                if attention_mask_2d is None:
-                    attention_mask = alibi / math.sqrt(self.config.hidden_size // self.num_heads)
-                else:
-                    min_dtype = torch.finfo(alibi.dtype).min
-                    attention_mask = torch.masked_fill(
-                        alibi / math.sqrt(self.config.hidden_size // self.num_heads),
-                        attention_mask < -1,
-                        min_dtype,
-                    )
+                min_dtype = torch.finfo(alibi.dtype).min
+                attention_mask = torch.masked_fill(
+                    alibi / math.sqrt(self.config.hidden_size // self.num_heads),
+                    attention_mask < -1,
+                    min_dtype,
+                )
 
-                    # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
-                    # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
-                    if seq_length > 1 and attention_mask.device.type == "cuda":
-                        attention_mask = AttentionMaskConverter._unmask_unattended(attention_mask, min_dtype=min_dtype)
+                # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
+                # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
+                if seq_length > 1 and attention_mask.device.type == "cuda":
+                    attention_mask = AttentionMaskConverter._unmask_unattended(attention_mask, min_dtype=min_dtype)
             else:
                 # PyTorch SDPA does not support head_mask, we fall back on the eager implementation in this case.
                 attention_mask = _prepare_4d_causal_attention_mask(

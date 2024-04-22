@@ -238,7 +238,7 @@ At this point, only three steps remain:
 ```py
 >>> training_args = TrainingArguments(
 ...     output_dir="my_awesome_eli5_mlm_model",
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     learning_rate=2e-5,
 ...     num_train_epochs=3,
 ...     weight_decay=0.01,

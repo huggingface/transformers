@@ -320,6 +320,8 @@
         title: CPMANT
       - local: model_doc/ctrl
         title: CTRL
+      - local: model_doc/dbrx
+        title: DBRX
       - local: model_doc/deberta
         title: DeBERTa
       - local: model_doc/deberta-v2
@@ -382,6 +384,8 @@
         title: HerBERT
       - local: model_doc/ibert
         title: I-BERT
+      - local: model_doc/jamba
+        title: Jamba
       - local: model_doc/jukebox
         title: Jukebox
       - local: model_doc/led
@@ -440,6 +444,8 @@
         title: NLLB-MoE
       - local: model_doc/nystromformer
         title: Nyströmformer
+      - local: model_doc/olmo
+        title: OLMo
       - local: model_doc/open-llama
         title: Open-Llama
       - local: model_doc/opt
@@ -468,6 +474,8 @@
         title: RAG
       - local: model_doc/realm
         title: REALM
+      - local: model_doc/recurrent_gemma
+        title: RecurrentGemma
       - local: model_doc/reformer
         title: Reformer
       - local: model_doc/rembert
@@ -730,10 +738,14 @@
         title: FLAVA
       - local: model_doc/git
         title: GIT
+      - local: model_doc/grounding-dino
+        title: Grounding DINO
       - local: model_doc/groupvit
         title: GroupViT
       - local: model_doc/idefics
         title: IDEFICS
+      - local: model_doc/idefics2
+        title: Idefics2
       - local: model_doc/instructblip
         title: InstructBLIP
       - local: model_doc/kosmos-2

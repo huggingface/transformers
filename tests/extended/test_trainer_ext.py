@@ -308,7 +308,7 @@ class TestTrainerExt(TestCasePlus):
             --per_device_eval_batch_size 4
             --max_eval_samples 8
             --val_max_target_length {max_len}
-            --evaluation_strategy steps
+            --eval_strategy steps
             --eval_steps {str(eval_steps)}
         """.split()
 

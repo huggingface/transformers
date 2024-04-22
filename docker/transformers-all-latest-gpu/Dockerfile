@@ -46,10 +46,14 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/opt
 RUN python3 -m pip install --no-cache-dir decord av==9.2.0
 
 # For `dinat` model
-RUN python3 -m pip install --no-cache-dir 'natten<0.15.0' -f https://shi-labs.com/natten/wheels/$CUDA/
+# The `XXX` part in `torchXXX` needs to match `PYTORCH` (to some extent)
+RUN python3 -m pip install --no-cache-dir natten==0.15.1+torch220$CUDA -f https://shi-labs.com/natten/wheels
 
 # For `nougat` tokenizer
 RUN python3 -m pip install --no-cache-dir python-Levenshtein
+
+# For `FastSpeech2ConformerTokenizer` tokenizer
+RUN python3 -m pip install --no-cache-dir g2p-en
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
