@@ -71,41 +71,35 @@ Here is an example adapted from  showing how powerful the ReAct agent framework 
 Task: How many more blocks (also denoted as layers) in BERT base encoder than the encoder from the architecture proposed in Attention is All You Need?
 
 Thought: To begin, I need to find the number of layers in the encoder of BERT base and the architecture proposed in Attention is All You Need. I will start by searching for the number of layers in BERT base.
-
 Action:
 {
    "action": "search",
  "action_input": "number of layers in BERT base encoder"
 }
-
 Observation: 12 layers
-Thought: I need to search for the number of layers in the encoder of the architecture proposed in Attention is All You Need.
 
+Thought: I need to search for the number of layers in the encoder of the architecture proposed in Attention is All You Need.
 Action:
 {
    "action": "search",
  "action_input": "number of layers in the encoder of the architecture proposed in Attention is All You Need"
 }
-
 Observation: Encoder: The encoder is composed of a stack of N = 6 identical layers. Each layer has two sub-layers.
-Thought: Now that I have the number of layers for both BERT base and the architecture proposed in Attention is All You Need, I can calculate the difference.
 
+Thought: Now that I have the number of layers for both BERT base and the architecture proposed in Attention is All You Need, I can calculate the difference.
 Action:
 {
    "action": "calculator",
  "action_input": "12 - 6"
 }
-
-
 Observation: 6
-Thought: Now that I have the calculated difference, I need to provide the final answer.
 
+Thought: Now that I have the calculated difference, I need to provide the final answer.
 Action:
 {
    "action": "final_answer",
  "action_input": "BERT base encoder has 6 more layers than the encoder from the architecture proposed in Attention is All You Need"
 }'
-
 ```
 
 
@@ -135,7 +129,7 @@ To start with, please install the `agents` extras in order to install all defaul
 pip install transformers[agents]
 ```
 
-To build your LLM engine, you have to define a `llm_engine` method, that will be given text and return text. This callable needs to accept a `stop` argument defining stop sequences indicating when to stop generating its output. For instance as follows:
+To build your LLM engine, you have to define a `llm_engine` method, that will be given text and return text. This callable needs to accept a `stop` argument defining stop sequences indicating when to stop generating its output. For instance you can define it as follows:
 
 ```python
 from huggingface_hub import login, InferenceClient
@@ -161,10 +155,24 @@ You also need a `tools` argument, as a list of `Tools`. We can start with an emp
 
 Then you can define your agent and run it.
 
+For your convenience, we provide the `HfEngine` which wraps the `InferenceClient`-based code shown below.
+
 ```python
-from transformers import CodeAgent
+from transformers.agents import CodeAgent, HfEngine
+
+llm_engine = HfEngine(model="meta-llama/Meta-Llama-3-70B-Instruct")
 
 agent = CodeAgent(llm_engine=llm_engine, tools=[], add_base_tools=True)
+
+agent.run("Draw me a picture of rivers and lakes")
+```
+
+You can also leave the llm_engine empty to start building right away:
+
+```python
+from transformers.agents import CodeAgent
+
+agent = CodeAgent(tools=[], add_base_tools=True)
 
 agent.run("Draw me a picture of rivers and lakes")
 ```

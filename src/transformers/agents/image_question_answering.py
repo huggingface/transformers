@@ -21,7 +21,7 @@ from PIL import Image
 
 from ..models.auto import AutoModelForVisualQuestionAnswering, AutoProcessor
 from ..utils import requires_backends
-from .base import PipelineTool
+from .tools import PipelineTool
 
 
 class ImageQuestionAnsweringTool(PipelineTool):

@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ..models.auto import AutoModelForSeq2SeqLM, AutoTokenizer
-from .base import PipelineTool
+from .tools import PipelineTool
 
 
 LANGUAGE_CODES = {
@@ -249,8 +249,14 @@ class TranslationTool(PipelineTool):
 
     inputs = {
         "text": {"type": str, "description": "The text to translate"},
-        "src_lang": {"type": str, "description": "The language of the text to translate. Written in plain English, such as 'Romanian', or 'Albanian'"},
-        "tgt_lang": {"type": str, "description": "The language for the desired ouput language. Written in plain English, such as 'Romanian', or 'Albanian'"}
+        "src_lang": {
+            "type": str,
+            "description": "The language of the text to translate. Written in plain English, such as 'Romanian', or 'Albanian'",
+        },
+        "tgt_lang": {
+            "type": str,
+            "description": "The language for the desired ouput language. Written in plain English, such as 'Romanian', or 'Albanian'",
+        },
     }
     output_type = str
 

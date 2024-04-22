@@ -17,21 +17,18 @@
 from typing import Any
 
 from ..models.whisper import WhisperForConditionalGeneration, WhisperProcessor
-from .base import PipelineTool
+from .tools import PipelineTool
 
 
 class SpeechToTextTool(PipelineTool):
     default_checkpoint = "openai/whisper-base"
-    description = (
-        "This is a tool that transcribes an audio into text. It returns the "
-        "transcribed text."
-    )
+    description = "This is a tool that transcribes an audio into text. It returns the " "transcribed text."
     name = "transcriber"
     pre_processor_class = WhisperProcessor
     model_class = WhisperForConditionalGeneration
 
     inputs = {"audio": {"type": Any, "description": "the audio to transcribe"}}
-    output_type= str
+    output_type = str
 
     def encode(self, audio):
         return self.pre_processor(audio, return_tensors="pt").input_features
