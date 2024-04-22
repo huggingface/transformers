@@ -612,6 +612,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_overall_accuracy"], 0.1)
 
+    @patch.dict(os.environ, {"WANDB_DISABLED": "true"})
     def test_run_object_detection(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -619,7 +620,7 @@ class ExamplesTests(TestCasePlus):
             --model_name_or_path qubvel-hf/detr-resnet-50-finetuned-10k-cppe5
             --output_dir {tmp_dir}
             --dataset_name qubvel-hf/cppe-5-sample
-            --do_train False
+            --do_train
             --do_eval
             --remove_unused_columns False
             --overwrite_output_dir True
@@ -627,7 +628,7 @@ class ExamplesTests(TestCasePlus):
             --max_steps 10
             --learning_rate=1e-6
             --per_device_train_batch_size=2
-            --per_device_eval_batch_size=2
+            --per_device_eval_batch_size=1
             --seed 32
         """.split()
 
