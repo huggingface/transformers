@@ -12,30 +12,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning DETA 🤗 Transformers model for object detection."""
+""" Finetuning 🤗 Transformers model for object detection with Accelerate."""
 
 import argparse
 import json
+import logging
 import math
 import os
 from functools import partial
 from pathlib import Path
+from typing import Any, List, Mapping, Tuple, Union
 
 import albumentations as A
 import datasets
-import evaluate
 import numpy as np
 import torch
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
-from albumentations.pytorch import ToTensorV2
 from datasets import load_dataset
-from huggingface_hub import HfApi, hf_hub_download
+from huggingface_hub import HfApi
 from torch.utils.data import DataLoader
-from tqdm.auto import tqdm
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
-from transformers.image_transforms import center_to_corners_format
+from tqdm.auto import tqdm
 
 import transformers
 from transformers import (
@@ -43,29 +42,33 @@ from transformers import (
     AutoImageProcessor,
     AutoModelForObjectDetection,
     SchedulerType,
-    default_data_collator,
     get_scheduler,
 )
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.image_processing_utils import BatchFeature
+from transformers.image_transforms import center_to_corners_format
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
-from typing import List, Tuple
+
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.40.0.dev0")
 
+logging.basicConfig(level=logging.INFO)
 logger = get_logger(__name__)
 
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/semantic-segmentation/requirements.txt")
 
 
-def format_image_annotations_as_coco(image_id: str, category: List[int], area: List[float], bbox: List[Tuple[float]]) -> dict:
+def format_image_annotations_as_coco(
+    image_id: str, category: List[int], area: List[float], bbox: List[Tuple[float]]
+) -> dict:
     """Format one image annotations to COCO format
 
     Args:
         image_id (str): image id. e.g. "0001"
         category (List[int]): list of categories/class labels corresponding to provided bounding boxes
         area (List[float]): list of corresponding areas to provided bounding boxes
-        bbox (List[Tuple[float]]): list of bounding boxes provided in COCO format 
+        bbox (List[Tuple[float]]): list of bounding boxes provided in COCO format
             ([center_x, center_y, width, height] in absolute coordinates)
 
     Returns:
@@ -91,19 +94,18 @@ def format_image_annotations_as_coco(image_id: str, category: List[int], area: L
     }
 
 
-def augment_and_transform_batch(examples, transform, image_processor):
+def augment_and_transform_batch(
+    examples: Mapping[str, Any], transform: A.Compose, image_processor: AutoImageProcessor
+) -> BatchFeature:
+    """Apply augmentations and format annotations in COCO format for object detection task"""
 
     images = []
     annotations = []
-    for image_id, image, objects in zip(
-        examples["image_id"], examples["image"], examples["objects"]
-    ):
+    for image_id, image, objects in zip(examples["image_id"], examples["image"], examples["objects"]):
         image = np.array(image.convert("RGB"))
 
         # apply augmentations
-        output = transform(
-            image=image, bboxes=objects["bbox"], category=objects["category"]
-        )
+        output = transform(image=image, bboxes=objects["bbox"], category=objects["category"])
         images.append(output["image"])
 
         # format annotations in COCO format
@@ -114,24 +116,103 @@ def augment_and_transform_batch(examples, transform, image_processor):
 
     # Apply the image processor transformations: resizing, rescaling, normalization
     result = image_processor(images=images, annotations=annotations, return_tensors="pt")
+
     return result
 
 
-def collate_fn(batch):
-    return {
-        "pixel_values": torch.stack([x["pixel_values"] for x in batch]),
-        "pixel_mask": torch.stack([x["pixel_mask"] for x in batch]),
-        "labels": [x["labels"] for x in batch],
-    }
+def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: Tuple[int, int]) -> torch.Tensor:
+    """
+    Convert bounding boxes from YOLO format (x_center, y_center, width, height) in range [0, 1]
+    to Pascal VOC format (x_min, y_min, x_max, y_max) in absolute coordinates.
 
+    Args:
+        boxes (torch.Tensor): Bounding boxes in YOLO format
+        image_size (Tuple[int, int]): Image size in format (height, width)
 
-def convert_boxes_to_absolute_coordinates(boxes: torch.Tensor, image_size: torch.Tensor) -> torch.Tensor:
+    Returns:
+        torch.Tensor: Bounding boxes in Pascal VOC format (x_min, y_min, x_max, y_max)
+    """
+    # convert center to corners format
+    boxes = center_to_corners_format(boxes)
+
+    # convert to absolute coordinates
     height, width = image_size
-    scale_factor = torch.stack([width, height, width, height])
-    # convert shape for multiplication: (4,) -> (1, 4)
-    scale_factor = scale_factor.unsqueeze(0).to(boxes.device)  
-    boxes = boxes * scale_factor
+    boxes = boxes * torch.tensor([[width, height, width, height]])
+
     return boxes
+
+
+def evaluation_loop(
+    model: torch.nn.Module,
+    image_processor: AutoImageProcessor,
+    accelerator: Accelerator,
+    dataloader: DataLoader,
+    id2label: Mapping[int, str],
+) -> dict:
+    model.eval()
+    metric = MeanAveragePrecision(box_format="xyxy", class_metrics=True)
+
+    for step, batch in enumerate(tqdm(dataloader, disable=not accelerator.is_local_main_process)):
+        with torch.no_grad():
+            outputs = model(**batch)
+
+        # For metric computation we need to collect ground truth and predicted boxes in the same format
+
+        # 1. Collect predicted boxes, classes, scores
+        # image_processor convert boxes from YOLO format to Pascal VOC format
+        # ([x_min, y_min, x_max, y_max] in absolute coordinates)
+        image_size = torch.stack([example["size"] for example in batch["labels"]], dim=0)
+        predictions = image_processor.post_process_object_detection(outputs, threshold=0.0, target_sizes=image_size)
+        predictions = nested_to_cpu(predictions)
+
+        # 2. Collect ground truth boxes in the same format for metric computation
+        # Do the same, convert YOLO boxes to Pascal VOC format
+        target = []
+        for label in batch["labels"]:
+            label = nested_to_cpu(label)
+            boxes = convert_bbox_yolo_to_pascal(label["boxes"], label["size"])
+            labels = label["class_labels"]
+            target.append({"boxes": boxes, "labels": labels})
+
+        metric.update(predictions, target)
+
+    metrics = metric.compute()
+
+    # Replace list of per class metrics with separate metric for each class
+    classes = metrics.pop("classes")
+    map_per_class = metrics.pop("map_per_class")
+    mar_100_per_class = metrics.pop("mar_100_per_class")
+    for class_id, class_map, class_mar in zip(classes, map_per_class, mar_100_per_class):
+        class_name = id2label[class_id.item()]
+        metrics[f"map_{class_name}"] = class_map
+        metrics[f"mar_100_{class_name}"] = class_mar
+
+    # Convert metrics to float
+    metrics = {k: round(v.item(), 4) for k, v in metrics.items()}
+
+    return metrics
+
+
+def collate_fn(batch: List[BatchFeature]) -> Mapping[str, Union[torch.Tensor, List[Any]]]:
+    data = {}
+    data["pixel_values"] = torch.stack([x["pixel_values"] for x in batch])
+    data["labels"] = [x["labels"] for x in batch]
+    if "pixel_mask" in batch[0]:
+        data["pixel_mask"] = torch.stack([x["pixel_mask"] for x in batch])
+    return data
+
+
+def nested_to_cpu(objects):
+    """Move nested tesnors in objects to CPU if they are on GPU"""
+    if isinstance(objects, torch.Tensor):
+        return objects.cpu()
+    elif isinstance(objects, Mapping):
+        return type(objects)({k: nested_to_cpu(v) for k, v in objects.items()})
+    elif isinstance(objects, (list, tuple)):
+        return type(objects)([nested_to_cpu(v) for v in objects])
+    elif isinstance(objects, (np.ndarray, str, int, float, bool)):
+        return objects
+    raise ValueError(f"Unsupported type {type(objects)}")
 
 
 def parse_args():
@@ -140,7 +221,7 @@ def parse_args():
         "--model_name_or_path",
         type=str,
         help="Path to a pretrained model or model identifier from huggingface.co/models.",
-        default="facebook/detr-resnet-50" #"jozhang97/deta-resnet-50",
+        default="facebook/detr-resnet-50",  # "jozhang97/deta-resnet-50",
     )
     parser.add_argument(
         "--dataset_name",
@@ -365,7 +446,7 @@ def main():
 
     # Get dataset categories and prepare mappings for label_name <-> label_id
     categories = dataset["train"].features["objects"].feature["category"].names
-    id2label = {index: x for index, x in enumerate(categories)}
+    id2label = dict(enumerate(categories))
     label2id = {v: k for k, v in id2label.items()}
 
     # ------------------------------------------------------------------------------------------------
@@ -378,27 +459,24 @@ def main():
         "trust_remote_code": args.trust_remote_code,
     }
     config = AutoConfig.from_pretrained(
-        args.model_name_or_path,
-        label2id=label2id,
-        id2label=id2label,
-        **common_pretrained_args
+        args.model_name_or_path, label2id=label2id, id2label=id2label, **common_pretrained_args
     )
     model = AutoModelForObjectDetection.from_pretrained(
         args.model_name_or_path,
         config=config,
         ignore_mismatched_sizes=args.ignore_mismatched_sizes,
-        **common_pretrained_args
+        **common_pretrained_args,
     )
     image_processor = AutoImageProcessor.from_pretrained(
         args.model_name_or_path,
         size={"longest_edge": args.longest_edge, "shortest_edge": args.shortest_edge},
-        **common_pretrained_args
+        **common_pretrained_args,
     )
 
     # ------------------------------------------------------------------------------------------------
     # Define image augmentations and dataset transforms
     # ------------------------------------------------------------------------------------------------
-    
+
     train_augmentation_transform = A.Compose(
         [
             A.HorizontalFlip(p=0.5),
@@ -410,14 +488,18 @@ def main():
     valid_augmentation_transform = A.Compose(
         [
             # empty transform, but you can add something here, e.g. specific cropping/resizing/padding
-            A.NoOp(), 
+            A.NoOp(),
         ],
-        bbox_params=A.BboxParams(format="coco", label_fields=["category"]),
+        bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True),
     )
 
     # Make transform functions for batch and apply for dataset splits
-    train_transform_batch = partial(augment_and_transform_batch, transform=train_augmentation_transform, image_processor=image_processor)
-    valid_transform_batch = partial(augment_and_transform_batch, transform=valid_augmentation_transform, image_processor=image_processor)
+    train_transform_batch = partial(
+        augment_and_transform_batch, transform=train_augmentation_transform, image_processor=image_processor
+    )
+    valid_transform_batch = partial(
+        augment_and_transform_batch, transform=valid_augmentation_transform, image_processor=image_processor
+    )
 
     with accelerator.main_process_first():
         train_dataset = dataset["train"].with_transform(train_transform_batch)
@@ -433,7 +515,11 @@ def main():
     test_dataloader = DataLoader(
         test_dataset, shuffle=False, collate_fn=collate_fn, batch_size=args.per_device_eval_batch_size
     )
-    
+
+    # ------------------------------------------------------------------------------------------------
+    # Define optimizer, scheduler and prepare everything with the accelerator
+    # ------------------------------------------------------------------------------------------------
+
     # Optimizer
     optimizer = torch.optim.AdamW(
         list(model.parameters()),
@@ -483,7 +569,10 @@ def main():
         experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
         accelerator.init_trackers("object_detection_no_trainer", experiment_config)
 
-    # Train!
+    # ------------------------------------------------------------------------------------------------
+    # Run training with evaluation on each epoch
+    # ------------------------------------------------------------------------------------------------
+
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
 
     logger.info("***** Running training *****")
@@ -587,40 +676,7 @@ def main():
                 break
 
         logger.info("***** Running evaluation *****")
-        model.eval()
-        metric = MeanAveragePrecision(box_format="xyxy", class_metrics=True)
-
-        for step, batch in enumerate(tqdm(valid_dataloader, disable=not accelerator.is_local_main_process)):
-            with torch.no_grad():
-                outputs = model(**batch)
-
-            # For metric computation we need to collect ground truth and predicted boxes in the same format
-            
-            # 1. Collect predicted boxes, classes, scores
-            # image_processor convert boxes from YOLO format to Pascal VOC format 
-            # ([x_min, y_min, x_max, y_max] in absolute coordinates)
-            image_size = torch.stack([example["size"] for example in batch["labels"]], dim=0)
-            predictions = image_processor.post_process_object_detection(outputs, threshold=0.0, target_sizes=image_size)
-
-            # 2. Collect ground truth boxes in the same format for metric computation
-            target = []
-            for label in batch["labels"]:
-                boxes = center_to_corners_format(label["boxes"])
-                boxes = convert_boxes_to_absolute_coordinates(boxes, label["size"])
-                labels = label["class_labels"]
-                target.append({"boxes": boxes, "labels": labels})
-
-            metric.update(predictions, target)
-
-        metrics = metric.compute()
-        classes = metrics.pop("classes")
-        map_per_class = metrics.pop("map_per_class")
-        mar_100_per_class = metrics.pop("mar_100_per_class")
-        for class_id, class_map, class_mar in zip(classes, map_per_class, mar_100_per_class):
-            class_name = id2label[class_id.item()]
-            metrics[f"map_{class_name}"] = class_map
-            metrics[f"mar_100_{class_name}"] = class_mar
-        metrics = {f"valid_{k}": round(v.item(), 4) for k, v in metrics.items()}
+        metrics = evaluation_loop(model, image_processor, accelerator, valid_dataloader, id2label)
 
         logger.info(f"epoch {epoch}: {metrics}")
 
@@ -657,6 +713,16 @@ def main():
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
 
+    # ------------------------------------------------------------------------------------------------
+    # Run evaluation on test dataset and save the model
+    # ------------------------------------------------------------------------------------------------
+
+    logger.info("***** Running evaluation on test dataset *****")
+    metrics = evaluation_loop(model, image_processor, accelerator, test_dataloader, id2label)
+    metrics = {f"test_{k}": v for k, v in metrics.items()}
+
+    logger.info(f"Test metrics: {metrics}")
+
     if args.with_tracking:
         accelerator.end_training()
 
@@ -667,7 +733,11 @@ def main():
             args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
         )
         if accelerator.is_main_process:
+            with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+                json.dump(metrics, f, indent=2)
+
             image_processor.save_pretrained(args.output_dir)
+
             if args.push_to_hub:
                 api.upload_folder(
                     commit_message="End of training",
@@ -676,12 +746,6 @@ def main():
                     repo_type="model",
                     token=args.hub_token,
                 )
-
-            all_results = {
-                f"eval_{k}": v.tolist() if isinstance(v, np.ndarray) else v for k, v in metrics.items()
-            }
-            with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
-                json.dump(all_results, f, indent=2)
 
 
 if __name__ == "__main__":
