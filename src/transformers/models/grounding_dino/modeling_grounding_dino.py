@@ -1427,14 +1427,15 @@ class GroundingDinoDecoderLayer(nn.Module):
 
         # Cross-Attention Text
         queries = self.with_pos_embed(hidden_states, position_embeddings)
-        text_encoder_attention_mask = text_encoder_attention_mask[:, None, None, :]
-        text_encoder_attention_mask = text_encoder_attention_mask.repeat(
-            1, self.num_attention_heads, self.num_queries, 1
-        )
+        if text_encoder_attention_mask is not None:
+            dtype = text_encoder_hidden_states.dtype
 
-        dtype = text_encoder_hidden_states.dtype
-        text_encoder_attention_mask = text_encoder_attention_mask.to(dtype=dtype)  # fp16 compatibility
-        text_encoder_attention_mask = text_encoder_attention_mask * torch.finfo(dtype).min
+            text_encoder_attention_mask = text_encoder_attention_mask[:, None, None, :]
+            text_encoder_attention_mask = text_encoder_attention_mask.repeat(
+                1, self.num_attention_heads, self.num_queries, 1
+            )
+            text_encoder_attention_mask = text_encoder_attention_mask.to(dtype=dtype)
+            text_encoder_attention_mask = text_encoder_attention_mask * torch.finfo(dtype).min
 
         hidden_states, text_cross_attn_weights = self.encoder_attn_text(
             queries=queries,
