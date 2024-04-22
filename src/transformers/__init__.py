@@ -2504,6 +2504,8 @@ else:
             "JetMoeForSequenceClassification",
             "JetMoeModel",
             "JetMoePreTrainedModel",
+        ]
+    )
     _import_structure["models.jamba"].extend(
         [
             "JambaForCausalLM",
@@ -7275,6 +7277,7 @@ if TYPE_CHECKING:
             JetMoeForSequenceClassification,
             JetMoeModel,
             JetMoePreTrainedModel,
+        )
         from .models.jamba import (
             JambaForCausalLM,
             JambaForSequenceClassification,
