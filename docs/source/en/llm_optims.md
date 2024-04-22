@@ -24,9 +24,9 @@ This guide will show you how to use the optimization techniques available in Tra
 
 During decoding, a LLM computes the key-value (kv) values for each input token and since it is autoregressive, it computes the same kv values each time because the generated output becomes part of the input now. This is not very efficient because you're recomputing the same kv values each time.
 
-To optimize this, you can use a kv-cache to store the past values instead of recomputing them each time. However, since the kv-cache grows with each generation step and is dynamic, it prevents you from taking advantage of [torch.compile](./perf_torch_compile), a powerful optimization tool that fuses PyTorch code into fast and optimized kernels.
+To optimize this, you can use a kv-cache to store the past keys and values instead of recomputing them each time. However, since the kv-cache grows with each generation step and is dynamic, it prevents you from taking advantage of [torch.compile](./perf_torch_compile), a powerful optimization tool that fuses PyTorch code into fast and optimized kernels.
 
-The *static kv-cache* solves this issue by fixing the kv-cache size to a maximum value which allows you to combine it with torch.compile for up to a 4x speed up.
+The *static kv-cache* solves this issue by pre-allocating the kv-cache size to a maximum value which allows you to combine it with torch.compile for up to a 4x speed up.
 
 > [!WARNING]
 > Currently, only [Command R](./model_doc/cohere), [Gemma](./model_doc/gemma) and [Llama](./model_doc/llama2) models support static kv-cache and torch.compile.
@@ -42,7 +42,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-There are two ways you can configure the model to use a static kv-cache.
+There are two ways you can configure the model to use a static kv-cache. For a 7B model on an A100, both methods get a 4x speed up in the forward pass. Your speed up may vary depending on the model size (larger models have a smaller speed up) and hardware. If you're using the [`~GenerationMixin.generate`] method, the speed up is ~3x. The forward pass (which still gets 4x speed up) is only a part of the whole [`~GenerationMixin.generate`] code.
 
 <hfoptions id="static-kv">
 <hfoption id="generation_config">
@@ -69,7 +69,7 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 <hfoption id="setup_cache">
 
 > [!WARNING]
-> The `_setup_cache` method is an internal and private method that is still under development, so keep in mind this will likely change in the future.
+> The `_setup_cache` method is an internal and private method that is still under development. This means it may not be backward compatible and the API design may change in the future.
 
 The `_setup_cache` method doesn't support [`~GenerationMixin.generate`] yet, so this method is a bit more involved. You'll need to write your own function to decode the next token given the current token and position and cache position of previously generated tokens.
 
