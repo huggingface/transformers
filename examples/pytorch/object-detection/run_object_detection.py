@@ -393,11 +393,11 @@ def main():
     dataset = load_dataset(data_args.dataset_name, cache_dir=model_args.cache_dir)
 
     # If we don't have a validation split, split off a percentage of train as validation
-    data_args.train_val_split = None if "valid" in dataset.keys() else data_args.train_val_split
+    data_args.train_val_split = None if "validation" in dataset.keys() else data_args.train_val_split
     if isinstance(data_args.train_val_split, float) and data_args.train_val_split > 0.0:
         split = dataset["train"].train_test_split(data_args.train_val_split)
         dataset["train"] = split["train"]
-        dataset["valid"] = split["test"]
+        dataset["validation"] = split["test"]
 
     # Get dataset categories and prepare mappings for label_name <-> label_id
     categories = dataset["train"].features["objects"].feature["category"].names
@@ -461,7 +461,7 @@ def main():
     )
 
     dataset["train"] = dataset["train"].with_transform(train_transform_batch)
-    dataset["valid"] = dataset["valid"].with_transform(valid_transform_batch)
+    dataset["validation"] = dataset["validation"].with_transform(valid_transform_batch)
     dataset["test"] = dataset["test"].with_transform(valid_transform_batch)
 
     # ------------------------------------------------------------------------------------------------
@@ -474,7 +474,7 @@ def main():
         model=model,
         args=training_args,
         train_dataset=dataset["train"] if training_args.do_train else None,
-        eval_dataset=dataset["valid"] if training_args.do_eval else None,
+        eval_dataset=dataset["validation"] if training_args.do_eval else None,
         tokenizer=image_processor,
         data_collator=collate_fn,
         compute_metrics=eval_compute_metrics,

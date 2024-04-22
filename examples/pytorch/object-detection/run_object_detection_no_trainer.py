@@ -438,11 +438,11 @@ def main():
     dataset = load_dataset(args.dataset_name, cache_dir=args.cache_dir)
 
     # If we don't have a validation split, split off a percentage of train as validation.
-    args.train_val_split = None if "valid" in dataset.keys() else args.train_val_split
+    args.train_val_split = None if "validation" in dataset.keys() else args.train_val_split
     if isinstance(args.train_val_split, float) and args.train_val_split > 0.0:
         split = dataset["train"].train_test_split(args.train_val_split)
         dataset["train"] = split["train"]
-        dataset["valid"] = split["test"]
+        dataset["validation"] = split["test"]
 
     # Get dataset categories and prepare mappings for label_name <-> label_id
     categories = dataset["train"].features["objects"].feature["category"].names
@@ -503,7 +503,7 @@ def main():
 
     with accelerator.main_process_first():
         train_dataset = dataset["train"].with_transform(train_transform_batch)
-        valid_dataset = dataset["valid"].with_transform(valid_transform_batch)
+        valid_dataset = dataset["validation"].with_transform(valid_transform_batch)
         test_dataset = dataset["test"].with_transform(valid_transform_batch)
 
     train_dataloader = DataLoader(
