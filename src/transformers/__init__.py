@@ -1050,7 +1050,7 @@ _import_structure = {
         "SpecialTokensMixin",
         "TokenSpan",
     ],
-    "tools": [
+    "agents": [
         "Agent",
         "ReactJSONAgent",
         "ReactCodeAgent",
@@ -6011,7 +6011,7 @@ if TYPE_CHECKING:
     )
 
     # Tools
-    from .tools import (
+    from .agents import (
         Agent,
         CodeAgent,
         PipelineTool,
