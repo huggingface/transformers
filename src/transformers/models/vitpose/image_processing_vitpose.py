@@ -305,8 +305,6 @@ class ViTPoseImageProcessor(BaseImageProcessor):
     ) -> np.array:
         data_format = input_data_format if data_format is None else data_format
 
-        print("Data format:", data_format)
-
         size = (size["width"], size["height"])
 
         transformation = get_warp_matrix(rotation, center * 2.0, np.array(size) - 1.0, scale * 200.0)

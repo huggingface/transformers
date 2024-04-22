@@ -18,7 +18,7 @@
 import inspect
 import unittest
 
-from transformers import ViTPoseConfig
+from transformers import ViTPoseBackboneConfig, ViTPoseConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -59,6 +59,7 @@ class ViTPoseModelTester:
         initializer_range=0.02,
         num_labels=2,
         scale_factor=4,
+        out_indices=[-1],
         scope=None,
     ):
         self.parent = parent
@@ -79,6 +80,7 @@ class ViTPoseModelTester:
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.scale_factor = scale_factor
+        self.out_indices = out_indices
         self.scope = scope
 
         # in ViTPose, the seq length equals the number of patches
@@ -98,19 +100,20 @@ class ViTPoseModelTester:
 
     def get_config(self):
         return ViTPoseConfig(
+            backbone_config=self.get_backbone_config(),
+        )
+
+    def get_backbone_config(self):
+        return ViTPoseBackboneConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
-            hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
+            hidden_size=self.hidden_size,
             intermediate_size=self.intermediate_size,
+            num_attention_heads=self.num_attention_heads,
             hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            initializer_range=self.initializer_range,
-            num_labels=self.num_labels,
-            scale_factor=self.scale_factor,
+            out_indices=self.out_indices,
         )
 
     def create_and_check_for_pose_estimation(self, config, pixel_values, labels):
@@ -123,7 +126,7 @@ class ViTPoseModelTester:
         expected_width = (self.image_size[1] // self.patch_size[1]) * self.scale_factor
 
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, expected_height, expected_width)
+            result.heatmaps.shape, (self.batch_size, self.num_labels, expected_height, expected_width)
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -156,7 +159,12 @@ class ViTPoseModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester = ConfigTester(self, config_class=ViTPoseConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.check_config_arguments_init()
 
     @unittest.skip(reason="ViTPose does not use inputs_embeds")
     def test_inputs_embeds(self):

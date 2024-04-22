@@ -12,7 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ViTPose backbone model."""
+""" PyTorch ViTPose backbone model.
+
+This code is the same as the original Vision Transformer (ViT) with 2 modifications:
+- use of padding=2 in the patch embedding layer
+- addition of a mixture-of-experts MLP layer
+"""
 
 
 import collections.abc
@@ -229,14 +234,16 @@ class ViTPoseBackboneMoEMLP(nn.Module):
     def __init__(self, config: ViTPoseBackboneConfig) -> None:
         super().__init__()
 
+        in_features = out_features = config.hidden_size
+        hidden_features = int(config.hidden_size * config.mlp_ratio)
+
         num_experts = config.num_experts
-        hidden_features = config.intermediate_size
         part_features = config.part_features
 
         self.part_features = part_features
         self.fc1 = nn.Linear(config.hidden_size, hidden_features)
         self.act = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(hidden_features, config.hidden_size - part_features)
+        self.fc2 = nn.Linear(hidden_features, out_features - part_features)
         self.drop = nn.Dropout(config.hidden_dropout_prob)
 
         self.num_experts = num_experts
@@ -308,7 +315,7 @@ class ViTPoseBackboneLayer(nn.Module):
         hidden_states = attention_output + hidden_states
 
         layer_output = self.layernorm_after(hidden_states)
-        layer_output = self.mlp(layer_output, dataset_index)
+        layer_output = self.mlp(layer_output, indices=dataset_index)
 
         # second residual connection
         layer_output = layer_output + hidden_states
@@ -456,6 +463,9 @@ class ViTPoseBackbone(ViTPoseBackbonePreTrainedModel, BackboneMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.embeddings
+
     @add_start_docstrings_to_model_forward(VITPOSE_BACKBONE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -519,11 +529,10 @@ class ViTPoseBackbone(ViTPoseBackbonePreTrainedModel, BackboneMixin):
                 feature_maps += (hidden_state,)
 
         if not return_dict:
-            output = (feature_maps,)
             if output_hidden_states:
-                output += (hidden_states,)
-            if output_attentions:
-                output += (outputs.attentions,)
+                output = (feature_maps,) + outputs[1:]
+            else:
+                output = (feature_maps,) + outputs[2:]
             return output
 
         return BackboneOutput(

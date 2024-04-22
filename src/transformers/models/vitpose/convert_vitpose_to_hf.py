@@ -48,6 +48,11 @@ def _xywh2xyxy(bbox_xywh):
 
 
 def get_config(model_name):
+
+    # TODO it's unclear whether this checkpoint uses an MoE, it looks like no?
+    # num_experts = 6 if model_name == "vitpose-base-coco-aic-mpii" else None
+    # part_features = 192 if model_name == "vitpose-base-coco-aic-mpii" else None
+
     backbone_config = ViTPoseBackboneConfig(out_indices=[12])
     # size of the architecture
     if "small" in model_name:
@@ -67,15 +72,11 @@ def get_config(model_name):
         backbone_config.num_attention_heads = 16
 
     use_simple_decoder = "simple" in model_name
-    num_experts = 6 if model_name == "vitpose-base-coco-aic-mpii" else None
-    part_features = 192 if model_name == "vitpose-base-coco-aic-mpii" else None
 
     config = ViTPoseConfig(
         backbone_config=backbone_config,
         num_labels=17,
         use_simple_decoder=use_simple_decoder,
-        num_experts=num_experts,
-        part_features=part_features,
     )
 
     return config
@@ -209,11 +210,12 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     assert torch.allclose(pixel_values, original_pixel_values)
 
     img_metas = torch.load(filepath, map_location="cpu")["img_metas"]
+    dataset_index = torch.tensor([0])
 
     print("Shape of pixel values:", pixel_values.shape)
     with torch.no_grad():
         # first forward pass
-        outputs = model(pixel_values, dataset_index=0)
+        outputs = model(pixel_values, dataset_index=dataset_index)
         output_heatmap = outputs.heatmaps
 
         # second forward pass (flipped)
@@ -221,8 +223,8 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         pixel_values_flipped = torch.flip(pixel_values, [3])
         outputs_flipped = model(
             pixel_values_flipped,
-            dataset_index=0,
-            flip_pairs=[[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16]],
+            dataset_index=dataset_index,
+            flip_pairs=torch.tensor([[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16]]),
         )
         output_flipped_heatmap = outputs_flipped.heatmaps
 

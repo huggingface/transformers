@@ -154,7 +154,7 @@ def flip_back(output_flipped, flip_pairs, target_type="GaussianHeatmap"):
     output_flipped_back = output_flipped.copy()
 
     # Swap left-right parts
-    for left, right in flip_pairs:
+    for left, right in flip_pairs.tolist():
         output_flipped_back[:, left, ...] = output_flipped[:, right, ...]
         output_flipped_back[:, right, ...] = output_flipped[:, left, ...]
     output_flipped_back = output_flipped_back.reshape(shape_ori)
@@ -242,11 +242,14 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.backbone.get_input_embeddings()
+
     def forward(
         self,
         pixel_values: torch.Tensor,
+        # TODO dataset_index must be a tensor instead of a lists of lists
         dataset_index: Optional[torch.Tensor] = None,
-        # TODO flip_pairs must be a tensor instead of a lists of lists
         flip_pairs: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -254,6 +257,10 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, PoseEstimatorOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         loss = None
         if labels is not None:
@@ -268,7 +275,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         )
 
         # Turn output hidden states in tensor of shape (batch_size, num_channels, height, width)
-        sequence_output = outputs.feature_maps[-1]
+        sequence_output = outputs.feature_maps[-1] if return_dict else outputs[0][-1]
         batch_size = sequence_output.shape[0]
         patch_height = self.config.image_size[0] // self.config.patch_size[0]
         patch_width = self.config.image_size[1] // self.config.patch_size[1]
@@ -279,7 +286,10 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         heatmaps = self.head(sequence_output, flip_pairs=flip_pairs)
 
         if not return_dict:
-            output = (heatmaps,) + outputs[1:]
+            if output_hidden_states:
+                output = (heatmaps,) + outputs[1:]
+            else:
+                output = (heatmaps,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return PoseEstimatorOutput(
