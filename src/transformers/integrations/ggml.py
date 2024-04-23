@@ -25,6 +25,11 @@ from tokenizers.models import BPE
 
 from .. import AddedToken
 from ..convert_slow_tokenizer import LlamaConverter
+from ..utils import logging
+from ..utils.logging import tqdm
+
+
+logger = logging.get_logger(__name__)
 
 
 # Listed here: https://github.com/ggerganov/ggml/blob/master/docs/gguf.md
@@ -486,6 +491,30 @@ class GGUFTokenizerSkeleton:
         for k, v in dict_.items():
             setattr(self, k, v)
 
+        if not hasattr(self, "tokens") or not hasattr(self, "scores"):
+            raise ValueError("tokens and scores need to be passed for a LLaMa tokenizer to be instantiated.")
+        else:
+            tokens = self.tokens
+            scores = self.scores
+            vocab = {t: scores[i] for i, t in enumerate(tokens)}
+
+        if not hasattr(self, "merges"):
+            logger.warning("Merges were not in checkpoint, building merges on the fly.")
+            merges = []
+            for merge, piece_score in tqdm(vocab.items()):
+                local = []
+                for index in range(1, len(merge)):
+                    piece_l, piece_r = merge[:index], merge[index:]
+                    if piece_l in tokens and piece_r in tokens:
+                        local.append((piece_l, piece_r, piece_score))
+                local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]), reverse=True)
+                merges.extend(local)
+            merges = sorted(merges, key=lambda val: val[2], reverse=True)
+            merges = [(val[0], val[1]) for val in merges]
+            self.merges = merges
+        else:
+            self.merges = [tuple(merge.split(" ")) for merge in self.merges]
+
 
 class GGUFLlamaConverter(LlamaConverter):
     def __init__(self, tokenizer_dict):
@@ -496,7 +525,7 @@ class GGUFLlamaConverter(LlamaConverter):
         return list(zip(proto.tokens, proto.scores))
 
     def merges(self, proto):
-        return [tuple(merge.split(" ")) for merge in proto.merges]
+        return proto.merges
 
     def tokenizer(self, proto):
         vocab_scores = self.vocab(self.proto)
