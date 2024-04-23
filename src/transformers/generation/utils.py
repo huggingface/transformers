@@ -1301,13 +1301,6 @@ class GenerationMixin:
         if "past_key_values" in model_kwargs:
             if isinstance(model_kwargs["past_key_values"], Cache):
                 past_length = model_kwargs["past_key_values"].get_seq_length()
-            elif "gptbigcode" in self.__class__.__name__.lower() or (
-                self.config.architectures is not None and "gptbigcode" in self.config.architectures[0].lower()
-            ):
-                if self.config.multi_query:
-                    past_length = model_kwargs["past_key_values"][0].shape[1]
-                else:
-                    past_length = model_kwargs["past_key_values"][0].shape[2]
             else:
                 past_length = model_kwargs["past_key_values"][0][0].shape[2]
         if "inputs_embeds" in model_kwargs:
