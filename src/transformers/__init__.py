@@ -1048,6 +1048,7 @@ _import_structure = {
         "ReactCodeAgent",
         "ReactAgent",
         "CodeAgent",
+        "HfEngine",
         "PipelineTool",
         "RemoteTool",
         "Tool",
@@ -5916,12 +5917,15 @@ if TYPE_CHECKING:
         TokenSpan,
     )
 
-    # Tools
+    # Agents
     from .agents import (
         Agent,
         CodeAgent,
+        HfEngine,
         PipelineTool,
         ReactAgent,
+        ReactCodeAgent,
+        ReactJSONAgent,
         RemoteTool,
         Tool,
         launch_gradio_demo,

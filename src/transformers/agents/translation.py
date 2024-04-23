@@ -231,7 +231,7 @@ class TranslationTool(PipelineTool):
     Example:
 
     ```py
-    from transformers.tools import TranslationTool
+    from transformers.agents import TranslationTool
 
     translator = TranslationTool()
     translator("This is a super nice API!", src_lang="English", tgt_lang="French")

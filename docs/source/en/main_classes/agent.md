@@ -92,12 +92,12 @@ These types have three specific purposes:
 
 ### AgentText
 
-[[autodoc]] transformers.tools.agent_types.AgentText
+[[autodoc]] transformers.agents.agent_types.AgentText
 
 ### AgentImage
 
-[[autodoc]] transformers.tools.agent_types.AgentImage
+[[autodoc]] transformers.agents.agent_types.AgentImage
 
 ### AgentAudio
 
-[[autodoc]] transformers.tools.agent_types.AgentAudio
+[[autodoc]] transformers.agents.agent_types.AgentAudio
