@@ -46,7 +46,7 @@ def import_protobuf(error_message=""):
 def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
     if add_prefix_space:
         prepend_scheme = "always"
-        if hasattr(original_tokenizer, "legacy") and not original_tokenizer.legacy:
+        if not getattr(original_tokenizer, "legacy"):
             prepend_scheme = "first"
     else:
         prepend_scheme = "never"
@@ -1393,7 +1393,7 @@ class LlamaConverter(SpmConverter):
         return tokenizer
 
     def normalizer(self, proto):
-        if self.original_tokenizer.legacy:
+        if getattr(self.original_tokenizer, "legacy"):
             sequence = []
             if getattr(self.original_tokenizer, "add_prefix_space"):
                 sequence += [normalizers.Prepend(prepend="▁")]
