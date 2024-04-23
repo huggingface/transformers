@@ -509,7 +509,7 @@ class EfficientFormerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "efficientformer"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
-    _no_split_modules = [""]
+    _no_split_modules = []
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
