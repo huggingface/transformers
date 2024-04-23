@@ -518,8 +518,8 @@ _import_structure = {
         "InstructBlipQFormerConfig",
         "InstructBlipVisionConfig",
     ],
-    "models.jetmoe": ["JetMoeConfig"],
     "models.jamba": ["JambaConfig"],
+    "models.jetmoe": ["JetMoeConfig"],
     "models.jukebox": [
         "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "JukeboxConfig",
@@ -2498,20 +2498,20 @@ else:
             "InstructBlipVisionModel",
         ]
     )
-    _import_structure["models.jetmoe"].extend(
-        [
-            "JetMoeForCausalLM",
-            "JetMoeForSequenceClassification",
-            "JetMoeModel",
-            "JetMoePreTrainedModel",
-        ]
-    )
     _import_structure["models.jamba"].extend(
         [
             "JambaForCausalLM",
             "JambaForSequenceClassification",
             "JambaModel",
             "JambaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.jetmoe"].extend(
+        [
+            "JetMoeForCausalLM",
+            "JetMoeForSequenceClassification",
+            "JetMoeModel",
+            "JetMoePreTrainedModel",
         ]
     )
     _import_structure["models.jukebox"].extend(
