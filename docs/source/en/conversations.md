@@ -149,7 +149,12 @@ also includes proprietary models - look at the `licence` column to identify open
 search for them on the [Hugging Face Hub](https://huggingface.co/models?pipeline_tag=text-generation&sort=trending).
 
 ### Specialist domains
-Bio / legal models and leaderboards?
+Some models may be specialized for certain domains, such as medical or legal text, or non-English languages. 
+If you're working in these domains, you may find that a specialized model will give you big performance benefits. 
+Don't automatically assume that, though! Particularly when specialized models are smaller or older than the current 
+cutting-edge, a top-end general-purpose model may still outclass them. Thankfully, we are beginning to see 
+[domain-specific leaderboards](https://huggingface.co/blog/leaderboard-medicalllm) that should make it easier to locate
+the best models for specialized domains.
 
 ## Breaking it down: What happens inside the pipeline?
 
@@ -172,20 +177,22 @@ model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruc
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct")
 
 # 2: Apply the chat template
-formatted_chat = tokenizer.apply_chat_template(chat, tokenize=False)
+formatted_chat = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
 print("Formatted chat:\n", formatted_chat)
 
 # 3: Tokenize the chat (This can be combined with the previous step using tokenize=True)
-inputs = tokenizer(formatted_chat, return_tensors="pt")
+inputs = tokenizer(formatted_chat, return_tensors="pt", add_special_tokens=False)
 # Move the tokenized inputs to the same device the model is on (GPU/CPU)
 inputs = {key: tensor.to(model.device) for key, tensor in inputs.items()}
 print("Tokenized inputs:\n", inputs)
 
-# 5: Generate text from the model
+# 4: Generate text from the model
 outputs = model.generate(**inputs, max_new_tokens=512, temperature=0.)
+print("Generated tokens:\n", outputs)
 
-# 6: Decode the output back to a string
-decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
+# 5: Decode the output back to a string
+decoded_output = tokenizer.decode(outputs[0][inputs['input_ids'].size(1):], skip_special_tokens=True)
+print("Decoded output:\n", decoded_output)
 ```
 
 There's a lot in here, each piece of which could be its own document! Rather than going into too much detail, I'll cover
@@ -195,7 +202,7 @@ the broad ideas, and leave the details for the linked documents. The key steps a
 2. The chat is formatted using the tokenizer's [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
 3. The formatted chat is [tokenized](https://huggingface.co/learn/nlp-course/en/chapter2/4) using the tokenizer.
 4. We [generate](https://huggingface.co/docs/transformers/en/llm_tutorial) a response from the model.
-5. The tokens output by the model are decoded back to a string (TODO: Is there a link for detokenization? Just the tokenization docs again?)
+5. The tokens output by the model are decoded back to a string
 
 ## Advanced: Performance, memory and hardware
 
@@ -205,7 +212,7 @@ the model in GPU memory, though, this will usually be the preferable option.
 
 ### Memory considerations
 
-By default, Hugging Face classes like `TextGenerationPipeline` or `AutoModelForCausalLM` will load the model in 
+By default, Hugging Face classes like [`TextGenerationPipeline`] or [`AutoModelForCausalLM`] will load the model in 
 `float32` precision. This means that it will need 4 bytes (32 bits) per parameter, so an "8B" model with 8 billion
 parameters will need ~32GB of memory. However, this can be wasteful! Most modern language models are trained in 
 "bfloat16" precision, which uses only 2 bytes per parameter. If your hardware supports it (Nvidia 30xx/Axxx
