@@ -425,6 +425,7 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
         self.has_attentions = False
         super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
