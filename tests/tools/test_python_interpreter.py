@@ -16,7 +16,7 @@
 import unittest
 
 from transformers.testing_utils import CaptureStdout
-from transformers.tools.python_interpreter import evaluate
+from transformers.agents.python_interpreter import evaluate
 
 
 # Fake function we will use as tool

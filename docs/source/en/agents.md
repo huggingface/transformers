@@ -13,13 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-# Agents
+# Agents and tools
 
-Large Language Models (LLMs) trained to perform [causal language modeling](https://huggingface.co/docs/transformers/tasks/language_modeling) can tackle a wide range of tasks, but they often struggle with basic tasks like logic, calculation, and search. The worst scenario is when they perform poorly in a domain, such as math, yet still attempt to handle all the calculations themselves.
+Large Language Models (LLMs) trained to perform [causal language modeling](./tasks/language_modeling.) can tackle a wide range of tasks, but they often struggle with basic tasks like logic, calculation, and search. When prompted in domains in which they do not perform well, they often fail to generate the answer we expect them to.
 
-One approach to overcome this weakness is to embed the LLM into a system where it has the ability to call tools: such a system is called an LLM Agent.
-
-The augmentation with tools gives the LLM superpowers. See for yourselves:
+One approach to overcome this weakness is to create an *agent*, a program powered by an LLM. The agent is empowered by *tools* to help the agent perform an action.
 
 ```python
 agent.run("Caption the following image", image=image)
@@ -43,29 +41,41 @@ agent.run("Read the following text out loud", text=text)
 | A beaver is swimming in the water | <audio controls><source src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tts_example.wav" type="audio/wav"> your browser does not support the audio element. </audio>
 ```
 
-Here you will learn:
+In this tutorial, you'll learn what agents and tools are, how to build them with Transformers, and how to use them.
 
-- what an agent is,
-- how to build one using `transformers` ,
-- and how to use it.
 
-## Quickstart
+## Agents
 
 ### What is an agent?
 
-The definition of LLM Agents is quite broad: all systems that use LLMs as their engine, and have access to functions called **tools**.
+An agent is a system that uses an LLM as its engine, and it has access to functions called *tools*.
 
-When trying to accomplish a task, an agent can be either programmed to:
+These *tools* are functions for performing a task, and they contain all necessary description for the agent to properly use them.
 
-- devise a series of actions/tool calls and run them all at once, like our `CodeAgent`
-- or plan and execute them one by one to wait for the outcome of the each action before launching the next one, thus following a Reflexion ⇒ Action ⇒ Perception cycle. Our `ReactJSONAgent` implements this latter framework.
+The agent can be programmed to:
+- devise a series of actions/tools and run them all at once like the `CodeAgent` for example
+- plan and execute actions/tools one by one and wait for the outcome of each action before launching the next one like the `ReactJSONAgent` for example
 
-![Framework of a React Agent](Doc%20agents%20ac753b9a3b934eaba22f659ba994c4bd/Untitled.png)
+### Types of agents
 
-Read [our blog post](https://huggingface.co/blog/open-source-llms-as-agents) to learn more.
+#### Code agent
 
+This agent has a planning step, then generates python code to execute all its actions at once. It natively handles different input and output types for its tools, thus it is the recommended choice for multimodal tasks.
 
-Here is an example adapted from  showing how powerful the ReAct agent framework can be to solve problems: Mixtral-8x7B answers the question:
+#### React agents
+
+This is the go-to agent to solve reasoning tasks, since the ReAct framework ([Yao et al., 2022](https://huggingface.co/papers/2210.03629)) makes it really efficient to think on the basis of its previous observations.
+
+We implement two versions of ReactJSONAgent: 
+- [`~ReactJSONAgent`] generates tool calls as a JSON in its output.
+- [`~ReactCodeAgent`] is a new type of ReactJSONAgent that generates its tool calls as blobs of code, which works really well for LLMs that have strong coding performance.
+
+> [!TIP]
+> Read [Open-source LLMs as LangChain Agents](https://huggingface.co/blog/open-source-llms-as-agents) blog post to learn more the ReAct agent.
+
+![Framework of a React Agent](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/open-source-llms-as-agents/ReAct.png)
+
+For example, here is how a ReAct agent would work its way through the following question.
 
 ```
 Task: How many more blocks (also denoted as layers) in BERT base encoder than the encoder from the architecture proposed in Attention is All You Need?
@@ -73,46 +83,35 @@ Task: How many more blocks (also denoted as layers) in BERT base encoder than th
 Thought: To begin, I need to find the number of layers in the encoder of BERT base and the architecture proposed in Attention is All You Need. I will start by searching for the number of layers in BERT base.
 Action:
 {
-   "action": "search",
- "action_input": "number of layers in BERT base encoder"
+    "action": "search",
+    "action_input": "number of layers in BERT base encoder"
 }
 Observation: 12 layers
 
 Thought: I need to search for the number of layers in the encoder of the architecture proposed in Attention is All You Need.
 Action:
 {
-   "action": "search",
- "action_input": "number of layers in the encoder of the architecture proposed in Attention is All You Need"
+    "action": "search",
+    "action_input": "number of layers in the encoder of the architecture proposed in Attention is All You Need"
 }
 Observation: Encoder: The encoder is composed of a stack of N = 6 identical layers. Each layer has two sub-layers.
 
 Thought: Now that I have the number of layers for both BERT base and the architecture proposed in Attention is All You Need, I can calculate the difference.
 Action:
 {
-   "action": "calculator",
- "action_input": "12 - 6"
+    "action": "calculator",
+    "action_input": "12 - 6"
 }
 Observation: 6
 
 Thought: Now that I have the calculated difference, I need to provide the final answer.
 Action:
 {
-   "action": "final_answer",
- "action_input": "BERT base encoder has 6 more layers than the encoder from the architecture proposed in Attention is All You Need"
-}'
+    "action": "final_answer",
+    "action_input": "BERT base encoder has 6 more layers than the encoder from the architecture proposed in Attention is All You Need"
+}
+Observation: BERT base encoder has 6 more layers than the encoder from the architecture proposed in Attention is All You Need
 ```
-
-
-### What is a tool?
-
-A tool is an atomic function to be used by an agent.
-
-You can for instance check the [~CalculatorTool], which we use
-
-It has a name, a description, input and output descriptions, and a __call__ method that will perform the action.
-
-Upon initialization of the agent system, the tool attributes are used to generate a tool description, then baked into the agent’s `system_prompt`  to let it know which tools it can use and why.
-
 
 ### How can I build an agent?
 
@@ -123,133 +122,87 @@ To initialize an agent, you need these arguments:
 - a toolbox from which the agent pick tools to execute
 - a parser to extract from the LLM output which tools are to call and with which arguments
 
+Upon initialization of the agent system, the tool attributes are used to generate a tool description, then baked into the agent’s `system_prompt` to let it know which tools it can use and why.
+
 To start with, please install the `agents` extras in order to install all default dependencies.
 
 ```bash
 pip install transformers[agents]
 ```
 
-To build your LLM engine, you have to define a `llm_engine` method, that will be given text and return text. This callable needs to accept a `stop` argument defining stop sequences indicating when to stop generating its output. For instance you can define it as follows:
+Build your LLM engine by defining a `llm_engine` method which accepts a list of [messages](./chat_templating.) and returns text. This callable also needs to accept a `stop` argument that indicates when to stop generating.
 
 ```python
 from huggingface_hub import login, InferenceClient
 
 login("<YOUR_HUGGINGFACEHUB_API_TOKEN>")
 
-client = InferenceClient(model="mistralai/Mixtral-8x7B-Instruct-v0.1")
+client = InferenceClient(model="meta-llama/Meta-Llama-3-70B-Instruct")
 
-def llm_engine(query: str, stop=["Task"]) -> str:
-    response = client.text_generation(query, stop_sequences=stop, return_full_text=False, max_new_tokens=1000)
+def llm_engine(messages, stop=["Task"]) -> str:
+    response = client.chat_completion(messages, stop_sequences=stop, return_full_text=False, max_new_tokens=1000)
+    answer = response.choices[0].message.content
     for stop_seq in stop:
-        if response[-len(stop_seq) :] == stop_seq:
-            response = response[: -len(stop_seq)]
-    return response
+        if answer[-len(stop_seq) :] == stop_seq:
+            answer = answer[: -len(stop_seq)]
+    return answer
 ```
 
-You could use any other `llm_engine` method, as long as:
+You could use any `llm_engine` method as long as:
+1. it follows the [messages format](./chat_templating.) for its input (`List[Dict[str, str]]`) and returns a `str`
+2. it stops generating outputs *before* the sequences passed in the argument `stop`
 
-- it takes a `str` as input and returns a `str`
-- it will stop generating output _before_ the sequences passed in argument `stop`
+You also need a `tools` argument which accepts a list of `Tools`. You can provide an empty list for `tools`, but use the default toolbox with the optional argument `add_base_tools=True`.
 
-You also need a `tools` argument, as a list of `Tools`. We can start with an empty one but specify `add_base_tools` to start from a default set of arguments.
-
-Then you can define your agent and run it.
-
-For your convenience, we provide the `HfEngine` which wraps the `InferenceClient`-based code shown below.
+Now you can create an agent, like `CodeAgent`, and run it. For convenience, we also provide the `HfEngine` class that uses `huggingface_hub.InferenceClient` under the hood.
 
 ```python
-from transformers.agents import CodeAgent, HfEngine
+from transformers import CodeAgent, HfEngine
 
 llm_engine = HfEngine(model="meta-llama/Meta-Llama-3-70B-Instruct")
 
 agent = CodeAgent(llm_engine=llm_engine, tools=[], add_base_tools=True)
 
-agent.run("Draw me a picture of rivers and lakes")
+agent.run("Please draw me a picture of rivers and lakes")
 ```
 
-You can also leave the llm_engine empty to start building right away:
+You can even leave argument `llm_engine` undefined, and an `HfEngine` will be loaded by default.
 
 ```python
-from transformers.agents import CodeAgent
+from transformers import CodeAgent
 
 agent = CodeAgent(tools=[], add_base_tools=True)
 
-agent.run("Draw me a picture of rivers and lakes")
+agent.run("Please draw me a picture of rivers and lakes")
 ```
 
-The prompt and output parser were automatically defined here, but you can easily inspect them.
+The prompt and output parser were automatically defined, but you can easily inspect them by calling the `system_prompt_template` on your agent.
 
 ![Untitled](Doc%20agents%20ac753b9a3b934eaba22f659ba994c4bd/Untitled%201.png)
 
 ```python
-agent.prompt_template
+agent.system_prompt_template
 ```
 
-Note that your agent is powered by a LLM, so small variations in your prompt might yield completely different results. It's important to explain as clearly as possible the task you want to perform. We go more in-depth on how to write good prompts [here](custom_tools#writing-good-user-inputs).
+It's important to explain as clearly as possible the task you want to perform.
+Every [`~Agent.run`] operation is independent, and since an agent is powered by an LLM, minor variations in your prompt might yield completely different results.
+You can also run an agent consecutively for different tasks.
 
-Every [`~Agent.run`] operation is independent, so you can run it several times in a row with different tasks.
 
+#### Code execution
 
-## Implementation of agents
+A Python interpreter executes the code on a set of inputs passed along with your tools.
+This should be safe because the only functions that can be called are the tools you provided (especially if it's only tools by Hugging Face) and the print function, so you're already limited in what can be executed.
 
-### ReactJSONAgent
+The Python interpreter also doesn't allow any attribute lookup or imports (which shouldn't be needed for passing inputs/outputs to a small set of functions) so all the most obvious attacks shouldn't be an issue.
 
-This is the go-to agent to solve reasoning tasks, since the ReAct framework makes it really efficient to think on the basis of its previous observations.
+The execution will stop at any code trying to perform an illegal operation or if there is a regular Python error with the code generated by the agent.
 
-### CodeAgent
+### The system prompt
 
-This class is the one to use when trying to execute multimodal tasks, since it natively handles different input and output types for its tools. It has a planning step, then generates python code to execute all actions at once.
+An agent, or rather the LLM that drives the agent, generates an output based on the system prompt. The system prompt can be customized and tailored to the intended task. For example, check out the system prompt of the ReAct agent.
 
-#### Code execution?!
-
-This code is then executed with our small Python interpreter on the set of inputs passed along with your tools. We hear you screaming "Arbitrary code execution!" in the back, but let us explain why that is not the case.
-
-The only functions that can be called are the tools you provided and the print function, so you're already limited in what can be executed. You should be safe if it's limited to Hugging Face tools. 
-
-Then, we don't allow any attribute lookup or imports (which shouldn't be needed anyway for passing along  inputs/outputs to a small set of functions) so all the most obvious attacks (and you'd need to prompt the LLM  to output them anyway) shouldn't be an issue.
-
-The execution will stop at any line trying to perform an illegal operation or if there is a regular Python error with the code generated by the agent.
-
-### Default toolbox
-
-We curated a set of tools that can empower agents. Here is an updated list of the tools we have integrated in `transformers`:
-
-- **Document question answering**: given a document (such as a PDF) in image format, answer a question on this document ([Donut](./model_doc/donut))
-- **Text question answering**: given a long text and a question, answer the question in the text ([Flan-T5](./model_doc/flan-t5))
-- **Unconditional image captioning**: Caption the image! ([BLIP](./model_doc/blip))
-- **Image question answering**: given an image, answer a question on this image ([VILT](./model_doc/vilt))
-- **Image segmentation**: given an image and a prompt, output the segmentation mask of that prompt ([CLIPSeg](./model_doc/clipseg))
-- **Speech to text**: given an audio recording of a person talking, transcribe the speech into text ([Whisper](./model_doc/whisper))
-- **Text to speech**: convert text to speech ([SpeechT5](./model_doc/speecht5))
-- **Zero-shot text classification**: given a text and a list of labels, identify to which label the text corresponds the most ([BART](./model_doc/bart))
-- **Text summarization**: summarize a long text in one or a few sentences ([BART](./model_doc/bart))
-- **Translation**: translate the text into a given language ([NLLB](./model_doc/nllb))
-
-These tools have an integration in transformers, and can be used manually as well, for example:
-
-```python
-from transformers import load_tool
-
-tool = load_tool("text-to-speech")
-audio = tool("This is a text to speech tool")
-```
-
-# Getting the best out of your agents
-
-To be performant, your agents should be tailored to the task you intend to give them.
-
-The things that you can easily customize in a `transformers` agent are:
-
-- the system prompt
-- the toolbox
-
-We will now see how to optimize the usage of both of these!
-
-## Customizing the prompt
-
-As we’ve seen above, the LLM generates its output based on a prompt. Let’s take a look at our system prompt for the React agent:
-
-```python
+```text
 Solve the following task as best you can. You have access to the following tools:
 
 <<tool_descriptions>>
@@ -290,43 +243,63 @@ To provide the final answer to the task, use an action blob with "action": 'fina
 Now begin!
 ```
 
-The prompt has these parts:
+The system prompt includes:
+- An *introduction* that explains how the agent should behave and what tools are.
+- A description of all the tools that is defined by a `<<tool_descriptions>>` token that is dynamically replaced at runtime with the tools defined/chosen by the user.
+    - The tool description comes from the tool attributes, `name`, `description`, `inputs` and `output_type`,  and a simple `jinja2` template that you can refine.
+- The expected output format.
+- An explanation of the task to perform.
 
-- Introduction: how the agent should behave, explanation of the concept of tools.
-- Description of all the tools. This is defined by a `<<tool_descriptions>>` token that is dynamically replaced at runtime with the tools defined/chosen by the user.
-    - The description is built based on the tool attributes `name`, `description`, `inputs` and `output_type`  with a simple `jinja2` template, that you can refine.
-- Clarifications on the output format
-- Introduction of the task at hand.
+You could improve the system prompt, for example, by adding an explanation of the output format.
 
-This could be improved: for instance by adding explanations of the output format.
-
-For maximum flexibility, you can overwrite the whole prompt template as explained above by passing your custom prompt as an argument:
+For maximum flexibility, you can overwrite the whole system prompt template by passing your custom prompt as an argument to the `system_prompt` parameter.
 
 ```python
 from transformers import ReactJSONAgent
-from transformers.tools import CalculatorTool
+from transformers.agents import CalculatorTool
 
-agent = ReactJSONAgent(llm_engine, tools = [CalculatorTool()], system_prompt="{your_custom_prompt}")
+agent = ReactJSONAgent(tools = [CalculatorTool()], system_prompt="{your_custom_prompt}")
 ```
 
-<Tip warning={true}>
+> [!WARNING]
+> Please make sure to define the `<<all_tools>>` string somewhere in the `template` so the agent is aware 
+of the available tools.
 
-Please make sure to have the `<<all_tools>>` string defined somewhere in the `template` so that the agent can be aware 
-of the tools, it has available to it.
+## Tools
 
-</Tip>
+A tool is an atomic function to be used by an agent.
+
+You can for instance check the [~CalculatorTool]: it has a name, a description, input descriptions, an output type, and a `__call__` method to perform the action.
+
+When the agent is initialized, the tool attributes are used to generate a tool description which is baked into the agent's system prompt. This lets the agent know which tools it can use and why.
+
+### Default toolbox
+
+Transformers comes with a default toolbox for empowering agents, that you can add to your agent upon initialization with argument `add_default_toolbox = True`:
+
+- **Document question answering**: given a document (such as a PDF) in image format, answer a question on this document ([Donut](./model_doc/donut))
+- **Image captioning**: Caption the image! ([BLIP](./model_doc/blip))
+- **Image question answering**: given an image, answer a question on this image ([VILT](./model_doc/vilt))
+- **Image segmentation**: given an image and a prompt, output the segmentation mask of that prompt ([CLIPSeg](./model_doc/clipseg))
+- **Speech to text**: given an audio recording of a person talking, transcribe the speech into text ([Whisper](./model_doc/whisper))
+- **Text to speech**: convert text to speech ([SpeechT5](./model_doc/speecht5))
+
+You can manually use a tool by calling the [`load_tool`] function and a task to perform.
 
 
-## Adding new tools
+```python
+from transformers import load_tool
 
-In this section, we show how to create a new tool that can be added to the agent.
+tool = load_tool("text-to-speech")
+audio = tool("This is a text to speech tool")
+```
 
-### Creating a new tool and sharing it to the Hub
+### Create a new tool
 
-We'll first start by creating a tool. We'll add the not-so-useful yet fun task of fetching the model on the Hugging Face
-Hub with the most downloads for a given task.
+You can create your own tool for use cases not covered by the default tools from Hugging Face.
+For example, let's create a tool that returns the most downloaded model for a given task from the Hub.
 
-We can do that with the following code:
+You'll start with the code below.
 
 ```python
 from huggingface_hub import list_models
@@ -337,28 +310,16 @@ model = next(iter(list_models(filter=task, sort="downloads", direction=-1)))
 print(model.id)
 ```
 
-For the task `text-classification`, this returns `'facebook/bart-large-mnli'`, for `translation` it returns `'google-t5/t5-base`.
+This code can be converted into a class that inherits from the [`Tool`] superclass.
 
-How do we convert this to a tool that the agent can leverage? All tools depend on the superclass `Tool` that holds the
-main attributes necessary. We'll create a class that inherits from it:
 
-```python
-from transformers import Tool
+The custom tool needs:
+- An attribute `name`, which corresponds to the name of the tool itself. The name usually describes what the tool does. Since the code returns the model with the most downloads for a task, let's name is `model_download_counter`.
+- An attribute `description` is used to populate the agent's system prompt.
+- An `inputs` attribute, which is a dictionary with keys `"type"` and `"description"`. It contains information that helps the Python interpreter make educated choices about the input.
+- An `output_type` attribute, which specifies the output type.
+- A `__call__` method which contains the inference code to be executed.
 
-class HFModelDownloadsTool(Tool):
-    pass
-```
-
-This class has a few needs:
-- An attribute `name`, which corresponds to the name of the tool itself. To be in tune with other tools which have a
-  performative name, we'll name it `model_download_counter`.
-- An attribute `description`, which will be used to populate the prompt of the agent.
-- `inputs` attribute. This is a dictionnary with keys `"type"`and `"description"`containing information to help the python interpreter make educated choices about the input,
-  and will allow for a gradio-demo to be spawned when we push our tool to the Hub.
-- An attribute `output_type` specifying the type of the ouput. 
-- A `__call__` method which contains the inference code. This is the code we've played with above!
-
-Here's what our class looks like now:
 
 ```python
 from transformers import Tool
@@ -384,8 +345,8 @@ class HFModelDownloadsTool(Tool):
         return model.id
 ```
 
-We now have our tool handy. Save it in a file and import it from your main script. Let's name this file
-`model_downloads.py`, so the resulting import code looks like this:
+Now that the custom `HfModelDownloadsTool` class is ready, you can save it to a file named model_downloads.py and import it for use.
+
 
 ```python
 from model_downloads import HFModelDownloadsTool
@@ -393,36 +354,24 @@ from model_downloads import HFModelDownloadsTool
 tool = HFModelDownloadsTool()
 ```
 
-In order to let others benefit from it and for simpler initialization, we recommend pushing it to the Hub under your 
-namespace. To do so, just call `push_to_hub` on the `tool` variable (be sure to have created the space beforehand, and to be authenticated with a token that has read access!)
+You can also share your custom tool to the Hub by calling [`~Tool.push_to_hub`] on the tool. Make sure you've created a repository for it on the Hub and are using a token with read access.
 
 ```python
 tool.push_to_hub("{your_username}/hf-model-downloads")
 ```
 
-You now have your code on the Hub! Let's take a look at the final step, which is to have the agent use it.
-
-### Initializing an agent that uses the tool
-
-We now have our tool that lives on the Hub which can be instantiated as such (change the user name for your tool):
+Load the tool with the [`~Tool.load_tool`] function and pass it to the `tools` parameter in your agent.
 
 ```python
-from transformers import load_tool
+from transformers import load_tool, CodeAgent
 
 model_download_tool = load_tool("m-ric/hf-model-downloads")
-```
-
-In order to use it in the agent, simply pass it to the agent initialization method.
-
-```python
-from transformers import CodeAgent
-
-agent = CodeAgent(llm_engine, tools=[model_download_tool])
-
+agent = CodeAgent(tools=[model_download_tool], llm_engine=llm_engine)
 agent.run(
     "Can you give me the name of the model that has the most downloads in the 'text-to-video' task on the Hugging Face Hub?"
 )
 ```
+
 You get the following:
 ```text
 ==Executing the code below:==
@@ -435,26 +384,16 @@ And the output:
 `"The most downloaded model in the 'text-to-video' task is 'ByteDance/AnimateDiff-Lightning'."`
 
 
+### Manage agent toolbox
 
-<Tip>
+If you have already initialized an agent, it is inconvenient to reinitialize it from scratch with a tool you want to use. With Transformers, you can manage an agent's toolbox by adding or replacing a tool.
 
-Depending on the LLM, some are quite brittle and require very exact prompts in order to work well. Having a well-defined
-name and description of the tool is paramount to having it be leveraged by the agent.
-
-</Tip>
-
-### Adding a new tool to an existing agent's toolbox
-
-If you have alread initialized an agent, it can be heavy to have to reinitialize it from scratch with your desired set of tools.
-
-So you can also directly add a new tool to the toolbox of an existing agent, or even replace an existing tool.
-
-Let's try to add our `model_download_tool` to an existing agent that we initialized with only the base tools:
+Let's add the `model_download_tool` to an existing agent initialized with only the default toolbox.
 
 ```python
 from transformers import CodeAgent
 
-agent = CodeAgent(llm_engine, tools=[], add_base_tools=True)
+agent = CodeAgent(tools=[], llm_engine=llm_engine, add_base_tools=True)
 agent.toolbox.add_tool(model_download_tool)
 ```
 Now we can leverage both the new tool and the previous text-to-speech tool:
@@ -465,48 +404,32 @@ agent.run(
 )
 ```
 
-this generates the following audio.
 
 | **Audio**                                                                                                                                            |
 |------------------------------------------------------------------------------------------------------------------------------------------------------|
 | <audio controls><source src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/damo.wav" type="audio/wav"/> |
 
 
-<Tip>
-
-The agent's prompt will reflect the new tool description. But beware when adding tools to an agent that already works well!
-It can result in your tool being selected way more than others or for other
-tools to be selected instead of the one you have defined.
-
-</Tip>
+> [!WARNING]
+> Beware when adding tools to an agent that already works well because it can bias selection towards your tool or select another tool other than the one already defined.
 
 
-### Replacing an existing tool in the agent's toolbox
+Use the `agent.toolbox.update_tool()` method to replace an existing tool in the agent's toolbox.
+This is useful if your new tool is a one-to-one replacement of the existing tool because the agent already knows how to perform that specific task.
+Just make sure the new tool follows the same API as the replaced tool or adapt the system prompt template to ensure all examples using the replaced tool are updated.
 
-Replacing existing tools can be done simply by updating the agent's toolbox using method `agent.toolbox.update_tool()`.
+```py
+agent.toolbox.update_tool()
+```
 
-
-<Tip>
-
-Overwriting existing tools can be beneficial if we want to use a custom tool exactly for the same task as an existing tool 
-because the agent is well-versed in using the specific task. Beware that the custom tool should follow the exact same API 
-as the overwritten tool in this case, or you should adapt the prompt template to make sure all examples using that
-tool are updated.
-
-</Tip>
-
-
-
-### Leveraging gradio-tools
+### Use gradio-tools
 
 [gradio-tools](https://github.com/freddyaboulton/gradio-tools) is a powerful library that allows using Hugging
-Face Spaces as tools. It supports many existing Spaces as well as custom Spaces to be designed with it.
+Face Spaces as tools. It supports many existing Spaces as well as custom Spaces.
 
-We offer support for `gradio_tools` by using the `Tool.from_gradio` method. For example, we want to take
-advantage of the `StableDiffusionPromptGeneratorTool` tool offered in the `gradio-tools` toolkit so as to
-improve our prompts and generate better images.
+Transformers supports `gradio_tools` with the [`Tool.from_gradio`] method. For example, let's use the [`StableDiffusionPromptGeneratorTool`](https://github.com/freddyaboulton/gradio-tools/blob/main/gradio_tools/tools/prompt_generator.py) from `gradio-tools` toolkit for improving prompts to generate better images.
 
-We first import the tool from `gradio_tools` and instantiate it:
+Import and instantiate the tool:
 
 ```python
 from gradio_tools import StableDiffusionPromptGeneratorTool
@@ -514,7 +437,7 @@ from gradio_tools import StableDiffusionPromptGeneratorTool
 gradio_tool = StableDiffusionPromptGeneratorTool()
 ```
 
-We pass that instance to the `Tool.from_gradio` method:
+Pass the tool to the `Tool.from_gradio` method:
 
 ```python
 from transformers import Tool
@@ -522,8 +445,7 @@ from transformers import Tool
 tool = Tool.from_gradio(gradio_tool)
 ```
 
-Now we can manage it exactly as we would a usual custom tool. We leverage it to improve our prompt
-` a rabbit wearing a space suit`:
+Now you can use it just like any other tool. For example, let's improve the prompt  `a rabbit wearing a space suit`.
 
 ```python
 from transformers import CodeAgent
@@ -531,10 +453,9 @@ from transformers import CodeAgent
 agent = CodeAgent(llm_engine, tools=[tool], add_base_tools=True)
 
 agent.run(
-    "Improve this prompt, then generate an image of it.", prompt="A cat in the forest."
+    "Improve this prompt: 'A rabbit wearing a space suit', then generate an image of it.",
 )
 ```
-
 
 The model adequately leverages the tool:
 ```text
@@ -551,28 +472,12 @@ Before finally generating the image:
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rabbit.png">
 
-This also works with its sibling `ReactJSONAgent`:
+> [!WARNING]
+> gradio-tools require *textual* inputs and outputs even when working with different modalities like image and audio objects. Image and audio inputs and outputs are currently incompatible.
 
-```python
-from transformers import ReactJSONAgent
+### Use LangChain tools
 
-agent = ReactJSONAgent(llm_engine, tools=[tool], add_base_tools=True)
-
-agent.run("Improve this prompt, then generate an image of it.", prompt="A rabbit wearing a space suit")
-```
-
-<Tip warning={true}>
-
-gradio-tools requires *textual* inputs and outputs, even when working with different modalities. This implementation
-works with image and audio objects. The two are currently incompatible, but will rapidly become compatible as we
-work to improve the support.
-
-</Tip>
-
-### Importing tools from LangChain
-
-You can also use method `from_langchain`to quickly initialize a tool from a LangChain tool.
-This goes as follows: 
+To import a tool from LangChain, use the `from_langchain()` method.
 
 ```python
 # Load langchain tool
@@ -583,7 +488,7 @@ api_wrapper = WikipediaAPIWrapper(top_k_results=1, doc_content_chars_max=100)
 langchain_tool = WikipediaQueryRun(api_wrapper=api_wrapper)
 
 # Initialize transformers tool from langchain tool
-from transformers.tools.base import Tool
+from transformers import Tool
 
 tool = Tool.from_langchain(langchain_tool)
 ```

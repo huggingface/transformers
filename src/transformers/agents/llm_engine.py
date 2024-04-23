@@ -70,7 +70,7 @@ class HfEngine:
         self.client = InferenceClient(model=self.model, timeout=120)
 
     def __call__(self, messages: List[Dict[str, str]], stop=[]) -> str:
-        if self.model == "meta-llama/Meta-Llama-3-70B-Instruct":
+        if "Meta-Llama-3" in self.model:
             stop += ["<|eot_id|>", "!!!!!"]
 
         # Get clean message list

@@ -378,7 +378,7 @@ class CodeAgent(Agent):
 
         ```py
         from transformers import CodeAgent
-        from transformers.tools import CalculatorTool
+        from transformers.agents import CalculatorTool
 
         calculator = CalculatorTool()
         agent = CodeAgent(toolbox=[CalculatorTool()])
@@ -388,28 +388,34 @@ class CodeAgent(Agent):
         # Run LLM
         self.system_prompt = format_prompt(self._toolbox, self.system_prompt_template, self.tool_description_template)
 
-        self.prompt = self.system_prompt + f"\nTask: {task}"
+        self.state = kwargs.copy()
+        if "<<additional_args>>" in self.system_prompt and len(self.state) > 0:
+            self.system_prompt = self.system_prompt.replace(
+                "<<additional_args>>",
+                f"You have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: {str(self.state)}.",
+            )
+        else:
+            self.system_prompt = self.system_prompt.replace("<<additional_args>>", "")
+    
+        prompt_message = {"role": MessageRole.SYSTEM, "content": self.system_prompt}
+        task_message = {
+            "role": MessageRole.USER,
+            "content": "Task: " + task,
+        }
+        self.prompt = [prompt_message, task_message]
+        self.logs.append({"task": task_message, "system_prompt": self.system_prompt})
+
+        # Run LLM
         self.log.info("====Executing with this prompt====")
         self.log.info(self.prompt)
         llm_output = self.llm_engine(self.prompt, stop=["<end_code>"])
 
-        task_message = f"Task: {task}"
-
-        self.logs.append({"task": task_message, "system_prompt": self.system_prompt})
-
-        memory = self.write_inner_memory_from_logs()
-
-        self.log.info("====Executing with these messages====")
-        self.log.info(memory)
-
-        # Run LLM
-        llm_output = self.llm_engine(memory, stop=["Task:"])
-
         if return_generated_code:
-            return llm_output["content"]
+            return llm_output
 
         # Parse
-        _, code_action = self.extract_action(llm_output=llm_output["content"], split_token="Code:")
+        _, code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
+        print(code_action)
 
         try:
             code_action = self.parse_code_blob(code_action)
@@ -423,7 +429,7 @@ class CodeAgent(Agent):
             self.log.info("\n\n==Executing the code below:==")
             self.log.info(code_action)
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
-            output, print_output = evaluate_python_code(code_action, available_tools, state=kwargs.copy())
+            output, print_output = evaluate_python_code(code_action, available_tools, state=self.state)
             self.log.info(print_output)
             return output
         except Exception as e:
@@ -480,11 +486,11 @@ class ReactAgent(Agent):
         Example:
 
         ```py
-        from transformers import ReactAgent
-        from transformers.tools import CalculatorTool
+        from transformers import ReactJSONAgent
+        from transformers.agents import CalculatorTool
 
         calculator = CalculatorTool()
-        agent = ReactAgent(tools=[CalculatorTool()])
+        agent = ReactJSONAgent(tools=[CalculatorTool()])
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
@@ -692,5 +698,4 @@ class ReactCodeAgent(ReactAgent):
         for line in code_action.split("\n"):
             if line[: len("final_answer")] == "final_answer":
                 return result
-        else:
-            return None
+        return None
