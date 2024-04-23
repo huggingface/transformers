@@ -279,12 +279,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
             past_key_values_length = past_key_values[0][0].shape[2]
             seq_length_with_past = seq_length_with_past + past_key_values_length
 
-        if position_ids is None:
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
-            position_ids = self.get_position_ids_from_attention_mask(
-                attention_mask, past_key_values_length, seq_length=seq_length, device=device
-            )
-
         if inputs_embeds is None:
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
             if image_patches is not None and past_key_values is None:
@@ -299,6 +293,11 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
                     continuous_embeddings=patch_embeddings,
                     image_patch_input_indices=image_patches_indices,
                 )
+
+        if position_ids is None:
+            position_ids = self.get_position_ids_from_attention_mask(
+                attention_mask, past_key_values_length, seq_length=seq_length, device=inputs_embeds.device
+            )
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,

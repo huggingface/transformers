@@ -870,9 +870,8 @@ class GPTJModel(GPTJPreTrainedModel):
             past_length = past_key_values[0][0].size(-2)
 
         if position_ids is None:
-            seq_length = input_shape[-1]
             position_ids = self.get_position_ids_from_attention_mask(
-                attention_mask, past_length, seq_length=seq_length, device=device
+                attention_mask, past_length, seq_length=input_shape[-1], device=device
             )
 
         if not self._use_flash_attention_2:

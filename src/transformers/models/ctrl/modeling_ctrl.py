@@ -412,8 +412,8 @@ class CTRLModel(CTRLPreTrainedModel):
             past_key_values = tuple([None] * len(self.h))
         else:
             past_length = past_key_values[0][0].size(-2)
+
         if position_ids is None:
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
             position_ids = self.get_position_ids_from_attention_mask(
                 attention_mask, past_length, seq_length=input_shape[1], device=device
             )

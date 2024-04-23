@@ -560,8 +560,8 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
             if past_key_values is not None:
                 raise ValueError("Make sure to provide `decoder_position_ids` when passing `past_key_values`.")
 
-            decoder_position_ids = jnp.broadcast_to(
-                jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
+            decoder_position_ids = self.get_position_ids_from_attention_mask(
+                decoder_attention_mask, batch_size, sequence_length
             )
 
         # Handle any PRNG if needed
@@ -737,12 +737,10 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         # Thus we can create a single static attention_mask here, which is more efficient for compilation
         extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
         if decoder_attention_mask is not None:
-            decoder_position_ids = decoder_attention_mask.cumsum(axis=-1) - 1
             extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, decoder_attention_mask, (0, 0))
-        else:
-            decoder_position_ids = jnp.broadcast_to(
-                jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length)
-            )
+        decoder_position_ids = self.get_position_ids_from_attention_mask(
+            decoder_attention_mask, batch_size, seq_length
+        )
 
         return {
             "past_key_values": past_key_values,

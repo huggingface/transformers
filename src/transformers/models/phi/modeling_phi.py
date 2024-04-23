@@ -995,16 +995,14 @@ class PhiModel(PhiPreTrainedModel):
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             past_key_values_length = past_key_values.get_usable_length(seq_length)
 
-        if position_ids is None:
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
-            position_ids = self.get_position_ids_from_attention_mask(
-                attention_mask, past_key_values_length, seq_length=seq_length, device=device
-            )
-
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-
         inputs_embeds = self.embed_dropout(inputs_embeds)
+
+        if position_ids is None:
+            position_ids = self.get_position_ids_from_attention_mask(
+                attention_mask, past_key_values_length, seq_length=seq_length, device=inputs_embeds.device
+            )
 
         # Attention mask.
         if self._use_flash_attention_2:

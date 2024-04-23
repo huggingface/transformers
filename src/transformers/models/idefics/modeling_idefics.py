@@ -1113,7 +1113,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
             seq_length_with_past = seq_length_with_past + past_key_values_length
 
         if position_ids is None:
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
             position_ids = self.get_position_ids_from_attention_mask(
                 attention_mask, past_key_values_length, seq_length=seq_length, device=device
             )

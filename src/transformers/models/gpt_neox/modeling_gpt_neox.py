@@ -850,6 +850,8 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         batch_size, seq_length = input_shape
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_in(input_ids)
 
         if past_key_values is None:
             past_length = 0
@@ -858,9 +860,8 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             past_length = past_key_values[0][0].size(-2)
 
         if position_ids is None:
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
             position_ids = self.get_position_ids_from_attention_mask(
-                attention_mask, past_length, seq_length=seq_length, device=device
+                attention_mask, past_length, seq_length=seq_length, device=inputs_embeds.device
             )
 
         # Attention mask.
@@ -891,10 +892,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_in(input_ids)
-
         hidden_states = self.emb_dropout(inputs_embeds)
 
         if self.gradient_checkpointing and self.training:

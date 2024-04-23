@@ -455,7 +455,8 @@ class CodeGenModel(CodeGenPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
+        if inputs_embeds is None:
+            inputs_embeds = self.wte(input_ids)
 
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
@@ -467,9 +468,8 @@ class CodeGenModel(CodeGenPreTrainedModel):
             past_length = past_key_values[0][0].size(-2)
 
         if position_ids is None:
-            seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[1]
             position_ids = self.get_position_ids_from_attention_mask(
-                attention_mask, past_length, seq_length=seq_length, device=device
+                attention_mask, past_length, seq_length=inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
         # Attention mask.
@@ -497,9 +497,6 @@ class CodeGenModel(CodeGenPreTrainedModel):
         # attention_probs has shape bsz x num_attention_heads x N x N
         # head_mask has shape n_layer x batch x num_attention_heads x N x N
         head_mask = self.get_head_mask(head_mask, self.config.n_layer)
-
-        if inputs_embeds is None:
-            inputs_embeds = self.wte(input_ids)
 
         hidden_states = inputs_embeds
 
