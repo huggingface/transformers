@@ -1118,8 +1118,9 @@ class GenerationTesterMixin:
             )
             self.assertListEqual(low_output.tolist(), high_output.tolist())
 
+    @parameterized.expand([(True,), (False,)])
     @is_flaky()  # Read NOTE (1) below. If there are API issues, all attempts will fail.
-    def test_assisted_decoding_matches_greedy_search(self):
+    def test_assisted_decoding_matches_greedy_search(self, use_position_ids):
         # This test ensures that the assisted generation does not introduce output changes over greedy search.
         # NOTE (1): The sentence above is true most of the time, there is a tiny difference in the logits due to matmul
         # shape differences -- and it may result in a different output. The input shape difference happens in the
@@ -1176,78 +1177,40 @@ class GenerationTesterMixin:
                 "output_attentions": True,
                 "return_dict_in_generate": True,
             }
-            output_greedy = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 
             assistant_model = model
             assistant_model.generation_config.num_assistant_tokens = 2  # see b)
             assistant_model.generation_config.num_assistant_tokens_schedule = "constant"  # see b)
-            generation_kwargs.update({"assistant_model": assistant_model})
-            output_assisted = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
+            
+            # test that the output is correct if user pass in position ids into `generate` vs it's calculated internally
+            if use_position_ids:
+                model_forward_args = inspect.signature(model.forward).parameters
+                if "position_ids" not in model_forward_args:
+                    self.skipTest("This model doesn't use `position_ids`")
+
+                position_ids = model.get_position_ids_from_attention_mask(
+                    attention_mask, past_length=0, seq_length=input_ids.shape[-1], device=input_ids.device
+                )
+                output_greedy = model.generate(
+                    input_ids, attention_mask=attention_mask, position_ids=position_ids, **generation_kwargs
+                )
+                output_assisted = model.generate(
+                    input_ids,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    assistant_model=assistant_model,
+                    **generation_kwargs,
+                )
+            else:
+                output_greedy = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
+                output_assisted = model.generate(
+                    input_ids, attention_mask=attention_mask, assistant_model=assistant_model, **generation_kwargs
+                )
 
             # The two outputs must match and their shape must be as expected
             self.assertListEqual(output_greedy.sequences.tolist(), output_assisted.sequences.tolist())
             for output in (output_greedy, output_assisted):
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
-
-    @is_flaky()
-    def test_assisted_decoding_position_ids(self):
-        """
-        Similar test to `test_assisted_decoding_matches_greedy_search` but passes in position ids to check if
-        assisted decoding can correctly expand/crop it while generating
-        """
-        for model_class in self.all_generative_model_classes:
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
-                self.skipTest("Won't fix: old model with different cache format")
-            if any(
-                model_name in model_class.__name__.lower()
-                for model_name in [
-                    "bigbirdpegasus",
-                    "led",
-                    "mega",
-                    "speech2text",
-                    "git",
-                    "prophetnet",
-                    "seamlessm4t",
-                    "clvp",
-                ]
-            ):
-                self.skipTest("May fix in the future: need model-specific fixes")
-
-            config, input_ids, attention_mask, _ = self._get_input_ids_and_config(batch_size=1)
-            if not hasattr(config, "use_cache"):
-                self.skipTest("This model doesn't support caching")
-
-            config.use_cache = True
-            config.is_decoder = True
-            model = model_class(config).to(torch_device).eval()
-            model_forward_args = inspect.signature(model.forward).parameters
-            if "position_ids" not in model_forward_args:
-                self.skipTest("This model doesn't use `position_ids`")
-
-            generation_kwargs = {
-                "eos_token_id": -1,
-                "max_new_tokens": 4,
-                "num_beams": 1,
-                "do_sample": False,
-            }
-
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            position_ids = position_ids[..., -input_ids.shape[-1] :].view(-1, input_ids.shape[-1])
-            output_greedy = model.generate(
-                input_ids, attention_mask=attention_mask, position_ids=position_ids, **generation_kwargs
-            )
-
-            assistant_model = model
-            assistant_model.generation_config.num_assistant_tokens = 2
-            assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
-            generation_kwargs.update({"assistant_model": assistant_model})
-            output_assisted = model.generate(
-                input_ids, attention_mask=attention_mask, position_ids=position_ids, **generation_kwargs
-            )
-
-            # The two outputs must match and their shape must be as expected
-            self.assertListEqual(output_greedy.tolist(), output_assisted.tolist())
 
     @is_flaky()
     def test_prompt_lookup_decoding_matches_greedy_search(self):
@@ -1678,9 +1641,9 @@ class GenerationTesterMixin:
             out_wo_positions = model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=5)
 
             # infer position ids from attn mask and generate again
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            position_ids = position_ids[..., -input_ids.shape[-1] :].view(-1, input_ids.shape[-1])
+            position_ids = model.get_position_ids_from_attention_mask(
+                attention_mask, past_length=0, seq_length=input_ids.shape[-1], device=input_ids.device
+            )
             out_w_positions = model.generate(
                 input_ids, attention_mask=attention_mask, position_ids=position_ids, max_new_tokens=5
             )
@@ -1706,9 +1669,9 @@ class GenerationTesterMixin:
             )
 
             # infer position ids from attn mask and generate again
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            position_ids = position_ids[..., -input_ids.shape[-1] :].view(-1, input_ids.shape[-1])
+            position_ids = model.get_position_ids_from_attention_mask(
+                attention_mask, past_length=0, seq_length=input_ids.shape[-1], device=input_ids.device
+            )
             out_w_positions = model.generate(
                 inputs_embeds=inputs_embeds, attention_mask=attention_mask, position_ids=position_ids, max_new_tokens=5
             )
