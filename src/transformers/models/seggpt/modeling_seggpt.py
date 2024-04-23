@@ -989,6 +989,7 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
             bool_masked_pos=bool_masked_pos,
             feature_ensemble=feature_ensemble,
             embedding_type=embedding_type,
+            labels=labels,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
