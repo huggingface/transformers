@@ -724,10 +724,10 @@ class AlignTextEmbeddings(nn.Module):
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
-        embeddings = inputs_embeds + token_type_embeddings
+        embeddings = inputs_embeds + token_type_embeddings.to(inputs_embeds.device)
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
+            embeddings += position_embeddings.to(embeddings.device)
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -1170,6 +1170,7 @@ class AlignPreTrainedModel(PreTrainedModel):
     config_class = AlignConfig
     base_model_prefix = "align"
     supports_gradient_checkpointing = True
+    _no_split_modules = []
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1611,7 +1612,7 @@ class AlignModel(AlignPreTrainedModel):
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) / self.temperature
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t()).to(self.temperature.device) / self.temperature
         logits_per_image = logits_per_text.t()
 
         loss = None
