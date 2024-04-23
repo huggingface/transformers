@@ -1276,7 +1276,7 @@ class GemmaConvert(SpmConverter):
         return vocab
 
     def pre_tokenizer(self, replacement, add_prefix_space):
-        return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme="never", split=False)
+        return pre_tokenizers.Split(" ", "merged_with_previous")
 
     def unk_id(self, proto):
         unk_id = 3
