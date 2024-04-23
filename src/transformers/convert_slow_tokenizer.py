@@ -1259,9 +1259,6 @@ class GemmaConvert(SpmConverter):
     byte_fallback: true
     """
 
-    def normalizer(self, proto):
-        return normalizers.Replace(" ", "▁")
-
     def vocab(self, proto):
         vocab = [
             (self.original_tokenizer.pad_token, 0.0),
@@ -1276,8 +1273,11 @@ class GemmaConvert(SpmConverter):
         # vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
         return vocab
 
-    def pre_tokenizer(self, replacement, add_prefix_space):
+    def normalizer(self, proto):
         return None
+    
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme="never", split=False)
 
     def unk_id(self, proto):
         unk_id = 3
