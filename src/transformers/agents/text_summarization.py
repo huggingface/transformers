@@ -23,7 +23,7 @@ class TextSummarizationTool(PipelineTool):
     Example:
 
     ```py
-    from transformers.tools import TextSummarizationTool
+    from transformers.agents import TextSummarizationTool
 
     summarizer = TextSummarizationTool()
     summarizer(long_text)

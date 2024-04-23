@@ -88,7 +88,7 @@ def get_remote_tools(logger, organization="huggingface-tools"):
 def setup_default_tools(logger):
     default_tools = {}
     main_module = importlib.import_module("transformers")
-    tools_module = main_module.tools
+    tools_module = main_module.agents
 
     remote_tools = get_remote_tools(logger)
     for task_name, tool_class_name in TASK_MAPPING.items():

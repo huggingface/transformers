@@ -27,7 +27,7 @@ class TextClassificationTool(PipelineTool):
     Example:
 
     ```py
-    from transformers.tools import TextClassificationTool
+    from transformers.agents import TextClassificationTool
 
     classifier = TextClassificationTool()
     classifier("This is a super nice API!", labels=["positive", "negative"])
