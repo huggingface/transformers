@@ -201,7 +201,10 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         # create torch tensors as image
         image = torch.randint(0, 256, image_size, dtype=torch.uint8)
         processed_image = image_processor(
-            image, size={"longest_edge": longest_edge, "shortest_edge": shortest_edge}, do_pad=False, return_tensors="pt"
+            image,
+            size={"longest_edge": longest_edge, "shortest_edge": shortest_edge},
+            do_pad=False,
+            return_tensors="pt",
         )["pixel_values"]
 
         shape = list(processed_image.shape[-2:])
