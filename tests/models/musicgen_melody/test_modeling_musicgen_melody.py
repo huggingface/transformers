@@ -214,6 +214,10 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
             with torch.no_grad():
                 model(**inputs)[0]
+    
+    @unittest.skip(reason="inputs_embeds not used by get_input_embeddings()")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
 
     # override since we have embeddings / LM heads over multiple codebooks
     def test_model_common_attributes(self):

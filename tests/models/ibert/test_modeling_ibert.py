@@ -381,6 +381,40 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             with torch.no_grad():
                 model(**inputs)[0]
+    
+    def test_inputs_embeds_matches_input_ids(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            with torch.no_grad():
+                out_ids = model(**inputs)[0]
+
+            if not self.is_encoder_decoder:
+                input_ids = inputs["input_ids"]
+                del inputs["input_ids"]
+            else:
+                encoder_input_ids = inputs["input_ids"]
+                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+                del inputs["input_ids"]
+                inputs.pop("decoder_input_ids", None)
+
+            wte = model.get_input_embeddings()
+            if not self.is_encoder_decoder:
+                embed, embed_scaling_factor = wte(input_ids)
+                inputs["inputs_embeds"] = embed
+            else:
+                inputs["inputs_embeds"] = wte(encoder_input_ids)
+                inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
+
+            with torch.no_grad():
+                out_embeds = model(**inputs)[0]
+            
+            self.assertTrue(torch.allclose(out_embeds, out_ids))
 
 
 @require_torch

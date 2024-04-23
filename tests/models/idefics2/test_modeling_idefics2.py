@@ -179,6 +179,10 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip("input_embeds cannot be passed in without input_ids")
     def test_inputs_embeds():
         pass
+    
+    @unittest.skip("input_embeds cannot be passed in without input_ids")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
 
     @unittest.skip("Model does not support padding right")
     def test_flash_attn_2_generate_padding_right(self):
@@ -334,6 +338,10 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 
     @unittest.skip("input_embeds cannot be passed in without input_ids")
     def test_inputs_embeds():
+        pass
+
+    @unittest.skip("input_embeds cannot be passed in without input_ids")
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     @unittest.skip("Model does not support padding right")

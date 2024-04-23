@@ -218,6 +218,10 @@ class MobileNetV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="MobileNetV2 has no inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip(reason="MobileNetV2 does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass

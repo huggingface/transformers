@@ -326,8 +326,12 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
-    # not implemented currently
+    @unittest.skip(reason="not implemented currently")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="not implemented currently")
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     # training is not supported yet

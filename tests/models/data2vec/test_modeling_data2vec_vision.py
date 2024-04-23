@@ -197,8 +197,12 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(reason="Data2VecVision does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # Data2VecVision does not use inputs_embeds
+        pass
+
+    @unittest.skip(reason="Data2VecVision does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     @require_torch_multi_gpu

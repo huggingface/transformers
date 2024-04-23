@@ -213,6 +213,10 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip("MobileViTV2 does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip(reason="MobileViTV2 does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass

@@ -174,6 +174,10 @@ class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, P
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="not implemented currently")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     # trocr has no base model
     def test_save_load_fast_init_from_base(self):
         pass

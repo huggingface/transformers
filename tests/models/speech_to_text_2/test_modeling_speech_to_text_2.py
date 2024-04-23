@@ -192,8 +192,12 @@ class Speech2Text2StandaloneDecoderModelTest(
         self.model_tester = Speech2Text2StandaloneDecoderModelTester(self, is_training=False)
         self.config_tester = ConfigTester(self, config_class=Speech2Text2Config)
 
-    # not implemented currently
+    @unittest.skip(reason="not implemented currently")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="not implemented currently")
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     # speech2text2 has no base model

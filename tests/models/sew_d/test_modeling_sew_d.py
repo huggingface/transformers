@@ -359,8 +359,12 @@ class SEWDModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Hubert has no inputs_embeds
+    @unittest.skip(reason="Hubert has no inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Hubert has no inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     # `input_ids` is renamed to `input_values`

@@ -162,6 +162,10 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="UnivNetModel.forward does not accept an inputs_embeds argument.")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip(reason="UnivNetModel does not use input embeddings and thus has no get_input_embeddings method.")
     def test_model_common_attributes(self):
         pass
