@@ -62,62 +62,69 @@ def incremental_to_binary_attention_mask(incremental_mask, return_tensors, num_c
 
 # copied from m4.training.packing
 def image_attention_mask_for_packed_input_ids(input_ids, tokenizer, return_tensors):
+    if return_tensors == "pt":
+        return image_attention_mask_for_packed_input_ids_pt(input_ids, tokenizer)
+    elif return_tensors == "tf":
+        return image_attention_mask_for_packed_input_ids_tf(input_ids, tokenizer)
+
+
+def image_attention_mask_for_packed_input_ids_pt(input_ids, tokenizer):
     image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
     eod_token_id = tokenizer.eos_token_id
-    batch_size = input_ids.size(0) if return_tensors == "pt" else tf.shape(input_ids)[0]
-    if return_tensors == "pt":
-        image_attention_mask = torch.full_like(input_ids, -1)
-        next_image_attention_mask = torch.full_like(input_ids, -1)
-    elif return_tensors == "tf":
-        image_attention_mask = tf.fill(tf.shape(input_ids), -1)
-        next_image_attention_mask = tf.fill(tf.shape(input_ids), -1)
+    batch_size = input_ids.size(0)
+    image_attention_mask = torch.full_like(input_ids, -1)
+    next_image_attention_mask = torch.full_like(input_ids, -1)
 
     for batch_idx in range(batch_size):
         count = -1
         seen_eod = False
-        seq_length = input_ids[batch_idx].size(0) if return_tensors == "pt" else tf.shape(input_ids)[1]
+        seq_length = input_ids[batch_idx].size(0)
 
         for idx in range(seq_length - 1, -1, -1):
-            if return_tensors == "pt":
-                token_id = input_ids[batch_idx, idx].item()
-            elif return_tensors == "tf":
-                token_id = input_ids[batch_idx, idx].numpy()
-
+            token_id = input_ids[batch_idx, idx].item()
             if token_id == image_token_id:
                 count += 1
-                if return_tensors == "pt":
-                    image_attention_mask[batch_idx, idx] = count
-                    next_image_attention_mask[batch_idx, idx] = count
-                elif return_tensors == "tf":
-                    indices = [[batch_idx, idx]]
-                    updates = [count]
-                    image_attention_mask = tf.tensor_scatter_nd_update(image_attention_mask, indices, updates)
-                    next_image_attention_mask = tf.tensor_scatter_nd_update(
-                        next_image_attention_mask, indices, updates
-                    )
-
+                image_attention_mask[batch_idx, idx] = count
+                next_image_attention_mask[batch_idx, idx] = count
             elif token_id == eod_token_id and not seen_eod:
                 seen_eod = True
                 count = 0
-                if return_tensors == "pt":
-                    next_image_attention_mask[batch_idx, idx] = count
-                elif return_tensors == "tf":
-                    indices = [[batch_idx, idx]]
-                    updates = [count]
-                    next_image_attention_mask = tf.tensor_scatter_nd_update(
-                        next_image_attention_mask, indices, updates
-                    )
-
+                next_image_attention_mask[batch_idx, idx] = count
             if seen_eod and token_id != eod_token_id:
-                if return_tensors == "pt":
-                    next_image_attention_mask[batch_idx, idx] = -1
-                elif return_tensors == "tf":
-                    indices = [[batch_idx, idx]]
-                    updates = [-1]
-                    next_image_attention_mask = tf.tensor_scatter_nd_update(
-                        next_image_attention_mask, indices, updates
-                    )
+                next_image_attention_mask[batch_idx, idx] = -1
+    return image_attention_mask, next_image_attention_mask
 
+
+def image_attention_mask_for_packed_input_ids_tf(input_ids, tokenizer):
+    image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+    eod_token_id = tokenizer.eos_token_id
+    batch_size = tf.shape(input_ids)[0]
+    image_attention_mask = tf.fill(tf.shape(input_ids), -1)
+    next_image_attention_mask = tf.fill(tf.shape(input_ids), -1)
+
+    for batch_idx in range(batch_size):
+        count = -1
+        seen_eod = False
+        seq_length = tf.shape(input_ids)[1]
+
+        for idx in range(seq_length - 1, -1, -1):
+            token_id = input_ids[batch_idx, idx].numpy()
+            if token_id == image_token_id:
+                count += 1
+                indices = [[batch_idx, idx]]
+                updates = [count]
+                image_attention_mask = tf.tensor_scatter_nd_update(image_attention_mask, indices, updates)
+                next_image_attention_mask = tf.tensor_scatter_nd_update(next_image_attention_mask, indices, updates)
+            elif token_id == eod_token_id and not seen_eod:
+                seen_eod = True
+                count = 0
+                indices = [[batch_idx, idx]]
+                updates = [count]
+                next_image_attention_mask = tf.tensor_scatter_nd_update(next_image_attention_mask, indices, updates)
+            if seen_eod and token_id != eod_token_id:
+                indices = [[batch_idx, idx]]
+                updates = [-1]
+                next_image_attention_mask = tf.tensor_scatter_nd_update(next_image_attention_mask, indices, updates)
     return image_attention_mask, next_image_attention_mask
 
 
