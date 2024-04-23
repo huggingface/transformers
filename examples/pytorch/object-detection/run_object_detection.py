@@ -301,12 +301,6 @@ class ModelArguments:
             )
         },
     )
-    use_auth_token: bool = field(
-        default=None,
-        metadata={
-            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
-        },
-    )
     trust_remote_code: bool = field(
         default=False,
         metadata={
@@ -331,15 +325,6 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-
-    if model_args.use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
-            FutureWarning,
-        )
-        if model_args.token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        model_args.token = model_args.use_auth_token
 
     # # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # # information sent is the one passed as arguments along with your Python/PyTorch versions.
@@ -468,7 +453,7 @@ def main():
     # Model training and evaluation with Trainer API
     # ------------------------------------------------------------------------------------------------
 
-    eval_compute_metrics = partial(compute_metrics, image_processor=image_processor, id2label=id2label, threshold=0.0)
+    eval_compute_metrics_fn = partial(compute_metrics, image_processor=image_processor, id2label=id2label, threshold=0.0)
 
     trainer = Trainer(
         model=model,
@@ -477,7 +462,7 @@ def main():
         eval_dataset=dataset["validation"] if training_args.do_eval else None,
         tokenizer=image_processor,
         data_collator=collate_fn,
-        compute_metrics=eval_compute_metrics,
+        compute_metrics=eval_compute_metrics_fn,
     )
 
     # Training
