@@ -1,9 +1,7 @@
-name: New model PR CI
+name: PR slow CI
 
 on:
   pull_request:
-    paths:
-      - "src/transformers/models/**"
 
 env:
   HF_HOME: /mnt/cache
@@ -22,7 +20,7 @@ env:
 jobs:
   check_for_new_model:
       runs-on: ubuntu-22.04
-      name: Check if PR is a new model PR
+      name: Check if a PR is a new model PR
       if: contains(github.event.pull_request.labels.*.name, 'single-model-run-slow')
       outputs:
         new_model: ${{ steps.check_new_model.outputs.new_model }}
@@ -31,14 +29,14 @@ jobs:
           with:
             fetch-depth: "0"
 
-        - name: Check if there is new model
+        - name: Check if there is a new model
           id: check_new_model
           run: |
             python -m pip install GitPython
             echo "new_model=$(python utils/check_if_new_model_added.py | tail -n 1)" >> $GITHUB_OUTPUT
 
-  run_test:
-      name: Run tests for the new model
+  run_new_model_tests:
+      name: Run all tests for the new model
       if: needs.check_for_new_model.outputs.new_model != ''
       needs: check_for_new_model
       strategy:
@@ -111,15 +109,15 @@ jobs:
           name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
 
-  result:
+  slow_test_result:
       runs-on: ubuntu-22.04
-      name: Check test status
-      needs: [run_test]
+      name: Check slow test status
+      needs: [run_new_model_tests]
       if: always()
       steps:
         - name: Check test status
           shell: bash
           # Mark the previous job `run_test` as successful even if it is skipped (e.g. when it is not a new model PR)
           run: |
-            echo "${{ needs.run_test.result }}"
-            if [ "${{ needs.run_test.result }}" = "failure" ]; then echo "failure"; exit -1; else echo "pass"; fi;
+            echo "${{ needs.run_new_model_tests.result }}"
+            if [ "${{ needs.run_new_model_tests.result }}" = "failure" ]; then echo "failure"; exit -1; else echo "pass"; fi;
