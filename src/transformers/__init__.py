@@ -930,6 +930,11 @@ _import_structure = {
         "ViTHybridConfig",
     ],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
+    "models.audio_mae": [
+        "AUDIO_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", 
+        "AudioMAEConfig", 
+        "AudioMAEFeatureExtractor",
+    ],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
     "models.vitdet": ["VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitDetConfig"],
     "models.vitmatte": ["VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitMatteConfig"],
@@ -3672,6 +3677,15 @@ else:
             "ViTMAEPreTrainedModel",
         ]
     )
+    _import_structure["models.audio_mae"].extend(
+        [
+            "AUDIO_MAE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "AudioMAEForPreTraining",
+            "AudioMAELayer",
+            "AudioMAEModel",
+            "AudioMAEPreTrainedModel",
+        ]
+    )
     _import_structure["models.vit_msn"].extend(
         [
             "VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5864,6 +5878,11 @@ if TYPE_CHECKING:
         ViTHybridConfig,
     )
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
+    from .models.audio_mae import (
+        AUDIO_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        AudioMAEConfig,
+        AudioMAEFeatureExtractor,
+    )
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
     from .models.vitdet import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP, VitDetConfig
     from .models.vitmatte import VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP, VitMatteConfig
@@ -8188,6 +8207,13 @@ if TYPE_CHECKING:
             ViTMAELayer,
             ViTMAEModel,
             ViTMAEPreTrainedModel,
+        )
+        from .models.audio_mae import (
+            Audio_MAE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            AudioMAEForPreTraining,
+            AudioMAELayer,
+            AudioMAEModel,
+            AudioMAEPreTrainedModel,
         )
         from .models.vit_msn import (
             VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST,

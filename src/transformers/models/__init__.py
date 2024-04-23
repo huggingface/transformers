@@ -248,6 +248,7 @@ from . import (
     vit,
     vit_hybrid,
     vit_mae,
+    audio_mae,
     vit_msn,
     vitdet,
     vitmatte,
