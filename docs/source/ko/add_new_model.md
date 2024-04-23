@@ -17,12 +17,6 @@ rendered properly in your Markdown viewer.
 
 Hugging Face Transformers 라이브러리는 커뮤니티 기여자들 덕분에 새로운 모델을 제공할 수 있는 경우가 많습니다. 하지만 이는 도전적인 프로젝트이며 Hugging Face Transformers 라이브러리와 구현할 모델에 대한 깊은 이해가 필요합니다. Hugging Face에서는 더 많은 커뮤니티 멤버가 모델을 적극적으로 추가할 수 있도록 지원하고자 하며, 이 가이드를 통해 PyTorch 모델을 추가하는 과정을 안내하고 있습니다 (PyTorch가 설치되어 있는지 확인해주세요).
 
-<Tip>
-
-TensorFlow 모델을 구현하고자 하는 경우 [🤗 Transformers 모델을 TensorFlow로 변환하는 방법](add_tensorflow_model) 가이드를 살펴보세요!
-
-</Tip>
-
 이 과정을 진행하면 다음과 같은 내용을 이해하게 됩니다:
 
 - 오픈 소스의 모범 사례에 대한 통찰력을 얻습니다.

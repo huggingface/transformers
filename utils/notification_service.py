@@ -1056,7 +1056,6 @@ if __name__ == "__main__":
         "TensorFlow pipelines": "run_tests_tf_pipeline_gpu",
         "Examples directory": "run_examples_gpu",
         "Torch CUDA extension tests": "run_tests_torch_cuda_extensions_gpu_test_reports",
-        "Quantization tests": "run_tests_quantization_torch_gpu",
     }
 
     if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
@@ -1077,7 +1076,6 @@ if __name__ == "__main__":
         "run_pipelines_tf_gpu": "TensorFlow pipelines",
         "run_examples_gpu": "Examples directory",
         "run_all_tests_torch_cuda_extensions_gpu": "Torch CUDA extension tests",
-        "run_tests_quantization_torch_gpu": "Quantization tests",
     }
 
     # Remove some entries in `additional_files` if they are not concerned.

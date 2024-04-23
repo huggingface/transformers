@@ -56,7 +56,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.40.0.dev0")
+check_min_version("4.41.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-classification/requirements.txt")
 
@@ -552,7 +552,7 @@ def main():
                     output_dir=training_args.output_dir,
                     hub_model_id=push_to_hub_model_id,
                     hub_token=training_args.push_to_hub_token,
-                    image_processor=image_processor,
+                    tokenizer=image_processor,
                     **model_card_kwargs,
                 )
             )

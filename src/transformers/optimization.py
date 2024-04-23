@@ -273,7 +273,7 @@ def get_polynomial_decay_schedule_with_warmup(
 
     lr_init = optimizer.defaults["lr"]
     if not (lr_init > lr_end):
-        raise ValueError(f"lr_end ({lr_end}) must be be smaller than initial lr ({lr_init})")
+        raise ValueError(f"lr_end ({lr_end}) must be smaller than initial lr ({lr_init})")
 
     lr_lambda = partial(
         _get_polynomial_decay_schedule_with_warmup_lr_lambda,
@@ -444,9 +444,8 @@ def get_scheduler(
 
         def scheduler_hook(param):
             # Since the optimizer hook has been already attached we only need to
-            # attach the scheduler hook
-            if param.grad is not None:
-                scheduler_dict[param].step()
+            # attach the scheduler hook, the gradients have been zeroed here
+            scheduler_dict[param].step()
 
         for param in optimizer_dict.keys():
             if param.requires_grad:

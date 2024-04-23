@@ -20,12 +20,6 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 Hugging Faceでは、コミュニティの多くの人々に積極的にモデルを追加する力を与えようと努力しており、
 このガイドをまとめて、PyTorchモデルを追加するプロセスを説明します（[PyTorchがインストールされていることを確認してください](https://pytorch.org/get-started/locally/)）。
 
-<Tip>
-
-TensorFlowモデルを実装する興味がある場合は、[🤗 TransformersモデルをTensorFlowに変換する方法](add_tensorflow_model)ガイドを参照してみてください！
-
-</Tip>
-
 この過程で、以下のことを学びます：
 
 - オープンソースのベストプラクティスに関する洞察

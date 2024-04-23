@@ -28,8 +28,9 @@ In this guide, we will:
 
 Before you begin, make sure you have all the necessary libraries installed:
 
-```bash
-pip install -q datasets transformers evaluate
+```py
+# uncomment to install the necessary libraries
+!pip install -q datasets transformers evaluate accelerate
 ```
 
 We encourage you to log in to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to log in:
@@ -236,6 +237,9 @@ Then take a look at an example:
 {'image': <PIL.JpegImagePlugin.JpegImageFile image mode=RGB size=512x683 at 0x7F9B0C201F90>,
  'annotation': <PIL.PngImagePlugin.PngImageFile image mode=L size=512x683 at 0x7F9B0C201DD0>,
  'scene_category': 368}
+
+# view the image
+>>> train_ds[0]["image"]
 ```
 
 - `image`: a PIL image of the scene.
@@ -531,7 +535,7 @@ At this point, only three steps remain:
 ...     per_device_train_batch_size=2,
 ...     per_device_eval_batch_size=2,
 ...     save_total_limit=3,
-...     evaluation_strategy="steps",
+...     eval_strategy="steps",
 ...     save_strategy="steps",
 ...     save_steps=20,
 ...     eval_steps=20,
@@ -642,7 +646,7 @@ and use the [`PushToHubCallback`] to upload the model:
 ...     metric_fn=compute_metrics, eval_dataset=tf_eval_dataset, batch_size=batch_size, label_cols=["labels"]
 ... )
 
->>> push_to_hub_callback = PushToHubCallback(output_dir="scene_segmentation", image_processor=image_processor)
+>>> push_to_hub_callback = PushToHubCallback(output_dir="scene_segmentation", tokenizer=image_processor)
 
 >>> callbacks = [metric_callback, push_to_hub_callback]
 ```
@@ -663,15 +667,19 @@ Congratulations! You have fine-tuned your model and shared it on the 🤗 Hub. Y
 </tf>
 </frameworkcontent>
 
-
 ### Inference
 
 Great, now that you've finetuned a model, you can use it for inference!
 
-Load an image for inference:
+Reload the dataset and load an image for inference.
 
 ```py
->>> image = ds[0]["image"]
+>>> from datasets import load_dataset
+
+>>> ds = load_dataset("scene_parse_150", split="train[:50]")
+>>> ds = ds.train_test_split(test_size=0.2)
+>>> test_ds = ds["test"]
+>>> image = ds["test"][0]["image"]
 >>> image
 ```
 
@@ -749,7 +757,166 @@ Next, rescale the logits to the original image size and apply argmax on the clas
 </tf>
 </frameworkcontent>
 
-To visualize the results, load the [dataset color palette](https://github.com/tensorflow/models/blob/3f1ca33afe3c1631b733ea7e40c294273b9e406d/research/deeplab/utils/get_dataset_colormap.py#L51) as `ade_palette()` that maps each class to their RGB values. Then you can combine and plot your image and the predicted segmentation map:
+To visualize the results, load the [dataset color palette](https://github.com/tensorflow/models/blob/3f1ca33afe3c1631b733ea7e40c294273b9e406d/research/deeplab/utils/get_dataset_colormap.py#L51) as `ade_palette()` that maps each class to their RGB values.
+
+```py
+def ade_palette():
+  return np.asarray([
+      [0, 0, 0],
+      [120, 120, 120],
+      [180, 120, 120],
+      [6, 230, 230],
+      [80, 50, 50],
+      [4, 200, 3],
+      [120, 120, 80],
+      [140, 140, 140],
+      [204, 5, 255],
+      [230, 230, 230],
+      [4, 250, 7],
+      [224, 5, 255],
+      [235, 255, 7],
+      [150, 5, 61],
+      [120, 120, 70],
+      [8, 255, 51],
+      [255, 6, 82],
+      [143, 255, 140],
+      [204, 255, 4],
+      [255, 51, 7],
+      [204, 70, 3],
+      [0, 102, 200],
+      [61, 230, 250],
+      [255, 6, 51],
+      [11, 102, 255],
+      [255, 7, 71],
+      [255, 9, 224],
+      [9, 7, 230],
+      [220, 220, 220],
+      [255, 9, 92],
+      [112, 9, 255],
+      [8, 255, 214],
+      [7, 255, 224],
+      [255, 184, 6],
+      [10, 255, 71],
+      [255, 41, 10],
+      [7, 255, 255],
+      [224, 255, 8],
+      [102, 8, 255],
+      [255, 61, 6],
+      [255, 194, 7],
+      [255, 122, 8],
+      [0, 255, 20],
+      [255, 8, 41],
+      [255, 5, 153],
+      [6, 51, 255],
+      [235, 12, 255],
+      [160, 150, 20],
+      [0, 163, 255],
+      [140, 140, 140],
+      [250, 10, 15],
+      [20, 255, 0],
+      [31, 255, 0],
+      [255, 31, 0],
+      [255, 224, 0],
+      [153, 255, 0],
+      [0, 0, 255],
+      [255, 71, 0],
+      [0, 235, 255],
+      [0, 173, 255],
+      [31, 0, 255],
+      [11, 200, 200],
+      [255, 82, 0],
+      [0, 255, 245],
+      [0, 61, 255],
+      [0, 255, 112],
+      [0, 255, 133],
+      [255, 0, 0],
+      [255, 163, 0],
+      [255, 102, 0],
+      [194, 255, 0],
+      [0, 143, 255],
+      [51, 255, 0],
+      [0, 82, 255],
+      [0, 255, 41],
+      [0, 255, 173],
+      [10, 0, 255],
+      [173, 255, 0],
+      [0, 255, 153],
+      [255, 92, 0],
+      [255, 0, 255],
+      [255, 0, 245],
+      [255, 0, 102],
+      [255, 173, 0],
+      [255, 0, 20],
+      [255, 184, 184],
+      [0, 31, 255],
+      [0, 255, 61],
+      [0, 71, 255],
+      [255, 0, 204],
+      [0, 255, 194],
+      [0, 255, 82],
+      [0, 10, 255],
+      [0, 112, 255],
+      [51, 0, 255],
+      [0, 194, 255],
+      [0, 122, 255],
+      [0, 255, 163],
+      [255, 153, 0],
+      [0, 255, 10],
+      [255, 112, 0],
+      [143, 255, 0],
+      [82, 0, 255],
+      [163, 255, 0],
+      [255, 235, 0],
+      [8, 184, 170],
+      [133, 0, 255],
+      [0, 255, 92],
+      [184, 0, 255],
+      [255, 0, 31],
+      [0, 184, 255],
+      [0, 214, 255],
+      [255, 0, 112],
+      [92, 255, 0],
+      [0, 224, 255],
+      [112, 224, 255],
+      [70, 184, 160],
+      [163, 0, 255],
+      [153, 0, 255],
+      [71, 255, 0],
+      [255, 0, 163],
+      [255, 204, 0],
+      [255, 0, 143],
+      [0, 255, 235],
+      [133, 255, 0],
+      [255, 0, 235],
+      [245, 0, 255],
+      [255, 0, 122],
+      [255, 245, 0],
+      [10, 190, 212],
+      [214, 255, 0],
+      [0, 204, 255],
+      [20, 0, 255],
+      [255, 255, 0],
+      [0, 153, 255],
+      [0, 41, 255],
+      [0, 255, 204],
+      [41, 0, 255],
+      [41, 255, 0],
+      [173, 0, 255],
+      [0, 245, 255],
+      [71, 0, 255],
+      [122, 0, 255],
+      [0, 255, 184],
+      [0, 92, 255],
+      [184, 255, 0],
+      [0, 133, 255],
+      [255, 214, 0],
+      [25, 194, 194],
+      [102, 255, 0],
+      [92, 0, 255],
+  ])
+```
+
+Then you can combine and plot your image and the predicted segmentation map:
 
 ```py
 >>> import matplotlib.pyplot as plt

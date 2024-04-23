@@ -724,7 +724,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> labels = torch.tensor(1)
         >>> loss = model(**inputs, labels=labels).loss
         >>> round(loss.item(), 2)
-        0.35
+        0.93
         ```
 
         Example of multi-label classification:

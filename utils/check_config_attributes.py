@@ -32,8 +32,19 @@ transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 SPECIAL_CASES_TO_ALLOW = {
+    # 'max_position_embeddings' is not used in modeling file, but needed for eval frameworks like Huggingface's lighteval (https://github.com/huggingface/lighteval/blob/af24080ea4f16eaf1683e353042a2dfc9099f038/src/lighteval/models/base_model.py#L264).
+    # periods and offsers are not used in modeling file, but used in the configuration file to define `layers_block_type` and `layers_num_experts`.
+    "JambaConfig": [
+        "max_position_embeddings",
+        "attn_layer_offset",
+        "attn_layer_period",
+        "expert_layer_offset",
+        "expert_layer_period",
+    ],
     # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
+    # used to compute the property `self.layers_block_type`
+    "RecurrentGemmaConfig": ["block_types"],
     # used as in the config to define `intermediate_size`
     "MambaConfig": ["expand"],
     # used as `self.bert_model = BertModel(config, ...)`

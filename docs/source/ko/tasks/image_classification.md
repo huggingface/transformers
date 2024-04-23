@@ -301,7 +301,7 @@ food["test"].set_transform(preprocess_val)
 >>> training_args = TrainingArguments(
 ...     output_dir="my_awesome_food_model",
 ...     remove_unused_columns=False,
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     save_strategy="epoch",
 ...     learning_rate=5e-5,
 ...     per_device_train_batch_size=16,
@@ -321,7 +321,7 @@ food["test"].set_transform(preprocess_val)
 ...     data_collator=data_collator,
 ...     train_dataset=food["train"],
 ...     eval_dataset=food["test"],
-...     image_processor=image_processor,
+...     tokenizer=image_processor,
 ...     compute_metrics=compute_metrics,
 ... )
 
@@ -417,7 +417,7 @@ TensorFlow에서 모델을 미세 조정하려면 다음 단계를 따르세요:
 >>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_eval_dataset)
 >>> push_to_hub_callback = PushToHubCallback(
 ...     output_dir="food_classifier",
-...     image_processor=image_processor,
+...     tokenizer=image_processor,
 ...     save_strategy="no",
 ... )
 >>> callbacks = [metric_callback, push_to_hub_callback]
