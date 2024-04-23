@@ -197,7 +197,9 @@ class JetMoeTopKGating(nn.Module):
         return "k={}, num_experts={}".format(self.top_k, self.num_experts)
 
     def compute_topo(self, top_k_indices, top_k_gates):
-        zeros = torch.zeros([top_k_gates.size(0), self.num_experts], dtype=top_k_gates.dtype, device=top_k_gates.device)
+        zeros = torch.zeros(
+            [top_k_gates.size(0), self.num_experts], dtype=top_k_gates.dtype, device=top_k_gates.device
+        )
         gates = zeros.scatter(1, top_k_indices, 1)
         expert_size = gates.long().sum(0)
         top_k_gates = top_k_gates.flatten()
@@ -239,13 +241,7 @@ class JetMoeMoE(nn.Module):
     A Sparsely gated mixture of experts layer with 1-layer Feed-Forward networks as experts.
 
     Args:
-        input_size: integer - size of the input
-        head_size: integer - size of the expert's hidden layer
-        num_experts: an integer - number of experts
-        top_k: an integer - how many experts to use for each batch element
-        bias: a boolean - whether to include bias in linear layers
-        activation: an activation function to apply to expert's outputs
-        glu: a boolean - whether to use GLU activation
+        config: Configuration object with model hyperparameters.
     """
 
     def __init__(self, config: JetMoeConfig):
@@ -280,6 +276,7 @@ class JetMoeMoE(nn.Module):
 
         Returns:
             Tensor: Output tensor.
+            Tensor: Router logits.
         """
         bsz, length, emb_size = x.size()
         x = x.reshape(-1, emb_size)
@@ -309,9 +306,9 @@ class JetMoeMoE(nn.Module):
 
         Returns:
             Tensor: Output tensor.
-            float: Gating loss.
+            Tensor: Router logits.
         """
-        bsz, length, emb_size = x.size()
+        bsz, length, _ = x.size()
 
         x = x.reshape(1, self.input_size)
         top_k_indices, top_k_gates, router_logits = self.router(x, return_topo=False)
@@ -342,6 +339,7 @@ class JetMoeMoE(nn.Module):
 
         Returns:
             Tensor: Output tensor.
+            Tensor: Router logits.
         """
         bsz, length, emb_size = x.size()
         if bsz * length == 1:
@@ -355,13 +353,7 @@ class JetMoeMoA(nn.Module):
     A Sparsely gated mixture of experts layer with 1-layer Feed-Forward networks as experts.
 
     Args:
-        input_size: integer - size of the input
-        head_size: integer - size of the expert's hidden layer
-        num_experts: an integer - number of experts
-        top_k: an integer - how many experts to use for each batch element
-        bias: a boolean - whether to include bias in linear layers
-        activation: an activation function to apply to expert's outputs
-        glu: a boolean - whether to use GLU activation
+        config: Configuration object with model hyperparameters.
     """
 
     def __init__(self, config: JetMoeConfig):
@@ -395,6 +387,7 @@ class JetMoeMoA(nn.Module):
 
         Returns:
             Tensor: Output tensor.
+            Tensor: Router logits.
         """
         bsz, length, emb_size = x.size()
 
@@ -420,6 +413,7 @@ class JetMoeMoA(nn.Module):
 
         Returns:
             Tensor: Output tensor.
+            Tensor: Router logits.
         """
         bsz, length, emb_size = x.size()
         x = x.reshape(-1, emb_size)
@@ -445,6 +439,7 @@ class JetMoeMoA(nn.Module):
 
         Returns:
             Tensor: Output tensor.
+            Tensor: Router logits.
         """
         bsz, length, emb_size = x.size()
         if bsz * length == 1:
@@ -625,6 +620,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
             Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
@@ -1128,7 +1124,10 @@ class JetMoeBlock(nn.Module):
             outputs += (present_key_value,)
 
         if output_router_logits:
-            outputs += (attn_router_logits, mlp_router_logits,)
+            outputs += (
+                attn_router_logits,
+                mlp_router_logits,
+            )
 
         return outputs
 
@@ -1497,9 +1496,9 @@ class JetMoeModel(JetMoePreTrainedModel):
                     offset = 0
                 mask_shape = attention_mask.shape
                 mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
-                causal_mask[
-                    : mask_shape[0], : mask_shape[1], offset : mask_shape[2] + offset, : mask_shape[3]
-                ] = mask_slice
+                causal_mask[: mask_shape[0], : mask_shape[1], offset : mask_shape[2] + offset, : mask_shape[3]] = (
+                    mask_slice
+                )
 
         if (
             self.config._attn_implementation == "sdpa"
@@ -1645,7 +1644,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel):
         inputs_embeds=None,
         cache_position=None,
         output_router_logits=False,
-        **kwargs
+        **kwargs,
     ):
         # With static cache, the `past_key_values` is None
         # TODO joao: standardize interface for the different Cache classes and remove of this if
@@ -1722,13 +1721,13 @@ class JetMoeForCausalLM(JetMoePreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
-                "output_router_logits": output_router_logits,
+                "output_router_logits": output_router_logits
             }
         )
         return model_inputs
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM._reorder_cache
     @staticmethod
+    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM._reorder_cache
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
