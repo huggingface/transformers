@@ -1249,8 +1249,8 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, Phi3ForCausalLM
 
-        >>> model = Phi3ForCausalLM.from_pretrained("microsoft/phi-3")
-        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-3")
+        >>> model = Phi3ForCausalLM.from_pretrained("microsoft/phi-3-mini-4k-instruct")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-3-mini-4k-instruct")
 
         >>> prompt = "This is an example script ."
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1258,7 +1258,7 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        'This is an example script .\n\n\n\nfrom typing import List\n\ndef find_most_common_letter(words: List[str'
+        'This is an example script .\n Certainly! Below is a sample script that demonstrates a simple task, such as calculating the sum
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
