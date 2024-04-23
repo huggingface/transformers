@@ -806,7 +806,7 @@ class SegGptModel(SegGptPreTrainedModel):
         prompt_pixel_values = (
             torch.cat((prompt_masks, prompt_masks), dim=2)
             if labels is None
-            else torch.cat((prompt_pixel_values, labels), dim=2)
+            else torch.cat((prompt_masks, labels), dim=2)
         )
 
         if bool_masked_pos is None and labels is not None:
