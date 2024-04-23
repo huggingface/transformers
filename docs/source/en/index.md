@@ -177,6 +177,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [LiLT](model_doc/lilt)                          |       ✅        |         ❌         |      ❌      |
 |                         [LLaMA](model_doc/llama)                         |       ✅        |         ❌         |      ✅      |
 |                        [Llama2](model_doc/llama2)                        |       ✅        |         ❌         |      ✅      |
+|                        [Llama3](model_doc/llama3)                        |       ✅        |         ❌         |      ✅      |
 |                         [LLaVa](model_doc/llava)                         |       ✅        |         ❌         |      ❌      |
 |                    [LLaVA-NeXT](model_doc/llava_next)                    |       ✅        |         ❌         |      ❌      |
 |                    [Longformer](model_doc/longformer)                    |       ✅        |         ✅         |      ❌      |
