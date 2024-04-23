@@ -117,9 +117,8 @@ jobs:
       steps:
         - name: Check test status
           shell: bash
-          # **NOT** a new model PR --> no failure (as `run_new_model_tests` is skipped)
-          # new model PR + the required label added --> check the results of `run_new_model_tests`
-          # new model PR but the required label **NOT** added --> this job is not run, and we get `skipped` status
+          # **NOT** a new model PR --> pass
+          # new model PR --> pass only if `run_new_model_tests` gives `success`
           run: |
             echo "${{ needs.run_new_model_tests.result }}"
             if [ "${{ needs.check_for_new_model.outputs.new_model }}" = "" ]; then echo "not new model"; elif [ "${{ needs.run_new_model_tests.result }}" != "success" ]; then echo "failure"; exit -1; else echo "pass"; fi;
