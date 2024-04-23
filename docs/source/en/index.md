@@ -235,6 +235,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                     [Perceiver](model_doc/perceiver)                     |       ✅        |         ❌         |      ❌      |
 |                     [Persimmon](model_doc/persimmon)                     |       ✅        |         ❌         |      ❌      |
 |                           [Phi](model_doc/phi)                           |       ✅        |         ❌         |      ❌      |
+|                          [Phi3](model_doc/phi3)                          |       ✅        |         ❌         |      ❌      |
 |                       [PhoBERT](model_doc/phobert)                       |       ✅        |         ✅         |      ✅      |
 |                    [Pix2Struct](model_doc/pix2struct)                    |       ✅        |         ❌         |      ❌      |
 |                        [PLBart](model_doc/plbart)                        |       ✅        |         ❌         |      ❌      |

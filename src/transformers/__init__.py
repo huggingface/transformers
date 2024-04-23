@@ -709,6 +709,7 @@ _import_structure = {
     ],
     "models.persimmon": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "PersimmonConfig"],
     "models.phi": ["PHI_PRETRAINED_CONFIG_ARCHIVE_MAP", "PhiConfig"],
+    "models.phi3": ["PHI3_PRETRAINED_CONFIG_ARCHIVE_MAP", "Phi3Config"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -3055,6 +3056,16 @@ else:
             "PhiForTokenClassification",
             "PhiModel",
             "PhiPreTrainedModel",
+        ]
+    )
+    _import_structure["models.phi3"].extend(
+        [
+            "PHI3_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Phi3ForCausalLM",
+            "Phi3ForSequenceClassification",
+            "Phi3ForTokenClassification",
+            "Phi3Model",
+            "Phi3PreTrainedModel",
         ]
     )
     _import_structure["models.pix2struct"].extend(
@@ -5669,6 +5680,7 @@ if TYPE_CHECKING:
         PersimmonConfig,
     )
     from .models.phi import PHI_PRETRAINED_CONFIG_ARCHIVE_MAP, PhiConfig
+    from .models.phi3 import PHI3_PRETRAINED_CONFIG_ARCHIVE_MAP, Phi3Config
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -7714,6 +7726,14 @@ if TYPE_CHECKING:
             PhiForTokenClassification,
             PhiModel,
             PhiPreTrainedModel,
+        )
+        from .models.phi3 import (
+            PHI3_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Phi3ForCausalLM,
+            Phi3ForSequenceClassification,
+            Phi3ForTokenClassification,
+            Phi3Model,
+            Phi3PreTrainedModel,
         )
         from .models.pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,

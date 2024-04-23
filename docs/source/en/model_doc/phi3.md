@@ -18,11 +18,13 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Phi-3 model was proposed in []() by Microsoft.
+The Phi-3 model was proposed in [Phi-3 Technical Report: A Highly Capable Language Model Locally on Your Phone](https://arxiv.org/abs/2404.14219) by Microsoft.
 
 ### Summary
 
 The abstract from the Phi-3 paper is the following:
+
+We introduce phi-3-mini, a 3.8 billion parameter language model trained on 3.3 trillion tokens, whose overall performance, as measured by both academic benchmarks and internal testing, rivals that of models such as Mixtral 8x7B and GPT-3.5 (e.g., phi-3-mini achieves 69% on MMLU and 8.38 on MT-bench), despite being small enough to be deployed on a phone. The innovation lies entirely in our dataset for training, a scaled-up version of the one used for phi-2, composed of heavily filtered web data and synthetic data. The model is also further aligned for robustness, safety, and chat format. We also provide some initial parameter-scaling results with a 7B and 14B models trained for 4.8T tokens, called phi-3-small and phi-3-medium, both significantly more capable than phi-3-mini (e.g., respectively 75% and 78% on MMLU, and 8.7 and 8.9 on MT-bench).
 
 The original code for Phi-3 can be found [here](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct).
 
@@ -61,30 +63,30 @@ Phi-3 has been integrated in the development version (4.40.0.dev) of `transforme
 <s><|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Absolutely! Bananas and dragonfruits are both delicious fruits that can be combined in various ways to create tasty and nutrit
 ```
 
-## PhiConfig
+## Phi3Config
 
 [[autodoc]] Phi3Config
 
 <frameworkcontent>
 <pt>
 
-## PhiModel
+## Phi3Model
 
 [[autodoc]] Phi3Model
     - forward
 
-## PhiForCausalLM
+## Phi3ForCausalLM
 
 [[autodoc]] Phi3ForCausalLM
     - forward
     - generate
 
-## PhiForSequenceClassification
+## Phi3ForSequenceClassification
 
 [[autodoc]] Phi3ForSequenceClassification
     - forward
 
-## PhiForTokenClassification
+## Phi3ForTokenClassification
 
 [[autodoc]] Phi3ForTokenClassification
     - forward
