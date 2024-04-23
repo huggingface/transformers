@@ -27,7 +27,7 @@ jobs:
     name: SSH
     runs-on: [single-gpu, nvidia-gpu, ${{ github.event.inputs.runner_type }}, ci]
     container:
-      image: ${{ github.event.inputs.runner_type }}
+      image: ${{ github.event.inputs.docker_image }}
       options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
 
     steps:
