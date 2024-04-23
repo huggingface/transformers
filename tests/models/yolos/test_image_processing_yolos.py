@@ -18,6 +18,8 @@ import json
 import pathlib
 import unittest
 
+from parameterized import parameterized
+
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -183,17 +185,24 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
             torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4)
         )
 
-    def test_resize_max_size_respected(self):
+    @parameterized.expand(
+        [
+            ((3, 100, 1500),),
+            ((3, 400, 400),),
+            ((3, 1500, 1500),),
+        ]
+    )
+    def test_resize_max_size_respected(self, image_size):
         image_processor = self.image_processing_class(**self.image_processor_dict)
 
         # create torch tensors as image
-        image = torch.randint(0, 256, (3, 100, 1500), dtype=torch.uint8)
+        image = torch.randint(0, 256, image_size, dtype=torch.uint8)
         processed_image = image_processor(
             image, size={"longest_edge": 1333, "shortest_edge": 800}, do_pad=False, return_tensors="pt"
         )["pixel_values"]
 
-        self.assertTrue(processed_image.shape[-1] <= 1333)
-        self.assertTrue(processed_image.shape[-2] <= 800)
+        self.assertTrue(processed_image.shape[-1] <= 1333, f"Expected width <= 1333, got {processed_image.shape[-1]}")
+        self.assertTrue(processed_image.shape[-2] <= 800, f"Expected height <= 800, got {processed_image.shape[-2]}")
 
     @slow
     def test_call_pytorch_with_coco_detection_annotations(self):
