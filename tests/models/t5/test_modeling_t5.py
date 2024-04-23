@@ -795,9 +795,9 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
 
             with torch.no_grad():
                 out_embeds = model(**inputs)[0]
-            
+
             self.assertTrue(torch.allclose(out_embeds, out_ids))
-    
+
     def test_config_and_model_silu_gated(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config = config_and_inputs[0]

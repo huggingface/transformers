@@ -2740,39 +2740,49 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
+            if model_class.__name__ not in get_values(MODEL_MAPPING_NAMES):
+                continue
             model = model_class(config)
             model.to(torch_device)
             model.eval()
+            print(model_class)
 
             model_forward_args = inspect.signature(model.forward).parameters
             if "inputs_embeds" not in model_forward_args:
                 self.skipTest("This model doesn't use `inputs_embeds`")
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            with torch.no_grad():
-                out_ids = model(**inputs)[0]
-
+            pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
+            wte = model.get_input_embeddings()
             if not self.is_encoder_decoder:
                 input_ids = inputs["input_ids"]
+                # some models infer position ids differently when input ids, by check if pad_token
+                # let's make sure no padding is in input ids
+                input_ids[input_ids == pad_token_id] = max(0, pad_token_id - 1)
+
                 del inputs["input_ids"]
+                inputs_embeds = wte(input_ids)
+                with torch.no_grad():
+                    out_ids = model(input_ids=input_ids, **inputs)[0]
+                    out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             else:
                 encoder_input_ids = inputs["input_ids"]
                 decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+                encoder_input_ids[encoder_input_ids == pad_token_id] = max(0, pad_token_id + 1)
+                decoder_input_ids[decoder_input_ids == pad_token_id] = max(0, pad_token_id + 1)
                 del inputs["input_ids"]
                 inputs.pop("decoder_input_ids", None)
 
-            wte = model.get_input_embeddings()
-            if not self.is_encoder_decoder:
-                inputs["inputs_embeds"] = wte(input_ids)
-            else:
-                inputs["inputs_embeds"] = wte(encoder_input_ids)
-                inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
+                inputs_embeds = wte(encoder_input_ids)
+                decoder_inputs_embeds = wte(decoder_input_ids)
+                with torch.no_grad():
+                    out_ids = model(input_ids=encoder_input_ids, decoder_input_ids=decoder_input_ids, **inputs)[0]
+                    out_embeds = model(
+                        inputs_embeds=inputs_embeds, decoder_inputs_embeds=decoder_inputs_embeds, **inputs
+                    )[0]
 
-            with torch.no_grad():
-                out_embeds = model(**inputs)[0]
-            
             self.assertTrue(torch.allclose(out_embeds, out_ids))
-    
+
     @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

@@ -578,7 +578,7 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
 
             with torch.no_grad():
                 model(**inputs)[0]
-    
+
     def test_inputs_embeds_matches_input_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -590,7 +590,7 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             with torch.no_grad():
                 out_ids = model(**inputs)[0]
-            
+
             input_ids = inputs["input_ids"]
             del inputs["input_ids"]
 
@@ -678,7 +678,7 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             with torch.no_grad():
                 out_ids = model(**inputs)[0]
-            
+
             input_ids = inputs["input_ids"]
             del inputs["input_ids"]
 
@@ -688,7 +688,7 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 out_embeds = model(**inputs)[0]
 
             self.assertTrue(torch.allclose(out_embeds, out_ids))
-    
+
     @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
@@ -756,7 +756,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip("FineModel relies on codebook idx and does not return same logits")
     def test_inputs_embeds_matches_input_ids(self):
         pass
-    
+
     @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()

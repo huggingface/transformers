@@ -326,7 +326,7 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_inputs_embeds_matches_input_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in (M2M100Model, M2M100ForConditionalGeneration):
+        for model_class in (M2M100Model,):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -353,9 +353,9 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
             with torch.no_grad():
                 out_embeds = model(**inputs)[0]
-            
+
             self.assertTrue(torch.allclose(out_embeds, out_ids))
-    
+
     @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()

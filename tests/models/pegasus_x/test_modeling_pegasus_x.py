@@ -311,9 +311,9 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
             with torch.no_grad():
                 out_embeds = model(**inputs)[0]
-            
+
             self.assertTrue(torch.allclose(out_embeds, out_ids))
-    
+
     @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()

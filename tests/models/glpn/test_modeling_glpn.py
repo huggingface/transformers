@@ -172,7 +172,7 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip("GLPN does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
-    
+
     @unittest.skip(reason="GLPN does not use inputs_embeds")
     def test_inputs_embeds_matches_input_ids(self):
         pass

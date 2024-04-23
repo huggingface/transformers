@@ -179,7 +179,7 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip("input_embeds cannot be passed in without input_ids")
     def test_inputs_embeds():
         pass
-    
+
     @unittest.skip("input_embeds cannot be passed in without input_ids")
     def test_inputs_embeds_matches_input_ids(self):
         pass
