@@ -556,7 +556,6 @@ class TFIdeficsEmbedding(tf.keras.layers.Layer):
         return self._compute_cos_sin(seq_len=seq_len)
 
 
-# Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -564,7 +563,6 @@ def rotate_half(x):
     return tf.concat((-x2, x1), axis=-1)
 
 
-# Copied from transformers.models.llama.modeling_flax_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     cos = tf.gather(cos, position_ids)  # [seq_len, dim] -> [batch_size, 1, seq_len, head_dim]
     sin = tf.gather(sin, position_ids)

@@ -147,7 +147,6 @@ class IdeficsImageProcessor(BaseImageProcessor):
         #     transforms.ToTensor(),
         #     transforms.Normalize(mean=image_mean, std=image_std),
         # ])
-        # TODO: Alazar figure out tf version for below
         if transform is not None:
             if not is_torch_available():
                 raise ImportError("To pass in `transform` torch must be installed")
