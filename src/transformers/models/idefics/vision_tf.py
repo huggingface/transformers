@@ -127,8 +127,8 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
 
     def call(self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False) -> tf.Tensor:
         # Input `pixel_values` is NCHW format which doesn't run on CPU so first thing we do is
-        # transpose it to change it to NHWC
-        # TODO: Alazar don't forget to change format back to NCHW
+        # transpose it to change it to NHWC. We don't care to transpose it back because
+        # the Conv2D layer is only hit once for each query
 
         if isinstance(pixel_values, dict):
             pixel_values = pixel_values["pixel_values"]

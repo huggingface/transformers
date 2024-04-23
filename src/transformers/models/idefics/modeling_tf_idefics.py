@@ -1326,9 +1326,8 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
         elif pixel_values is not None:
             no_images = tf.reduce_sum(tf.cast(pixel_values, dtype=tf.int32)) == 0
             pixel_values = tf.cast(pixel_values, dtype=self.dtype)  # fp16 compatibility
-            # TODO Alazar: nasty hack below because when cross-loading pytorch weights, there is an
+            # Below hack is because when cross-loading pytorch weights, there is an
             # initial forward pass with dummy input and code below is here to handle that
-            # but I want to come up with a cleaner fix if possible
             if len(pixel_values.shape) == 4:
                 batch_size = shape_list(pixel_values)[0]
                 num_images = shape_list(pixel_values)[0]
