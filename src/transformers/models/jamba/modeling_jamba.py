@@ -231,6 +231,7 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
         conv_kernel_size = config.mamba_d_conv
         self.conv_states = []
         self.ssm_states = []
+        self.transformer_layers = []
         for i in range(config.num_hidden_layers):
             if self.layers_block_type[i] == "mamba":
                 self.conv_states += [
@@ -242,6 +243,7 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
             else:
                 self.conv_states += [torch.tensor([[]] * batch_size, device=device)]
                 self.ssm_states += [torch.tensor([[]] * batch_size, device=device)]
+                self.transformer_layers.append(i)
 
         self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
         self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
@@ -275,6 +277,14 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
             self.conv_states[layer_idx] = self.conv_states[layer_idx].index_select(0, beam_idx.to(device))
             device = self.ssm_states[layer_idx].device
             self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
+
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        # take any layer that contains cache and not empty tensor
+        layer_idx = self.transformer_layers[0] if layer_idx not in self.transformer_layers else layer_idx
+        if len(self.key_cache) <= layer_idx:
+            return 0
+        return self.key_cache[layer_idx].shape[-2]
 
     def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
         raise NotImplementedError("HybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")

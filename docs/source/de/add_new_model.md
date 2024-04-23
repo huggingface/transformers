@@ -17,12 +17,6 @@ rendered properly in your Markdown viewer.
 
 Die 🤗 Transformers-Bibliothek ist dank der Beiträge der Community oft in der Lage, neue Modelle anzubieten. Aber das kann ein anspruchsvolles Projekt sein und erfordert eine eingehende Kenntnis der 🤗 Transformers-Bibliothek und des zu implementierenden Modells. Bei Hugging Face versuchen wir, mehr Mitgliedern der Community die Möglichkeit zu geben, aktiv Modelle hinzuzufügen, und wir haben diese Anleitung zusammengestellt, die Sie durch den Prozess des Hinzufügens eines PyTorch-Modells führt (stellen Sie sicher, dass Sie [PyTorch installiert haben](https://pytorch.org/get-started/locally/)).
 
-<Tip>
-
-Wenn Sie daran interessiert sind, ein TensorFlow-Modell zu implementieren, werfen Sie einen Blick in die Anleitung [How to convert a 🤗 Transformers model to TensorFlow](add_tensorflow_model)!
-
-</Tip>
-
 Auf dem Weg dorthin, werden Sie:
 
 - Einblicke in bewährte Open-Source-Verfahren erhalten
