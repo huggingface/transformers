@@ -100,7 +100,7 @@ class YolosImageProcessingTester(unittest.TestCase):
                 if max_original_size / min_original_size * size > max_size:
                     size = int(round(max_size * min_original_size / max_original_size))
 
-            if width < height and width != size:
+            if width <= height and width != size:
                 height = int(size * height / width)
                 width = size
             elif height < width and height != size:
