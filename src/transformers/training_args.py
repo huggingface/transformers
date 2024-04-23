@@ -1831,10 +1831,10 @@ class TrainingArguments:
                         )
             prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
             os.environ[f"{prefix}BACKWARD_PREFETCH"] = prefetch_policy.upper()
-            os.environ[f"{prefix}FORWARD_PREFETCH"] = self.fsdp_config.get("forward_prefetch", "false")
+            os.environ[f"{prefix}FORWARD_PREFETCH"] = str(self.fsdp_config.get("forward_prefetch", "false"))
 
-            sync_module_states = self.fsdp_config.get("sync_module_states", "true")
-            cpu_ram_efficient_loading = self.fsdp_config.get("cpu_ram_efficient_loading", "false")
+            sync_module_states = str(self.fsdp_config.get("sync_module_states", "true"))
+            cpu_ram_efficient_loading = str(self.fsdp_config.get("cpu_ram_efficient_loading", "false"))
 
             if str(sync_module_states).lower() == "false" and str(cpu_ram_efficient_loading).lower() == "true":
                 # In this case, all the processes except the main process would have random weights leading
@@ -1844,7 +1844,7 @@ class TrainingArguments:
             os.environ[f"{prefix}SYNC_MODULE_STATES"] = sync_module_states
             os.environ[f"{prefix}CPU_RAM_EFFICIENT_LOADING"] = cpu_ram_efficient_loading
 
-            os.environ[f"{prefix}USE_ORIG_PARAMS"] = self.fsdp_config.get("use_orig_params", "true")
+            os.environ[f"{prefix}USE_ORIG_PARAMS"] = str(self.fsdp_config.get("use_orig_params", "true"))
 
         if is_accelerate_available():
             if not isinstance(self.accelerator_config, (AcceleratorConfig)):
