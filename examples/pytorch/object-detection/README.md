@@ -227,7 +227,7 @@ dataset.push_to_hub("name of repo on the hub")
 
 And the final step, for training you should provide id2label mapping in the following way:
 ```python
-label2id = {0: "Car", 1: "Bird", ...}
+id2label = {0: "Car", 1: "Bird", ...}
 ```
 Just find it in code and replace for simplicity, or save `json` locally and with the dataset on the hub!
 
