@@ -555,12 +555,14 @@ class TFIdeficsEmbedding(tf.keras.layers.Layer):
             seq_len = shape_list(x)[2]
         return self._compute_cos_sin(seq_len=seq_len)
 
+
 # Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return tf.concat((-x2, x1), axis=-1)
+
 
 # Copied from transformers.models.llama.modeling_flax_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
@@ -1091,6 +1093,7 @@ class TFIdeficsPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["TFIdeficsDecoderLayer", "TFIdeficsGatedCrossAttentionLayer"]
+
 
 LLAMA_INPUTS_DOCSTRING = r"""
     Args:
