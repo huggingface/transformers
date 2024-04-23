@@ -16,6 +16,7 @@
 
 
 import inspect
+import math
 import unittest
 
 from datasets import load_dataset
@@ -329,6 +330,20 @@ def prepare_img():
     return images, masks
 
 
+def prepare_bool_masked_pos(config: SegGptConfig):
+    num_patches = math.prod([i // config.patch_size for i in config.image_size])
+    mask_ratio = 0.75
+    torch.manual_seed(2)
+    num_masked_patches = int(num_patches * mask_ratio)
+    shuffle_idx = torch.randperm(num_patches)
+    bool_masked_pos = torch.FloatTensor([0] * (num_patches - num_masked_patches) + [1] * num_masked_patches)[
+        shuffle_idx
+    ]
+    bool_masked_pos = bool_masked_pos.unsqueeze(0).bool()
+
+    return bool_masked_pos
+
+
 @require_torch
 @require_vision
 class SegGptModelIntegrationTest(unittest.TestCase):
@@ -407,3 +422,30 @@ class SegGptModelIntegrationTest(unittest.TestCase):
 
         self.assertEqual(outputs.pred_masks.shape, expected_shape)
         self.assertTrue(torch.allclose(outputs.pred_masks[0, :, 448:451, :3], expected_slice, atol=4e-4))
+
+    @slow
+    def test_one_shot_with_label(self):
+        model = SegGptForImageSegmentation.from_pretrained("BAAI/seggpt-vit-large").to(torch_device)
+
+        image_processor = self.default_image_processor
+
+        images, masks = prepare_img()
+
+        input_image = images[1]
+        label = masks[1]
+        prompt_image = images[0]
+        prompt_mask = masks[0]
+
+        inputs = image_processor(
+            images=input_image, prompt_masks=prompt_mask, prompt_images=prompt_image, return_tensors="pt"
+        ).to(torch_device)
+
+        labels = image_processor(images=None, prompt_masks=label, return_tensors="pt")["prompt_masks"].to(torch_device)
+
+        bool_masked_pos = prepare_bool_masked_pos(model.config).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs, labels=labels, bool_masked_pos=bool_masked_pos)
+
+        expected_loss = torch.tensor(0.0074).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
