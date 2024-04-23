@@ -187,22 +187,27 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
 
     @parameterized.expand(
         [
-            ((3, 100, 1500),),
-            ((3, 400, 400),),
-            ((3, 1500, 1500),),
+            ((3, 100, 1500), 1333, 800),
+            ((3, 400, 400), 1333, 800),
+            ((3, 1500, 1500), 1333, 800),
+            ((3, 800, 1333), 1333, 800),
+            ((3, 1333, 800), 1333, 800),
+            ((3, 800, 800), 400, 400),
         ]
     )
-    def test_resize_max_size_respected(self, image_size):
+    def test_resize_max_size_respected(self, image_size, longest_edge, shortest_edge):
         image_processor = self.image_processing_class(**self.image_processor_dict)
 
         # create torch tensors as image
         image = torch.randint(0, 256, image_size, dtype=torch.uint8)
         processed_image = image_processor(
-            image, size={"longest_edge": 1333, "shortest_edge": 800}, do_pad=False, return_tensors="pt"
+            image, size={"longest_edge": longest_edge, "shortest_edge": shortest_edge}, do_pad=False, return_tensors="pt"
         )["pixel_values"]
 
-        self.assertTrue(processed_image.shape[-1] <= 1333, f"Expected width <= 1333, got {processed_image.shape[-1]}")
-        self.assertTrue(processed_image.shape[-2] <= 800, f"Expected height <= 800, got {processed_image.shape[-2]}")
+        shape = list(processed_image.shape[-2:])
+        max_size, min_size = max(shape), min(shape)
+        self.assertTrue(max_size <= 1333, f"Expected max_size <= 1333, got image shape {shape}")
+        self.assertTrue(min_size <= 800, f"Expected min_size <= 800, got image shape {shape}")
 
     @slow
     def test_call_pytorch_with_coco_detection_annotations(self):
