@@ -147,7 +147,7 @@ def load_tf_weights_in_qdqbert(model, tf_checkpoint_path):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert -> QDQBert
-class QDQBertEmbeddings(nn.Module):
+class BertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
@@ -202,9 +202,9 @@ class QDQBertEmbeddings(nn.Module):
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
-        embeddings = inputs_embeds + token_type_embeddings
+        embeddings = inputs_embeds + token_type_embeddings.to(inputs_embeds.device)
         if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
+            position_embeddings = self.position_embeddings(position_ids).to(inputs_embeds.device)
             embeddings += position_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
