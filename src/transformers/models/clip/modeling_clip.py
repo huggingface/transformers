@@ -382,13 +382,17 @@ class CLIPSdpaAttention(CLIPAttention):
         value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
         attn_mask = causal_attention_mask if attention_mask is not None else None
+        is_causal = self.is_causal and attn_mask is None and tgt_len > 1
+        # Otherwise CLIPModelTest::{test_torchscript_simple, test_torchscript_output_hidden_state} cry.
+        if torch.is_tensor(is_causal):
+            is_causal = bool(is_causal)
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
             attn_mask=attn_mask,
             dropout_p=self.dropout if self.training else 0.0,
-            is_causal=self.is_causal and attn_mask is None and tgt_len > 1,
+            is_causal=is_causal,
             scale=self.scale,
         )
 

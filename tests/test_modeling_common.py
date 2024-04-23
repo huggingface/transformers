@@ -3583,7 +3583,7 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             if hasattr(config, "vision_config"):
-                config.vision_config._attn_implementation = "sdpa"
+                config.vision_config._attn_implementation = config._attn_implementation
             model = model_class(config)
 
             is_encoder_decoder = model.config.is_encoder_decoder
@@ -3708,6 +3708,12 @@ class ModelTesterMixin:
                                     # Otherwise fails for e.g. WhisperEncoderModel
                                     if "attention_mask" in inspect.signature(model_eager.forward).parameters:
                                         other_inputs["attention_mask"] = dummy_attention_mask
+                                    # Otherwise fails for e.g. CLIPModelTest
+                                    if (
+                                        "pixel_values" in inspect.signature(model_eager.forward).parameters
+                                        and model_class.__name__ == "CLIPModel"
+                                    ):
+                                        other_inputs["pixel_values"] = inputs_dict["pixel_values"]
 
                                 # TODO: test gradients as well (& for FA2 as well!)
                                 with torch.no_grad():
@@ -3719,16 +3725,32 @@ class ModelTesterMixin:
                                         outputs_eager = model_eager(dummy_input, **other_inputs)
                                         outputs_sdpa = model_sdpa(dummy_input, **other_inputs)
 
-                                logits_eager = (
-                                    outputs_eager.hidden_states[-1]
-                                    if not is_encoder_decoder
-                                    else outputs_eager.decoder_hidden_states[-1]
-                                )
-                                logits_sdpa = (
-                                    outputs_sdpa.hidden_states[-1]
-                                    if not is_encoder_decoder
-                                    else outputs_sdpa.decoder_hidden_states[-1]
-                                )
+                                # `CLIPOutput` doesn't have "hidden_states" or "decoder_hidden_states".
+                                if model_class.__name__ == "CLIPModel":
+                                    logits_eager = torch.cat(
+                                        [outputs_eager.image_embeds, outputs_eager.text_embeds], dim=0
+                                    )
+                                else:
+                                    logits_eager = (
+                                        outputs_eager.hidden_states[-1]
+                                        if not is_encoder_decoder
+                                        else outputs_eager.decoder_hidden_states[-1]
+                                    )
+                                if model_class.__name__ == "CLIPModel":
+                                    logits_sdpa = torch.cat(
+                                        [outputs_sdpa.image_embeds, outputs_sdpa.text_embeds], dim=0
+                                    )
+                                else:
+                                    logits_sdpa = (
+                                        outputs_sdpa.hidden_states[-1]
+                                        if not is_encoder_decoder
+                                        else outputs_sdpa.decoder_hidden_states[-1]
+                                    )
+
+                                if enable_kernels:
+                                    print(
+                                        f"Enabled kernels: {torch.allclose(logits_eager, logits_sdpa, atol=1e-3, rtol=1e-3)}"
+                                    )
 
                                 if torch_device in ["cpu", "cuda"]:
                                     atol = atols[torch_device, enable_kernels, torch_dtype]
