@@ -83,7 +83,7 @@ class Phi3Config(PretrainedConfig):
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`dict`, *optional*):
-            The scaling factor for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
+            The scaling strategy for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
             contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be `longrope` and
             the `short_factor` and `long_factor` must be lists of numbers with the same length as the hidden size
             divided by the number of attention heads divided by 2.
