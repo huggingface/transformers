@@ -30,7 +30,7 @@ The original code for Phi-3 can be found [here](https://huggingface.co/microsoft
 
 ## Usage tips
 
-- This model is quite similar to `Mistral` with the main difference in [`Phi3LongScaledRotaryEmbedding`], where it is used to extend the context of the rotary embeddings.
+- This model is very similar to `Llama` with the main difference of [`Phi3SuScaledRotaryEmbedding`] and [`Phi3YarnScaledRotaryEmbedding`], where they are used to extend the context of the rotary embeddings. The query, key and values are fused, and the MLP's up and gate projection layers are also fused.
 - The tokenizer used for this model is identical to the [`LlamaTokenizer`], with the exception of additional tokens.
 
 ## How to use Phi-3

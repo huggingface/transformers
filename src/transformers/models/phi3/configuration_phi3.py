@@ -87,6 +87,8 @@ class Phi3Config(PretrainedConfig):
             contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be either `su` or `yarn` and
             the `short_factor` and `long_factor` must be lists of numbers with the same length as the hidden size
             divided by the number of attention heads divided by 2.
+        bos_token_id (`int`, *optional*, defaults to 1):
+            The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 32000):
             The id of the "end-of-sequence" token.
         pad_token_id (`int`, *optional*, defaults to 32000):
@@ -132,6 +134,7 @@ class Phi3Config(PretrainedConfig):
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
+        bos_token_id=1,
         eos_token_id=32000,
         pad_token_id=32000,
         sliding_window=None,
@@ -162,6 +165,7 @@ class Phi3Config(PretrainedConfig):
         self.sliding_window = sliding_window
 
         super().__init__(
+            bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             pad_token_id=pad_token_id,
             tie_word_embeddings=tie_word_embeddings,

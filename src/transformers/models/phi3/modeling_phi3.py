@@ -286,6 +286,7 @@ class Phi3Attention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
         self.original_max_position_embeddings = config.original_max_position_embeddings
         self.rope_theta = config.rope_theta
+        self.rope_scaling = config.rope_scaling
         self.is_causal = True
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
@@ -300,7 +301,7 @@ class Phi3Attention(nn.Module):
         self._init_rope()
 
     def _init_rope(self):
-        if self.config.rope_scaling is None:
+        if self.rope_scaling is None:
             self.rotary_emb = Phi3RotaryEmbedding(
                 self.head_dim,
                 max_position_embeddings=self.max_position_embeddings,
@@ -308,29 +309,29 @@ class Phi3Attention(nn.Module):
             )
         else:
             scaling_type = self.config.rope_scaling["type"]
+            short_factor = self.config.rope_scaling["short_factor"]
+            long_factor = self.config.rope_scaling["long_factor"]
+
             if scaling_type == "su":
                 self.rotary_emb = Phi3SuScaledRotaryEmbedding(
                     self.head_dim,
-                    self.config.rope_scaling["short_factor"],
-                    self.config.rope_scaling["long_factor"],
-                    max_position_embeddings=self.config.max_position_embeddings,
-                    original_max_position_embeddings=self.config.original_max_position_embeddings,
-                    base=self.config.rope_theta,
+                    short_factor,
+                    long_factor,
+                    max_position_embeddings=self.max_position_embeddings,
+                    original_max_position_embeddings=self.original_max_position_embeddings,
+                    base=self.rope_theta,
                 )
             elif scaling_type == "yarn":
                 self.rotary_emb = Phi3YarnScaledRotaryEmbedding(
                     self.head_dim,
-                    self.config.rope_scaling["short_factor"],
-                    self.config.rope_scaling["long_factor"],
-                    max_position_embeddings=self.config.max_position_embeddings,
-                    original_max_position_embeddings=self.config.original_max_position_embeddings,
-                    base=self.config.rope_theta,
+                    short_factor,
+                    long_factor,
+                    max_position_embeddings=self.max_position_embeddings,
+                    original_max_position_embeddings=self.original_max_position_embeddings,
+                    base=self.rope_theta,
                 )
             else:
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
-
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
         self,
