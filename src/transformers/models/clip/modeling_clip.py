@@ -386,7 +386,7 @@ class CLIPSdpaAttention(CLIPAttention):
             query_states,
             key_states,
             value_states,
-            attn_mask=attention_mask,
+            attn_mask=causal_attention_mask if attention_mask is not None else None,
             dropout_p=self.dropout if self.training else 0.0,
             is_causal=self.is_causal and attention_mask is None and tgt_len > 1,
         )
