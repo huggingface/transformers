@@ -23,7 +23,6 @@ import warnings
 from typing import Dict, List, Tuple
 
 from packaging import version
-
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
@@ -106,7 +105,7 @@ class GemmaSentencePieceExtractor(SentencePieceExtractor):
 
         # there is a missing token in the vocab. We have to do this to support merges
         # "<0x09>" is the bytefallback for `\t`
-        vocab["\t"] = vocab.pop("<0x09>")
+        vocab["\t"] = vocab.get("<0x09>")
 
         if vocab_scores is not None:
             vocab_scores, reverse = dict(vocab_scores), True
@@ -1259,6 +1258,9 @@ class GemmaConvert(SpmConverter):
     byte_fallback: true
     """
 
+    def normalizer(self, proto):
+        return normalizers.Replace(" ", "▁")
+
     def vocab(self, proto):
         vocab = [
             (self.original_tokenizer.pad_token, 0.0),
@@ -1273,9 +1275,6 @@ class GemmaConvert(SpmConverter):
         # vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
         return vocab
 
-    def normalizer(self, proto):
-        return None
-    
     def pre_tokenizer(self, replacement, add_prefix_space):
         return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme="never", split=False)
 
@@ -1330,7 +1329,7 @@ class GemmaConvert(SpmConverter):
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
             )
         user_defined_symbols = [
-            AddedToken(token, normalized=False, special=False) for token in proto.trainer_spec.user_defined_symbols
+            AddedToken(token, normalized=True, special=False) for token in proto.trainer_spec.user_defined_symbols
         ]
         tokenizer.add_tokens(user_defined_symbols)
         return tokenizer
