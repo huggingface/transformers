@@ -105,7 +105,6 @@ from .stopping_criteria import (
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..tokenization_utils_base import PreTrainedTokenizerBase
-    from ..tokenization_utils_base import PreTrainedTokenizerBase
     from .streamers import BaseStreamer
 
 logger = logging.get_logger(__name__)
