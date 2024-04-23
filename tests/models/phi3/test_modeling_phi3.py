@@ -376,7 +376,11 @@ class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         n_factors = config.hidden_size // config.num_attention_heads // 2
-        config.rope_scaling = {"type": scaling_type, "short_factor": [5.0 for _ in range(n_factors)], "long_factor": [5.0 for _ in range(n_factors)]}
+        config.rope_scaling = {
+            "type": scaling_type,
+            "short_factor": [5.0 for _ in range(n_factors)],
+            "long_factor": [5.0 for _ in range(n_factors)],
+        }
         scaled_model = Phi3Model(config)
         scaled_model.to(torch_device)
         scaled_model.eval()
