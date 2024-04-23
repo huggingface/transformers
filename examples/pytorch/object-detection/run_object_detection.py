@@ -16,7 +16,6 @@
 import logging
 import os
 import sys
-import warnings
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Any, List, Mapping, Optional, Tuple, Union
@@ -453,7 +452,9 @@ def main():
     # Model training and evaluation with Trainer API
     # ------------------------------------------------------------------------------------------------
 
-    eval_compute_metrics_fn = partial(compute_metrics, image_processor=image_processor, id2label=id2label, threshold=0.0)
+    eval_compute_metrics_fn = partial(
+        compute_metrics, image_processor=image_processor, id2label=id2label, threshold=0.0
+    )
 
     trainer = Trainer(
         model=model,
