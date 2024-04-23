@@ -913,9 +913,7 @@ class JambaMambaMixer(nn.Module):
 
             if cache_params.has_previous_state and seq_len == 1 and \
                     cache_params.conv_states[self.layer_idx].shape[0] == batch_size:
-                
-                
-                = cache_params.conv_states[self.layer_idx]                   # [batch, intermediate_size, conv_kernel_size]
+                conv_state = cache_params.conv_states[self.layer_idx]                   # [batch, intermediate_size, conv_kernel_size]
                 conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
                 conv_state[:, :, -1] = hidden_states[:, :, 0]
                 cache_params.conv_states[self.layer_idx] = conv_state
