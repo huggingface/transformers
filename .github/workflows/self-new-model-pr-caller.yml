@@ -113,9 +113,7 @@ jobs:
       runs-on: ubuntu-22.04
       name: Check slow test status
       needs: [check_for_new_model, run_new_model_tests]
-      # Triggered if either **NOT** a new model PR (to give it `successful` state) or the required label is added (to check the results)
-      # For a new model PR without the required label added, skip this, so the merge button would be blocked.
-      if: ${{ needs.check_for_new_model.outputs.new_model == '' || contains(github.event.pull_request.labels.*.name, 'single-model-run-slow') }}
+      if: always()
       steps:
         - name: Check test status
           shell: bash
@@ -124,4 +122,4 @@ jobs:
           # new model PR but the required label **NOT** added --> this job is not run, and we get `skipped` status
           run: |
             echo "${{ needs.run_new_model_tests.result }}"
-            if [ "${{ needs.run_new_model_tests.result }}" = "failure" ]; then echo "failure"; exit -1; else echo "pass"; fi;
+            if [ "${{ needs.check_for_new_model.outputs.new_model }}" = "" ]; then echo "not new model"; elif [ "${{ needs.run_new_model_tests.result }}" != "successful" ]; then echo "failure"; exit -1; else echo "pass"; fi;
