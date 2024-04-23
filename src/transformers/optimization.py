@@ -444,9 +444,8 @@ def get_scheduler(
 
         def scheduler_hook(param):
             # Since the optimizer hook has been already attached we only need to
-            # attach the scheduler hook
-            if param.grad is not None:
-                scheduler_dict[param].step()
+            # attach the scheduler hook, the gradients have been zeroed here
+            scheduler_dict[param].step()
 
         for param in optimizer_dict.keys():
             if param.requires_grad:
