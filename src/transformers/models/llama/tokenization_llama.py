@@ -107,7 +107,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             ```python
             >>> from transformers import LlamaTokenizerFast
 
-            >>> tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=True)
+            >>> tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=True, from_slow=True)
             >>> tokenizer.encode("Hello <s>.") # 869 is '▁.'
             [1, 15043, 29871, 1, 869]
             ```
@@ -115,7 +115,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             ```python
             >>> from transformers import LlamaTokenizerFast
 
-            >>> tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=False)
+            >>> tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=False, from_slow=True)
             >>> tokenizer.encode("Hello <s>.")  # 29889 is '.'
             [1, 15043, 29871, 1, 29889]
             ```
