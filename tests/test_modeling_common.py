@@ -3748,9 +3748,10 @@ class ModelTesterMixin:
                                     )
 
                                 if enable_kernels:
-                                    print(
-                                        f"Enabled kernels: {torch.allclose(logits_eager, logits_sdpa, atol=1e-3, rtol=1e-3)}"
-                                    )
+                                    atol = atols[torch_device, enable_kernels, torch_dtype]
+                                    rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                                    if not torch.allclose(logits_eager, logits_sdpa, atol=atol, rtol=rtol):
+                                        print(f"{failcase=}")
 
                                 if torch_device in ["cpu", "cuda"]:
                                     atol = atols[torch_device, enable_kernels, torch_dtype]

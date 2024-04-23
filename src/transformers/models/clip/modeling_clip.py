@@ -27,8 +27,6 @@ from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import (
     _create_4d_causal_attention_mask,
     _prepare_4d_attention_mask,
-    _prepare_4d_attention_mask_for_sdpa,
-    _prepare_4d_causal_attention_mask_for_sdpa,
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
@@ -338,9 +336,7 @@ class CLIPAttention(nn.Module):
 
 class CLIPSdpaAttention(CLIPAttention):
     def __init__(self, *args, **kwargs):
-        is_causal = kwargs.pop("is_causal", False)
         super().__init__(*args, **kwargs)
-        self.is_causal = is_causal
 
     """
     SDPA attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -381,21 +377,22 @@ class CLIPSdpaAttention(CLIPAttention):
         key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
-        attn_mask = causal_attention_mask if attention_mask is not None else None
-        is_causal = self.is_causal and attn_mask is None and tgt_len > 1
-        # Otherwise CLIPModelTest::{test_torchscript_simple, test_torchscript_output_hidden_state} cry.
-        if torch.is_tensor(is_causal):
-            is_causal = bool(is_causal)
+        attn_mask = None
+        if causal_attention_mask is not None:
+            attn_mask = causal_attention_mask
+        if attention_mask is not None:
+            if attn_mask is not None:
+                attn_mask = attn_mask + attention_mask
+            else:
+                attn_mask = attention_mask
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
             attn_mask=attn_mask,
             dropout_p=self.dropout if self.training else 0.0,
-            is_causal=is_causal,
             scale=self.scale,
         )
-
         attn_output = attn_output.transpose(1, 2)
         attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
 
@@ -426,11 +423,11 @@ class CLIPMLP(nn.Module):
 
 
 class CLIPEncoderLayer(nn.Module):
-    def __init__(self, config: CLIPConfig, is_causal=False):
+    def __init__(self, config: CLIPConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
         if config._attn_implementation == "sdpa":
-            self.self_attn = CLIP_ATTENTION_CLASSES[config._attn_implementation](config, is_causal=is_causal)
+            self.self_attn = CLIP_ATTENTION_CLASSES[config._attn_implementation](config)
         else:
             self.self_attn = CLIP_ATTENTION_CLASSES[config._attn_implementation](config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -650,12 +647,10 @@ class CLIPEncoder(nn.Module):
         config: CLIPConfig
     """
 
-    def __init__(self, config: CLIPConfig, is_causal=False):
+    def __init__(self, config: CLIPConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList(
-            [CLIPEncoderLayer(config, is_causal=is_causal) for _ in range(config.num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([CLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -746,7 +741,7 @@ class CLIPTextTransformer(nn.Module):
         self.config = config
         embed_dim = config.hidden_size
         self.embeddings = CLIPTextEmbeddings(config)
-        self.encoder = CLIPEncoder(config, is_causal=True)
+        self.encoder = CLIPEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self._use_sdpa = config._attn_implementation == "sdpa"
 
@@ -784,25 +779,14 @@ class CLIPTextTransformer(nn.Module):
 
         # CLIP's text model uses causal mask, prepare it here.
         # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
-        if self._use_sdpa and not output_attentions:
-            causal_attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                attention_mask=attention_mask,
-                input_shape=input_shape,
-                inputs_embeds=hidden_states,
-                past_key_values_length=0,
-            )
-        else:
-            causal_attention_mask = _create_4d_causal_attention_mask(
-                input_shape, hidden_states.dtype, device=hidden_states.device
-            )
+        causal_attention_mask = _create_4d_causal_attention_mask(
+            input_shape, hidden_states.dtype, device=hidden_states.device
+        )
 
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            if self._use_sdpa and not output_attentions:
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, hidden_states.dtype)
-            else:
-                attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
