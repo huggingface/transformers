@@ -125,20 +125,21 @@ There are an enormous number of different chat models available on the [Hugging 
 and new users often feel very overwhelmed by the selection on offer. Don't be, though! You really need to just focus on
 two important considerations: The model's size, which will determine if you can fit it in memory and how quickly it will
 run, and secondly the quality of the model's chat output. In general, these are correlated - bigger models tend to be 
-smarter, but even so there's a lot of variation at a given size point!
+more capable, but even so there's a lot of variation at a given size point!
 
 ### Size and model naming
 The size of a model is easy to spot - it's the number in the model name, like "8B" or "70B". This is the number of
-**parameters** in the model. As a general rule, you should expect to need about 2 bytes of memory per parameter for
-a model that hasn't been compressed with quantization. This means that an "8B" model with 8 billion parameters will 
-need about 16GB of memory just to fit the parameters, plus a little extra for other overhead. It's a good fit for a
-high-end consumer GPU with 24GB of memory, such as a 3090 or 4090.
+**parameters** in the model. Without quantization, you should expect to need about 2 bytes of memory per parameter.
+This means that an "8B" model with 8 billion parameters will need about 16GB of memory just to fit the parameters, 
+plus a little extra for other overhead. It's a good fit for a high-end consumer GPU with 24GB of memory, such as a 3090
+or 4090.
 
 Some chat models are "Mixture of Experts" models. These may list their sizes in different ways, such as "8x7B" or 
-"141B-A35B". The numbers are a little fuzzier in this case, but in general you can read this as saying that the model
+"141B-A35B". The numbers are a little fuzzier here, but in general you can read this as saying that the model
 has approximately 56 (8x7) billion parameters in the first case, or 141 billion parameters in the second case.
 
-This topic is discussed in more detail in the "Performance, memory and hardware" section below.
+Note that it is very common to use quantization techniques to reduce the memory usage per parameter to 8 bits, 4 bits,
+or even less. This topic is discussed in more detail in the [Memory considerations](memory-considerations) section below.
 
 ### But which chat model is best?
 Even once you know the size of chat model you can run, there's still a lot of choice out there. One way to sift through
@@ -204,34 +205,46 @@ the model in GPU memory, though, this will usually be the preferable option.
 
 ### Memory considerations
 
-By default the `TextGenerationPipeline` will load the model on CPU in `float32` precision. This means that it will
-need 4 bytes (32 bits) per parameter, so an "8B" model with 8 billion parameters will need ~32GB of memory. However,
-this is unnecessary. Most modern language models are trained in "bfloat16" precision, which uses only 2 bytes per 
-parameter. If your hardware supports it (modern GPUs such as the Nvidia 30xx or newer do), you can load the model
-in `bfloat16` precision, using the `torch_dtype` argument as we did above.
+By default, Hugging Face classes like `TextGenerationPipeline` or `AutoModelForCausalLM` will load the model in 
+`float32` precision. This means that it will need 4 bytes (32 bits) per parameter, so an "8B" model with 8 billion
+parameters will need ~32GB of memory. However, this can be wasteful! Most modern language models are trained in 
+"bfloat16" precision, which uses only 2 bytes per parameter. If your hardware supports it (Nvidia 30xx/Axxx
+or newer), you can load the model in `bfloat16` precision, using the `torch_dtype` argument as we did above.
 
 It is possible to go even lower than 16-bits using "quantization", a method to lossily compress model weights. This
-allows each parameter to be squeezed down to 8 bits, 4 bits or even less. Note that, especially at lower precisions,
+allows each parameter to be squeezed down to 8 bits, 4 bits or even less. Note that, especially at 4 bits,
 the model's outputs may be negatively affected, but often this is a tradeoff worth making to fit a larger and more
 capable chat model in memory. For more details, please see the [Quantization guide](https://huggingface.co/docs/transformers/en/quantizationhttps://huggingface.co/docs/transformers/en/quantization), 
-and note that quantization arguments for the model can be passed to the pipeline via the `model_kwargs` argument.
+and note that quantization arguments for the model can be passed directly to `from_pretrained()`, or to the pipeline
+via the `model_kwargs` argument.
 
 ### Performance considerations
 
-As a general rule, larger language models will be slower in addition to requiring more memory. It's possible to be
-more concrete about this, though: Generating text from a language model is unusual in that it is bottlenecked by
-**memory bandwidth** rather than compute power, because every active parameter must be ready from memory for each
-token that the language model generates. This means that number of tokens per second you can generate from a language
+As a general rule, larger chat models will be slower in addition to requiring more memory. It's possible to be
+more concrete about this, though: Generating text from a chat model is unusual in that it is bottlenecked by
+**memory bandwidth** rather than compute power, because every active parameter must be read from memory for each
+token that the model generates. This means that number of tokens per second you can generate from a chat
 model is generally proportional to the total bandwidth of the memory it resides in, divided by the size of the model.
+
 In our quickstart example above, our model was ~16GB in size when loaded in `bfloat16` precision. 
-This means that 16GB must be read from memory for every token generated by the model.
+This means that 16GB must be read from memory for every token generated by the model. Total memory bandwidth can
+vary from 20-100GB/sec for consumer CPUs, 200-900GB/sec for consumer GPUs, specialized motherboards like
+Intel Xeon, AMD Threadripper/Epyc or high-end Apple silicon, and finally up to 2-3TB/sec for data center GPUs like
+the Nvidia A100 or H100. This should give you a good idea of the generation speed you can expect from these different
+hardware types.
 
-Therefore, if you want to improve the speed of language model generation, you need to either reduce the memory 
-requirements (for example by quantization), or get hardware with higher memory bandwidth. GPUs generally have much
-more memory bandwidth than CPUs, but server motherboards with multi-channel memory can be surprisingly competitive, 
-even outclassing many consumer GPUs.
+Therefore, if you want to improve the speed of text generation, the easiest solution is to either reduce the
+size of the model in memory (usually by quantization), or get hardware with higher memory bandwidth. For advanced users, 
+several other techniques exist to get around this bandwidth bottleneck. The most common are variants on 
+[assisted generation](https://huggingface.co/blog/assisted-generation), also known as "speculative
+sampling". These techniques try to guess multiple future tokens at once, often using a smaller "draft model", and then
+confirm these generations with the chat model. If the guesses are validated by the chat model, more than one token can
+be generated per forward pass, which greatly alleviates the bandwidth bottleneck and improves generation speed.  
 
-We should particularly note the concept of "Mixture of Experts" (MoE) models here. Several popular chat models,
-such as DBRX and Mixtral, are MoE models. In these models, not every parameter is active for every token generated.
+Finally, we should also note the impact of "Mixture of Experts" (MoE) models here. Several popular chat models,
+such as Mixtral, Qwen-MoE and DBRX, are MoE models. In these models, not every parameter is active for every token generated.
 As a result, MoE models generally have much lower memory bandwidth requirements, even though their total size
-can be quite large. As a result, they can be several times faster than a "dense" model of the same size.
+can be quite large. As a result, they can be several times faster than a normal "dense" model of the same size. However,
+techniques like assisted generation are generally ineffective for these models because more parameters will become
+active with each new speculated token, which will negate the bandwidth and speed benefits that the MoE architecture
+provides.
