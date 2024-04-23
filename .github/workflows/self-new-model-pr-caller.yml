@@ -115,7 +115,7 @@ jobs:
       needs: [check_for_new_model, run_new_model_tests]
       # Triggered if either **NOT** a new model PR (to give it `successful` state) or the required label is added (to check the results)
       # For a new model PR without the required label added, skip this, so the merge button would be blocked.
-      if: ${{ needs.check_for_new_model.outputs.new_model == '' || contains(github.event.pull_request.labels.*.name, 'single-model-run-slow')}}
+      if: ${{ needs.check_for_new_model.outputs.new_model == '' || contains(github.event.pull_request.labels.*.name, 'single-model-run-slow') }}
       steps:
         - name: Check test status
           shell: bash
