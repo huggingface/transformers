@@ -94,27 +94,27 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             Whether or not the default system prompt for Llama should be used
         legacy (`bool`, *optional*):
             Whether or not the `legacy` behavior of the tokenizer should be used. Legacy is before the merge of #24622
-            and #25224 which includes fixes to properly handle tokens that appear after special tokens. A simple
-            example:
+            and #25224 which includes fixes to properly handle tokens that appear after special tokens.
+            Make sure to also set `from_slow` to `True`.
+            A simple example:
 
             - `legacy=True`:
             ```python
-            >>> from transformers import T5Tokenizer
+            >>> from transformers import LlamaTokenizerFast
 
-            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=True)
-            >>> tokenizer.encode("Hello <extra_id_0>.")
-            [8774, 32099, 3, 5, 1]
+            >>> tokenizer = LlamaTokenizerFast.from_pretrained("meta-llama/Llama-2-7b-hf", legacy=True)
+            >>> tokenizer.encode("Hello <s>.") # 869 is '▁.'
+            [1, 15043, 29871, 1, 869]
             ```
             - `legacy=False`:
             ```python
-            >>> from transformers import T5Tokenizer
+            >>> from transformers import LlamaTokenizerFast
 
-            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
-            >>> tokenizer.encode("Hello <extra_id_0>.")  # the extra space `[3]` is no longer here
-            [8774, 32099, 5, 1]
+            >>> tokenizer = LlamaTokenizerFast.from_pretrained("meta-llama/Llama-2-7b-hf", legacy=False)
+            >>> tokenizer.encode("Hello <s>.")  # 29889 is '.'
+            [1, 15043, 29871, 1, 29889]
             ```
             Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
-            Whether or not the default system prompt for Llama should be used.
         add_prefix_space (`bool`, *optional*):
             Whether or not the tokenizer should automatically add a prefix space
     """
