@@ -42,6 +42,7 @@ _import_structure = {
         "set_hf_deepspeed_config",
         "unset_hf_deepspeed_config",
     ],
+    "eetq": ["replace_with_eetq_linear"],
     "ggml": [
         "GGUF_CONFIG_MAPPING",
         "GGUF_TENSOR_MAPPING",
@@ -119,6 +120,7 @@ if TYPE_CHECKING:
         set_hf_deepspeed_config,
         unset_hf_deepspeed_config,
     )
+    from .eetq import replace_with_eetq_linear
     from .ggml import (
         GGUF_CONFIG_MAPPING,
         GGUF_TENSOR_MAPPING,
