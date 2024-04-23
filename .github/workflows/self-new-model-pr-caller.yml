@@ -118,7 +118,8 @@ jobs:
         - name: Check test status
           shell: bash
           # NOT a new model PR --> pass
-          # new model PR --> pass only if `run_new_model_tests` gives `success`
+          # new model PR --> pass only if `run_new_model_tests` gives `success` (so if the label is not added, we fail
+          # this job even if `run_new_model_tests` has `skipped` status).
           run: |
             echo "${{ needs.run_new_model_tests.result }}"
             if [ "${{ needs.check_for_new_model.outputs.new_model }}" = "" ]; then echo "not new model"; elif [ "${{ needs.run_new_model_tests.result }}" != "success" ]; then echo "failure"; exit -1; else echo "pass"; fi;
