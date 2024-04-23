@@ -39,6 +39,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SegGptForImageSegmentation, SegGptModel
+    from transformers.models.seggpt.modeling_seggpt import SegGptLoss
 
 
 if is_vision_available():
@@ -297,6 +298,22 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     model_batched_output[key] = model_batched_output[key][1:]
                     model_row_output[key] = model_row_output[key][1:]
                 recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
+
+    def test_seggpt_loss(self):
+        torch.manual_seed(100)
+        config = self.model_tester.get_config()
+
+        prompt_masks = torch.rand(1, config.num_channels, config.image_size, config.image_size)
+        label = torch.rand(1, config.num_channels, config.image_size, config.image_size)
+        pred_masks = torch.rand(1, config.num_channels, config.image_size * 2, config.image_size)
+        # seq_len x 2 because the loss concatenates prompt_masks and labels as pred_masks is concatenated
+        bool_masked_pos = torch.rand(1, self.model_tester.seq_length * 2) > 0.5
+
+        loss = SegGptLoss(config)
+        loss_value = loss(prompt_masks, pred_masks, label, bool_masked_pos)
+        expected_loss_value = torch.tensor(0.3340)
+
+        self.assertTrue(torch.allclose(loss_value, expected_loss_value, atol=1e-4))
 
     @slow
     def test_model_from_pretrained(self):
