@@ -1721,7 +1721,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
-                "output_router_logits": output_router_logits
+                "output_router_logits": output_router_logits,
             }
         )
         return model_inputs
