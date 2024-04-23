@@ -231,6 +231,7 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
         conv_kernel_size = config.mamba_d_conv
         self.conv_states = []
         self.ssm_states = []
+        print(self.device_map)
         for i in range(config.num_hidden_layers):
             if self.layers_block_type[i] == "mamba":
                 self.conv_states += [
@@ -908,7 +909,7 @@ class JambaMambaMixer(nn.Module):
                 ssm_state = cache_params.ssm_states[self.layer_idx].clone()
             else:
                 ssm_state = cache_params.ssm_states[self.layer_idx]
-            # compatibility with multi-gpu forward
+
             ssm_state = ssm_state.to(hidden_states.device)
 
             if cache_params.has_previous_state and seq_len == 1 and \
