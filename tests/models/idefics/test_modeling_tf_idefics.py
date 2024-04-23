@@ -20,12 +20,7 @@ import unittest
 from importlib import import_module
 
 from transformers import IdeficsConfig, is_tf_available, is_vision_available
-from transformers.testing_utils import (
-    TestCasePlus,
-    require_tf,
-    require_vision,
-    slow,
-)
+from transformers.testing_utils import TestCasePlus, is_pt_tf_cross_test, require_tf, require_vision, slow
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
