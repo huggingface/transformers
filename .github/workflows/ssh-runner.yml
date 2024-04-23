@@ -25,7 +25,6 @@ env:
 
 jobs:
   ssh_runner:
-    needs: get_modified_models
     name: SSH
     runs-on: [single-gpu, nvidia-gpu, ${{ github.event.inputs.runner_type }}, ci]
     container:
