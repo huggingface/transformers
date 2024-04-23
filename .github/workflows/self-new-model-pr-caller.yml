@@ -86,28 +86,28 @@ jobs:
         working-directory: /transformers
         run: pip freeze
 
-#      - name: Run all tests on GPU
-#        working-directory: /transformers
-#        run: python3 -m pytest -v -rs --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
+      - name: Run all tests on GPU
+        working-directory: /transformers
+        run: python3 -m pytest -v -rs --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
 
-#      - name: Failure short reports
-#        if: ${{ failure() }}
-#        continue-on-error: true
-#        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
-#
-#      - name: Make sure report directory exists
-#        shell: bash
-#        run: |
-#          mkdir -p /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
-#          echo "hello" > /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/hello.txt
-#          echo "${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}"
-#
-#      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports"
-#        if: ${{ always() }}
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
-#          path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
+
+      - name: Make sure report directory exists
+        shell: bash
+        run: |
+          mkdir -p /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
+          echo "hello" > /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/hello.txt
+          echo "${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}"
+
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
+          path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
 
   slow_test_result:
       runs-on: ubuntu-22.04
