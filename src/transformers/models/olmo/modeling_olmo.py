@@ -1293,6 +1293,11 @@ class OlmoForCausalLM(OlmoPreTrainedModel):
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
+        # otherwise zeros in static kv cache are not masked, which leads to incorrect generation
+        if has_static_cache and attention_mask is not None:
+            attention_mask_zeros = torch.zeros_like(attention_mask)[: max_cache_length - past_length]
+            attention_mask = torch.cat([attention_mask, attention_mask_zeros], dim=-1)
+
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
