@@ -811,7 +811,7 @@ class SegGptModel(SegGptPreTrainedModel):
 
         if bool_masked_pos is None and labels is not None:
             logger.warning_once(
-                "Labels were provided, but bool_masked_pos is not. It will be set to default value. If you're training the model, make sure to provide a bool_masked_pos."
+                "Labels were provided, but bool_masked_pos were not. It will be set to default value. If you're training the model, make sure to provide a bool_masked_pos."
             )
 
         # We concat on height axis so SegGPT can handle as a single image, hence we need to mask the portion
