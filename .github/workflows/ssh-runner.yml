@@ -12,7 +12,6 @@ on:
 
 env:
   IS_GITHUB_CI: "1"
-  OUTPUT_SLACK_CHANNEL_ID: "C06L2SGMEEA"
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   HF_HOME: /mnt/cache 
   TRANSFORMERS_IS_CI: yes 
