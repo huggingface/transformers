@@ -110,7 +110,7 @@ class EfficientFormerSelfAttention(nn.Module):
                     attention_offsets[offset] = len(attention_offsets)
                 idxs.append(attention_offsets[offset])
         self.attention_biases = torch.nn.Parameter(torch.zeros(num_heads, len(attention_offsets)))
-        self.attention_bias_idxs = torch.LongTensor(idxs).view(num_points, num_points)
+        self.register_buffer("attention_bias_idxs", torch.LongTensor(idxs).view(num_points, num_points))
 
     @torch.no_grad()
     def train(self, mode=True):
@@ -509,7 +509,6 @@ class EfficientFormerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "efficientformer"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
-    _no_split_modules = []
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
