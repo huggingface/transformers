@@ -86,7 +86,7 @@ class TFIdeficsPerceiverResampler(tf.keras.layers.Layer):
                 ]
             )
 
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
     def build(self, input_shape):
         # Create Latents for Perceiver

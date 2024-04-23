@@ -51,7 +51,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_idefics"] = [
-        "TF_IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFIdeficsForVisionText2Text",
         "TFIdeficsModel",
         "TFIdeficsPreTrainedModel",
@@ -88,7 +87,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_idefics import (
-            TF_IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFIdeficsForVisionText2Text,
             TFIdeficsModel,
             TFIdeficsPreTrainedModel,
