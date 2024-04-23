@@ -659,15 +659,20 @@ class LlamaSdpaAttention(LlamaAttention):
         if attention_mask is not None:
             causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
 
-        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom
+        # attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
         if query_states.device.type == "cuda" and causal_mask is not None:
             query_states = query_states.contiguous()
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
-        # In case we are not compiling, we may set `causal_mask` to None, which is required to dispatch to SDPA's Flash Attention 2 backend, rather
-        # relying on the `is_causal` argument.
+        # In case we are not compiling, we may set `causal_mask` to None, which is required to dispatch to SDPA's Flash
+        # Attention 2 backend, rather relying on the `is_causal` argument. If using static cache, we need to drop the
+        # empty KV entries
+        if causal_mask is None and cache_position is not None:
+            key_states = key_states[:, :, :cache_position[-1]+1, :]
+            value_states = value_states[:, :, :cache_position[-1]+1, :]
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
