@@ -134,43 +134,27 @@ class Phi3RotaryEmbedding(nn.Module):
         )
 
 
-class Phi3LongScaledRotaryEmbedding(nn.Module):
+class _Phi3ScaledRotaryEmbedding(nn.Module):
     def __init__(
         self,
         dim,
         short_factor,
         long_factor,
-        max_position_embeddings=4096,
-        original_max_position_embeddings=4096,
+        max_position_embeddings=2048,
+        original_max_position_embeddings=2048,
         base=10000,
-        magnitude_scaling_policy="su",
     ):
         super().__init__()
 
         self.dim = dim
+        self.short_factor = short_factor
+        self.long_factor = long_factor
         self.max_position_embeddings = max_position_embeddings
         self.original_max_position_embeddings = original_max_position_embeddings
         self.base = base
 
-        if magnitude_scaling_policy == "su":
-            self._calc_mscale = self._calc_mscale_su
-        elif magnitude_scaling_policy == "yarn":
-            self._calc_mscale = self._calc_mscale_yarn
-        else:
-            self._calc_mscale = lambda scale: float(scale)
-
-        self.short_factor = short_factor
-        self.long_factor = long_factor
-
-    def _calc_mscale_su(self, scale):
-        if scale <= 1.0:
-            return 1.0
-        return math.sqrt(1 + math.log(scale) / math.log(self.original_max_position_embeddings))
-
-    def _calc_mscale_yarn(self, scale):
-        if scale <= 1.0:
-            return 1.0
-        return 0.1 * math.log(scale) + 1.0
+    def _calc_mscale(self, scale):
+        raise NotImplementedError("`_calc_mscale` should be implemented in subclasses")
 
     @torch.no_grad()
     def forward(self, x, seq_len=None):
@@ -184,9 +168,6 @@ class Phi3LongScaledRotaryEmbedding(nn.Module):
         else:
             t = torch.arange(self.original_max_position_embeddings, device=x.device, dtype=torch.float32)
             rescale_factors = torch.tensor(self.short_factor, dtype=torch.float32, device=x.device)
-        assert rescale_factors.shape == (
-            self.dim // 2,
-        ), f"misaligned shape for LongRoPE rescale factors: {rescale_factors.shape}"
 
         inv_freq = 1.0 / (
             rescale_factors * (self.base ** (torch.arange(0, self.dim, 2).float().to(x.device) / self.dim))
@@ -197,6 +178,20 @@ class Phi3LongScaledRotaryEmbedding(nn.Module):
         emb = torch.cat((freqs, freqs), dim=-1)
 
         return (emb.cos() * mscale).to(x.dtype), (emb.sin() * mscale).to(x.dtype)
+
+
+class Phi3SuScaledRotaryEmbedding(_Phi3ScaledRotaryEmbedding):
+    def _calc_mscale(self, scale):
+        if scale <= 1.0:
+            return 1.0
+        return math.sqrt(1 + math.log(scale) / math.log(self.original_max_position_embeddings))
+
+
+class Phi3YarnScaledRotaryEmbedding(_Phi3ScaledRotaryEmbedding):
+    def _calc_mscale(self, scale):
+        if scale <= 1.0:
+            return 1.0
+        return 0.1 * math.log(scale) + 1.0
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
@@ -313,8 +308,17 @@ class Phi3Attention(nn.Module):
             )
         else:
             scaling_type = self.config.rope_scaling["type"]
-            if scaling_type == "longrope":
-                self.rotary_emb = Phi3LongScaledRotaryEmbedding(
+            if scaling_type == "su":
+                self.rotary_emb = Phi3SuScaledRotaryEmbedding(
+                    self.head_dim,
+                    self.config.rope_scaling["short_factor"],
+                    self.config.rope_scaling["long_factor"],
+                    max_position_embeddings=self.config.max_position_embeddings,
+                    original_max_position_embeddings=self.config.original_max_position_embeddings,
+                    base=self.config.rope_theta,
+                )
+            elif scaling_type == "yarn":
+                self.rotary_emb = Phi3YarnScaledRotaryEmbedding(
                     self.head_dim,
                     self.config.rope_scaling["short_factor"],
                     self.config.rope_scaling["long_factor"],

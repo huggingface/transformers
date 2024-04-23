@@ -363,7 +363,7 @@ class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    @parameterized.expand([("longrope",)])
+    @parameterized.expand([("su",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
@@ -389,10 +389,9 @@ class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         scaled_short_output = scaled_model(short_input).last_hidden_state
         scaled_long_output = scaled_model(long_input).last_hidden_state
 
-        # Long scaling changes the RoPE embeddings, both for the short and long outputs
-        if scaling_type == "longrope":
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-            self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+        # Scaling changes the RoPE embeddings, both for the short and long outputs
+        self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
 
 @slow
