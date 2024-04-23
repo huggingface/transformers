@@ -21,7 +21,6 @@ jobs:
   check_for_new_model:
       runs-on: ubuntu-22.04
       name: Check if a PR is a new model PR
-      if: contains(github.event.pull_request.labels.*.name, 'single-model-run-slow')
       outputs:
         new_model: ${{ steps.check_new_model.outputs.new_model }}
       steps:
@@ -37,7 +36,7 @@ jobs:
 
   run_new_model_tests:
       name: Run all tests for the new model
-      if: needs.check_for_new_model.outputs.new_model != ''
+      if: ${{ needs.check_for_new_model.outputs.new_model != '' && contains(github.event.pull_request.labels.*.name, 'single-model-run-slow') }}
       needs: check_for_new_model
       strategy:
         fail-fast: false
@@ -112,8 +111,10 @@ jobs:
   slow_test_result:
       runs-on: ubuntu-22.04
       name: Check slow test status
-      needs: [run_new_model_tests]
-      if: always()
+      needs: [check_for_new_model, run_new_model_tests]
+      # Triggered if either **NOT** new model PR (to give it `successful` state) or the required label is added (to check the results)
+      # For a new model PR without the required label added, skip this, so the merge button would be blocked.
+      if: ${{ needs.check_for_new_model.outputs.new_model == '' || contains(github.event.pull_request.labels.*.name, 'single-model-run-slow')}}
       steps:
         - name: Check test status
           shell: bash
