@@ -97,11 +97,11 @@ def _get_unpad_data(attention_mask):
     )
 
 
-# Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with Gemma->Phi3
+# Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with gemma->phi3, Gemma->Phi3
 class Phi3RotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
-        
+
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
@@ -128,64 +128,108 @@ class Phi3RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class _Phi3ScaledRotaryEmbedding(nn.Module):
+class Phi3SuScaledRotaryEmbedding(Phi3RotaryEmbedding):
     def __init__(
         self,
         dim,
         short_factor,
         long_factor,
-        max_position_embeddings=2048,
         original_max_position_embeddings=2048,
+        max_position_embeddings=2048,
         base=10000,
+        device=None,
     ):
-        super().__init__()
+        super().__init__(dim, max_position_embeddings, base, device)
 
-        self.dim = dim
         self.short_factor = short_factor
         self.long_factor = long_factor
-        self.max_position_embeddings = max_position_embeddings
         self.original_max_position_embeddings = original_max_position_embeddings
-        self.base = base
 
-    def _calc_mscale(self, scale):
-        raise NotImplementedError("`_calc_mscale` should be implemented in subclasses")
-
-    @torch.no_grad()
-    def forward(self, x, seq_len=None):
-        if seq_len is None:
-            seq_len = x.shape[-2]
-        t = torch.arange(seq_len, device=x.device, dtype=torch.float32)
-
-        if seq_len > self.original_max_position_embeddings:
-            t = torch.arange(seq_len, device=x.device, dtype=torch.float32)
-            rescale_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=x.device)
-        else:
-            t = torch.arange(self.original_max_position_embeddings, device=x.device, dtype=torch.float32)
-            rescale_factors = torch.tensor(self.short_factor, dtype=torch.float32, device=x.device)
-
-        inv_freq = 1.0 / (
-            rescale_factors * (self.base ** (torch.arange(0, self.dim, 2).float().to(x.device) / self.dim))
-        )
-
-        freqs = torch.outer(t, inv_freq)
-        mscale = self._calc_mscale(self.max_position_embeddings / self.original_max_position_embeddings)
-        emb = torch.cat((freqs, freqs), dim=-1)
-
-        return (emb.cos() * mscale).to(x.dtype), (emb.sin() * mscale).to(x.dtype)
-
-
-class Phi3SuScaledRotaryEmbedding(_Phi3ScaledRotaryEmbedding):
-    def _calc_mscale(self, scale):
+    def _calc_scaling_factor(self, scale):
         if scale <= 1.0:
             return 1.0
         return math.sqrt(1 + math.log(scale) / math.log(self.original_max_position_embeddings))
 
+    @torch.no_grad()
+    def forward(self, x, position_ids, seq_len=None):
+        position_ids_expanded = position_ids[:, None, :].float()
+        if position_ids_expanded.shape[-1] > self.original_max_position_embeddings:
+            ext_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=x.device)
+        else:
+            ext_factors = torch.tensor(self.short_factor, dtype=torch.float32, device=x.device)
 
-class Phi3YarnScaledRotaryEmbedding(_Phi3ScaledRotaryEmbedding):
-    def _calc_mscale(self, scale):
+        if self.inv_freq is None:
+            self.inv_freq = 1.0 / (
+                ext_factors
+                * self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device=x.device).float() / self.dim)
+            )
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+
+        # Force float32 since bfloat16 loses precision on long contexts
+        # See https://github.com/huggingface/transformers/pull/29285
+        device_type = x.device.type
+        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            scaling_factor = self._calc_scaling_factor(
+                self.max_position_embeddings / self.original_max_position_embeddings
+            )
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * scaling_factor
+            sin = emb.sin() * scaling_factor
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+class Phi3YarnScaledRotaryEmbedding(Phi3RotaryEmbedding):
+    def __init__(
+        self,
+        dim,
+        short_factor,
+        long_factor,
+        original_max_position_embeddings=2048,
+        max_position_embeddings=2048,
+        base=10000,
+        device=None,
+    ):
+        super().__init__(dim, max_position_embeddings, base, device)
+
+        self.short_factor = short_factor
+        self.long_factor = long_factor
+        self.original_max_position_embeddings = original_max_position_embeddings
+
+    def _calc_scaling_factor(self, scale):
         if scale <= 1.0:
             return 1.0
         return 0.1 * math.log(scale) + 1.0
+
+    @torch.no_grad()
+    def forward(self, x, position_ids, seq_len=None):
+        position_ids_expanded = position_ids[:, None, :].float()
+        if position_ids_expanded.shape[-1] > self.original_max_position_embeddings:
+            ext_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=x.device)
+        else:
+            ext_factors = torch.tensor(self.short_factor, dtype=torch.float32, device=x.device)
+
+        if self.inv_freq is None:
+            self.inv_freq = 1.0 / (
+                ext_factors
+                * self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device=x.device).float() / self.dim)
+            )
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+
+        # Force float32 since bfloat16 loses precision on long contexts
+        # See https://github.com/huggingface/transformers/pull/29285
+        device_type = x.device.type
+        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            scaling_factor = self._calc_scaling_factor(
+                self.max_position_embeddings / self.original_max_position_embeddings
+            )
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * scaling_factor
+            sin = emb.sin() * scaling_factor
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
@@ -359,7 +403,7 @@ class Phi3Attention(nn.Module):
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=kv_seq_len)
-        
+
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
