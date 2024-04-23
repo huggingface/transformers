@@ -815,6 +815,66 @@ class BlipModel(BlipPreTrainedModel):
         return image_features
 
     @add_start_docstrings_to_model_forward(BLIP_INPUTS_DOCSTRING)
+    def get_multimodal_features(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = None,
+    ) -> torch.FloatTensor:
+        r"""
+        Returns:
+            multimodal_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The multimodal embeddings
+            obtained by applying the image embeddings to the text encoder using the cross-attention mechanism.
+
+        Examples:
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> import torch
+        >>> from transformers import BlipImageProcessor, BertTokenizerFast, BlipModel
+
+        >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = BlipImageProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+
+        >>> tokenizer.add_special_tokens({"bos_token": "[DEC]"})
+        >>> tokenizer.add_special_tokens({"additional_special_tokens": ["[ENC]"]})
+        >>> tokenizer.enc_token_id = tokenizer.additional_special_tokens_ids[0]
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> image_inputs = processor(images=image, return_tensors="pt")
+
+        >>> text_inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt", return_token_type_ids=False)
+        >>> text_inputs["input_ids"][:, 0] = tokenizer.enc_token_id
+
+        >>> multimodal_features = model.get_multimodal_features(**text_inputs, **image_inputs)
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=True,
+            output_hidden_states=True,
+            return_dict=return_dict,
+        )
+
+        image_embeds = vision_outputs[0]
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long)
+
+        text_outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            encoder_hidden_states=image_embeds,
+            encoder_attention_mask=image_atts,
+            return_dict=return_dict,
+        )
+
+        multimodal_features = text_outputs.last_hidden_state[:, 0, :]
+
+        return multimodal_features
+
+    @add_start_docstrings_to_model_forward(BLIP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BlipOutput, config_class=BlipConfig)
     def forward(
         self,
