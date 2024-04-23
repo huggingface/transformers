@@ -23,6 +23,7 @@ jobs:
   check_for_new_model:
       runs-on: ubuntu-22.04
       name: Check if PR is a new model PR
+      if: contains(github.event.pull_request.labels.*.name, 'run-slow')
       outputs:
         new_model: ${{ steps.check_new_model.outputs.new_model }}
       steps:
