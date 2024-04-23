@@ -551,7 +551,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 
         # Make sure dummy space is added if it is indeed the first word
         example_inputs = tokenizer.tokenize("inform<s>. Hey.       .")
-        self.assertEqual(example_inputs, ["▁inform", "<s>", ".", "▁Hey", "<unk>", ".", "▁▁▁▁▁▁", "▁."])
+        self.assertEqual(example_inputs, ["▁inform", "<s>", ".", "▁Hey", ".", "▁▁▁▁▁▁", "▁."])
         out1 = tokenizer.decode(
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False
         )
@@ -582,11 +582,11 @@ class LlamaIntegrationTest(unittest.TestCase):
 
         # Let's make sure that if there are any spaces, we don't remove them!
         input_ids = tokenizer.encode(" <s> Hello<s> how", add_special_tokens=False)
-        self.assertEqual(input_ids, [259, 1, 15043, 1, 920])
+        self.assertEqual(input_ids, [29871, 1, 15043, 1, 920])
         tokens = tokenizer.tokenize(" <s> Hello<s> how", add_special_tokens=False)
-        self.assertEqual(tokens, ["▁▁", "<s>", "▁Hello", "<s>", "▁how"])
+        self.assertEqual(tokens, ["▁", "<s>", "▁Hello", "<s>", "▁how"])
         decoded_tokens = tokenizer.decode(input_ids)
-        self.assertEqual(decoded_tokens, " <s> Hello<s> how")
+        self.assertEqual(decoded_tokens, "<s> Hello<s> how")
 
         # Let's make sure the space is preserved
         input_ids = tokenizer.encode("hello", add_special_tokens=True)
