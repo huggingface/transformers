@@ -139,7 +139,7 @@ Some chat models are "Mixture of Experts" models. These may list their sizes in 
 has approximately 56 (8x7) billion parameters in the first case, or 141 billion parameters in the second case.
 
 Note that it is very common to use quantization techniques to reduce the memory usage per parameter to 8 bits, 4 bits,
-or even less. This topic is discussed in more detail in the [Memory considerations](memory-considerations) section below.
+or even less. This topic is discussed in more detail in the [Memory considerations](#memory-considerations) section below.
 
 ### But which chat model is best?
 Even once you know the size of chat model you can run, there's still a lot of choice out there. One way to sift through
