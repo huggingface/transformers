@@ -1126,7 +1126,14 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
-    "utils.quantization_config": ["AqlmConfig", "AwqConfig", "BitsAndBytesConfig", "GPTQConfig", "QuantoConfig"],
+    "utils.quantization_config": [
+        "AqlmConfig",
+        "AwqConfig",
+        "BitsAndBytesConfig",
+        "EetqConfig",
+        "GPTQConfig",
+        "QuantoConfig",
+    ],
 }
 
 # sentencepiece-backed objects
@@ -4517,6 +4524,14 @@ else:
             "TFSpeech2TextPreTrainedModel",
         ]
     )
+    _import_structure["models.swiftformer"].extend(
+        [
+            "TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFSwiftFormerForImageClassification",
+            "TFSwiftFormerModel",
+            "TFSwiftFormerPreTrainedModel",
+        ]
+    )
     _import_structure["models.swin"].extend(
         [
             "TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -6063,7 +6078,14 @@ if TYPE_CHECKING:
     )
 
     # bitsandbytes config
-    from .utils.quantization_config import AqlmConfig, AwqConfig, BitsAndBytesConfig, GPTQConfig, QuantoConfig
+    from .utils.quantization_config import (
+        AqlmConfig,
+        AwqConfig,
+        BitsAndBytesConfig,
+        EetqConfig,
+        GPTQConfig,
+        QuantoConfig,
+    )
 
     try:
         if not is_sentencepiece_available():
@@ -8900,6 +8922,12 @@ if TYPE_CHECKING:
             TFSpeech2TextForConditionalGeneration,
             TFSpeech2TextModel,
             TFSpeech2TextPreTrainedModel,
+        )
+        from .models.swiftformer import (
+            TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSwiftFormerForImageClassification,
+            TFSwiftFormerModel,
+            TFSwiftFormerPreTrainedModel,
         )
         from .models.swin import (
             TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
