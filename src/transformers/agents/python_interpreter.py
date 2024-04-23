@@ -103,6 +103,24 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
     elif isinstance(expression, ast.Constant):
         # Constant -> just return the value
         return expression.value
+    elif isinstance(expression, ast.Compare):
+        # Comparison -> evaluate the comparison
+        return evaluate_condition(expression, state, tools)
+    elif isinstance(expression, ast.Return):
+        return evaluate_ast(expression.value, state, tools)
+    elif isinstance(expression, ast.FunctionDef):
+        def create_function(func_def, state, tools):
+            def new_func(*args):
+                new_state = state.copy()
+                for arg, val in zip(func_def.args.args, args):
+                    new_state[arg.arg] = val
+                result = None
+                for node in func_def.body:
+                    result = evaluate_ast(node, new_state, tools)
+                return result
+            return new_func
+        tools[expression.name] = create_function(expression, state, tools)
+        return None
     elif isinstance(expression, ast.Dict):
         # Dict -> evaluate all keys and values
         keys = [evaluate_ast(k, state, tools) for k in expression.keys]
@@ -133,9 +151,18 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
     elif isinstance(expression, ast.Subscript):
         # Subscript -> return the value of the indexing
         return evaluate_subscript(expression, state, tools)
+    elif isinstance(expression, ast.BoolOp):
+        # Boolean operation -> evaluate the operation
+        return evaluate_boolop(expression, state, tools)
     elif isinstance(expression, ast.BinOp):
         # Binary operation -> execute operation
         return evaluate_binop(expression, state, tools)
+    elif isinstance(expression, ast.IfExp):
+        test_val = evaluate_ast(expression.test, state, tools)
+        if test_val:
+            return evaluate_ast(expression.body, state, tools)
+        else:
+            return evaluate_ast(expression.orelse, state, tools)
     else:
         # For now we refuse anything else. Let's add things as we need them.
         raise InterpretorError(f"{expression.__class__.__name__} is not supported.")
@@ -164,6 +191,15 @@ def evaluate_augassign(expression: ast.AugAssign, state: Dict[str, Any], tools: 
         return updated_value
     else:
         raise InterpretorError("AugAssign not supported for non-simple variable targets.")
+
+
+def evaluate_boolop(boolop, state, tools):
+    values = [evaluate_ast(val, state, tools) for val in boolop.values]
+    op = boolop.op
+    if isinstance(op, ast.And):
+        return all(values)
+    elif isinstance(op, ast.Or):
+        return any(values)
 
 
 def evaluate_binop(binop, state, tools):
