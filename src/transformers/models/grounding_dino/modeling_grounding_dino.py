@@ -1362,8 +1362,6 @@ class GroundingDinoDecoderLayer(nn.Module):
     def __init__(self, config: GroundingDinoConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.num_attention_heads = config.decoder_attention_heads
-        self.num_queries = config.num_queries
 
         # self-attention
         self.self_attn = GroundingDinoMultiheadAttention(config, num_attention_heads=config.decoder_attention_heads)
@@ -1427,16 +1425,6 @@ class GroundingDinoDecoderLayer(nn.Module):
 
         # Cross-Attention Text
         queries = self.with_pos_embed(hidden_states, position_embeddings)
-        if text_encoder_attention_mask is not None:
-            dtype = text_encoder_hidden_states.dtype
-
-            text_encoder_attention_mask = text_encoder_attention_mask[:, None, None, :]
-            text_encoder_attention_mask = text_encoder_attention_mask.repeat(
-                1, self.num_attention_heads, self.num_queries, 1
-            )
-            text_encoder_attention_mask = text_encoder_attention_mask.to(dtype=dtype)
-            text_encoder_attention_mask = text_encoder_attention_mask * torch.finfo(dtype).min
-
         hidden_states, text_cross_attn_weights = self.encoder_attn_text(
             queries=queries,
             keys=text_encoder_hidden_states,
@@ -1903,6 +1891,16 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         all_cross_attns_text = () if (output_attentions and text_encoder_hidden_states is not None) else None
         intermediate = ()
         intermediate_reference_points = ()
+
+        if text_encoder_attention_mask is not None:
+            dtype = text_encoder_hidden_states.dtype
+
+            text_encoder_attention_mask = text_encoder_attention_mask[:, None, None, :]
+            text_encoder_attention_mask = text_encoder_attention_mask.repeat(
+                1, self.config.decoder_attention_heads, self.config.num_queries, 1
+            )
+            text_encoder_attention_mask = text_encoder_attention_mask.to(dtype=dtype)
+            text_encoder_attention_mask = text_encoder_attention_mask * torch.finfo(dtype).min
 
         for idx, decoder_layer in enumerate(self.layers):
             num_coordinates = reference_points.shape[-1]
