@@ -373,8 +373,7 @@ class CLIPSdpaAttention(CLIPAttention):
 
         bsz, tgt_len, embed_dim = hidden_states.size()
 
-        # get query proj
-        query_states = self.q_proj(hidden_states) * self.scale
+        query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
@@ -382,13 +381,15 @@ class CLIPSdpaAttention(CLIPAttention):
         key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
+        attn_mask = causal_attention_mask if attention_mask is not None else None
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
-            attn_mask=causal_attention_mask if attention_mask is not None else None,
+            attn_mask=attn_mask,
             dropout_p=self.dropout if self.training else 0.0,
-            is_causal=self.is_causal and attention_mask is None and tgt_len > 1,
+            is_causal=self.is_causal and attn_mask is None and tgt_len > 1,
+            scale=self.scale,
         )
 
         attn_output = attn_output.transpose(1, 2)
@@ -495,7 +496,7 @@ class CLIPPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-        elif isinstance(module, (CLIPAttention, CLIPSdpaAttention)):
+        elif isinstance(module, CLIPAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
