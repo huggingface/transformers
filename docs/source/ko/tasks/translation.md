@@ -209,7 +209,7 @@ pip install transformers datasets evaluate sacrebleu
 ```py
 >>> training_args = Seq2SeqTrainingArguments(
 ...     output_dir="my_awesome_opus_books_model",
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     learning_rate=2e-5,
 ...     per_device_train_batch_size=16,
 ...     per_device_eval_batch_size=16,

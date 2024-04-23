@@ -266,8 +266,12 @@ class AttentionMaskConverter:
             # Thus, we currently can NOT set `ignore_causal_mask = True` here. We would need a `torch._dynamo.is_exporting()` flag.
             #
             # Besides, jit.trace can not handle the `q_len > 1` condition for `is_causal` (`TypeError: scaled_dot_product_attention(): argument 'is_causal' must be bool, not Tensor`).
-            if sliding_window is None or key_value_length < sliding_window:
-                ignore_causal_mask = not is_tracing
+            if (
+                not is_tracing
+                and (query_length == 1 or key_value_length == query_length)
+                and (sliding_window is None or key_value_length < sliding_window)
+            ):
+                ignore_causal_mask = True
         elif sliding_window is None or key_value_length < sliding_window:
             if len(attention_mask.shape) == 4:
                 expected_shape = (batch_size, 1, query_length, key_value_length)
