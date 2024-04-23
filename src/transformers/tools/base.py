@@ -101,7 +101,8 @@ class Tool:
       returns the text contained in the file'.
     - **name** (`str`) -- A performative name that will be used for your tool in the prompt to the agent. For instance
       `"text-classifier"` or `"image_generator"`.
-    - **inputs** (`Dict[str, type]`) -- The dict of modalities expected for the inputs.
+    - **inputs** (`Dict[str, Dict[str, Union[str, type]]]`) -- The dict of modalities expected for the inputs.
+      It has one `type`key and a `description`key.
       This is used by `launch_gradio_demo` or to make a nice space from your tool, and also can be used in the generated
       description for your tool.
     - **output_type** (`type`) -- The type of the tool output. This is used by `launch_gradio_demo`
@@ -121,7 +122,6 @@ class Tool:
         self.is_initialized = False
 
     def validate_attributes(self):
-        print("ok")
         required_attributes = {
             "description": str,
             "name": str,
@@ -185,6 +185,8 @@ class Tool:
             "tool_class": full_name,
             "description": self.description,
             "name": self.name,
+            "inputs": str(self.inputs),
+            "output_type": str(self.output_type),
         }
         with open(config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tool_config, indent=2, sort_keys=True) + "\n")
@@ -404,8 +406,11 @@ class Tool:
                 super().__init__()
                 self.name = _gradio_tool.name
                 self.description = _gradio_tool.description
+                self.output_type = str
+                self._gradio_tool = _gradio_tool
 
-        GradioToolWrapper.__call__ = gradio_tool.run
+            def __call__(self, *args, **kwargs):
+                return self._gradio_tool.run(*args, *list(kwargs.values()))
         return GradioToolWrapper(gradio_tool)
 
     @staticmethod
@@ -443,6 +448,7 @@ DEFAULT_TOOL_DESCRIPTION_TEMPLATE = """
 - {{ tool.name }}: {{ tool.description }}
     Takes inputs: {{tool.inputs}}
 """
+
 
 OPENAI_TOOL_DESCRIPTION_TEMPLATE = """
 {
@@ -720,7 +726,7 @@ class PipelineTool(Tool):
         outputs = send_to_device(outputs, "cpu")
         decoded_outputs = self.decode(outputs)
 
-        return handle_agent_outputs(decoded_outputs, self.outputs)
+        return handle_agent_outputs(decoded_outputs, self.output_type)
 
 
 def launch_gradio_demo(tool_class: Tool):
@@ -744,7 +750,7 @@ def launch_gradio_demo(tool_class: Tool):
         return tool(*args, **kwargs)
 
     gradio_inputs = []
-    for input_type in tool_class.inputs.values():
+    for input_type in [tool_input['type'] for tool_input in tool_class.inputs.values()]:
         if input_type in [str, int, float]:
             gradio_inputs += "text"
         elif is_vision_available() and input_type == PIL.Image.Image:
@@ -770,13 +776,13 @@ def launch_gradio_demo(tool_class: Tool):
 
 TASK_MAPPING = {
     "document-question-answering": "DocumentQuestionAnsweringTool",
-    "image-captioning": "ImageCaptioningTool",
+    # "image-captioning": "ImageCaptioningTool",
     "image-question-answering": "ImageQuestionAnsweringTool",
-    "image-segmentation": "ImageSegmentationTool",
+    # "image-segmentation": "ImageSegmentationTool",
     "speech-to-text": "SpeechToTextTool",
-    "summarization": "TextSummarizationTool",
-    "text-classification": "TextClassificationTool",
-    "text-question-answering": "TextQuestionAnsweringTool",
+    # "summarization": "TextSummarizationTool",
+    # "text-classification": "TextClassificationTool",
+    # "text-question-answering": "TextQuestionAnsweringTool",
     "text-to-speech": "TextToSpeechTool",
     "translation": "TranslationTool",
 }
