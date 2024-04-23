@@ -31,24 +31,25 @@ jobs:
       options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
 
     steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-      
-      - name: Install locally transformers & other libs
+      - name: Update clone
+        working-directory: /transformers
         run: |
-          apt install sudo
-          sudo -H pip install --upgrade pip
-          sudo -H pip uninstall -y transformers 
-          sudo -H pip install -U -e ".[testing]" 
-          MAX_JOBS=4 pip install flash-attn --no-build-isolation
-          pip install bitsandbytes
+          git fetch && git checkout ${{ github.sha }}
+
+      - name: Cleanup
+        working-directory: /transformers
+        run: |
+          rm -rf tests/__pycache__
+          rm -rf tests/models/__pycache__
+          rm -rf reports
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
       
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
-      
-      - name: Show installed libraries and their versions
-        run: pip freeze
       
       - name: Tailscale # In order to be able to SSH when a test fails
         uses: huggingface/tailscale-action@v1
