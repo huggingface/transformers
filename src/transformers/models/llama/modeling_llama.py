@@ -616,10 +616,13 @@ class LlamaSdpaAttention(LlamaAttention):
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
-            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is
+            # implemented.
             logger.warning_once(
-                "LlamaModel is using LlamaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                "LlamaModel is using LlamaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does "
+                "not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                "but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
+                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
                 hidden_states=hidden_states,
@@ -660,8 +663,7 @@ class LlamaSdpaAttention(LlamaAttention):
             causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom
-        # attn_mask,
-        # Reference: https://github.com/pytorch/pytorch/issues/112577.
+        # attn_mask. Reference: https://github.com/pytorch/pytorch/issues/112577.
         if query_states.device.type == "cuda" and causal_mask is not None:
             query_states = query_states.contiguous()
             key_states = key_states.contiguous()
@@ -671,8 +673,8 @@ class LlamaSdpaAttention(LlamaAttention):
         # Attention 2 backend, rather relying on the `is_causal` argument. If using static cache, we need to drop the
         # empty KV entries
         if causal_mask is None and cache_position is not None:
-            key_states = key_states[:, :, :cache_position[-1]+1, :]
-            value_states = value_states[:, :, :cache_position[-1]+1, :]
+            key_states = key_states[:, :, : cache_position[-1] + 1, :]
+            value_states = value_states[:, :, : cache_position[-1] + 1, :]
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
