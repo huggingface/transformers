@@ -56,6 +56,7 @@ _CHECKPOINT_FOR_DOC = "jetmoe"
 _CONFIG_FOR_DOC = "JetMoeConfig"
 
 
+# Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
 def load_balancing_loss_func(
     gate_logits: torch.Tensor, num_experts: torch.Tensor = None, top_k=2, attention_mask: Optional[torch.Tensor] = None
 ) -> float:
