@@ -16,7 +16,7 @@
 # limitations under the License.
 from enum import Enum
 from typing import Dict, List
-
+from copy import deepcopy
 from huggingface_hub import InferenceClient
 
 
@@ -40,6 +40,7 @@ def get_clean_message_list(message_list: List[Dict[str, str]], role_conversions:
         message_list (`List[Dict[str, str]]`): List of chat messages.
     """
     final_message_list = []
+    message_list = deepcopy(message_list) # Avoid modifying the original list
     for message in message_list:
         if not set(message.keys()) == {"role", "content"}:
             raise ValueError("Message should contain only 'role' and 'content' keys!")

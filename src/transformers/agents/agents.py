@@ -671,18 +671,18 @@ class ReactCodeAgent(ReactAgent):
 
         # Parse
         self.log.debug("=====Extracting action=====")
-        rationale, code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
-
-        self.logs[-1]["rationale"] = rationale
-        self.logs[-1]["tool_call"] = {"tool_name": "code interpreter", "tool_arguments": code_action}
+        rationale, raw_code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
 
         # Execute
         try:
-            code_action = parse_code_blob(code_action)
+            code_action = parse_code_blob(raw_code_action)
         except Exception as e:
             error_msg = f"Error in code parsing: {e}. Be sure to provide correct code"
             self.log.error(error_msg)
             raise AgentParsingError(error_msg)
+
+        self.logs[-1]["rationale"] = rationale
+        self.logs[-1]["tool_call"] = {"tool_name": "code interpreter", "tool_arguments": code_action}
 
         # Execute
         try:

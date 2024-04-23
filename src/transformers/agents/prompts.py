@@ -52,7 +52,6 @@ DEFAULT_CODE_SYSTEM_PROMPT = """I will ask you to perform a task, your job is to
 To help you, I will give you access to a set of tools that you can use. Each tool is a Python function and has a description explaining the task it performs, the inputs it expects and the outputs it returns.
 You should first explain which tool you will use to perform the task and for what reason, then write the code in Python.
 Each instruction in Python should be a simple assignment. You can print intermediate results if it makes sense to do so.
-Be sure to provide an 'Code:' token, else the system will be stuck in a loop.
 
 Tools:
 <<tool_descriptions>>
@@ -126,6 +125,7 @@ Above example were using tools that might not exist for you. You only have acces
 
 Now Begin! 
 Remember to make sure that variables you use are all defined. <<additional_args>>
+Be sure to provide an 'Code:' sequence before the code, else you will get an, error.
 """
 
 

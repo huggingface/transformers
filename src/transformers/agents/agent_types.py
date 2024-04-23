@@ -226,6 +226,6 @@ def handle_agent_inputs(*args, **kwargs):
 def handle_agent_outputs(output, output_type):
     # If the class has defined outputs, we can map directly according to the class definition
     if output_type in AGENT_TYPE_MAPPING:
-        return AGENT_TYPE_MAPPING[output_type]
+        return AGENT_TYPE_MAPPING[output_type](output)
     else:
         return AgentType(output)
