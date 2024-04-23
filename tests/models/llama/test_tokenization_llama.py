@@ -602,7 +602,9 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(decoded_tokens, "hello")
 
     def test_no_prefix_space(self):
-        tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=False, from_slow=True, add_prefix_space=False)
+        tokenizer = LlamaTokenizerFast.from_pretrained(
+            "huggyllama/llama-7b", legacy=False, from_slow=True, add_prefix_space=False
+        )
         tokenizer.add_tokens([AddedToken("<REPR_END>", rstrip=True, lstrip=True)], special_tokens=False)
 
         example_inputs = tokenizer.tokenize("<REPR_END>inform<s>. Hey.       .")

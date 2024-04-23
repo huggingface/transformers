@@ -30,10 +30,10 @@ from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
     require_jinja,
+    require_read_token,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
-    require_read_token,
     slow,
 )
 
@@ -320,11 +320,13 @@ class GemmaIntegrationTest(unittest.TestCase):
             encoded1 = pyth_tokenizer.encode(string)
             encoded2 = rust_tokenizer.encode(string)
 
-            self.assertEqual(encoded1, encoded2, msg=
-                            "Hint: the following tokenization diff were obtained for slow vs fast:\n "
-                            f"elements in slow: {set(pyth_tokenizer.tokenize(string))-set(rust_tokenizer.tokenize(string))} \nvs\n "
-                            f"elements in fast: {set(rust_tokenizer.tokenize(string))-set(pyth_tokenizer.tokenize(string))} \n\n{string}"
-                        )
+            self.assertEqual(
+                encoded1,
+                encoded2,
+                msg="Hint: the following tokenization diff were obtained for slow vs fast:\n "
+                f"elements in slow: {set(pyth_tokenizer.tokenize(string))-set(rust_tokenizer.tokenize(string))} \nvs\n "
+                f"elements in fast: {set(rust_tokenizer.tokenize(string))-set(pyth_tokenizer.tokenize(string))} \n\n{string}",
+            )
 
             decoded1 = pyth_tokenizer.decode(encoded1, skip_special_tokens=True)
             decoded2 = rust_tokenizer.decode(encoded1, skip_special_tokens=True)
