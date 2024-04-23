@@ -105,7 +105,7 @@ class GemmaSentencePieceExtractor(SentencePieceExtractor):
 
         # there is a missing token in the vocab. We have to do this to support merges
         # "<0x09>" is the bytefallback for `\t`
-        vocab["\t"] = vocab.pop("<0x09>")
+        vocab["\t"] = vocab.get("<0x09>")
 
         if vocab_scores is not None:
             vocab_scores, reverse = dict(vocab_scores), True
@@ -1276,7 +1276,7 @@ class GemmaConvert(SpmConverter):
         return vocab
 
     def pre_tokenizer(self, replacement, add_prefix_space):
-        return None
+        return pre_tokenizers.Split(" ", "merged_with_previous")
 
     def unk_id(self, proto):
         unk_id = 3
@@ -1329,7 +1329,7 @@ class GemmaConvert(SpmConverter):
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
             )
         user_defined_symbols = [
-            AddedToken(token, normalized=False, special=False) for token in proto.trainer_spec.user_defined_symbols
+            AddedToken(token, normalized=True, special=False) for token in proto.trainer_spec.user_defined_symbols
         ]
         tokenizer.add_tokens(user_defined_symbols)
         return tokenizer
@@ -1393,14 +1393,18 @@ class LlamaConverter(SpmConverter):
         return tokenizer
 
     def normalizer(self, proto):
-        sequence = []
-        if hasattr(self.original_tokenizer, "add_prefix_space"):
-            if self.original_tokenizer.add_prefix_space:
+        if self.original_tokenizer.legacy:
+            sequence = []
+            if getattr(self.original_tokenizer, "add_prefix_space"):
                 sequence += [normalizers.Prepend(prepend="▁")]
-        sequence += [normalizers.Replace(pattern=" ", content="▁")]
-        return normalizers.Sequence(sequence)
+            sequence += [normalizers.Replace(pattern=" ", content="▁")]
+            return normalizers.Sequence(sequence)
+        return None  # non-legacy, no normalizer
 
     def pre_tokenizer(self, replacement, add_prefix_space):
+        if not self.original_tokenizer.legacy:  # non-legacy, we need a replace
+            prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
+            return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
         return None
 
     def post_processor(self):
