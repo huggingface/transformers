@@ -18,7 +18,9 @@
 
 import unittest
 
-from transformers import Phi3Config, is_torch_available
+from parameterized import parameterized
+
+from transformers import Phi3Config, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_torch,
     torch_device,
@@ -358,3 +360,30 @@ class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    @parameterized.expand([("longrope",)])
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        short_input = ids_tensor([1, 10], config.vocab_size)
+        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+
+        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        original_model = Phi3Model(config)
+        original_model.to(torch_device)
+        original_model.eval()
+        original_short_output = original_model(short_input).last_hidden_state
+        original_long_output = original_model(long_input).last_hidden_state
+
+        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        n_factors = config.hidden_size // config.num_attention_heads // 2
+        config.rope_scaling = {"type": scaling_type, "short_factor": [5.0 for _ in range(n_factors)], "long_factor": [5.0 for _ in range(n_factors)]}
+        scaled_model = Phi3Model(config)
+        scaled_model.to(torch_device)
+        scaled_model.eval()
+        scaled_short_output = scaled_model(short_input).last_hidden_state
+        scaled_long_output = scaled_model(long_input).last_hidden_state
+
+        # Long scaling changes the RoPE embeddings, both for the short and long outputs
+        if scaling_type == "longrope":
+            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
