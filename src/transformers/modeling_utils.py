@@ -1166,9 +1166,7 @@ class ModuleUtilsMixin:
                         num_bytes = 1
                     else:
                         num_bytes = param.quant_storage.itemsize
-                    total_numel.append(
-                        param.numel() * 2 * num_bytes
-                    )
+                    total_numel.append(param.numel() * 2 * num_bytes)
                 else:
                     total_numel.append(param.numel())
 
