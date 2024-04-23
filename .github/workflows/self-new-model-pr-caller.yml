@@ -36,7 +36,7 @@ jobs:
 
   run_new_model_tests:
       name: Run all tests for the new model
-      # Triggered if it **IS** a new model PR **AND** the required label is added
+      # Triggered if it is a new model PR and the required label is added
       if: ${{ needs.check_for_new_model.outputs.new_model != '' && contains(github.event.pull_request.labels.*.name, 'single-model-run-slow') }}
       needs: check_for_new_model
       strategy:
@@ -117,7 +117,7 @@ jobs:
       steps:
         - name: Check test status
           shell: bash
-          # **NOT** a new model PR --> pass
+          # NOT a new model PR --> pass
           # new model PR --> pass only if `run_new_model_tests` gives `success`
           run: |
             echo "${{ needs.run_new_model_tests.result }}"
