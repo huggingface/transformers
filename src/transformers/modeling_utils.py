@@ -1162,10 +1162,10 @@ class ModuleUtilsMixin:
                 if is_loaded_in_4bit and isinstance(param, bnb.nn.Params4bit):
                     if hasattr(param, "element_size"):
                         num_bytes = param.element_size()
-                    elif not hasattr(param, "quant_storage"):
-                        num_bytes = 1
-                    else:
+                    elif hasattr(param, "quant_storage"):
                         num_bytes = param.quant_storage.itemsize
+                    else:
+                        num_bytes = 1
                     total_numel.append(param.numel() * 2 * num_bytes)
                 else:
                     total_numel.append(param.numel())
