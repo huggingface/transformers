@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Llava-NeXT model. """
 
-import copy
 import gc
 import unittest
 
@@ -214,6 +213,7 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     @unittest.skip(reason="CPU offload is not yet supported")
     def test_cpu_offload(self):
         pass
+
 
 @require_torch
 class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):

@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Testing suite for the PyTorch VipLlava model. """
 
-import copy
 import gc
 import unittest
 
