@@ -46,7 +46,7 @@ from transformers import (
 )
 from transformers.image_processing_utils import BatchFeature
 from transformers.image_transforms import center_to_corners_format
-from transformers.utils import check_min_version
+from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
@@ -59,6 +59,7 @@ logger = get_logger(__name__)
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/semantic-segmentation/requirements.txt")
 
 
+# Copied from examples/pytorch/object-detection/run_object_detection.format_image_annotations_as_coco
 def format_image_annotations_as_coco(
     image_id: str, category: List[int], area: List[float], bbox: List[Tuple[float]]
 ) -> dict:
@@ -94,6 +95,30 @@ def format_image_annotations_as_coco(
     }
 
 
+# Copied from examples/pytorch/object-detection/run_object_detection.convert_bbox_yolo_to_pascal
+def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: Tuple[int, int]) -> torch.Tensor:
+    """
+    Convert bounding boxes from YOLO format (x_center, y_center, width, height) in range [0, 1]
+    to Pascal VOC format (x_min, y_min, x_max, y_max) in absolute coordinates.
+
+    Args:
+        boxes (torch.Tensor): Bounding boxes in YOLO format
+        image_size (Tuple[int, int]): Image size in format (height, width)
+
+    Returns:
+        torch.Tensor: Bounding boxes in Pascal VOC format (x_min, y_min, x_max, y_max)
+    """
+    # convert center to corners format
+    boxes = center_to_corners_format(boxes)
+
+    # convert to absolute coordinates
+    height, width = image_size
+    boxes = boxes * torch.tensor([[width, height, width, height]])
+
+    return boxes
+
+
+# Copied from examples/pytorch/object-detection/run_object_detection.augment_and_transform_batch
 def augment_and_transform_batch(
     examples: Mapping[str, Any], transform: A.Compose, image_processor: AutoImageProcessor
 ) -> BatchFeature:
@@ -120,26 +145,27 @@ def augment_and_transform_batch(
     return result
 
 
-def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: Tuple[int, int]) -> torch.Tensor:
-    """
-    Convert bounding boxes from YOLO format (x_center, y_center, width, height) in range [0, 1]
-    to Pascal VOC format (x_min, y_min, x_max, y_max) in absolute coordinates.
+# Copied from examples/pytorch/object-detection/run_object_detection.collate_fn
+def collate_fn(batch: List[BatchFeature]) -> Mapping[str, Union[torch.Tensor, List[Any]]]:
+    data = {}
+    data["pixel_values"] = torch.stack([x["pixel_values"] for x in batch])
+    data["labels"] = [x["labels"] for x in batch]
+    if "pixel_mask" in batch[0]:
+        data["pixel_mask"] = torch.stack([x["pixel_mask"] for x in batch])
+    return data
 
-    Args:
-        boxes (torch.Tensor): Bounding boxes in YOLO format
-        image_size (Tuple[int, int]): Image size in format (height, width)
 
-    Returns:
-        torch.Tensor: Bounding boxes in Pascal VOC format (x_min, y_min, x_max, y_max)
-    """
-    # convert center to corners format
-    boxes = center_to_corners_format(boxes)
-
-    # convert to absolute coordinates
-    height, width = image_size
-    boxes = boxes * torch.tensor([[width, height, width, height]])
-
-    return boxes
+def nested_to_cpu(objects):
+    """Move nested tesnors in objects to CPU if they are on GPU"""
+    if isinstance(objects, torch.Tensor):
+        return objects.cpu()
+    elif isinstance(objects, Mapping):
+        return type(objects)({k: nested_to_cpu(v) for k, v in objects.items()})
+    elif isinstance(objects, (list, tuple)):
+        return type(objects)([nested_to_cpu(v) for v in objects])
+    elif isinstance(objects, (np.ndarray, str, int, float, bool)):
+        return objects
+    raise ValueError(f"Unsupported type {type(objects)}")
 
 
 def evaluation_loop(
@@ -193,35 +219,13 @@ def evaluation_loop(
     return metrics
 
 
-def collate_fn(batch: List[BatchFeature]) -> Mapping[str, Union[torch.Tensor, List[Any]]]:
-    data = {}
-    data["pixel_values"] = torch.stack([x["pixel_values"] for x in batch])
-    data["labels"] = [x["labels"] for x in batch]
-    if "pixel_mask" in batch[0]:
-        data["pixel_mask"] = torch.stack([x["pixel_mask"] for x in batch])
-    return data
-
-
-def nested_to_cpu(objects):
-    """Move nested tesnors in objects to CPU if they are on GPU"""
-    if isinstance(objects, torch.Tensor):
-        return objects.cpu()
-    elif isinstance(objects, Mapping):
-        return type(objects)({k: nested_to_cpu(v) for k, v in objects.items()})
-    elif isinstance(objects, (list, tuple)):
-        return type(objects)([nested_to_cpu(v) for v in objects])
-    elif isinstance(objects, (np.ndarray, str, int, float, bool)):
-        return objects
-    raise ValueError(f"Unsupported type {type(objects)}")
-
-
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers model for object detection task")
     parser.add_argument(
         "--model_name_or_path",
         type=str,
         help="Path to a pretrained model or model identifier from huggingface.co/models.",
-        default="facebook/detr-resnet-50",  # "jozhang97/deta-resnet-50",
+        default="facebook/detr-resnet-50",
     )
     parser.add_argument(
         "--dataset_name",
@@ -386,7 +390,7 @@ def main():
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    # send_example_telemetry("run_object_detection_no_trainer", args)
+    send_example_telemetry("run_object_detection_no_trainer", args)
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
