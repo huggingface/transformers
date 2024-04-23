@@ -271,7 +271,7 @@ class Toolbox():
                 self._tools[name] = load_tool(task_or_repo_id, remote=_remote)
 
 
-class AgentError(Exception):
+class AgentError(RuntimeError):
     """Base class for other agent-related exceptions"""
     def __init__(self, message):
         super().__init__(message)
@@ -335,7 +335,6 @@ class Agent:
 
         self.prompt = None
         self.logs = []
-
 
     @property
     def toolbox(self) -> Dict[str, Tool]:
