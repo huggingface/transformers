@@ -98,6 +98,17 @@ class PaLIGemmaProcessor(ProcessorMixin):
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length=None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        do_resize: bool=None,
+        do_normalize: bool=None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        data_format: Optional["ChannelDimension"] = "channels_first",  # noqa: F821
+        input_data_format: Optional[Union[str, "ChannelDimension"]] = None,  # noqa: F821
+        resample: "PILImageResampling" = None,  # noqa: F821
+        do_convert_rgb: bool = None,
+        do_thumbnail: bool = None,
+        do_align_long_axis: bool = None,
+        do_rescale: bool = None,
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -167,15 +178,25 @@ class PaLIGemmaProcessor(ProcessorMixin):
                 bos_token=self.tokenizer.bos_token,
                 image_seq_len=self.image_seq_length,
                 image_token="<image>",
-
             )
             for prompt in text
         ]
 
-        pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
-        # Here padding is done wrongly, there is not enough fake image tokens.
+        pixel_values = self.image_processor(
+            images,
+            do_resize=do_resize,
+            do_normalize=do_normalize,
+            return_tensors=return_tensors,
+            image_mean=image_mean, 
+            image_std=image_std,
+            input_data_format=input_data_format,
+            data_format=data_format,
+            resample=resample,
+            do_convert_rgb=do_convert_rgb,
+            )["pixel_values"]
+        
         if max_length is not None:
-            max_length += self.image_seq_length  # Here max_length has to account for the image tokens
+            max_length += self.image_seq_length  # max_length has to account for the image tokens
         text_inputs = self.tokenizer(
             input_strings,
             return_tensors=return_tensors,
