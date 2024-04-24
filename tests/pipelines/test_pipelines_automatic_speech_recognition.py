@@ -896,7 +896,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         pipe = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-large-v3",
-            chunk_length_s=3,
             return_timestamps="word",
         )
         data = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -906,23 +905,23 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         EXPECTED_OUTPUT = {
             "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
             "chunks": [
-                {"text": " Mr.", "timestamp": (0.0, 0.72)},
-                {"text": " Quilter", "timestamp": (0.72, 1.08)},
-                {"text": " is", "timestamp": (1.08, 1.3)},
+                {"text": " Mr.", "timestamp": (0.0, 0.74)},
+                {"text": " Quilter", "timestamp": (0.74, 1.04)},
+                {"text": " is", "timestamp": (1.04, 1.3)},
                 {"text": " the", "timestamp": (1.3, 1.44)},
-                {"text": " apostle", "timestamp": (1.44, 1.78)},
-                {"text": " of", "timestamp": (1.78, 2.18)},
+                {"text": " apostle", "timestamp": (1.44, 1.74)},
+                {"text": " of", "timestamp": (1.74, 2.18)},
                 {"text": " the", "timestamp": (2.18, 2.28)},
-                {"text": " middle", "timestamp": (2.28, 2.48)},
-                {"text": " classes,", "timestamp": (2.48, 3.0)},
+                {"text": " middle", "timestamp": (2.28, 2.5)},
+                {"text": " classes,", "timestamp": (2.5, 3.0)},
                 {"text": " and", "timestamp": (3.0, 3.4)},
                 {"text": " we", "timestamp": (3.4, 3.5)},
                 {"text": " are", "timestamp": (3.5, 3.6)},
                 {"text": " glad", "timestamp": (3.6, 3.84)},
                 {"text": " to", "timestamp": (3.84, 4.1)},
-                {"text": " welcome", "timestamp": (4.1, 4.42)},
-                {"text": " his", "timestamp": (4.38, 4.68)},
-                {"text": " gospel.", "timestamp": (4.68, 5.36)},
+                {"text": " welcome", "timestamp": (4.1, 4.4)},
+                {"text": " his", "timestamp": (4.4, 4.7)},
+                {"text": " gospel.", "timestamp": (4.7, 5.34)},
             ],
         }
 
