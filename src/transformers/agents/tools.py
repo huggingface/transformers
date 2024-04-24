@@ -467,9 +467,10 @@ OPENAI_TOOL_DESCRIPTION_TEMPLATE = """
 
 def get_tool_description_with_args(tool: Tool, description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE) -> str:
     compiled_template = compile_jinja_template(description_template)
-    return compiled_template.render(
+    rendered = compiled_template.render(
         tool=tool,  # **self.special_tokens_map
     )
+    return rendered
 
 
 @lru_cache
@@ -756,7 +757,9 @@ TASK_MAPPING = {
     # "text-question-answering": "TextQuestionAnsweringTool",
     "text-to-speech": "TextToSpeechTool",
     "translation": "TranslationTool",
-    "calculator": "CalculatorTool"
+    "calculator": "CalculatorTool",
+    "final_answer": "FinalAnswerTool",
+    "python_evaluator": "PythonEvaluatorTool",
 }
 
 

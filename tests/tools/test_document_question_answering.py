@@ -26,7 +26,7 @@ class DocumentQuestionAnsweringToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
         self.tool = load_tool("document-question-answering")
         self.tool.setup()
-        self.remote_tool = load_tool("document-question-answering", remote=True)
+        self.remote_tool = load_tool("document-question-answering")
 
     def test_exact_match_arg(self):
         dataset = load_dataset("hf-internal-testing/example-documents", split="test")
