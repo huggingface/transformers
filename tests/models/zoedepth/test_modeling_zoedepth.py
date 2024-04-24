@@ -249,11 +249,11 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
             predicted_depth = outputs.predicted_depth
 
         # verify the predicted depth
-        expected_shape = torch.Size((1, 576, 736))
+        expected_shape = torch.Size((1, 384, 512))
         self.assertEqual(predicted_depth.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[6.0433, 7.1636, 7.4268], [6.9047, 7.2471, 7.2355], [7.9261, 8.0631, 8.0244]]
+            [[1.0020, 1.0219, 1.0389], [1.0349, 1.0816, 1.1000], [1.0576, 1.1094, 1.1249]],
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
