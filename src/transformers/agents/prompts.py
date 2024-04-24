@@ -52,6 +52,7 @@ DEFAULT_CODE_SYSTEM_PROMPT = """I will ask you to perform a task, your job is to
 To help you, I will give you access to a set of tools that you can use. Each tool is a Python function and has a description explaining the task it performs, the inputs it expects and the outputs it returns.
 You should first explain which tool you will use to perform the task and for what reason, then write the code in Python.
 Each instruction in Python should be a simple assignment. You can print intermediate results if it makes sense to do so.
+Be sure to provide an 'Code:' token, else the system will be stuck in a loop.
 
 Tools:
 <<tool_descriptions>>
@@ -126,6 +127,7 @@ Above example were using tools that might not exist for you. You only have acces
 Now Begin! 
 Remember to make sure that variables you use are all defined. <<additional_args>>
 Be sure to provide an 'Code:' sequence before the code, else you will get an, error.
+
 """
 
 
@@ -161,15 +163,15 @@ Observation: the result of the action
 
 ALWAYS provide a 'Thought:' and an 'Action:' sequence. You MUST provide at least the 'Action:' sequence to move forward.
 You can use the result of the previous action as input for the next action.
-The observation will always be a string: it can represent a file, like "image_1.png".
+The observation will always be a string: it can represent a file, like "image_1.jpg".
 Then you can use it as input for the next action. You can do it for instance as follows:
 
-Observation: "image_1.png"
+Observation: "image_1.jpg"
 Thought: I need to transform the image that I received in the previous observation to make it green.
 Action:
 {
   "action": "image_transformer",
-  "action_input": {"image": "image_1.png"}
+  "action_input": {"image": "image_1.jpg"}
 }
 
 To provide the final answer to the task, use an action blob with "action": "final_answer" tool. It is the only way to complete the task, else you will be stuck on a loop. So your final output should look like this:
@@ -179,13 +181,11 @@ Action:
   "action_input": {"answer": "insert your final answer here"}
 }
 
-Now begin! <<additional_args>>
+Now begin! You have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: <<additional_args>>
 """
 
 
-DEFAULT_REACT_CODE_SYSTEM_PROMPT = """
-I will ask you to perform a task, your job is to come up with a series of simple commands in Python that will perform the task.
-To help you, I will give you access to a set of tools that you can use. Each tool is a Python function and has a description explaining the task it performs, the inputs it expects and the outputs it returns.
+REACT_CODE_SYSTEM_PROMPT = """Solve the following task as best you can. You have access to the following tools:
 
 To solve the task, you must plan forward to proceed in a series of steps, in a cycle of 'Thought:', 'Code:', and 'Observation:' sequences.
 
@@ -199,9 +199,10 @@ Only when you use function final_answer() will your final answer be returned.
 You have access to the following tools:
 <<tool_descriptions>>
 
+You will be provided a task:
+Task: the task you are given.
 
-Example:::
-Task: "Answer the question in the variable `question` about the image stored in the variable `image`. The question is in French."
+Then you should answer as follows:
 
 Thought: I will use the following tools: `translator` to translate the question into English and then `image_qa` to answer the question on the input image.
 Code:
@@ -211,8 +212,8 @@ answer = image_qa(image=image, question=translated_question)
 final_answer(f"The answer is {answer}")
 ```<end_code>
 
-Example:::
-Task: "Identify the oldest person in the `document` and create an image showcasing the result."
+The 'Action input:' should be the input for the tool you are using.
+Make sure to have the $ACTION_INPUT as a dictionnary, with the right keys for the tool you are using, and do not put variable names as input if you know the right values.
 
 Thought: I will proceed step by step and use the following tools: `document_qa` to find the oldest person in the document, then `image_generator` to generate an image according to the answer.
 Code:
