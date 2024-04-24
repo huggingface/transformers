@@ -52,6 +52,25 @@ tokenizer = LlamaTokenizer.from_pretrained("/output/path")
 
 Important note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
 come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM).
+
+If you want you tokenizer to add a bos automatically you should update the tokenizer._tokenizers.post_processor:
+
+```py
+from tokenizers import processors
+bos = "<|begin_of_text|>"
+tokenizer._tokenizers.post_processor = processors.Sequence(
+    [
+        processors.ByteLevel(trim_offsets=False),
+        processors.TemplateProcessing(
+            single=f"{bos}:0 $A:0",
+            pair=f"{bos}:0 $A:0 {bos}:1 $B:1",
+            special_tokens=[
+                (bos, tokenizer.encode(bos)),
+            ],
+        ),
+    ]
+)
+```
 """
 
 NUM_SHARDS = {
@@ -87,7 +106,6 @@ def write_model(
     model_path,
     input_base_path,
     model_size,
-    tokenizer_path=None,
     safe_serialization=True,
     llama_version=1,
     vocab_size=None,
@@ -122,7 +140,6 @@ def write_model(
             max_position_embeddings = 8192
 
     vocab_size = vocab_size if vocab_size is not None else 32000
-    print(params)
     if params.get("n_kv_heads", None) is not None:
         num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
         num_local_key_value_heads = n_heads_per_shard // num_key_value_heads
@@ -300,7 +317,6 @@ class Llama3Converter(TikTokenConverter):
     def __init__(self, vocab_file, num_reserved_special_tokens=256, **kwargs):
         super().__init__(vocab_file, **kwargs)
         tokenizer = self.converted()
-
         chat_template = (
             "{% set loop_messages = messages %}"
             "{% for message in loop_messages %}"
@@ -326,7 +342,7 @@ class Llama3Converter(TikTokenConverter):
             "<|eot_id|>",  # end of turn
         ] + [f"<|reserved_special_token_{i}|>" for i in range(5, num_reserved_special_tokens - 5)]
         tokenizer.add_special_tokens(special_tokens)
-        # TODO get the bos and eos from the tiktoken object?
+
         self.tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,
             bos_token="<|begin_of_text|>",
@@ -337,7 +353,6 @@ class Llama3Converter(TikTokenConverter):
 
 
 def write_tokenizer(tokenizer_path, input_tokenizer_path, llama_version=2):
-    # Initialize the tokenizer based on the `spm` model
     tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
     if llama_version == 3:
         tokenizer = Llama3Converter(input_tokenizer_path).tokenizer

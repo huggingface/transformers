@@ -1522,7 +1522,7 @@ class TikTokenConverter:
     def tokenizer(self):
         vocab_scores, merges = self.extract_vocab_merges_from_model(self.vocab_file)
         tokenizer = Tokenizer(BPE(vocab_scores, merges, fuse_unk=False))
-        if hasattr(tokenizer.model, "ignore_merges"):  # needs the transformeres release
+        if hasattr(tokenizer.model, "ignore_merges"):
             tokenizer.model.ignore_merges = True
         return tokenizer
 
@@ -1534,7 +1534,6 @@ class TikTokenConverter:
                 pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space, use_regex=False),
             ]
         )
-
         tokenizer.decoder = decoders.ByteLevel()
         tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
         return tokenizer
