@@ -690,8 +690,12 @@ class PipelineTool(Tool):
             self.setup()
 
         encoded_inputs = self.encode(*args, **kwargs)
-        encoded_inputs = send_to_device(encoded_inputs, self.device)
-        outputs = self.forward(encoded_inputs)
+
+        tensor_inputs = {k: v for k, v in encoded_inputs.items() if isinstance(v, torch.Tensor)}
+        non_tensor_inputs = {k: v for k, v in encoded_inputs.items() if not isinstance(v, torch.Tensor)}
+
+        encoded_inputs = send_to_device(tensor_inputs, self.device)
+        outputs = self.forward({**encoded_inputs, **non_tensor_inputs})
         outputs = send_to_device(outputs, "cpu")
         decoded_outputs = self.decode(outputs)
 
