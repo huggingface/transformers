@@ -200,7 +200,7 @@ class ChineseCLIPVisionEmbeddings(nn.Module):
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding(self.position_ids)
+        embeddings = embeddings + self.position_embedding(self.position_ids).to(embeddings.device)
         return embeddings
 
 

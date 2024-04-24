@@ -739,7 +739,7 @@ class GroupViTEncoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
+        hidden_states = residual.to(hidden_states.device) + hidden_states
 
         outputs = (hidden_states,)
 
