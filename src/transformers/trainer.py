@@ -621,8 +621,9 @@ class Trainer:
                     )
         if (args.fp16 or args.bf16) and args.half_precision_backend == "auto":
             if args.device == torch.device("cpu"):
-                if args.fp16 and version.parse(get_torch_version()) < version.parse("2.3.0"):
-                    raise ValueError("Tried to use `fp16` but it is not supported on cpu")
+                if args.fp16:
+                    if version.parse(get_torch_version()) < version.parse("2.3.0"):
+                        raise ValueError("Tried to use `fp16` but it is not supported on cpu")
                 else:
                     args.half_precision_backend = "cpu_amp"
             logger.info(f"Using {args.half_precision_backend} half precision backend")
