@@ -3830,6 +3830,8 @@ class ModelTesterMixin:
                 self.skipTest("Llava-like models currently (transformers==4.39.1) requires an attention_mask input")
             if config.model_type in ["idefics"]:
                 self.skipTest("Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
+            if "clip" in config.model_type:
+                self.skipTest("CLIP text tower has two attention masks: `causal_attention_mask` and `attention_mask`")
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:

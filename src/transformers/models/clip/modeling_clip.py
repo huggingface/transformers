@@ -385,11 +385,12 @@ class CLIPSdpaAttention(CLIPAttention):
                 attn_mask = attn_mask + attention_mask
             else:
                 attn_mask = attention_mask
+        # CLIP text model uses both  `causal_attention_mask` and `attention_mask` sequentially.
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
-            attn_mask=attn_mask,
+            attn_mask=attn_mask if causal_attention_mask is not None else attention_mask,
             dropout_p=self.dropout if self.training else 0.0,
             scale=self.scale,
         )
