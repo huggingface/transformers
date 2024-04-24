@@ -8723,10 +8723,6 @@ class VMambaPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-def load_tf_weights_in_vmamba(*args, **kwargs):
-    requires_backends(load_tf_weights_in_vmamba, ["torch"])
-
-
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
