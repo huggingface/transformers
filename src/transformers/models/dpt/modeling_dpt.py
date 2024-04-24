@@ -258,7 +258,7 @@ class DPTViTEmbeddings(nn.Module):
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
-        embeddings += position_embeddings.to(embeddings.device)
+        embeddings = embeddings + position_embeddings.to(embeddings.device)
 
         embeddings = self.dropout(embeddings)
 

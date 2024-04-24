@@ -318,11 +318,11 @@ class EfficientFormerMeta3D(nn.Module):
 
         if self.use_layer_scale:
             layer_output = hidden_states + self.drop_path(
-                self.layer_scale_1.unsqueeze(0).unsqueeze(0) * attention_output
-            )
+                self.layer_scale_1.unsqueeze(0).unsqueeze(0) * attention_output.to(self.layer_scale_1.device)
+            ).to(hidden_states.device)
             layer_output = layer_output + self.drop_path(
-                self.layer_scale_2.unsqueeze(0).unsqueeze(0) * self.mlp(self.layernorm2(layer_output))
-            )
+                self.layer_scale_2.unsqueeze(0).unsqueeze(0) * self.mlp(self.layernorm2(layer_output)).to(self.layer_scale_2.device)
+            ).to(layer_output.device)
         else:
             layer_output = hidden_states + self.drop_path(attention_output)
             layer_output = layer_output + self.drop_path(self.mlp(self.layernorm2(layer_output)))
@@ -382,11 +382,13 @@ class EfficientFormerMeta4D(nn.Module):
         outputs = self.token_mixer(hidden_states)
 
         if self.use_layer_scale:
-            layer_output = hidden_states + self.drop_path(self.layer_scale_1.unsqueeze(-1).unsqueeze(-1) * outputs)
+            layer_output = hidden_states + self.drop_path(
+                self.layer_scale_1.unsqueeze(-1).unsqueeze(-1) * outputs
+            ).to(hidden_states.device)
 
-            layer_output = layer_output + self.drop_path(
-                self.layer_scale_2.unsqueeze(-1).unsqueeze(-1) * self.mlp(layer_output)
-            )
+            layer_output =  layer_output + self.drop_path(
+                self.layer_scale_2.unsqueeze(-1).unsqueeze(-1) * self.mlp(layer_output).to(self.layer_scale_2.device)
+            ).to(layer_output.device)
         else:
             layer_output = hidden_states + self.drop_path(outputs)
             layer_output = layer_output + self.drop_path(self.mlp(layer_output))
@@ -509,6 +511,7 @@ class EfficientFormerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "efficientformer"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
+    _no_split_modules = ["EfficientFormerSelfAttention"]
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
