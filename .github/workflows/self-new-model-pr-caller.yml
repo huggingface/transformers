@@ -2,6 +2,8 @@ name: PR slow CI
 
 on:
   pull_request:
+    paths:
+      - "src/transformers/models/*/modeling_*.py"
 
 env:
   HF_HOME: /mnt/cache
