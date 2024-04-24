@@ -19,7 +19,8 @@ pytest<8.0.1
 conllu
 sentencepiece != 0.1.92
 protobuf
-torch
+# TODO: Remove pin once comptiability with fp16 is fixed
+torch<2.3
 torchvision
 torchaudio
 jiwer
