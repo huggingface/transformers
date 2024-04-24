@@ -127,7 +127,6 @@ class JetMoeConfig(PretrainedConfig):
         if num_experts_per_tok > num_local_experts:
             raise ValueError("`num_experts_per_tok` must be less than or equal to `num_local_experts`")
         if num_attention_heads != num_key_value_heads * num_experts_per_tok:
-            print(num_attention_heads, num_key_value_heads, num_experts_per_tok)
             raise ValueError("`num_attention_heads` must be equal to `num_key_value_heads` * `num_experts_per_tok`")
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
