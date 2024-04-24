@@ -38,6 +38,7 @@ from packaging import version
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, Identity
 from torch.utils.checkpoint import checkpoint
+from tqdm import tqdm as tqdm_lib
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
@@ -808,7 +809,13 @@ def _load_state_dict_into_meta_model(
     for old_key, new_key in zip(old_keys, new_keys):
         state_dict[new_key] = state_dict.pop(old_key)
 
-    for param_name, param in state_dict.items():
+    # Show shard-level progress. Useful to monitor quantization progress
+    show_progress = False
+    if hf_quantizer is not None:
+        if hasattr(hf_quantizer, "show_progress"):
+            show_progress = hf_quantizer.show_progress
+
+    for param_name, param in tqdm_lib(state_dict.items(), disable=not show_progress):
         # First part of the test is always true as load_state_dict_keys always contains state_dict keys.
         if param_name not in loaded_state_dict_keys or param_name not in expected_keys:
             continue
@@ -2656,6 +2663,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @wraps(torch.nn.Module.cuda)
     def cuda(self, *args, **kwargs):
+        if getattr(self, "quantization_method", None) == QuantizationMethod.HQQ:
+            raise ValueError("`.to` is not supported for HQQ-quantized models.")
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
             raise ValueError(
@@ -2667,6 +2676,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @wraps(torch.nn.Module.to)
     def to(self, *args, **kwargs):
+        if getattr(self, "quantization_method", None) == QuantizationMethod.HQQ:
+            raise ValueError("`.to` is not supported for HQQ-quantized models.")
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
             raise ValueError(

@@ -45,6 +45,9 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/opt
 # Add aqlm for quantization testing
 RUN python3 -m pip install --no-cache-dir aqlm[gpu]==1.0.2
 
+# Add hqq for quantization testing
+RUN python3 -m pip install --no-cache-dir hqq
+
 # Add autoawq for quantization testing
 # >=v0.2.3 needed for compatibility with torch 2.2.1
 RUN python3 -m pip install --no-cache-dir https://github.com/casper-hansen/AutoAWQ/releases/download/v0.2.3/autoawq-0.2.3+cu118-cp38-cp38-linux_x86_64.whl
