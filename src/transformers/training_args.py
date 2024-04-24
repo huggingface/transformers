@@ -56,7 +56,7 @@ from .utils import (
     requires_backends,
 )
 from .utils.generic import strtobool
-from .utils.import_utils import is_optimum_neuron_available, get_torch_version
+from .utils.import_utils import is_optimum_neuron_available
 
 
 logger = logging.get_logger(__name__)
@@ -67,7 +67,7 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
 
-    from .pytorch_utils import is_torch_greater_or_equal_than_2_0
+    from .pytorch_utils import is_torch_greater_or_equal_than_2_0, is_torch_greater_or_equal_than_2_3
 
 if is_accelerate_available():
     from accelerate.state import AcceleratorState, PartialState
@@ -1618,7 +1618,7 @@ class TrainingArguments:
         if (
             self.framework == "pt"
             and is_torch_available()
-            and (self.device.type == "cpu" and (version.parse(get_torch_version()) < version.parse("2.3.0")))
+            and (self.device.type == "cpu" and is_torch_greater_or_equal_than_2_3)
             and (self.device.type != "cuda")
             and (self.device.type != "mlu")
             and (self.device.type != "npu")

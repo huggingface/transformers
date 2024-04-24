@@ -36,7 +36,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 
-
 # Integrations must be imported before ML frameworks:
 # isort: off
 from .integrations import (
@@ -70,7 +69,11 @@ from .models.auto.modeling_auto import (
     MODEL_MAPPING_NAMES,
 )
 from .optimization import Adafactor, get_scheduler
-from .pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
+from .pytorch_utils import (
+    ALL_LAYERNORM_LAYERS,
+    is_torch_greater_or_equal_than_1_13,
+    is_torch_greater_or_equal_than_2_3,
+)
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -160,7 +163,6 @@ from .utils import (
     is_torch_npu_available,
     is_torch_xla_available,
     logging,
-    get_torch_version,
     strtobool,
 )
 from .utils.quantization_config import QuantizationMethod
@@ -622,7 +624,7 @@ class Trainer:
         if (args.fp16 or args.bf16) and args.half_precision_backend == "auto":
             if args.device == torch.device("cpu"):
                 if args.fp16:
-                    if version.parse(get_torch_version()) < version.parse("2.3.0"):
+                    if is_torch_greater_or_equal_than_2_3:
                         raise ValueError("Tried to use `fp16` but it is not supported on cpu")
                 else:
                     args.half_precision_backend = "cpu_amp"
