@@ -286,8 +286,9 @@ torch_and_tf_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
         "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
-        # TODO: remove this one after fixing the dependency issue(s) above
-        "pip install -U --upgrade-strategy eager torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu",
+        # TODO: remove this one after fixing the dependency issue(s) above"
+        # TODO: remove torch<2.3 pin once issues with fp16 and trainer resolved
+        "pip install -U --upgrade-strategy eager 'torch<2.3' torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu",
     ],
     marker="is_pt_tf_cross_test",
     pytest_options={"rA": None, "durations": 0},
@@ -525,7 +526,8 @@ doc_test_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager natten==0.15.1+torch210cpu -f https://shi-labs.com/natten/wheels",
         "pip install -U --upgrade-strategy eager g2p-en",
         # TODO: remove this one after fixing the dependency issue(s) above
-        "pip install -U --upgrade-strategy eager torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu",
+        # TODO: remove torch<2.3 pin once issues with fp16 and trainer resolved
+        "pip install -U --upgrade-strategy eager 'torch<2.3' torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu",
         "find -name __pycache__ -delete",
         "find . -name \*.pyc -delete",
         # Add an empty file to keep the test step running correctly even no file is selected to be tested.
