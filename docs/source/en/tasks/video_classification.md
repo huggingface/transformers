@@ -104,7 +104,7 @@ UCF101_subset/
         ...
 ```
 
-Let's now count the number of total videos we have.
+You can then count the number of total videos.
 
 ```py 
 >>> import pathlib
