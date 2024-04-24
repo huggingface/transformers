@@ -463,6 +463,16 @@ Before finally generating the image:
 This also works with its sibling `ReactJSONAgent`:
 
 ```python
+from transformers import ReactAgent
+
+agent = ReactAgent(llm_engine, tools=[tool], add_base_tools=True)
+
+agent.run("Improve this prompt, then generate an image of it.", prompt="A rabbit wearing a space suit")
+```
+
+<Tip warning={true}>
+
+```python
 from transformers import ReactJSONAgent
 
 agent = ReactJSONAgent(llm_engine, tools=[tool], add_base_tools=True)

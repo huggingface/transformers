@@ -43,8 +43,6 @@ from .prompts import DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT, DE
 from .python_interpreter import evaluate_python_code
 from PIL import Image
 
-
-# logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 _tools_are_initialized = False
@@ -100,6 +98,11 @@ class MessageRole(str, Enum):
     SYSTEM = "system"
     TOOL_CALL = "tool-call"
     TOOL_RESPONSE = "tool-response"
+
+    @classmethod
+    def roles(cls):
+        return [r.value for r in cls]
+
 
 def get_remote_tools(organization="huggingface-tools"):
     if is_offline_mode():
@@ -291,7 +294,7 @@ class Toolbox():
                 self._tools[name] = load_tool(task_or_repo_id, remote=_remote)
 
 
-class AgentError(Exception):
+class AgentError(RuntimeError):
     """Base class for other agent-related exceptions"""
     def __init__(self, message):
         super().__init__(message)
@@ -401,9 +404,6 @@ class Agent:
     def toolbox(self) -> Dict[str, Tool]:
         """Get the toolbox currently available to the agent"""
         return self._toolbox
-    
-    def show_logs(self):
-        self.log.info('\n'.join(self.logs))
 
 
     def write_inner_memory_from_logs(self) -> List[Dict[str, str]]:
@@ -420,11 +420,11 @@ class Agent:
             "content": "Task: " + self.logs[0]["task"],
         }
         memory  = [prompt_message, task_message]
-
+        
         for step_log in self.logs[1:]:
             thought_message = {
                 "role": MessageRole.ASSISTANT,
-                "content": step_log["llm_output"] + "\n"
+                "content": "Thought: " + step_log["llm_output"] + "\n"
             }
             memory.append(thought_message)
 
@@ -485,6 +485,7 @@ class Agent:
                 observation = self.toolbox.tools[tool_name](arguments)
             else:
                 for key, value in arguments.items():
+                    # if the value is the name of a state variable like "image.png", replace it with the actual value
                     if value in self.state:
                         arguments[key] = self.state[value]
                 observation = self.toolbox.tools[tool_name](**arguments)
@@ -582,11 +583,11 @@ class CodeAgent(Agent):
         llm_output = self.llm_engine(memory, stop=["Task:"])
 
         if return_generated_code:
-            return llm_output
+            return llm_output["content"]
 
         # Parse
         _, code_action = self.extract_action(
-            llm_output=llm_output,
+            llm_output=llm_output["content"],
             split_token="Answer:"
         )
 
@@ -647,7 +648,6 @@ class ReactAgent(Agent):
             "your model, please set `tokenizer.tool_description_template` to an appropriate template. "
         )
         return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
-
 
     def run(self, task, **kwargs):
         """
@@ -740,7 +740,6 @@ class ReactJSONAgent(ReactAgent):
 
         self.log.info("=====Calling LLM with these messages:=====")
         self.log.info(agent_memory)
-
 
         if self.llm_engine_grammar:
             llm_output = self.llm_engine(self.prompt, stop=["Observation:", "assistant"], grammar=self.llm_engine_grammar)

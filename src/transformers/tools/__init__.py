@@ -69,6 +69,7 @@ if TYPE_CHECKING:
         from .translation import TranslationTool
         from .default_tools import CalculatorTool, PythonEvaluatorTool
         from .agents import ReactJSONAgent, CodeAgent, ReactCodeAgent
+        from .agents import ReactAgent, CodeAgent
 else:
     import sys
 
