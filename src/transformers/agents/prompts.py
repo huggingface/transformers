@@ -185,7 +185,7 @@ Now begin! You have been provided with these initial arguments, that you should 
 """
 
 
-REACT_CODE_SYSTEM_PROMPT = """Solve the following task as best you can. You have access to the following tools:
+DEFAULT_REACT_CODE_SYSTEM_PROMPT = """Solve the following task as best you can. You have access to the following tools:
 
 To solve the task, you must plan forward to proceed in a series of steps, in a cycle of 'Thought:', 'Code:', and 'Observation:' sequences.
 

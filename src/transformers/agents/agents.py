@@ -235,6 +235,9 @@ class Agent:
     def toolbox(self) -> Dict[str, Tool]:
         """Get the toolbox currently available to the agent"""
         return self._toolbox
+    
+    def show_logs(self):
+        self.log.info('\n'.join(self.logs))
 
     def write_inner_memory_from_logs(self) -> List[Dict[str, str]]:
         """
@@ -247,7 +250,6 @@ class Agent:
             "content": "Task: " + self.logs[0]["task"],
         }
         memory = [prompt_message, task_message]
-
         for step_log in self.logs[1:]:
             thought_message = {"role": MessageRole.ASSISTANT, "content": step_log["llm_output"] + "\n"}
             memory.append(thought_message)
@@ -307,14 +309,14 @@ class Agent:
                 observation = self.toolbox.tools[tool_name](arguments)
             else:
                 for key, value in arguments.items():
+                    # if the value is the name of a state variable like "image.png", replace it with the actual value
                     if value in self.state:
                         arguments[key] = self.state[value]
                 observation = self.toolbox.tools[tool_name](**arguments)
             return observation
-
         except Exception as e:
             raise AgentExecutionError(
-                f"Error in tool call execution: {e}.\nYou provided an incorrect input to the tool.\n"
+                f"Error in tool call execution: {e}.\nYour input was probably incorrect.\n"
                 f"As a reminder, this tool's description is the following:\n{get_tool_description_with_args(self.toolbox.tools[tool_name])}"
             )
 
@@ -510,7 +512,7 @@ class ReactAgent(Agent):
         self.log.info("=====New task=====")
         self.log.debug("System prompt is as follows:")
         self.log.debug(self.system_prompt)
-        self.logs.append({"system_prompt": self.system_prompt, "task": task})
+        self.logs.append({"task": task, "system_prompt": self.system_prompt})
 
         final_answer = None
         iteration = 0

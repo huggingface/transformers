@@ -84,10 +84,9 @@ class AgentTests(unittest.TestCase):
         agent = ReactJSONAgent(tools=[CalculatorTool()], llm_engine=fake_react_json_llm)
         output = agent.run("What is 2 multiplied by 3.6452?")
         assert output == "7.2904"
-        print(agent.logs[-1])
-        assert agent.logs[1] == "Task: What is 2 multiplied by 3.6452?"
-        assert agent.logs[3] == "Observation: 7.2904"
-        assert agent.logs[4] == """
+        assert agent.logs[0]['task'] == "What is 2 multiplied by 3.6452?"
+        assert agent.logs[1]['observation'] == "7.2904"
+        assert agent.logs[2]['llm_output'] == """
 Thought: I can now answer the initial question
 Action:
 {
@@ -99,8 +98,9 @@ Action:
         agent = ReactCodeAgent(tools=[CalculatorTool()], llm_engine=fake_react_code_llm)
         output = agent.run("What is 2 multiplied by 3.6452?")
         assert output == 7.2904
-        assert agent.logs[1] == "Task: What is 2 multiplied by 3.6452?"
-        assert agent.logs[3] == "Observation: 7.2904"
+        assert agent.logs[0]['task'] == "What is 2 multiplied by 3.6452?"
+        assert agent.logs[1]['observation'] == '\n12.511648652635412'
+        assert agent.logs[2]['tool_call'] == {'tool_arguments': 'final_answer(7.2904)\n', 'tool_name': 'code interpreter'}
 
     def test_fake_code_agent(self):
         agent = CodeAgent(tools=[CalculatorTool()], llm_engine=fake_code_llm)
