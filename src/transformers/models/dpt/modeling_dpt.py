@@ -254,11 +254,11 @@ class DPTViTEmbeddings(nn.Module):
         batch_size, seq_len, _ = embeddings.size()
 
         # add the [CLS] token to the embedded patch tokens
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1).to(embeddings.device)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
-        embeddings = embeddings + position_embeddings
+        embeddings += position_embeddings.to(embeddings.device)
 
         embeddings = self.dropout(embeddings)
 
@@ -812,6 +812,7 @@ class DPTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "dpt"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["DPTViTLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
