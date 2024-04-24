@@ -16,25 +16,20 @@
 # limitations under the License.
 from typing import Any
 
-from ..models.whisper import WhisperForConditionalGeneration, WhisperProcessor
-from .tools import PipelineTool
+from .tools import Tool
+from huggingface_hub import InferenceClient
 
 
-class SpeechToTextTool(PipelineTool):
-    default_checkpoint = "openai/whisper-base"
-    description = "This is a tool that transcribes an audio into text. It returns the " "transcribed text."
+class SpeechToTextTool(Tool):
+    description = "This is a tool that transcribes an audio into text. It returns the transcribed text."
     name = "transcriber"
-    pre_processor_class = WhisperProcessor
-    model_class = WhisperForConditionalGeneration
 
-    inputs = {"audio": {"type": Any, "description": "the audio to transcribe"}}
+    inputs = {"audio": {"type": Any, "description": "The audio to transcribe"}}
     output_type = str
 
-    def encode(self, audio):
-        return self.pre_processor(audio, return_tensors="pt").input_features
+    def __init__(self, checkpoint=None):
+        super().__init__(checkpoint=checkpoint)
+        self.client = InferenceClient()
 
-    def forward(self, inputs):
-        return self.model.generate(inputs=inputs)
-
-    def decode(self, outputs):
-        return self.pre_processor.batch_decode(outputs, skip_special_tokens=True)[0]
+    def __call__(self, audio):
+        return self.client.automatic_speech_recognition(audio).text

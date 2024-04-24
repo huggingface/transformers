@@ -28,7 +28,7 @@ class InterpretorError(ValueError):
     pass
 
 
-def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, state=None, chat_mode=False):
+def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, state=None):
     """
     Evaluate a python expression using the content of the variables stored in a state and only evaluating a given set
     of functions.
@@ -44,8 +44,6 @@ def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, s
         state (`Dict[str, Any]`):
             A dictionary mapping variable names to values. The `state` should contain the initial inputs but will be
             updated by this function to contain all variables as they are evaluated.
-        chat_mode (`bool`, *optional*, defaults to `False`):
-            Whether or not the function is called from `Agent.chat`.
     """
     try:
         expression = ast.parse(code)
@@ -60,13 +58,8 @@ def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, s
         try:
             line_result = evaluate_ast(node, state, tools)
         except InterpretorError as e:
-            msg = f"Evaluation of the code stopped at line {idx} before the end because of the following error"
-            if chat_mode:
-                msg += (
-                    f". Copy paste the following error message and send it back to the agent:\nI get an error: '{e}'"
-                )
-            else:
-                msg += f":\n{e}"
+            msg = f"You tried to execute the following code:\n{code}\n"
+            msg += f"\nEvaluation stopped at line '{node}' because of the following error:\n{e}"
             raise InterpretorError(msg)
         if line_result is not None:
             result = line_result
@@ -76,7 +69,7 @@ def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, s
 
 def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Callable]):
     """
-    Evaluate an absract syntax tree using the content of the variables stored in a state and only evaluating a given
+    Evaluate an abstract syntax tree using the content of the variables stored in a state and only evaluating a given
     set of functions.
 
     This function will recurse trough the nodes of the tree provided.
@@ -103,6 +96,24 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
     elif isinstance(expression, ast.Constant):
         # Constant -> just return the value
         return expression.value
+    elif isinstance(expression, ast.UnaryOp):
+        operand = evaluate_ast(expression.operand, state, tools)
+        if isinstance(expression.op, ast.USub):
+            return -operand
+        elif isinstance(expression.op, ast.UAdd):
+            return operand
+        elif isinstance(expression.op, ast.Not):
+            return not operand
+        elif isinstance(expression.op, ast.Invert):
+            return ~operand
+        else:
+            raise InterpretorError(f"Unary operation {expression.op.__class__.__name__} is not supported.")
+    elif isinstance(expression, ast.BoolOp):
+        # Boolean operation -> evaluate the operation
+        return evaluate_boolop(expression, state, tools)
+    elif isinstance(expression, ast.BinOp):
+        # Binary operation -> execute operation
+        return evaluate_binop(expression, state, tools)
     elif isinstance(expression, ast.Compare):
         # Comparison -> evaluate the comparison
         return evaluate_condition(expression, state, tools)
@@ -151,18 +162,34 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
     elif isinstance(expression, ast.Subscript):
         # Subscript -> return the value of the indexing
         return evaluate_subscript(expression, state, tools)
-    elif isinstance(expression, ast.BoolOp):
-        # Boolean operation -> evaluate the operation
-        return evaluate_boolop(expression, state, tools)
-    elif isinstance(expression, ast.BinOp):
-        # Binary operation -> execute operation
-        return evaluate_binop(expression, state, tools)
     elif isinstance(expression, ast.IfExp):
         test_val = evaluate_ast(expression.test, state, tools)
         if test_val:
             return evaluate_ast(expression.body, state, tools)
         else:
             return evaluate_ast(expression.orelse, state, tools)
+    elif isinstance(expression, ast.Attribute):
+        obj = evaluate_ast(expression.value, state, tools)
+        if not isinstance(obj, str):
+            raise InterpretorError("Attribute access is only supported for strings")
+        if expression.attr =='replace':
+            args = [evaluate_ast(arg, state, tools) for arg in expression.args.args]
+            return obj.replace(*args)
+        elif expression.attr =='split':
+            args = [evaluate_ast(arg, state, tools) if arg is not None else None for arg in expression.args.args]
+            return obj.split(*args)
+        else:
+            raise InterpretorError(f"Attribute {expression.attr} is not supported")
+    elif isinstance(expression.slice, ast.Slice):
+        obj = evaluate_ast(expression.value, state, tools)
+        start = evaluate_ast(expression.slice.lower, state, tools) if expression.slice.lower is not None else 0
+        stop = evaluate_ast(expression.slice.upper, state, tools) if expression.slice.upper is not None else len(obj)
+        step = evaluate_ast(expression.slice.step, state, tools) if expression.slice.step is not None else 1
+        return obj[start:stop:step]
+    elif isinstance(expression.slice, ast.Index):
+        obj = evaluate_ast(expression.value, state, tools)
+        index = evaluate_ast(expression.slice.value, state, tools)
+        return obj[index]
     else:
         # For now we refuse anything else. Let's add things as we need them.
         raise InterpretorError(f"{expression.__class__.__name__} is not supported.")
@@ -233,7 +260,7 @@ def evaluate_binop(binop, state, tools):
     elif isinstance(binop.op, ast.RShift):
         return left_val >> right_val
     else:
-        raise NotImplementedError(f"Operator {type(binop.op).__name__} is not implemented.")
+        raise NotImplementedError(f"Binary operation {type(binop.op).__name__} is not implemented.")
 
 
 def evaluate_assign(assign, state, tools):
@@ -251,28 +278,33 @@ def evaluate_assign(assign, state, tools):
 
 
 def evaluate_call(call, state, tools):
-    if not isinstance(call.func, ast.Name):
-        raise InterpretorError(
-            f"It is not permitted to evaluate other functions than the provided tools (tried to execute {call.func} of "
-            f"type {type(call.func)}."
-        )
-    func_name = call.func.id
+    if isinstance(call.func, ast.Attribute):
+        obj = evaluate_ast(call.func.value, state, tools)
+        func_name = call.func.attr
+        if not hasattr(obj, func_name):
+            raise InterpretorError(f"Object {obj} has no attribute {func_name}")
+        func = getattr(obj, func_name)
 
-    if func_name not in tools:
-        raise InterpretorError(
-            f"It is not permitted to evaluate other functions than the provided tools (tried to execute {call.func.id})."
-        )
-    func = tools[func_name]
-    # Todo deal with args
-    args = [evaluate_ast(arg, state, tools) for arg in call.args]
-    kwargs = {keyword.arg: evaluate_ast(keyword.value, state, tools) for keyword in call.keywords}
-    output = func(*args, **kwargs)
+    elif isinstance(call.func, ast.Name):
+        func_name = call.func.id
 
-    # store logs of print statements
-    if func_name == "print":
-        state['print_outputs'] += '\n' + output
-    
-    return output
+        if func_name not in tools:
+            raise InterpretorError(
+                f"It is not permitted to evaluate other functions than the provided tools (tried to execute {call.func.id})."
+            )
+        func = tools[func_name]
+        # Todo deal with args
+        args = [evaluate_ast(arg, state, tools) for arg in call.args]
+        kwargs = {keyword.arg: evaluate_ast(keyword.value, state, tools) for keyword in call.keywords}
+        output = func(*args, **kwargs)
+
+        # store logs of print statements
+        if func_name == "print":
+            state['print_outputs'] += '\n' + output
+        
+        return output
+    else:
+        raise InterpretorError(f"It is not permitted to evaluate other functions than the provided tools (tried to execute {call.func}).")
 
 
 def evaluate_subscript(subscript, state, tools):
