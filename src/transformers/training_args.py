@@ -1618,7 +1618,7 @@ class TrainingArguments:
         if (
             self.framework == "pt"
             and is_torch_available()
-            and (self.device_type == "cpu" and get_torch_version() < version.parse("2.3.0"))
+            and (self.device.type == "cpu" and get_torch_version() < version.parse("2.3.0"))
             and (self.device.type != "cuda")
             and (self.device.type != "mlu")
             and (self.device.type != "npu")
