@@ -831,7 +831,6 @@ class BlipModel(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> import torch
         >>> from transformers import BlipImageProcessor, BertTokenizerFast, BlipModel
 
         >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
@@ -839,7 +838,11 @@ class BlipModel(BlipPreTrainedModel):
         >>> tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
 
         >>> tokenizer.add_special_tokens({"bos_token": "[DEC]"})
+        1
+
         >>> tokenizer.add_special_tokens({"additional_special_tokens": ["[ENC]"]})
+        1
+
         >>> tokenizer.enc_token_id = tokenizer.additional_special_tokens_ids[0]
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
