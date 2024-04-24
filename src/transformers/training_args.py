@@ -56,7 +56,7 @@ from .utils import (
     requires_backends,
 )
 from .utils.generic import strtobool
-from .utils.import_utils import is_optimum_neuron_available
+from .utils.import_utils import is_optimum_neuron_available, get_torch_version
 
 
 logger = logging.get_logger(__name__)
@@ -1618,6 +1618,7 @@ class TrainingArguments:
         if (
             self.framework == "pt"
             and is_torch_available()
+            and (self.device_type == "cpu" and get_torch_version() < version.parse("2.3.0"))
             and (self.device.type != "cuda")
             and (self.device.type != "mlu")
             and (self.device.type != "npu")
