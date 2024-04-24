@@ -265,7 +265,9 @@ class GroupViTTokenAssign(nn.Module):
         new_image_tokens, attention = self.assign(projected_group_tokens, image_tokens)
         new_image_tokens += projected_group_tokens
 
-        new_image_tokens = new_image_tokens + self.mlp_channels(self.norm_new_x(new_image_tokens)).to(new_image_tokens.device)
+        new_image_tokens = new_image_tokens + self.mlp_channels(self.norm_new_x(new_image_tokens)).to(
+            new_image_tokens.device
+        )
 
         return new_image_tokens, attention
 
@@ -650,7 +652,9 @@ class GroupViTAttention(nn.Module):
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
                     f" {causal_attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask.to(attn_weights.device)
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask.to(
+                attn_weights.device
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if attention_mask is not None:
@@ -658,7 +662,9 @@ class GroupViTAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask.to(attn_weights.device)
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask.to(
+                attn_weights.device
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
