@@ -378,7 +378,9 @@ def main():
         "--output_dir",
         help="Location to write HF model and tokenizer",
     )
-    parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
+    parser.add_argument(
+        "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
+    )
     # Different Llama versions used different default values for max_position_embeddings, hence the need to be able to specify which version is being used.
     parser.add_argument(
         "--llama_version",
