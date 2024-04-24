@@ -22,7 +22,7 @@ from typing import Callable, Iterable, Optional, Tuple, Union
 import torch
 from torch import nn
 from torch.optim import Optimizer
-from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
+from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau, StepLR
 
 from .trainer_pt_utils import LayerWiseDummyOptimizer, LayerWiseDummyScheduler
 from .trainer_utils import SchedulerType
@@ -387,6 +387,37 @@ def get_cosine_with_min_lr_schedule_with_warmup(
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
+def get_step_lr(
+    optimizer,
+    num_warmup_steps,
+    num_training_steps,
+    gamma=0.1, 
+    last_epoch=-1, 
+    verbose="False"
+):  
+    """
+    Create a schedule with a learning rate that decays by gamma every
+    num_training_steps. Notice that such decay can happen simultaneously with
+    other changes to the learning rate from outside this scheduler. When
+    last_epoch=-1, sets initial lr as lr.
+
+    Args:
+        optimizer (Optimizer): Wrapped optimizer.
+        num_warmup_steps (int): Reserved for future use to maintain interface compatibility.
+        num_training_steps (int): Period of learning rate decay.
+        gamma (float): Multiplicative factor of learning rate decay.
+            Default: 0.1.
+        last_epoch (int): The index of last epoch. Default: -1.
+        verbose (bool): If ``True``, prints a message to stdout for
+            each update. Default: ``False``.
+
+    Return:
+        `torch.optim.lr_scheduler.StepLR` with the appropriate schedule.
+    """
+    
+    return StepLR(optimizer, num_training_steps, gamma, last_epoch, verbose)
+
+
 TYPE_TO_SCHEDULER_FUNCTION = {
     SchedulerType.LINEAR: get_linear_schedule_with_warmup,
     SchedulerType.COSINE: get_cosine_schedule_with_warmup,
@@ -397,6 +428,7 @@ TYPE_TO_SCHEDULER_FUNCTION = {
     SchedulerType.INVERSE_SQRT: get_inverse_sqrt_schedule,
     SchedulerType.REDUCE_ON_PLATEAU: get_reduce_on_plateau_schedule,
     SchedulerType.COSINE_WITH_MIN_LR: get_cosine_with_min_lr_schedule_with_warmup,
+    SchedulerType.STEP_LR: get_step_lr
 }
 
 
