@@ -19,6 +19,23 @@ PATH_TO_REPO = Path(__file__).parent.parent.resolve()
 repo = Repo(PATH_TO_REPO)
 
 
+class HubModelLister:
+    """
+    Utility for getting models from the hub based on tags. Handles errors without crashing the script.
+    """
+
+    def __init__(self, tags):
+        self.tags = tags
+        self.model_list = api.list_models(tags=tags)
+
+    def __iter__(self):
+        try:
+            yield from self.model_list
+        except Exception as e:
+            print(f"Error: {e}")
+            return
+
+
 def _extract_commit_hash(commits):
     for commit in commits:
         if commit.startswith("commit "):
@@ -83,27 +100,33 @@ def get_list_of_models_to_deprecate(
             models_info[model]["commit_hash"] = commit_hash
             models_info[model]["first_commit_datetime"] = committed_datetime
             models_info[model]["model_path"] = model_path
+            models_info[model]["downloads"] = 0
+
+            # Some tags on the hub are formatted differently than in the library
+            tags = [model]
+            if "_" in model:
+                tags.append(model.replace("_", "-"))
+            models_info[model]["tags"] = tags
 
         # Filter out models which were added less than a year ago
         models_info = {
             model: info for model, info in models_info.items() if info["first_commit_datetime"] < thresh_date
         }
 
-        # For each model on the hub, find it corresponding model based on its tags and update the number of downloads
-        for model, info in models_info.items():
-            models_info[model]["downloads"] = 0
-
-        for i, hub_model in enumerate(api.list_models()):
-            if i % 100 == 0:
-                print(f"Processing model {i}")
-            if max_num_models != -1 and i > max_num_models:
-                break
-            if hub_model.private:
-                continue
-            for tag in hub_model.tags:
-                tag = tag.lower().replace("-", "_")
-                if tag in models_info:
-                    models_info[tag]["downloads"] += hub_model.downloads
+        # We make successive calls to the hub, filtering based on the model tags
+        n_seen = 0
+        for model, model_info in models_info.items():
+            for model_tag in model_info["tags"]:
+                model_list = HubModelLister(tags=model_tag)
+                for i, hub_model in enumerate(model_list):
+                    n_seen += 1
+                    if i % 100 == 0:
+                        print(f"Processing model {i} for tag {model_tag}")
+                    if max_num_models != -1 and i > n_seen:
+                        break
+                    if hub_model.private:
+                        continue
+                    model_info["downloads"] += hub_model.downloads
 
     if save_model_info and not (use_cache and os.path.exists("models_info.json")):
         # Make datetimes serializable
