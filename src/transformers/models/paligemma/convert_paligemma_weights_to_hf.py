@@ -420,10 +420,29 @@ def convert_paligemma_checkpoint(
     else:
         processor = PaLIGemmaProcessor.from_pretrained(pytorch_dump_folder_path)
         model = PaLIGemmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path).eval()
-    model.config._attn_implementation = 'eager'
+    #model.config._attn_implementation = 'eager'
     if do_verify_logits:
         print("Verifying logits...")
         verify_logits(model, processor)
+
+    # model expansion to get random embeds of image tokens
+    pad_shape = 64 # for performance reasons
+    pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
+    mu = torch.mean(pre_expansion_embeddings, dim=0).float()
+    n = pre_expansion_embeddings.size()[0]
+    sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
+    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+
+    # We add an image token so we resize the model
+    model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
+    model.language_model.model.embed_tokens.weight.data[257152:] = torch.stack(
+        tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[257152:].shape[0]))),
+        dim=0,
+    )
+    model.language_model.lm_head.weight.data[257152:] = torch.stack(
+        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[257152:].shape[0]))),
+        dim=0,
+    )
 
     model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
     processor.save_pretrained(pytorch_dump_folder_path)
