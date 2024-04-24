@@ -21,10 +21,13 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 from ..integrations import prepare_for_hqq_linear
-from ..utils import is_hqq_available, is_torch_available, logging
+from ..utils import is_accelerate_available, is_hqq_available, is_torch_available, logging
 from ..utils.hqq_utils import find_parent
 from .quantizers_utils import get_module_from_name
 
+
+if is_accelerate_available():
+    from accelerate.hooks import remove_hook_from_module
 
 if is_torch_available():
     import torch
@@ -54,6 +57,7 @@ class HQQHfQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
         self.show_progress = quantization_config.show_progress
         self.torch_dtype = None
+        self.using_multi_gpu = False
 
     def validate_environment(self, *args, **kwargs):
         if not (is_hqq_available()):
@@ -72,6 +76,11 @@ class HQQHfQuantizer(HfQuantizer):
 
         if self.torch_dtype is None:
             self.torch_dtype = kwargs.get("torch_dtype", torch.float16)
+
+        if self.using_multi_gpu is False:
+            if "device_map" in kwargs:
+                if isinstance(kwargs["device_map"], dict):
+                    self.using_multi_gpu = len({item[1] for item in kwargs["device_map"].items()}) > 1
 
     def check_quantized_param(
         self,
@@ -140,6 +149,9 @@ class HQQHfQuantizer(HfQuantizer):
                 if isinstance(hqq_layer.bias, torch.Tensor):
                     hqq_layer.bias = torch.nn.Parameter(hqq_layer.bias)
 
+            if self.using_multi_gpu:
+                hqq_layer = self._patch_layer_for_multigpu(hqq_layer)
+
             setattr(
                 parent_module,
                 node,
@@ -151,6 +163,19 @@ class HQQHfQuantizer(HfQuantizer):
             setattr(parent_module, node, module)
 
         torch.cuda.empty_cache()
+
+    # Remove accelerate hook and uses a simpler forward pass. Otherwise, this breaks with multi-gpu
+    def _patch_layer_for_multigpu(self, hqq_layer):
+        hqq_layer = remove_hook_from_module(hqq_layer)
+
+        def forward_with_device(self, x):
+            out = torch.matmul(x.to(self.device), self.dequantize().t())
+            if self.bias is not None:
+                out += self.bias
+            return out
+
+        hqq_layer.forward = lambda x: forward_with_device(hqq_layer, x)
+        return hqq_layer
 
     def _process_model_before_weight_loading(
         self,
