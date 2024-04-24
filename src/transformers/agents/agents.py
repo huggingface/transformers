@@ -16,7 +16,7 @@
 # limitations under the License.
 import json
 import re
-from typing import Dict, List, Union, Callable
+from typing import Dict, List, Union, Callable, Any, Tuple
 
 from PIL import Image
 
@@ -35,11 +35,10 @@ from .tools import (
 )
 
 
-logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def parse_json_blob(json_blob: str):
+def parse_json_blob(json_blob: str) -> Dict[str, str]:
     try:
         first_accolade_index = json_blob.find("{")
         last_accolade_index = [a.start() for a in list(re.finditer("}", json_blob))][-1]
@@ -47,22 +46,22 @@ def parse_json_blob(json_blob: str):
         return json.loads(json_blob)
     except Exception as e:
         raise ValueError(
-            f"The JSON blob you used is invalid: due to the following error: {e}. Make sure to correct its formatting."
+            f"The JSON blob you used is invalid: due to the following error: {e}. Make sure to correct its formatting. JSON blob was: {json_blob}"
         )
 
 
-def parse_code_blob(code_blob: str):
+def parse_code_blob(code_blob: str) -> str:
     try:
         pattern = r"```(?:py)?\n(.*?)```"
         match = re.search(pattern, code_blob, re.DOTALL)
         return match.group(1)
     except Exception as e:
         raise ValueError(
-            f"The code blob you used is invalid: due to the following error: {e}. This means that the regex pattern {pattern} was not respected. Make sure to correct its formatting."
+            f"The code blob you used is invalid: due to the following error: {e}. This means that the regex pattern {pattern} was not respected. Make sure to correct its formatting. Code blob was: {code_blob}"
         )
 
 
-def parse_json_tool_call(json_blob: str):
+def parse_json_tool_call(json_blob: str) -> Tuple[str, Dict[str, str]]:
     json_blob = json_blob.replace("```json", "").replace("```", "")
     tool_call = parse_json_blob(json_blob)
     if "action" in tool_call and "action_input" in tool_call:
@@ -73,7 +72,7 @@ def parse_json_tool_call(json_blob: str):
         )
 
 
-def parse_text_tool_call(text: str):
+def parse_text_tool_call(text: str) -> Tuple[str, Union[str, Dict[str, str]]]:
     """
     Expects a text in the format: 'Action:', 'Action input:', 'Observation:'. 'Action input:' contains a json string with input arguments.
     """
@@ -90,16 +89,6 @@ def parse_text_tool_call(text: str):
         return tool_name.strip().replace('"', "").replace("\\", ""), tool_input
     except Exception as e:
         raise ValueError(f"Error in parsing the text tool call: {e}. Be sure to provide the correct format.")
-
-
-def format_prompt(toolbox, prompt_template, tool_description_template):
-    tool_descriptions = toolbox.show_tool_descriptions(tool_description_template)
-    prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
-    if "<<tool_names>>" in prompt:
-        tool_names = [f"'{tool_name}'" for tool_name in toolbox.tools.keys()]
-        prompt = prompt.replace("<<tool_names>>", ", ".join(tool_names))
-    return prompt
-
 
 def to_text(input: Union[List[Dict[str, str]], Dict[str, str], str]) -> str:
     if isinstance(input, list):
@@ -164,12 +153,21 @@ class Toolbox:
         """Clears the toolbox"""
         self._tools = {}
 
-    def load_tools_if_needed(self, remote=False):
+    def load_tools_if_needed(self, remote: bool=False):
         for name, tool in self._tools.items():
             if not isinstance(tool, Tool):
                 task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id
                 _remote = remote and supports_remote(task_or_repo_id)
                 self._tools[name] = load_tool(task_or_repo_id, remote=_remote)
+
+
+def format_prompt(toolbox: Toolbox, prompt_template: str, tool_description_template: str) -> str:
+    tool_descriptions = toolbox.show_tool_descriptions(tool_description_template)
+    prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
+    if "<<tool_names>>" in prompt:
+        tool_names = [f"'{tool_name}'" for tool_name in toolbox.tools.keys()]
+        prompt = prompt.replace("<<tool_names>>", ", ".join(tool_names))
+    return prompt
 
 
 class AgentError(Exception):
@@ -209,7 +207,7 @@ class Agent:
         max_iterations: int = 1,
         tool_parser=parse_json_tool_call,
         add_base_tools: bool = False,
-        verbose: bool = False,
+        verbose: int = 0,
     ):
         self.agent_name = self.__class__.__name__
         self.llm_engine = llm_engine
@@ -228,7 +226,9 @@ class Agent:
         self.prompt = None
         self.logs = []
 
-        if verbose:
+        if verbose == 1:
+            logging.set_verbosity_info()
+        elif verbose == 2:
             logging.set_verbosity_debug()
 
     @property
@@ -264,7 +264,7 @@ class Agent:
             memory.append(tool_response_message)
         return memory
 
-    def show_message_history(self):
+    def show_message_history(self) -> None:
         self.log.info("\n".join(self.messages))
 
     def extract_action(self, llm_output: str, split_token: str) -> str:
@@ -288,7 +288,7 @@ class Agent:
             )
         return rationale, action
 
-    def execute(self, tool_name: str, arguments: Dict[str, str]) -> None:
+    def execute(self, tool_name: str, arguments: Dict[str, str]) -> Any:
         """
         Execute tool with the provided input and returns the result.
 
@@ -325,7 +325,7 @@ class Agent:
 
 class CodeAgent(Agent):
     """
-    A class for an agent that solves the given task using a single block of code. This is a one-shot agent: it won't be able to act step-by-step.
+    A class for an agent that solves the given task using a single block of code. It plans all its actions, then executes all in one shot.
     """
 
     def __init__(
@@ -345,11 +345,12 @@ class CodeAgent(Agent):
             else self.default_tool_description_template,
             **kwargs,
         )
+        self.python_evaluator = evaluate_python_code
 
     @property
     def default_tool_description_template(self) -> str:
         """
-        This template is taking can desbribe a tool as it is expected by the model
+        This template describs the tool, it should be adapted to the LLM you use.
         """
         logger.warning_once(
             "\nNo tool description template is defined for this tokenizer - using a default tool description template "
@@ -358,16 +359,16 @@ class CodeAgent(Agent):
         )
         return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
 
-    def parse_code_blob(self, result):
+    def parse_code_blob(self, result: str)-> str:
         """
         Override this method if you want to change the way the code is
-        cleaned for the `run` method.
+        cleaned in the `run` method.
         """
         return parse_code_blob(result)
 
     def run(self, task, return_generated_code: bool = False, **kwargs):
         """
-        Sends a request to the agent.
+        Runs the agent for the given task.
 
         Args:
             task (`str`): The task to perform
@@ -381,7 +382,7 @@ class CodeAgent(Agent):
         from transformers.agents import CalculatorTool
 
         calculator = CalculatorTool()
-        agent = CodeAgent(toolbox=[CalculatorTool()])
+        agent = CodeAgent(tools=[calculator])
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
@@ -415,7 +416,6 @@ class CodeAgent(Agent):
 
         # Parse
         _, code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
-        print(code_action)
 
         try:
             code_action = self.parse_code_blob(code_action)
@@ -429,7 +429,7 @@ class CodeAgent(Agent):
             self.log.info("\n\n==Executing the code below:==")
             self.log.info(code_action)
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
-            output, print_output = evaluate_python_code(code_action, available_tools, state=self.state)
+            output, print_output = self.python_evaluator(code_action, available_tools, state=self.state)
             self.log.info(print_output)
             return output
         except Exception as e:
@@ -440,9 +440,9 @@ class CodeAgent(Agent):
 
 class ReactAgent(Agent):
     """
-    This agent that solves the given task step by step, using the ReAct framework.
+    This agent that solves the given task step by step, using the ReAct framework:
     While the objective is not reached, the agent will perform a cycle of thinking and acting.
-    The action will be parsed from the LLM output, it consists in calls to tools from the toolbox, with arguments chosen by the LLM engine.
+    The action will be parsed from the LLM output: it consists in calls to tools from the toolbox, with arguments chosen by the LLM engine.
     """
 
     def __init__(
@@ -478,7 +478,7 @@ class ReactAgent(Agent):
 
     def run(self, task, **kwargs):
         """
-        Sends a request to the agent.
+        Runs the agent for the given task.
 
         Args:
             task (`str`): The task to perform
@@ -490,7 +490,7 @@ class ReactAgent(Agent):
         from transformers.agents import CalculatorTool
 
         calculator = CalculatorTool()
-        agent = ReactJSONAgent(tools=[CalculatorTool()])
+        agent = ReactJSONAgent(tools=[calculator])
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
@@ -559,9 +559,6 @@ class ReactJSONAgent(ReactAgent):
         )
 
     def step(self):
-        """
-        Runs agent step with the current prompt (task + state).
-        """
         agent_memory = self.write_inner_memory_from_logs()
         self.logs[-1]["agent_memory"] = agent_memory.copy()
 
@@ -648,9 +645,6 @@ class ReactCodeAgent(ReactAgent):
         )
 
     def step(self):
-        """
-        Runs agent step with the current prompt (task + state).
-        """
         agent_memory = self.write_inner_memory_from_logs()
         self.logs[-1]["agent_memory"] = agent_memory.copy()
 
@@ -661,8 +655,8 @@ class ReactCodeAgent(ReactAgent):
         # Add new step in logs
         self.logs.append({})
 
-        self.log.info("=====Calling LLM with these messages:=====")
-        self.log.info(agent_memory)
+        self.log.info("=====Calling LLM with this last message:=====")
+        self.log.info(agent_memory[-1])
 
         llm_output = self.llm_engine(self.prompt, stop=["Observation:", "<end_code>"])
         self.log.debug("=====Output message of the LLM:=====")
@@ -697,5 +691,6 @@ class ReactCodeAgent(ReactAgent):
             raise AgentExecutionError(error_msg)
         for line in code_action.split("\n"):
             if line[: len("final_answer")] == "final_answer":
+                self.log.warning(result)
                 return result
         return None

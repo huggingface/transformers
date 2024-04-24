@@ -72,7 +72,10 @@ class HfEngine:
 
     def __call__(self, messages: List[Dict[str, str]], stop=[]) -> str:
         if "Meta-Llama-3" in self.model:
-            stop += ["<|eot_id|>", "!!!!!"]
+            if "<|eot_id|>" not in stop:
+                stop.append("<|eot_id|>")
+            if "!!!!!" not in stop:
+                stop.append("!!!!!")
 
         # Get clean message list
         messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
