@@ -398,12 +398,14 @@ In dem speziellen Fall, dass Sie ein Modell hinzufügen, dessen Architektur gena
 Modells übereinstimmt, müssen Sie nur ein Konvertierungsskript hinzufügen, wie in [diesem Abschnitt](#write-a-conversion-script) beschrieben.
 In diesem Fall können Sie einfach die gesamte Modellarchitektur des bereits vorhandenen Modells wiederverwenden.
 
-Andernfalls beginnen wir mit der Erstellung eines neuen Modells. Sie haben hier zwei Möglichkeiten:
+Andernfalls beginnen wir mit der Erstellung eines neuen Modells. Wir empfehlen die Verwendung des folgenden Skripts, um ein Modell hinzuzufügen
+ein bestehendes Modell:
 
-- `transformers-cli add-new-model-like`, um ein neues Modell wie ein bestehendes hinzuzufügen
-- `transformers-cli add-new-model`, um ein neues Modell aus unserer Vorlage hinzuzufügen (sieht dann aus wie BERT oder Bart, je nachdem, welche Art von Modell Sie wählen)
+```bash
+transformers-cli add-new-model-like
+```
 
-In beiden Fällen werden Sie mit einem Fragebogen aufgefordert, die grundlegenden Informationen zu Ihrem Modell auszufüllen. Für den zweiten Befehl müssen Sie `cookiecutter` installieren, weitere Informationen dazu finden Sie [hier](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model).
+Sie werden mit einem Fragebogen aufgefordert, die grundlegenden Informationen Ihres Modells einzugeben.
 
 **Eröffnen Sie einen Pull Request auf dem Haupt-Repositorium huggingface/transformers**
 

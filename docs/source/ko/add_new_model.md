@@ -268,12 +268,14 @@ cd transformers
 
 다음과 같이 이미 존재하는 모델의 모델 아키텍처와 정확히 일치하는 모델을 추가하는 특별한 경우에는 [이 섹션](#write-a-conversion-script)에 설명된대로 변환 스크립트만 추가하면 됩니다. 이 경우에는 이미 존재하는 모델의 전체 모델 아키텍처를 그대로 재사용할 수 있습니다.
 
-그렇지 않으면 새로운 모델 생성을 시작합시다. 여기에서 두 가지 선택지가 있습니다:
+그렇지 않으면 새 모델 생성을 시작하겠습니다. 다음 스크립트를 사용하여 다음에서 시작하는 모델을 추가하는 것이 좋습니다.
+기존 모델:
 
-- `transformers-cli add-new-model-like`를 사용하여 기존 모델과 유사한 새로운 모델 추가하기
-- `transformers-cli add-new-model`을 사용하여 템플릿을 기반으로 한 새로운 모델 추가하기 (선택한 모델 유형에 따라 BERT 또는 Bart와 유사한 모습일 것입니다)
+```bash
+transformers-cli add-new-model-like
+```
 
-두 경우 모두, 모델의 기본 정보를 입력하는 설문조사가 제시됩니다. 두 번째 명령어는 `cookiecutter`를 설치해야 합니다. 자세한 정보는 [여기](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model)에서 확인할 수 있습니다.
+모델의 기본 정보를 입력하는 설문지가 표시됩니다.
 
 **huggingface/transformers 메인 저장소에 Pull Request 열기**
 
