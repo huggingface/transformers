@@ -286,7 +286,7 @@ torch_and_tf_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
         # Without this we can't pin torch versions in the future
-        "pip install -U --upgrade-strategy eager -e --no-deps git+https://github.com/huggingface/accelerate@main#egg=accelerate",
+        "pip install -U --upgrade-strategy eager --no-deps -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
         # TODO: remove this one after fixing the dependency issue(s) above
         "pip install -U --upgrade-strategy eager torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu",
     ],
@@ -303,7 +303,7 @@ torch_and_flax_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager --upgrade pip",
         "pip install -U --upgrade-strategy eager .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]",
         # Without this we can't pin torch versions in the future
-        "pip install -U --upgrade-strategy eager -e --no-deps git+https://github.com/huggingface/accelerate@main#egg=accelerate",
+        "pip install -U --upgrade-strategy eager --no-deps -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
     ],
     marker="is_pt_flax_cross_test",
     pytest_options={"rA": None, "durations": 0},
@@ -317,7 +317,7 @@ torch_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
         # Without this we can't pin torch versions in the future
-        "pip install -U --upgrade-strategy eager -e --no-deps git+https://github.com/huggingface/accelerate@main#egg=accelerate",
+        "pip install -U --upgrade-strategy eager --no-deps -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
     ],
     parallelism=1,
     pytest_num_workers=12,
@@ -412,7 +412,7 @@ examples_torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[sklearn,torch,sentencepiece,testing,torch-speech]",
         "pip install -U --upgrade-strategy eager -r examples/pytorch/_tests_requirements.txt",
         # Without this we can't pin torch versions in the future
-        "pip install -U --upgrade-strategy eager -e --no-deps git+https://github.com/huggingface/accelerate@main#egg=accelerate",
+        "pip install -U --upgrade-strategy eager --no-deps -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
     ],
     pytest_num_workers=1,
 )
@@ -525,7 +525,7 @@ doc_test_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager -e .[dev]",
         # Without this we can't pin torch versions in the future
-        "pip install -U --upgrade-strategy eager -e --no-deps git+https://github.com/huggingface/accelerate@main#egg=accelerate",
+        "pip install -U --upgrade-strategy eager --no-deps -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
         "pip install --upgrade --upgrade-strategy eager 'pytest<8.0.0' pytest-sugar",
         "pip install -U --upgrade-strategy eager natten==0.15.1+torch210cpu -f https://shi-labs.com/natten/wheels",
         "pip install -U --upgrade-strategy eager g2p-en",
