@@ -537,7 +537,7 @@ class Kosmos2VisionMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->Kosmos2Vision
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->Kosmos2Vision
 class Kosmos2VisionEncoderLayer(nn.Module):
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()

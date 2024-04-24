@@ -358,7 +358,7 @@ class CLIPSegMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->CLIPSeg
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->CLIPSeg
 class CLIPSegEncoderLayer(nn.Module):
     def __init__(self, config: CLIPSegConfig):
         super().__init__()
@@ -664,6 +664,7 @@ class CLIPSegTextTransformer(nn.Module):
         self.embeddings = CLIPSegTextEmbeddings(config)
         self.encoder = CLIPSegEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self._use_sdpa = config._attn_implementation == "sdpa"
 
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
@@ -1152,7 +1153,7 @@ class CLIPSegDecoderLayer(nn.Module):
     self-attention/MLP, rather than before.
     """
 
-    # Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer.__init__ with CLIP->CLIPSeg
+    # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer.__init__ with AltCLIP->CLIPSeg
     def __init__(self, config: CLIPSegConfig):
         super().__init__()
         self.embed_dim = config.hidden_size

@@ -734,7 +734,7 @@ class GitVisionAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->GitVision
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->GitVision
 class GitVisionEncoderLayer(nn.Module):
     def __init__(self, config: GitVisionConfig):
         super().__init__()

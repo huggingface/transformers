@@ -292,7 +292,7 @@ class XCLIPMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->XCLIP
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->XCLIP
 class XCLIPEncoderLayer(nn.Module):
     def __init__(self, config: XCLIPConfig):
         super().__init__()

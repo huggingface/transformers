@@ -427,10 +427,7 @@ class CLIPEncoderLayer(nn.Module):
     def __init__(self, config: CLIPConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        if config._attn_implementation == "sdpa":
-            self.self_attn = CLIP_ATTENTION_CLASSES[config._attn_implementation](config)
-        else:
-            self.self_attn = CLIP_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.self_attn = CLIP_ATTENTION_CLASSES[config._attn_implementation](config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = CLIPMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)

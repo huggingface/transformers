@@ -833,7 +833,6 @@ class AltCLIPMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->AltCLIP
 class AltCLIPEncoderLayer(nn.Module):
     def __init__(self, config: AltCLIPConfig):
         super().__init__()

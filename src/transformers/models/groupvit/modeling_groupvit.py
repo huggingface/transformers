@@ -692,7 +692,7 @@ class GroupViTAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->GroupViT
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->GroupViT
 class GroupViTEncoderLayer(nn.Module):
     def __init__(self, config: GroupViTConfig):
         super().__init__()
@@ -1047,6 +1047,7 @@ class GroupViTTextTransformer(nn.Module):
         self.embeddings = GroupViTTextEmbeddings(config)
         self.encoder = GroupViTTextEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self._use_sdpa = config._attn_implementation == "sdpa"
 
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
@@ -1085,6 +1086,7 @@ class GroupViTTextTransformer(nn.Module):
         causal_attention_mask = _create_4d_causal_attention_mask(
             input_shape, hidden_states.dtype, device=hidden_states.device
         )
+
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
