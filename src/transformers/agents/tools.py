@@ -756,6 +756,7 @@ TASK_MAPPING = {
     # "text-question-answering": "TextQuestionAnsweringTool",
     "text-to-speech": "TextToSpeechTool",
     "translation": "TranslationTool",
+    "calculator": "CalculatorTool"
 }
 
 
