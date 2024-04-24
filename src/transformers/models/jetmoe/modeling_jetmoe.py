@@ -895,10 +895,8 @@ class JetMoeFlashAttention2(JetMoeAttention):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        # query_states = query_states.contiguous()
-        # expand the key_states and value_states [sk, b, ng, hn] -> [sk, b, np, hn]
-        key_states = key_states.repeat(1, 1, self.top_k, 1)
-        value_states = value_states.repeat(1, 1, self.top_k, 1)
+        key_states = key_states.repeat(1, self.top_k, 1, 1)
+        value_states = value_states.repeat(1, self.top_k, 1, 1)
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
