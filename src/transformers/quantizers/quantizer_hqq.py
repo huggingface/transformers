@@ -136,6 +136,9 @@ class HQQHfQuantizer(HfQuantizer):
                 del_orig=True,
             )
 
+            if(hqq_layer.bias is not None):
+                hqq_layer.bias = torch.nn.Parameter(hqq_layer.bias)
+
             setattr(
                 parent_module,
                 node,
