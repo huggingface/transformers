@@ -90,12 +90,12 @@ Agents可以处理工具之间任何类型的对象；工具是多模态的，�
 
 ### AgentText
 
-[[autodoc]] transformers.tools.agent_types.AgentText
+[[autodoc]] transformers.agents.agent_types.AgentText
 
 ### AgentImage
 
-[[autodoc]] transformers.tools.agent_types.AgentImage
+[[autodoc]] transformers.agents.agent_types.AgentImage
 
 ### AgentAudio
 
-[[autodoc]] transformers.tools.agent_types.AgentAudio
+[[autodoc]] transformers.agents.agent_types.AgentAudio

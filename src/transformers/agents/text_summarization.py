@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ..models.auto import AutoModelForSeq2SeqLM, AutoTokenizer
-from .base import PipelineTool
+from .tools import PipelineTool
 
 
 class TextSummarizationTool(PipelineTool):
@@ -23,7 +23,7 @@ class TextSummarizationTool(PipelineTool):
     Example:
 
     ```py
-    from transformers.tools import TextSummarizationTool
+    from transformers.agents import TextSummarizationTool
 
     summarizer = TextSummarizationTool()
     summarizer(long_text)
@@ -31,9 +31,7 @@ class TextSummarizationTool(PipelineTool):
     """
 
     default_checkpoint = "philschmid/bart-large-cnn-samsum"
-    description = (
-        "This is a tool that summarizes an English text. It returns a summary of the text."
-    )
+    description = "This is a tool that summarizes an English text. It returns a summary of the text."
     name = "summarizer"
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSeq2SeqLM
