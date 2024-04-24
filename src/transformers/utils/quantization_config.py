@@ -227,7 +227,7 @@ class HqqConfig(QuantizationConfigMixin):
         offload_meta: bool = False,
         view_as_float: bool = False,
         axis: int = 0,
-        dynamic_config: dict | None = None,
+        dynamic_config: Optional[dict] = None,
         skip_modules=["lm_head"],
         show_progress=True,
         **kwargs,
