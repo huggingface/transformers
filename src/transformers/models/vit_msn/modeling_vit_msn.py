@@ -345,7 +345,7 @@ class ViTMSNLayer(nn.Module):
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
-        hidden_states = attention_output + hidden_states
+        hidden_states = attention_output.to(hidden_states.device) + hidden_states
 
         # in ViTMSN, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
@@ -421,6 +421,7 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = []
 
     # todo: Resort to https://github.com/facebookresearch/msn/blob/main/src/deit.py#L200-#L211
     # when creating pre-training scripts.
