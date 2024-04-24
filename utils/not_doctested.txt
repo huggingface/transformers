@@ -2,7 +2,6 @@ docs/source/en/_config.py
 docs/source/en/accelerate.md
 docs/source/en/add_new_model.md
 docs/source/en/add_new_pipeline.md
-docs/source/en/add_tensorflow_model.md
 docs/source/en/attention.md
 docs/source/en/benchmarks.md
 docs/source/en/bertology.md
@@ -336,7 +335,6 @@ src/transformers/benchmark/benchmark_args_tf.py
 src/transformers/benchmark/benchmark_args_utils.py
 src/transformers/benchmark/benchmark_tf.py
 src/transformers/benchmark/benchmark_utils.py
-src/transformers/commands/add_new_model.py
 src/transformers/commands/add_new_model_like.py
 src/transformers/commands/convert.py
 src/transformers/commands/download.py
