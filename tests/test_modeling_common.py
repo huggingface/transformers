@@ -2745,7 +2745,6 @@ class ModelTesterMixin:
             model = model_class(config)
             model.to(torch_device)
             model.eval()
-            print(model_class)
 
             model_forward_args = inspect.signature(model.forward).parameters
             if "inputs_embeds" not in model_forward_args:
@@ -2758,7 +2757,8 @@ class ModelTesterMixin:
                 input_ids = inputs["input_ids"]
                 # some models infer position ids differently when input ids, by check if pad_token
                 # let's make sure no padding is in input ids
-                input_ids[input_ids == pad_token_id] = max(0, pad_token_id - 1)
+                not_pad_token_id = pad_token_id + 1 if max(0, pad_token_id - 1) == 0 else pad_token_id - 1
+                input_ids[input_ids == pad_token_id] = not_pad_token_id
 
                 del inputs["input_ids"]
                 inputs_embeds = wte(input_ids)
