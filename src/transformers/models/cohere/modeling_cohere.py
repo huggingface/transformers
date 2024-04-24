@@ -590,7 +590,8 @@ class CohereSdpaAttention(CohereAttention):
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
-        # We dispatch to SDPA's Flash Attention 2 backend via the if statement to support both torch.compile's dynamic=True & fullgraph=True
+        # We dispatch to SDPA's Flash Attention 2 or Efficient kernels via the if statement instead of
+        # setting `is_causal` inline to support both torch.compile's `dynamic=True` & `fullgraph=True`
         dropout = self.attention_dropout if self.training else 0.0
         if causal_mask is None and q_len > 1:
             attn_output = torch.nn.functional.scaled_dot_product_attention(
