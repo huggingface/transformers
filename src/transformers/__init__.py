@@ -3515,7 +3515,6 @@ else:
             "VMambaForImageClassification",
             "VMambaModel",
             "VMambaPreTrainedModel",
-            "load_tf_weights_in_vmamba",
         ]
     )
     _import_structure["models.wav2vec2"].extend(
@@ -7848,7 +7847,6 @@ if TYPE_CHECKING:
             VMambaForImageClassification,
             VMambaModel,
             VMambaPreTrainedModel,
-            load_tf_weights_in_vmamba,
         )
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
