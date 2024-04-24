@@ -264,10 +264,6 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("VITS does not use inputs_embeds")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip("VITS has no input embeddings")
     def test_model_common_attributes(self):
         pass

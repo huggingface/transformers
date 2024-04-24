@@ -183,10 +183,6 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Pvt has no inputs_embeds")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip("Pvt does not have get_input_embeddings method and get_output_embeddings methods")
     def test_model_common_attributes(self):
         pass

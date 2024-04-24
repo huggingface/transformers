@@ -403,12 +403,8 @@ class UniSpeechSatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    @unittest.skip(reason="UniSpeechSat has no inputs_embeds")
+    # UniSpeechSat has no inputs_embeds
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="UniSpeechSat has no inputs_embeds")
-    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     # `input_ids` is renamed to `input_values`
@@ -619,12 +615,8 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    @unittest.skip(reason="UniSpeechSat has no inputs_embeds")
+    # UniSpeechSat has no inputs_embeds
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="UniSpeechSat has no inputs_embeds")
-    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     # `input_ids` is renamed to `input_values`

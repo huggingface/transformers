@@ -545,11 +545,6 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         pass
 
     # Ignore copy
-    @unittest.skip(reason="Wav2Vec2Bert has no inputs_embeds")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
-    # Ignore copy
     @unittest.skip(reason="`input_ids` is renamed to `input_features`")
     def test_forward_signature(self):
         pass

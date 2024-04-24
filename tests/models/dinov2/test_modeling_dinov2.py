@@ -241,10 +241,6 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Dinov2 does not use inputs_embeds")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )

@@ -211,12 +211,8 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             )
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    @unittest.skip("Speecht5 does not use inputs_embeds")
+    # this model has no inputs_embeds
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip("Speecht5 does not use inputs_embeds")
-    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     # this model has no input embeddings

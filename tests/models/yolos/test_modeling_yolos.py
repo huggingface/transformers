@@ -204,12 +204,8 @@ class YolosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip("YOLOS does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip("YOLOS does not use inputs_embeds")
-    def test_inputs_embeds_matches_input_ids(self):
+        # YOLOS does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):

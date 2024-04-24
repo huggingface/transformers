@@ -161,10 +161,6 @@ class SiglipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="SIGLIP does not use inputs_embeds")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -361,10 +357,6 @@ class SiglipTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="SIGLIP does not use inputs_embeds")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip(reason="SiglipTextModel has no base class and is not available in MODEL_MAPPING")
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_save_load_fast_init_from_base
     def test_save_load_fast_init_from_base(self):
@@ -464,10 +456,6 @@ class SiglipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_inputs_embeds
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="SIGLIP does not use inputs_embeds")
-    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     @unittest.skip(reason="Retain_grad is tested in individual model tests")

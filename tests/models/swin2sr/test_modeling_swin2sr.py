@@ -201,10 +201,6 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Swin2SR does not use inputs_embeds")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip(reason="Swin2SR does not support training yet")
     def test_training(self):
         pass

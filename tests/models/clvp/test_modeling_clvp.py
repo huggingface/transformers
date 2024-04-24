@@ -490,10 +490,6 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
         pass
 
     @unittest.skip(reason="ClvpModelForConditionalGeneration does not have get_input_embeddings")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
-    @unittest.skip(reason="ClvpModelForConditionalGeneration does not have get_input_embeddings")
     def test_model_common_attributes(self):
         pass
 

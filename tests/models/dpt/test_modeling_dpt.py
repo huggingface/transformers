@@ -184,10 +184,6 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="DPT has no inputs_embeds")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 

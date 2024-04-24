@@ -191,10 +191,6 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="TVP has no inputs_embeds")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip(reason="TVPModel does not have input/output embeddings")
     def test_model_common_attributes(self):
         pass

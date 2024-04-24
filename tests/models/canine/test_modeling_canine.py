@@ -503,10 +503,6 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip("CANINE does not have a get_input_embeddings() method.")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
-    @unittest.skip("CANINE does not have a get_input_embeddings() method.")
     def test_model_common_attributes(self):
         pass
 

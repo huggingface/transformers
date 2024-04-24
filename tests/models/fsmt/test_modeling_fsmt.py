@@ -321,10 +321,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("Passing inputs_embeds not implemented for FSMT.")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip("model weights aren't tied in FSMT.")
     def test_tie_model_weights(self):
         pass

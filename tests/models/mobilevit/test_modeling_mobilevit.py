@@ -211,10 +211,6 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("MobileViT does not use inputs_embeds")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip(reason="MobileViT does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass

@@ -161,10 +161,6 @@ class CpmAntModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         unittest.skip("CPMAnt doesn't support input_embeds.")(self.test_inputs_embeds)
 
-    @unittest.skip(reason="CPManr does not use inputs_embeds")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     def test_retain_grad_hidden_states_attentions(self):
         unittest.skip(
             "CPMAnt doesn't support retain grad in hidden_states or attentions, because prompt management will peel off the output.hidden_states from graph.\
