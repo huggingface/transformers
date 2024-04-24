@@ -4368,6 +4368,10 @@ class Trainer:
                     "`non_blocking` is only supported in accelerate v0.30.0 and above. Please upgrade accelerate to use this feature."
                 )
         else:
+            if non_blocking and not self.args.dataloader_pin_memory:
+                logger.warning(
+                    "`non_blocking` is enabled but `dataloader_pin_memory` is not. For the best performance, it's recommended to enable both."
+                )
             dataloader_config.non_blocking = non_blocking
         # this would have been updated above, no need for it anymore
         accelerator_config.pop("gradient_accumulation_kwargs")
