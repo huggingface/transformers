@@ -2416,6 +2416,16 @@ class Trainer:
             # this checks the FSDP state dict when `FULL_STATE_DICT` is used
             or os.path.isfile(os.path.join(resume_from_checkpoint, f"{FSDP_MODEL_NAME}.bin"))
         )
+        # if multiple adapters exist, they get saved in sub directories
+        adapter_subdirs = [
+            folder_name
+            for folder_name in os.listdir(resume_from_checkpoint)
+            if os.path.isdir(os.path.join(resume_from_checkpoint, folder_name))
+            and (
+                os.path.isfile(os.path.join(resume_from_checkpoint, folder_name, ADAPTER_WEIGHTS_NAME))
+                or os.path.isfile(os.path.join(resume_from_checkpoint, folder_name, ADAPTER_SAFE_WEIGHTS_NAME))
+                )
+        ] if os.path.isdir(resume_from_checkpoint) else []
 
         if is_fsdp_ckpt and not self.is_fsdp_enabled:
             raise ValueError(f"Checkpoint found at {resume_from_checkpoint} is only supported when using PyTorch FSDP")
@@ -2433,6 +2443,7 @@ class Trainer:
                 ]
             )
             or is_fsdp_ckpt
+            or adapter_subdirs
         ):
             raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
@@ -2506,7 +2517,13 @@ class Trainer:
             # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
             if hasattr(model, "active_adapter") and hasattr(model, "load_adapter"):
                 if os.path.exists(resume_from_checkpoint):
-                    model.load_adapter(resume_from_checkpoint, model.active_adapter, is_trainable=True)
+                    if adapter_subdirs:
+                        for subdir_name in adapter_subdirs:
+                            peft_id = os.path.join(resume_from_checkpoint, subdir_name)
+                            print(f"loading adapter {subdir_name} from {peft_id}, trainable={model.active_adapter==subdir_name}")
+                            model.load_adapter(peft_id, subdir_name, is_trainable=model.active_adapter==subdir_name)
+                    else:
+                        model.load_adapter(resume_from_checkpoint, model.active_adapter, is_trainable=True)
                 else:
                     logger.warning(
                         "The intermediate checkpoints of PEFT may not be saved correctly, "
