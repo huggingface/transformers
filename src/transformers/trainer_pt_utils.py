@@ -1246,6 +1246,10 @@ class AcceleratorConfig:
                 The [`accelerate.utils.GradientAccumulationPlugin`] default is `True`.
               sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch.
                 The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`.
+        non_blocking (`bool`, *optional*, defaults to `False`):
+            Whether to use non-blocking CUDA calls to help minimize synchronization during
+            distributed training with prepared `DataLoader` inputs being moved to device.
+            Best if used with `pin_memory=True` in the `TrainingArguments`.
 
     """
 
@@ -1295,6 +1299,15 @@ class AcceleratorConfig:
             "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `True`. "
             "  sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch. "
             "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`."
+        },
+    )
+
+    non_blocking: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether to use non-blocking CUDA calls to help minimize synchronization during "
+            "distributed training with prepared `DataLoader` inputs being moved to device. "
+            "Best if used with `pin_memory=True` in the `TrainingArguments`."
         },
     )
 
