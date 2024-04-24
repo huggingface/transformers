@@ -26,7 +26,7 @@ def _extract_commit_hash(commits):
     return ""
 
 
-def get_list_of_repo_model_paths(models_dir="src/transformers/models"):
+def get_list_of_repo_model_paths(models_dir):
     # Get list of all models in the library
     models = glob.glob(os.path.join(models_dir, "*/modeling_*.py"))
 
@@ -39,18 +39,16 @@ def get_list_of_repo_model_paths(models_dir="src/transformers/models"):
     # For each deprecated model, remove the deprecated models from the list of all models as well as the symlink path
     for deprecated_model in deprecated_models:
         deprecated_model_name = "/" + deprecated_model.split("/")[-1] + "/"
-        models = [model for model in models if deprecated_model_name not in models]
+        models = [model for model in models if deprecated_model_name not in model]
     # Remove deprecated models
     models = [model for model in models if "/deprecated" not in model]
-    # Remove init
-    models = [model for model in models if "__init__" not in model]
     # Remove auto
     models = [model for model in models if "/auto/" not in model]
     return models
 
 
 def get_list_of_models_to_deprecate(
-    thresh_num_downloads=1_000,
+    thresh_num_downloads=5_000,
     thresh_date=None,
     use_cache=False,
     save_model_info=False,
@@ -61,7 +59,8 @@ def get_list_of_models_to_deprecate(
     else:
         thresh_date = datetime.strptime(thresh_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
 
-    model_paths = get_list_of_repo_model_paths()
+    models_dir = PATH_TO_REPO / "src/transformers/models"
+    model_paths = get_list_of_repo_model_paths(models_dir=models_dir)
 
     if use_cache and os.path.exists("models_info.json"):
         with open("models_info.json", "r") as f:
@@ -106,7 +105,7 @@ def get_list_of_models_to_deprecate(
                 if tag in models_info:
                     models_info[tag]["downloads"] += hub_model.downloads
 
-    if save_model_info:
+    if save_model_info and not (use_cache and os.path.exists("models_info.json")):
         # Make datetimes serializable
         for model, info in models_info.items():
             info["first_commit_datetime"] = info["first_commit_datetime"].isoformat()
@@ -138,13 +137,13 @@ if __name__ == "__main__":
         "--thresh_num_downloads",
         type=int,
         default=5_000,
-        help="Threshold number of downloads below which a model should be deprecated. Default is 1,000.",
+        help="Threshold number of downloads below which a model should be deprecated. Default is 5,000.",
     )
     parser.add_argument(
         "--thresh_date",
         type=str,
         default=None,
-        help="Date to consider the first commit from. Format: YYYY-MM-DD, default is one year ago.",
+        help="Date to consider the first commit from. Format: YYYY-MM-DD. If unset, defaults to one year ago from today.",
     )
     parser.add_argument(
         "--max_num_models",
