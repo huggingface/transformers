@@ -154,14 +154,26 @@ You could use any `llm_engine` method as long as:
 
 You also need a `tools` argument which accepts a list of `Tools`. You can provide an empty list for `tools`, but use the default toolbox with the optional argument `add_base_tools=True`.
 
-Now you can create an agent, like `CodeAgent`, and run it.
+Now you can create an agent, like `CodeAgent`, and run it. For convenience, we also provide the `HfEngine` class that uses `huggingface_hub.InferenceClient` under the hood.
+
+```python
+from transformers import CodeAgent, HfEngine
+
+llm_engine = HfEngine(model="meta-llama/Meta-Llama-3-70B-Instruct")
+
+agent = CodeAgent(llm_engine=llm_engine, tools=[], add_base_tools=True)
+
+agent.run("Please draw me a picture of rivers and lakes")
+```
+
+You can even leave argument `llm_engine` undefined, and an `HfEngine` will be loaded by default.
 
 ```python
 from transformers import CodeAgent
 
-agent = CodeAgent(llm_engine=llm_engine, tools=[], add_base_tools=True)
+agent = CodeAgent(tools=[], add_base_tools=True)
 
-agent.run("Draw me a picture of rivers and lakes")
+agent.run("Please draw me a picture of rivers and lakes")
 ```
 
 The prompt and output parser were automatically defined, but you can easily inspect them by calling the `system_prompt_template` on your agent.
@@ -190,7 +202,7 @@ The execution will stop at any code trying to perform an illegal operation or if
 
 An agent, or rather the LLM that drives the agent, generates an output based on the system prompt. The system prompt can be customized and tailored to the intended task. For example, check out the system prompt of the ReAct agent.
 
-```python
+```text
 Solve the following task as best you can. You have access to the following tools:
 
 <<tool_descriptions>>
@@ -244,9 +256,9 @@ For maximum flexibility, you can overwrite the whole system prompt template by p
 
 ```python
 from transformers import ReactJSONAgent
-from transformers.tools import CalculatorTool
+from transformers.agents import CalculatorTool
 
-agent = ReactJSONAgent(llm_engine, tools = [CalculatorTool()], system_prompt="{your_custom_prompt}")
+agent = ReactJSONAgent(tools = [CalculatorTool()], system_prompt="{your_custom_prompt}")
 ```
 
 > [!WARNING]
@@ -342,7 +354,7 @@ from model_downloads import HFModelDownloadsTool
 tool = HFModelDownloadsTool()
 ```
 
-You can also share your custom tool to the Hub by calling [`~Tool.push_to_hub`] on the tool. Make sure you've created a repository for it on the Hub and have a token with read access.
+You can also share your custom tool to the Hub by calling [`~Tool.push_to_hub`] on the tool. Make sure you've created a repository for it on the Hub and are using a token with read access.
 
 ```python
 tool.push_to_hub("{your_username}/hf-model-downloads")
@@ -354,7 +366,7 @@ Load the tool with the [`~Tool.load_tool`] function and pass it to the `tools` p
 from transformers import load_tool, CodeAgent
 
 model_download_tool = load_tool("m-ric/hf-model-downloads")
-agent = CodeAgent(llm_engine, tools=[model_download_tool])
+agent = CodeAgent(tools=[model_download_tool], llm_engine=llm_engine)
 agent.run(
     "Can you give me the name of the model that has the most downloads in the 'text-to-video' task on the Hugging Face Hub?"
 )
@@ -381,7 +393,7 @@ Let's add the `model_download_tool` to an existing agent initialized with only t
 ```python
 from transformers import CodeAgent
 
-agent = CodeAgent(llm_engine, tools=[], add_base_tools=True)
+agent = CodeAgent(tools=[], llm_engine=llm_engine, add_base_tools=True)
 agent.toolbox.add_tool(model_download_tool)
 ```
 Now we can leverage both the new tool and the previous text-to-speech tool:
@@ -441,10 +453,9 @@ from transformers import CodeAgent
 agent = CodeAgent(llm_engine, tools=[tool], add_base_tools=True)
 
 agent.run(
-    "Improve this prompt, then generate an image of it.", prompt="A cat in the forest."
+    "Improve this prompt: 'A rabbit wearing a space suit', then generate an image of it.",
 )
 ```
-
 
 The model adequately leverages the tool:
 ```text
@@ -461,28 +472,6 @@ Before finally generating the image:
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rabbit.png">
 
-This also works with its sibling `ReactAgent`:
-<<<<<<< HEAD
-=======
-
-```python
-from transformers import ReactAgent
-
-agent = ReactAgent(llm_engine, tools=[tool], add_base_tools=True)
-
-agent.run("Improve this prompt, then generate an image of it.", prompt="A rabbit wearing a space suit")
-```
-
-<Tip warning={true}>
->>>>>>> 2364c3bd3 (Support variable usage in ReactAgent)
-
-```python
-from transformers import ReactAgent
-
-agent = ReactAgent(llm_engine, tools=[tool], add_base_tools=True)
-
-agent.run("Improve this prompt, then generate an image of it.", prompt="A rabbit wearing a space suit")
-```
 
 > [!WARNING]
 > gradio-tools require *textual* inputs and outputs even when working with different modalities like image and audio objects. Image and audio inputs and outputs are currently incompatible.
@@ -500,7 +489,7 @@ api_wrapper = WikipediaAPIWrapper(top_k_results=1, doc_content_chars_max=100)
 langchain_tool = WikipediaQueryRun(api_wrapper=api_wrapper)
 
 # Initialize transformers tool from langchain tool
-from transformers.tools.base import Tool
+from transformers import Tool
 
 tool = Tool.from_langchain(langchain_tool)
 ```

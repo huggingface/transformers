@@ -20,7 +20,7 @@ import torch
 
 from ..models.speecht5 import SpeechT5ForTextToSpeech, SpeechT5HifiGan, SpeechT5Processor
 from ..utils import is_datasets_available
-from .base import PipelineTool
+from .tools import PipelineTool
 
 
 if is_datasets_available():
