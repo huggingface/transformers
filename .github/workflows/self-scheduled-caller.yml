@@ -7,7 +7,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - run_scheduled_ci*
+      - run_better_job_artifact_name
 
 jobs:
   model-ci:
@@ -15,7 +15,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_models_gpu
-      slack_report_channel: "#transformers-ci-daily-models"
+      slack_report_channel: "#transformers-ci-feedback-tests"
     secrets: inherit
 
   torch-pipeline:
@@ -23,7 +23,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_pipelines_torch_gpu
-      slack_report_channel: "#transformers-ci-daily-pipeline-torch"
+      slack_report_channel: "#transformers-ci-feedback-tests"
     secrets: inherit
 
   tf-pipeline:
@@ -31,7 +31,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_pipelines_tf_gpu
-      slack_report_channel: "#transformers-ci-daily-pipeline-tf"
+      slack_report_channel: "#transformers-ci-feedback-tests"
     secrets: inherit
 
   example-ci:
@@ -39,7 +39,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_examples_gpu
-      slack_report_channel: "#transformers-ci-daily-examples"
+      slack_report_channel: "#transformers-ci-feedback-tests"
     secrets: inherit
 
   deepspeed-ci:
@@ -47,7 +47,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_torch_cuda_extensions_gpu
-      slack_report_channel: "#transformers-ci-daily-deepspeed"
+      slack_report_channel: "#transformers-ci-feedback-tests"
     secrets: inherit
 
   quantization-ci:
@@ -55,5 +55,5 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_quantization_torch_gpu
-      slack_report_channel: "#transformers-ci-daily-quantization"
+      slack_report_channel: "#transformers-ci-feedback-tests"
     secrets: inherit
