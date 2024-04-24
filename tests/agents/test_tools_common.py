@@ -27,16 +27,16 @@ if is_vision_available():
     from PIL import Image
 
 
+AUTHORIZED_TYPES = {
+    'text': (AgentText, str),
+    'audio': (AgentAudio,),
+    'image': (AgentImage, Image.Image),
+}
 
 
 def is_authorized_type(_type):
-    authorized_types = {
-        'text': (AgentText, str),
-        'audio': (AgentAudio,),
-        'image': (AgentImage, Image.Image),
-    }
 
-    for authorized_type in authorized_types.values():
+    for authorized_type in AUTHORIZED_TYPES.values():
         if _type in authorized_type:
             print(_type, 'is in', authorized_type)
             return True
@@ -49,7 +49,7 @@ def create_inputs(tool_inputs: Dict[str, Dict[str | type, str]]):
     for input_type in input_types:
         authorized_type = None
 
-        for k, v in authorized_types.items():
+        for k, v in AUTHORIZED_TYPES.items():
             if input_type in v:
                 authorized_type = k
 

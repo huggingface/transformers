@@ -71,7 +71,7 @@ NOT_DEVICE_TESTS = {
     "ModelTester::test_pipeline_",
     "/repo_utils/",
     "/utils/",
-    "/tools/",
+    "/agents/",
 }
 
 # allow having multiple repository checkouts and not needing to remember to rerun

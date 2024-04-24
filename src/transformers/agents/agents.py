@@ -204,7 +204,7 @@ class Agent:
         system_prompt=DEFAULT_REACT_SYSTEM_PROMPT,
         tool_description_template=None,
         additional_args={},
-        max_iterations: int = 1,
+        max_iterations: int = 5,
         tool_parser=parse_json_tool_call,
         add_base_tools: bool = False,
         verbose: int = 0,
@@ -429,8 +429,8 @@ class CodeAgent(Agent):
             self.log.info("\n\n==Executing the code below:==")
             self.log.info(code_action)
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
-            output, print_output = self.python_evaluator(code_action, available_tools, state=self.state)
-            self.log.info(print_output)
+            output = self.python_evaluator(code_action, available_tools, state=self.state)
+            self.log.info(self.state['print_outputs'])
             return output
         except Exception as e:
             error_msg = f"Error in execution: {e}. Be sure to provide correct code."
@@ -678,13 +678,14 @@ class ReactCodeAgent(ReactAgent):
         self.logs[-1]["rationale"] = rationale
         self.logs[-1]["tool_call"] = {"tool_name": "code interpreter", "tool_arguments": code_action}
 
+
         # Execute
         try:
             self.log.info("\n\n==Executing the code below:==")
             self.log.info(code_action)
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
-            result, print_output = evaluate_python_code(code_action, available_tools, state=self.state)
-            self.logs[-1]["observation"] = print_output
+            result = evaluate_python_code(code_action, available_tools, state=self.state)
+            self.logs[-1]["observation"] = self.state['print_outputs']
         except Exception as e:
             error_msg = f"Error in execution: {e}. Be sure to provide correct code."
             self.log.error(error_msg, exc_info=1)
