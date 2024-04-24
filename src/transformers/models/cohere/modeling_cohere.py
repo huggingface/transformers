@@ -591,21 +591,14 @@ class CohereSdpaAttention(CohereAttention):
             value_states = value_states.contiguous()
 
         # We dispatch to SDPA's Flash Attention 2 backend via the if statement to support both torch.compile's dynamic=True & fullgraph=True
+        dropout = self.attention_dropout if self.training else 0.0
         if causal_mask is None and q_len > 1:
             attn_output = torch.nn.functional.scaled_dot_product_attention(
-                query_states,
-                key_states,
-                value_states,
-                dropout_p=self.attention_dropout if self.training else 0.0,
-                is_causal=True,
+                query_states, key_states, value_states, None, dropout, True
             )
         else:
             attn_output = torch.nn.functional.scaled_dot_product_attention(
-                query_states,
-                key_states,
-                value_states,
-                attn_mask=causal_mask,
-                dropout_p=self.attention_dropout if self.training else 0.0,
+                query_states, key_states, value_states, causal_mask, dropout
             )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
