@@ -670,11 +670,11 @@ class LlamaSdpaAttention(LlamaAttention):
             value_states = value_states.contiguous()
 
         # In case we are not compiling, we may set `causal_mask` to None, which is required to dispatch to SDPA's Flash
-        # Attention 2 backend, rather relying on the `is_causal` argument. If using static cache, we need to drop the
-        # empty KV entries
-        if causal_mask is None and cache_position is not None:
-            key_states = key_states[:, :, : cache_position[-1] + 1, :]
-            value_states = value_states[:, :, : cache_position[-1] + 1, :]
+        # Attention 2 backend, rather relying on the `is_causal` argument. In that case, if using static cache, we need
+        # to drop the empty KV entries
+        # if causal_mask is None and cache_position is not None and isinstance(past_key_value, StaticCache):
+        #     key_states = key_states[:, :, : cache_position[-1] + 1, :]
+        #     value_states = value_states[:, :, : cache_position[-1] + 1, :]
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
@@ -1080,6 +1080,7 @@ class LlamaModel(LlamaPreTrainedModel):
         if self.config._attn_implementation == "sdpa":
             # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument,
             # in order to dispatch on Flash Attention 2.
+            breakpoint()
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask, inputs_embeds=input_tensor, past_key_values_length=past_seen_tokens
             ):
