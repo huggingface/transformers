@@ -30,7 +30,6 @@ from transformers import (
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
-    require_torch_fp16,
     require_torch_gpu,
     require_vision,
     slow,

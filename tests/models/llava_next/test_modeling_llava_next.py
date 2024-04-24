@@ -32,7 +32,6 @@ from transformers.testing_utils import (
     require_torch,
     slow,
     torch_device,
-    require_torch_fp16,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -271,7 +270,6 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     @unittest.skip(reason="Compile not yet supported because in LLava models")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
-
 
 
 @require_torch
