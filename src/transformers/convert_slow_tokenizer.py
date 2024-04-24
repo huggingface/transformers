@@ -46,7 +46,7 @@ def import_protobuf(error_message=""):
 def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
     if add_prefix_space:
         prepend_scheme = "always"
-        if not getattr(original_tokenizer, "legacy"):
+        if not getattr(original_tokenizer, "legacy", None):
             prepend_scheme = "first"
     else:
         prepend_scheme = "never"
