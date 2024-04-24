@@ -17,12 +17,6 @@ rendered properly in your Markdown viewer.
 
 The 🤗 Transformers library is often able to offer new models thanks to community contributors. But this can be a challenging project and requires an in-depth knowledge of the 🤗 Transformers library and the model to implement. At Hugging Face, we're trying to empower more of the community to actively add models and we've put together this guide to walk you through the process of adding a PyTorch model (make sure you have [PyTorch installed](https://pytorch.org/get-started/locally/)).
 
-<Tip>
-
-If you're interested in implementing a TensorFlow model, take a look at the [How to convert a 🤗 Transformers model to TensorFlow](add_tensorflow_model) guide!
-
-</Tip>
-
 Along the way, you'll:
 
 - get insights into open-source best practices
@@ -404,12 +398,14 @@ In the special case that you are adding a model whose architecture exactly match
 existing model you only have to add a conversion script as described in [this section](#write-a-conversion-script).
 In this case, you can just re-use the whole model architecture of the already existing model.
 
-Otherwise, let's start generating a new model. You have two choices here:
+Otherwise, let's start generating a new model. We recommend using the following script to add a model starting from
+an existing model:
 
-- `transformers-cli add-new-model-like` to add a new model like an existing one
-- `transformers-cli add-new-model` to add a new model from our template (will look like BERT or Bart depending on the type of model you select)
+```bash
+transformers-cli add-new-model-like
+```
 
-In both cases, you will be prompted with a questionnaire to fill in the basic information of your model. The second command requires to install `cookiecutter`, you can find more information on it [here](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model).
+You will be prompted with a questionnaire to fill in the basic information of your model.
 
 **Open a Pull Request on the main huggingface/transformers repo**
 

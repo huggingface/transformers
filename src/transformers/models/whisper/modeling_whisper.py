@@ -1861,7 +1861,7 @@ class WhisperDecoderWrapper(WhisperPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Whisper decoder with with a language modeling head on top (linear layer with weights tied to the input embeddings).
+    Whisper decoder with a language modeling head on top (linear layer with weights tied to the input embeddings).
     """,
     WHISPER_START_DOCSTRING,
 )

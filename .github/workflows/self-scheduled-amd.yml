@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout transformers
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
@@ -171,7 +171,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
@@ -239,7 +239,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
@@ -296,7 +296,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_examples_gpu"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.machine_type }}_run_examples_gpu
           path: /transformers/reports/${{ matrix.machine_type }}_examples_gpu
@@ -352,7 +352,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_torch_pipeline_gpu"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.machine_type }}_run_tests_torch_pipeline_gpu
           path: /transformers/reports/${{ matrix.machine_type }}_tests_torch_pipeline_gpu
@@ -409,7 +409,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_torch_deepspeed_gpu_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.machine_type }}_run_tests_torch_deepspeed_gpu_test_reports
           path: /transformers/reports/${{ matrix.machine_type }}_tests_torch_deepspeed_gpu
@@ -430,7 +430,7 @@ jobs:
     ]
     steps:
       - name: Checkout transformers
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
@@ -443,7 +443,7 @@ jobs:
       - name: Create output directory
         run: mkdir warnings_in_ci
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           path: warnings_in_ci
 
@@ -458,7 +458,7 @@ jobs:
 
       - name: Upload artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: warnings_in_ci
           path: warnings_in_ci/selected_warnings.json
@@ -487,8 +487,8 @@ jobs:
           echo "Runner status: ${{ needs.check_runners.result }}"
           echo "Setup status: ${{ needs.setup.result }}"
 
-      - uses: actions/checkout@v3
-      - uses: actions/download-artifact@v3
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
       - name: Send message to Slack
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
@@ -513,7 +513,7 @@ jobs:
       # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
       - name: Failure table artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: test_failure_tables
           path: test_failure_tables

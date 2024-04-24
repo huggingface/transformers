@@ -477,7 +477,7 @@ SpeechT5 では、モデルのデコーダ部分への入力が 2 分の 1 に�
 ...     max_steps=4000,
 ...     gradient_checkpointing=True,
 ...     fp16=True,
-...     evaluation_strategy="steps",
+...     eval_strategy="steps",
 ...     per_device_eval_batch_size=2,
 ...     save_steps=1000,
 ...     eval_steps=1000,

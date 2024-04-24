@@ -101,7 +101,7 @@ if is_torch_available():
         _prepare_4d_attention_mask,
         _prepare_4d_causal_attention_mask,
     )
-    from transformers.modeling_utils import shard_checkpoint
+    from transformers.modeling_utils import _find_disjoint, _find_identical, shard_checkpoint
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
@@ -256,6 +256,26 @@ class ModelUtilsTest(TestCasePlus):
 
         self.assertTrue(check_models_equal(model, model_loaded))
 
+    def test_model_manually_shared_disjointed_tensors_optimum(self):
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+        model = BertModel(config)
+
+        # Let's fuse qkv
+        attn = model.encoder.layer[0].attention.self
+        q = attn.query.weight
+        k = attn.key.weight
+        v = attn.value.weight
+        # Force some shared storage
+        qkv = torch.stack([q, k, v], dim=0)
+        attn.query.weight = torch.nn.Parameter(qkv[0])
+        attn.key.weight = torch.nn.Parameter(qkv[1])
+        attn.value.weight = torch.nn.Parameter(qkv[2])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            model_loaded = BertModel.from_pretrained(tmp_dir)
+
+        self.assertTrue(check_models_equal(model, model_loaded))
+
     def test_model_from_pretrained_subfolder_sharded(self):
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
         model = BertModel(config)
@@ -406,6 +426,44 @@ class ModelUtilsTest(TestCasePlus):
         # test model whose first param is not of a floating type, but int
         model = AutoModel.from_pretrained(TINY_BERT_FOR_TOKEN_CLASSIFICATION, torch_dtype="auto")
         self.assertEqual(model.dtype, torch.float32)
+
+    def test_model_from_pretrained_attn_implementation(self):
+        # test that the model can be instantiated with attn_implementation of either
+        # 1. explicit from_pretrained's attn_implementation argument
+        # 2. explicit from_pretrained's attn_implementation argument with a config argument
+        attn_implementation_available = ["eager"]
+        if is_torch_sdpa_available():
+            attn_implementation_available.append("sdpa")
+
+        if is_flash_attn_2_available():
+            attn_implementation_available.append("flash_attention_2")
+
+        mistral_attention_classes = {
+            "eager": "MistralAttention",
+            "sdpa": "MistralSdpaAttention",
+            "flash_attention_2": "MistralFlashAttention2",
+        }
+        for requested_attn_implementation in attn_implementation_available:
+            model = AutoModelForCausalLM.from_pretrained(
+                TINY_MISTRAL, attn_implementation=requested_attn_implementation
+            )
+            self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
+            for module in model.modules():
+                if "Attention" in module.__class__.__name__:
+                    self.assertEqual(
+                        module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
+                    )
+
+            config = AutoConfig.from_pretrained(TINY_MISTRAL)
+            model = AutoModelForCausalLM.from_pretrained(
+                TINY_MISTRAL, config=config, attn_implementation=requested_attn_implementation
+            )
+            self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
+            for module in model.modules():
+                if "Attention" in module.__class__.__name__:
+                    self.assertEqual(
+                        module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
+                    )
 
     def test_no_super_init_config_and_model(self):
         config = NoSuperInitConfig(attribute=32)
@@ -756,33 +814,33 @@ class ModelUtilsTest(TestCasePlus):
 
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         inputs = tokenizer("Hello, my name is", return_tensors="pt")
-        output = model.generate(inputs["input_ids"].to(0))
+        output = model.generate(inputs["input_ids"].to(f"{torch_device}:0"))
 
         text_output = tokenizer.decode(output[0].tolist())
         self.assertEqual(text_output, "Hello, my name is John. I'm a writer, and I'm a writer. I'm")
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_from_pretrained_disk_offload_task_model(self):
         model = AutoModel.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         device_map = {
-            "transformer.wte": 0,
-            "transformer.wpe": 0,
+            "transformer.wte": f"{torch_device}:0",
+            "transformer.wpe": f"{torch_device}:0",
             "transformer.h.0": "cpu",
             "transformer.h.1": "cpu",
             "transformer.h.2": "cpu",
             "transformer.h.3": "disk",
             "transformer.h.4": "disk",
-            "transformer.ln_f": 0,
-            "lm_head": 0,
+            "transformer.ln_f": f"{torch_device}:0",
+            "lm_head": f"{torch_device}:0",
         }
         with tempfile.TemporaryDirectory() as tmp_dir:
-            inputs = torch.tensor([[1, 2, 3]]).to(0)
+            inputs = torch.tensor([[1, 2, 3]]).to(f"{torch_device}:0")
 
             model.save_pretrained(tmp_dir)
-            new_model = AutoModelForCausalLM.from_pretrained(tmp_dir).to(0)
-            outputs1 = new_model.to(0)(inputs)
+            new_model = AutoModelForCausalLM.from_pretrained(tmp_dir).to(f"{torch_device}:0")
+            outputs1 = new_model.to(f"{torch_device}:0")(inputs)
 
             offload_folder = os.path.join(tmp_dir, "offload")
             new_model_with_offload = AutoModelForCausalLM.from_pretrained(
@@ -793,7 +851,6 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(torch.allclose(outputs1.logits.cpu(), outputs2.logits.cpu()))
 
             # With state dict temp offload
-            offload_folder = os.path.join(tmp_dir, "offload")
             new_model_with_offload = AutoModelForCausalLM.from_pretrained(
                 tmp_dir,
                 device_map=device_map,
@@ -801,30 +858,29 @@ class ModelUtilsTest(TestCasePlus):
                 offload_state_dict=True,
             )
             outputs2 = new_model_with_offload(inputs)
-
             self.assertTrue(torch.allclose(outputs1.logits.cpu(), outputs2.logits.cpu()))
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_from_pretrained_disk_offload_derived_to_base_model(self):
         derived_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
         device_map = {
-            "wte": 0,
-            "wpe": 0,
+            "wte": f"{torch_device}:0",
+            "wpe": f"{torch_device}:0",
             "h.0": "cpu",
             "h.1": "cpu",
             "h.2": "cpu",
             "h.3": "disk",
             "h.4": "disk",
-            "ln_f": 0,
+            "ln_f": f"{torch_device}:0",
         }
         with tempfile.TemporaryDirectory() as tmp_dir:
-            inputs = torch.tensor([[1, 2, 3]]).to(0)
+            inputs = torch.tensor([[1, 2, 3]]).to(f"{torch_device}:0")
             derived_model.save_pretrained(tmp_dir, use_safetensors=True)
             base_model = AutoModel.from_pretrained(tmp_dir)
-            outputs1 = base_model.to(0)(inputs)
+            outputs1 = base_model.to(f"{torch_device}:0")(inputs)
 
             # with disk offload
             offload_folder = os.path.join(tmp_dir, "offload")
@@ -2222,3 +2278,40 @@ class Mask4DTestHard(unittest.TestCase):
         ]
 
         self.assertEqual(decoded_0, decoded_1b)
+
+
+@require_torch
+class TestTensorSharing(TestCasePlus):
+    def test_disjoint(self):
+        main = torch.zeros(10)
+        a = main[:5]
+        b = main[5:]
+        state_dict = {"a": a, "b": b}
+
+        shared_names, disjoint_names = _find_disjoint([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [])
+        self.assertEqual(disjoint_names, ["a", "b"])
+
+        a = main[::2]
+        b = main[1::2]
+        state_dict = {"a": a, "b": b}
+
+        shared_names, disjoint_names = _find_disjoint([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [{"a", "b"}])
+        self.assertEqual(disjoint_names, [])
+
+    def test_identical(self):
+        a = torch.zeros(10)
+        b = a
+        state_dict = {"a": a, "b": b}
+
+        shared_names, identical_names = _find_identical([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [])
+        self.assertEqual(identical_names, [{"a", "b"}])
+
+        b = a[:5]
+        state_dict = {"a": a, "b": b}
+
+        shared_names, identical_names = _find_identical([{"a", "b"}], state_dict)
+        self.assertEqual(shared_names, [{"a", "b"}])
+        self.assertEqual(identical_names, [])

@@ -129,12 +129,12 @@ rendered properly in your Markdown viewer.
 ...     return metric.compute(predictions=predictions, references=labels)
 ```
 
-미세 튜닝 중에 평가 지표를 모니터링하려면 훈련 인수에 `evaluation_strategy` 파라미터를 지정하여 각 에폭이 끝날 때 평가 지표를 확인할 수 있습니다:
+미세 튜닝 중에 평가 지표를 모니터링하려면 훈련 인수에 `eval_strategy` 파라미터를 지정하여 각 에폭이 끝날 때 평가 지표를 확인할 수 있습니다:
 
 ```py
 >>> from transformers import TrainingArguments, Trainer
 
->>> training_args = TrainingArguments(output_dir="test_trainer", evaluation_strategy="epoch")
+>>> training_args = TrainingArguments(output_dir="test_trainer", eval_strategy="epoch")
 ```
 
 ### 훈련 하기[[trainer]]
