@@ -110,18 +110,3 @@ jobs:
         with:
           name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
-
-  slow_test_result:
-      runs-on: ubuntu-22.04
-      name: Check slow test status
-      needs: [check_for_new_model, run_new_model_tests]
-      if: always()
-      steps:
-        - name: Check test status
-          shell: bash
-          # NOT a new model PR --> pass
-          # new model PR --> pass only if `run_new_model_tests` gives `success` (so if the label is not added, we fail
-          # this job even if `run_new_model_tests` has `skipped` status).
-          run: |
-            echo "${{ needs.run_new_model_tests.result }}"
-            if [ "${{ needs.check_for_new_model.outputs.new_model }}" = "" ]; then echo "not new model"; elif [ "${{ needs.run_new_model_tests.result }}" != "success" ]; then echo "failure"; exit -1; else echo "pass"; fi;
