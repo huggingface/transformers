@@ -34,7 +34,7 @@ from transformers import (
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 
-original_device = "cuda:0"
+original_device = "cuda:2"
 hf_device = "cuda:3"
 
 
