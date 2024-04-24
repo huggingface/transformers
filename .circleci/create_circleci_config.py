@@ -285,7 +285,7 @@ torch_and_tf_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
-        # Without this we can't dependency versions in the future
+        # Without --no-deps we can't pin PyTorch versions in the future
         "pip install -U --upgrade-strategy eager --no-deps -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
         # TODO: remove this one after fixing the dependency issue(s) above
         "pip install -U --upgrade-strategy eager torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu",
