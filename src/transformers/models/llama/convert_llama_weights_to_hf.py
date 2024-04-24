@@ -396,7 +396,6 @@ def main():
             input_base_path=args.input_dir,
             model_size=args.model_size,
             safe_serialization=args.safe_serialization,
-            tokenizer_path=spm_path,
             llama_version=args.llama_version,
             vocab_size=vocab_size,
         )
