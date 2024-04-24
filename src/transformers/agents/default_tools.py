@@ -23,9 +23,14 @@ from typing import Dict
 
 from huggingface_hub import hf_hub_download, list_spaces
 
+from .. import requires_backends
 from ..utils import is_offline_mode
 from .python_interpreter import evaluate_python_code
 from .tools import TASK_MAPPING, TOOL_CONFIG_FILE, Tool
+from ..utils.import_utils import is_numexpr_available
+
+if is_numexpr_available():
+    import numexpr
 
 
 def custom_print(*args):
@@ -160,17 +165,16 @@ class CalculatorTool(Tool):
     }
     output_type = str
 
-    def __init__(self):
-        import numexpr
-
-        self.numexpr = numexpr
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["numexpr"])
+        super().__init__(*args, **kwargs)
 
     def __call__(self, expression):
         if isinstance(expression, Dict):
             expression = expression["expression"]
         local_dict = {"pi": math.pi, "e": math.e}
         output = str(
-            self.numexpr.evaluate(
+            numexpr.evaluate(
                 expression.strip().replace("^", "**"),
                 global_dict={},  # restrict access to globals
                 local_dict=local_dict,  # add common mathematical functions
