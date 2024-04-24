@@ -104,6 +104,31 @@ UCF101_subset/
         ...
 ```
 
+Let's now count the number of total videos we have.
+
+```py 
+>>> import pathlib
+>>> dataset_root_path = "UCF101_subset"
+>>> dataset_root_path = pathlib.Path(dataset_root_path)
+```
+
+```py 
+>>> video_count_train = len(list(dataset_root_path.glob("train/*/*.avi")))
+>>> video_count_val = len(list(dataset_root_path.glob("val/*/*.avi")))
+>>> video_count_test = len(list(dataset_root_path.glob("test/*/*.avi")))
+>>> video_total = video_count_train + video_count_val + video_count_test
+>>> print(f"Total videos: {video_total}")
+```
+
+```py 
+>>> all_video_file_paths = (
+...     list(dataset_root_path.glob("train/*/*.avi"))
+...     + list(dataset_root_path.glob("val/*/*.avi"))
+...     + list(dataset_root_path.glob("test/*/*.avi"))
+...  )
+>>> all_video_file_paths[:5]
+```
+
 The (`sorted`) video paths appear like so:
 
 ```bash
@@ -115,7 +140,6 @@ The (`sorted`) video paths appear like so:
 'UCF101_subset/train/ApplyEyeMakeup/v_ApplyEyeMakeup_g09_c06.avi'
 ...
 ```
-
 You will notice that there are video clips belonging to the same group / scene where group is denoted by `g` in the video file paths. `v_ApplyEyeMakeup_g07_c04.avi` and `v_ApplyEyeMakeup_g07_c06.avi`, for example.
 
 For the validation and evaluation splits, you wouldn't want to have video clips from the same group / scene to prevent [data leakage](https://www.kaggle.com/code/alexisbcook/data-leakage). The subset that you are using in this tutorial takes this information into account.
