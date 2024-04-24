@@ -864,25 +864,25 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_from_pretrained_disk_offload_derived_to_base_model(self):
         derived_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
         device_map = {
-            "wte": 0,
-            "wpe": 0,
+            "wte": f"{torch_device}:0",
+            "wpe": f"{torch_device}:0",
             "h.0": "cpu",
             "h.1": "cpu",
             "h.2": "cpu",
             "h.3": "disk",
             "h.4": "disk",
-            "ln_f": 0,
+            "ln_f": f"{torch_device}:0",
         }
         with tempfile.TemporaryDirectory() as tmp_dir:
-            inputs = torch.tensor([[1, 2, 3]]).to(0)
+            inputs = torch.tensor([[1, 2, 3]]).to(f"{torch_device}:0")
             derived_model.save_pretrained(tmp_dir, use_safetensors=True)
             base_model = AutoModel.from_pretrained(tmp_dir)
-            outputs1 = base_model.to(0)(inputs)
+            outputs1 = base_model.to(f"{torch_device}:0")(inputs)
 
             # with disk offload
             offload_folder = os.path.join(tmp_dir, "offload")
