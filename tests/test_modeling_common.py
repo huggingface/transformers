@@ -68,6 +68,7 @@ from transformers.testing_utils import (
     is_flaky,
     is_pt_flax_cross_test,
     is_pt_tf_cross_test,
+    is_safetensors_available,
     require_accelerate,
     require_bitsandbytes,
     require_flash_attn,
@@ -124,6 +125,10 @@ if is_flax_available():
 
 if is_torch_fx_available():
     from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
+
+
+if is_safetensors_available():
+    from safetensors.torch import save_file
 
 
 def _config_zero_init(config):
@@ -625,19 +630,40 @@ class ModelTesterMixin:
                 torch.save(state_dict, pt_checkpoint_path, _use_new_zipfile_serialization=False)
                 check_equal(load_state_dict(pt_checkpoint_path))
 
+    def _test_models_weight_initialization(self, config, model_class, model):
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                self.assertIn(
+                    ((param.data.mean() * 1e9).round() / 1e9).item(),
+                    [0.0, 1.0],
+                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                )
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
+            self._test_models_weight_initialization(configs_no_init, model_class, model)
+
+    def test_initialization_from_pretrained(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+
+        # We create a dummy state dict - to ensure all the parameters are initialized in the from_pretrained method
+        # We have to add a dummy key to the state dict to allow it to be loaded.
+        # See: https://github.com/huggingface/safetensors/pull/472 which enables saving empty state dicts with metadata
+        dummy_state_dict = {"dummy": torch.empty(1)}
+
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            config.save_pretrained(tmp_dir_name)
+            save_file(dummy_state_dict, os.path.join(tmp_dir_name, "model.safetensors"), metadata={"format": "pt"})
+
+            for model_class in self.all_model_classes:
+                model = model_class.from_pretrained(tmp_dir_name, config=configs_no_init)
+                self._test_models_weight_initialization(configs_no_init, model_class, model)
 
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

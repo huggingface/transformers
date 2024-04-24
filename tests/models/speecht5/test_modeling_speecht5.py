@@ -34,7 +34,6 @@ from transformers.utils import cached_property
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -569,32 +568,27 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "conv.parametrizations.weight",
-                    "masked_spec_embed",
-                    "feature_projection.projection.weight",
-                    "feature_projection.projection.bias",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
+    def _test_models_weight_initialization(self, config, model_class, model):
+        for name, param in model.named_parameters():
+            uniform_init_parms = [
+                "conv.weight",
+                "conv.parametrizations.weight",
+                "masked_spec_embed",
+                "feature_projection.projection.weight",
+                "feature_projection.projection.bias",
+            ]
+            if param.requires_grad:
+                if any(x in name for x in uniform_init_parms):
+                    self.assertTrue(
+                        -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+                else:
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
     # this model has no inputs_embeds
     def test_inputs_embeds(self):
@@ -942,28 +936,23 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
             )
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
+    def _test_models_weight_initialization(self, config, model_class, model):
+        for name, param in model.named_parameters():
+            uniform_init_parms = [
+                "conv.weight",
+            ]
+            if param.requires_grad:
+                if any(x in name for x in uniform_init_parms):
+                    self.assertTrue(
+                        -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+                else:
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
     # this model has no inputs_embeds
     def test_inputs_embeds(self):
@@ -1620,32 +1609,27 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "conv.parametrizations.weight",
-                    "masked_spec_embed",
-                    "feature_projection.projection.weight",
-                    "feature_projection.projection.bias",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
+    def _test_models_weight_initialization(self, config, model_class, model):
+        for name, param in model.named_parameters():
+            uniform_init_parms = [
+                "conv.weight",
+                "conv.parametrizations.weight",
+                "masked_spec_embed",
+                "feature_projection.projection.weight",
+                "feature_projection.projection.bias",
+            ]
+            if param.requires_grad:
+                if any(x in name for x in uniform_init_parms):
+                    self.assertTrue(
+                        -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+                else:
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
     # this model has no inputs_embeds
     def test_inputs_embeds(self):
@@ -1839,6 +1823,10 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
 
     # skip
     def test_initialization(self):
+        pass
+
+    # skip
+    def test_initialization_from_pretrained(self):
         pass
 
     # this model has no inputs_embeds

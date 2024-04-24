@@ -341,28 +341,24 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba_lm_head_forward_and_backwards(*config_and_inputs)
 
-    def test_initialization(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            for name, param in model.named_parameters():
-                if "dt_proj.bias" in name:
-                    dt = torch.exp(
-                        torch.tensor([0, 1]) * (math.log(config.time_step_max) - math.log(config.time_step_min))
-                        + math.log(config.time_step_min)
-                    ).clamp(min=config.time_step_floor)
-                    inv_dt = dt + torch.log(-torch.expm1(-dt))
-                    if param.requires_grad:
-                        self.assertTrue(param.data.max().item() <= inv_dt[1])
-                        self.assertTrue(param.data.min().item() >= inv_dt[0])
-                elif "A_log" in name:
-                    A = torch.arange(1, config.state_size + 1, dtype=torch.float32)[None, :]
-                    self.assertTrue(torch.allclose(param.data, torch.log(A), atol=1e-5, rtol=1e-5))
-                elif "D" in name:
-                    if param.requires_grad:
-                        # check if it's a ones like
-                        self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
+    def _test_models_weight_initialization(self, config, model_class, model):
+        for name, param in model.named_parameters():
+            if "dt_proj.bias" in name:
+                dt = torch.exp(
+                    torch.tensor([0, 1]) * (math.log(config.time_step_max) - math.log(config.time_step_min))
+                    + math.log(config.time_step_min)
+                ).clamp(min=config.time_step_floor)
+                inv_dt = dt + torch.log(-torch.expm1(-dt))
+                if param.requires_grad:
+                    self.assertTrue(param.data.max().item() <= inv_dt[1])
+                    self.assertTrue(param.data.min().item() >= inv_dt[0])
+            elif "A_log" in name:
+                A = torch.arange(1, config.state_size + 1, dtype=torch.float32)[None, :]
+                self.assertTrue(torch.allclose(param.data, torch.log(A), atol=1e-5, rtol=1e-5))
+            elif "D" in name:
+                if param.requires_grad:
+                    # check if it's a ones like
+                    self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
 
     @unittest.skip("Mamba does not use attention")
     def test_attention_outputs(self):

@@ -28,6 +28,7 @@ from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from transformers.testing_utils import (
     is_flax_available,
     is_pt_flax_cross_test,
+    is_safetensors_available,
     require_torch,
     require_vision,
     slow,
@@ -73,6 +74,10 @@ if is_flax_available():
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
     )
+
+
+if is_safetensors_available():
+    pass
 
 
 class CLIPVisionModelTester:
@@ -511,28 +516,23 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     # override as the `logit_scale` parameter initilization is different for CLIP
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
+    def _test_models_weight_initialization(self, config, model_class, model):
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                # check if `logit_scale` is initilized as per the original implementation
+                if name == "logit_scale":
+                    self.assertAlmostEqual(
+                        param.data.item(),
+                        np.log(1 / 0.07),
+                        delta=1e-3,
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+                else:
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
@@ -797,10 +797,6 @@ class CLIPForImageClassificationModelTest(ModelTesterMixin, PipelineTesterMixin,
 
     @unittest.skip(reason="CLIPForImageClassification does not support gradient checkpointing yet")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="CLIP uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
 

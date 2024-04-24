@@ -32,7 +32,7 @@ from transformers.testing_utils import require_bitsandbytes, require_torch, slow
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -173,21 +173,16 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         self.model_tester = LlavaNextVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LlavaNextConfig, has_text_modality=False)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if "image_newline" in name:
-                    continue
-                elif param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
+    def _test_models_weight_initialization(self, config, model_class, model):
+        for name, param in model.named_parameters():
+            if "image_newline" in name:
+                continue
+            elif param.requires_grad:
+                self.assertIn(
+                    ((param.data.mean() * 1e9).round() / 1e9).item(),
+                    [0.0, 1.0],
+                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                )
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"

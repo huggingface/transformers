@@ -153,6 +153,10 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     def test_initialization(self):
         pass
 
+    @unittest.skip("TimmBackbone initialization is managed on the timm side")
+    def test_initialization_from_pretrained(self):
+        pass
+
     @unittest.skip("TimmBackbone models doesn't have inputs_embeds")
     def test_inputs_embeds(self):
         pass

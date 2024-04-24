@@ -325,6 +325,10 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         pass
 
     @unittest.skip(reason="This will be fixed once MaskFormerSwin is replaced by native Swin")
+    def test_initialization_from_pretrained(self):
+        pass
+
+    @unittest.skip(reason="This will be fixed once MaskFormerSwin is replaced by native Swin")
     def test_gradient_checkpointing_backward_compatibility(self):
         pass
 

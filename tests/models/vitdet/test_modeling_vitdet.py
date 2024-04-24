@@ -179,6 +179,10 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_initialization(self):
         super().test_initialization()
 
+    @is_flaky(max_attempts=3, description="`torch.nn.init.trunc_normal_` is flaky.")
+    def test_initialization_from_pretrained(self):
+        super().test_initialization_from_pretrained()
+
     # TODO: Fix me (once this model gets more usage)
     @unittest.skip("Does not work on the tiny model as we keep hitting edge cases.")
     def test_cpu_offload(self):

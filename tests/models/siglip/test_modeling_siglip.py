@@ -210,10 +210,6 @@ class SiglipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/siglip-base-patch16-224"
@@ -367,10 +363,6 @@ class SiglipTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/siglip-base-patch16-224"
@@ -482,10 +474,6 @@ class SiglipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="SiglipModel does not support training")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest._create_and_check_torchscript with CLIP->Siglip
@@ -635,10 +623,6 @@ class SiglipForImageClassificationModelTest(ModelTesterMixin, PipelineTesterMixi
 
     @unittest.skip(reason="SiglipForImageClassification does not support gradient checkpointing yet")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
 

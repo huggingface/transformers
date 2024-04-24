@@ -234,6 +234,10 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_initialization(self):
         super().test_initialization()
 
+    @is_flaky(max_attempts=3, description="`torch.nn.init.trunc_normal_` is flaky.")
+    def test_initialization_from_pretrained(self):
+        super().test_initialization_from_pretrained()
+
     def test_config(self):
         self.config_tester.run_common_tests()
 

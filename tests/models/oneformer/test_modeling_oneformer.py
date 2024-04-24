@@ -16,12 +16,14 @@
 
 import copy
 import inspect
+import os
+import tempfile
 import unittest
 
 import numpy as np
 
 from tests.test_modeling_common import floats_tensor
-from transformers import OneFormerConfig, is_torch_available, is_vision_available
+from transformers import OneFormerConfig, is_safetensors_available, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -46,8 +48,13 @@ if is_torch_available():
     if is_vision_available():
         from transformers import OneFormerProcessor
 
+
 if is_vision_available():
     from PIL import Image
+
+
+if is_safetensors_available():
+    from safetensors.torch import save_file
 
 
 def _config_zero_init(config):
@@ -366,13 +373,26 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
+            self._test_models_weight_initialization(configs_no_init, model_class, model)
+
+    def test_initialization_from_pretrained(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.contrastive_temperature = 1
+
+        configs_no_init = _config_zero_init(config)
+
+        # We create a dummy state dict - to ensure all the parameters are initialized in the from_pretrained method
+        # We have to add a dummy key to the state dict to allow it to be loaded.
+        # See: https://github.com/huggingface/safetensors/pull/472 which enables saving empty state dicts with metadata
+        dummy_state_dict = {"dummy": torch.empty(1)}
+
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            config.save_pretrained(tmp_dir_name)
+            save_file(dummy_state_dict, os.path.join(tmp_dir_name, "model.safetensors"), metadata={"format": "pt"})
+
+            for model_class in self.all_model_classes:
+                model = model_class.from_pretrained(tmp_dir_name)
+                self._test_models_weight_initialization(configs_no_init, model_class, model)
 
     def test_training(self):
         if not self.model_tester.is_training:

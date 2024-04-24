@@ -21,7 +21,7 @@ import os
 import tempfile
 import unittest
 
-from transformers import GraphormerConfig, is_torch_available
+from transformers import GraphormerConfig, is_safetensors_available, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -34,6 +34,10 @@ if is_torch_available():
     from torch import tensor
 
     from transformers import GraphormerForGraphClassification, GraphormerModel
+
+
+if is_safetensors_available():
+    from safetensors.torch import save_file
 
 
 class GraphormerModelTester:
@@ -383,12 +387,31 @@ class GraphormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertTrue(
-                        -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
+            self._test_models_weight_initialization(configs_no_init, model_class, model)
+
+    def test_initialization_from_pretrained(self, model):
+        def _config_zero_init(config):
+            configs_no_init = copy.deepcopy(config)
+            for key in configs_no_init.__dict__.keys():
+                if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
+                    setattr(configs_no_init, key, 1e-10)
+            return configs_no_init
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        # We create a dummy state dict - to ensure all the parameters are initialized in the from_pretrained method
+        # We have to add a dummy key to the state dict to allow it to be loaded.
+        # See: https://github.com/huggingface/safetensors/pull/472 which enables saving empty state dicts with metadata
+        dummy_state_dict = {"dummy": torch.empty(1)}
+
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            config.save_pretrained(tmp_dir_name)
+            save_file(dummy_state_dict, os.path.join(tmp_dir_name, "model.safetensors"), metadata={"format": "pt"})
+
+            for model_class in self.all_model_classes:
+                model = model_class.from_pretrained(tmp_dir_name)
+                self._test_models_weight_initialization(configs_no_init, model_class, model)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

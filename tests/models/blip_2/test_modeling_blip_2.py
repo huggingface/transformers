@@ -16,6 +16,7 @@
 
 
 import inspect
+import os
 import tempfile
 import unittest
 
@@ -30,7 +31,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_safetensors_available, is_torch_available, is_vision_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -55,6 +56,9 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import Blip2Processor
+
+if is_safetensors_available():
+    from safetensors.torch import save_file
 
 
 class Blip2VisionModelTester:
@@ -830,13 +834,28 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
             setattr(configs_no_init, key, _config_zero_init(getattr(configs_no_init, key)))
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
+            self._test_models_weight_initialization(configs_no_init, model_class, model)
+
+    # override from common to deal with nested configurations (`vision_config`, `text_config` and `qformer_config`)
+    def test_initialization_from_pretrained(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for key in ["vision_config", "qformer_config", "text_config"]:
+            setattr(configs_no_init, key, _config_zero_init(getattr(configs_no_init, key)))
+
+        # We create a dummy state dict - to ensure all the parameters are initialized in the from_pretrained method
+        # We have to add a dummy key to the state dict to allow it to be loaded.
+        # See: https://github.com/huggingface/safetensors/pull/472 which enables saving empty state dicts with metadata
+        dummy_state_dict = {"dummy": torch.empty(1)}
+
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            config.save_pretrained(tmp_dir_name)
+            save_file(dummy_state_dict, os.path.join(tmp_dir_name, "model.safetensors"), metadata={"format": "pt"})
+
+            for model_class in self.all_model_classes:
+                model = model_class.from_pretrained(tmp_dir_name)
+                self._test_models_weight_initialization(configs_no_init, model_class, model)
 
 
 # We will verify our results on an image of cute cats
