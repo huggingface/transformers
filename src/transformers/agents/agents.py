@@ -225,7 +225,9 @@ class Agent:
         self.prompt = None
         self.logs = []
 
-        if verbose == 1:
+        if verbose == 0:
+            logging.set_verbosity_warning()
+        elif verbose == 1:
             logging.set_verbosity_info()
         elif verbose == 2:
             logging.set_verbosity_debug()
@@ -603,6 +605,8 @@ class ReactJSONAgent(ReactAgent):
             observation = self.execute(tool_name, arguments)
 
             observation_type = type(observation)
+            print("OBSSSSSSS: ", observation)
+            print("Obseration type: ", observation_type)
             if observation_type == AgentText:
                 updated_information = str(observation).strip()
             else:

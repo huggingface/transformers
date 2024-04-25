@@ -318,7 +318,7 @@ The custom tool needs:
 - An attribute `description` is used to populate the agent's system prompt.
 - An `inputs` attribute, which is a dictionary with keys `"type"` and `"description"`. It contains information that helps the Python interpreter make educated choices about the input.
 - An `output_type` attribute, which specifies the output type.
-- A `__call__` method which contains the inference code to be executed.
+- A `forward` method which contains the inference code to be executed.
 
 
 ```python
@@ -334,13 +334,13 @@ class HFModelDownloadsTool(Tool):
 
     inputs = {
         "task": {
-            "type": str,
+            "type": "text",
             "description": "the task category (such as text-classification, depth-estimation, etc)",
         }
     }
-    output_type = str
+    output_type = "text"
 
-    def __call__(self, task: str):
+    def forward(self, task: str):
         model = next(iter(list_models(filter=task, sort="downloads", direction=-1)))
         return model.id
 ```

@@ -77,7 +77,7 @@ class AgentText(AgentType, str):
         return self._value
 
     def to_string(self):
-        return self._value
+        return str(self._value)
 
 
 class AgentImage(AgentType, ImageType):
