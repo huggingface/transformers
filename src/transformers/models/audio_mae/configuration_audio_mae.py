@@ -99,7 +99,7 @@ class AudioMAEConfig(PretrainedConfig):
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
-        intermediate_size=3072,
+        hidden_act="gelu",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
@@ -116,14 +116,13 @@ class AudioMAEConfig(PretrainedConfig):
         decoder_hidden_size=512,
         decoder_num_hidden_layers=16,
         drop_path_rate=0.0,
-        decoder_intermediate_size=2048, #TODO intermediate size and decoder intermediate size are still pending.
         mask_ratio=0.8,
         norm_pix_loss=True,
         mask_t_prob=0.6, 
         mask_f_prob=0.5,
         mask_2d=False,
         window_size=(4, 4),
-        feat_size=(64, 8),
+        decoder_input_resolution=(64, 8),
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -131,7 +130,6 @@ class AudioMAEConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.drop_path_rate = drop_path_rate
@@ -145,7 +143,6 @@ class AudioMAEConfig(PretrainedConfig):
         self.decoder_num_attention_heads = decoder_num_attention_heads
         self.decoder_hidden_size = decoder_hidden_size
         self.decoder_num_hidden_layers = decoder_num_hidden_layers
-        self.decoder_intermediate_size = decoder_intermediate_size
         self.mask_ratio = mask_ratio
         self.norm_pix_loss = norm_pix_loss
         self.mlp_ratio = mlp_ratio
@@ -155,4 +152,5 @@ class AudioMAEConfig(PretrainedConfig):
         self.mask_f_prob = mask_f_prob
         self.mask_2d = mask_2d
         self.window_size = window_size
-        self.feat_size = feat_size
+        self.decoder_input_resolution = decoder_input_resolution
+        self.hidden_act = hidden_act

@@ -29,7 +29,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import meshgrid
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -48,6 +48,50 @@ _CHECKPOINT_FOR_DOC = "facebook/audiomae-base"
 
 from ..deprecated._archive_maps import VIT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
+
+# Copied from transformers.models.swin.modeling_swin.window_partition
+def window_partition(input_feature, window_size):
+    """
+    Partitions the given input into windows.
+    """
+    batch_size, height, width, num_channels = input_feature.shape
+    input_feature = input_feature.view(
+        batch_size, height // window_size[0], window_size[0], width // window_size[1], window_size[1], num_channels
+    )
+    windows = input_feature.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size[0], window_size[1], num_channels)
+    return windows
+
+
+# Copied from transformers.models.swin.modeling_swin.window_reverse
+def window_reverse(windows, window_size, height, width):
+    """
+    Merges windows to produce higher resolution features.
+    """
+    num_channels = windows.shape[-1]
+    windows = windows.view(-1, height // window_size[0], width // window_size[1], window_size[0], window_size[1], num_channels)
+    windows = windows.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, height, width, num_channels)
+    return windows
+
+
+# Copied from transformers.models.swin.modeling_swin.drop_path
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+    """
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
+    """
+    if drop_prob == 0.0 or not training:
+        return input
+    keep_prob = 1 - drop_prob
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    random_tensor.floor_()  # binarize
+    output = input.div(keep_prob) * random_tensor
+    return output
 
 @dataclass
 # Copied from transformers.models.vit_mae.modeling_vit_mae.ViTMAEModelOutput with ViTMAE->AudioMAE
@@ -152,12 +196,12 @@ def get_2d_sincos_pos_embed(embed_dim, grid_size, add_cls_token=False):
         (`torch.FloatTensor` of shape (grid_size*grid_size, embed_dim) or (1+grid_size*grid_size, embed_dim): the
         position embeddings (with or without classification token)
     """
-    grid_h = np.arange(grid_size, dtype=np.float32)
-    grid_w = np.arange(grid_size, dtype=np.float32)
+    grid_h = np.arange(grid_size[0], dtype=np.float32)
+    grid_w = np.arange(grid_size[1], dtype=np.float32)
     grid = np.meshgrid(grid_w, grid_h)  # here w goes first
     grid = np.stack(grid, axis=0)
 
-    grid = grid.reshape([2, 1, grid_size, grid_size])
+    grid = grid.reshape([2, 1, grid_size[0], grid_size[1]])
     pos_embed = get_2d_sincos_pos_embed_from_grid(embed_dim, grid)
     if add_cls_token:
         pos_embed = np.concatenate([np.zeros([1, embed_dim]), pos_embed], axis=0)
@@ -220,7 +264,7 @@ class AudioMAEEmbeddings(nn.Module):
     def initialize_weights(self):
         # initialize (and freeze) position embeddings by sin-cos embedding
         pos_embed = get_2d_sincos_pos_embed(
-            self.position_embeddings.shape[-1], int(self.patch_embeddings.num_patches**0.5), add_cls_token=True
+            self.position_embeddings.shape[-1], self.patch_embeddings.patch_hw, add_cls_token=True
         )
         self.position_embeddings.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
@@ -306,11 +350,11 @@ class AudioMAEEmbeddings(nn.Module):
         mask_t = torch.gather(mask_t, dim=1, index=ids_restore_t).unsqueeze(1).repeat(1,F,1).permute(0,2,1)
         mask = 1-(1-mask_t)*(1-mask_f)
 
-        id2res=torch.Tensor(list(range(N*T*F))).reshape(N,T,F).to(x.device)
+        id2res=torch.Tensor(list(range(seq_length*T*F))).reshape(seq_length,T,F).to(sequence.device)
         id2res = id2res + 999*mask # add a large value for masked elements
         id2res2 = torch.argsort(id2res.flatten(start_dim=1))
         ids_keep=id2res2.flatten(start_dim=1)[:,:len_keep_f*len_keep_t]
-        sequence_masked = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, dim))
+        sequence_masked = torch.gather(sequence, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, dim))
 
         ids_restore = torch.argsort(id2res2.flatten(start_dim=1))
         mask = mask.flatten(start_dim=1)
@@ -339,7 +383,7 @@ class AudioMAEEmbeddings(nn.Module):
         return embeddings, mask, ids_restore
 
 
-# Copied from transformers.models.vit_mae.modeling_vit_mae.ViTMAEPatchEmbeddings with ViTMAE->AudioMAE
+#DONE
 class AudioMAEPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -349,11 +393,12 @@ class AudioMAEPatchEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
+        image_size = (config.max_length, config.num_mel_bins) 
+        patch_size = config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.patch_hw = (image_size[1] // patch_size[1], image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
@@ -376,6 +421,7 @@ class AudioMAEPatchEmbeddings(nn.Module):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention ViT->AudioMAE
+#DONE
 class AudioMAESelfAttention(nn.Module):
     def __init__(self, config: AudioMAEConfig) -> None:
         super().__init__()
@@ -401,7 +447,7 @@ class AudioMAESelfAttention(nn.Module):
         return x.permute(0, 2, 1, 3)
 
     def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
+        self, hidden_states, output_attentions: bool = False
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
@@ -421,10 +467,6 @@ class AudioMAESelfAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
         context_layer = torch.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
@@ -437,6 +479,7 @@ class AudioMAESelfAttention(nn.Module):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->AudioMAE
+#DONE
 class AudioMAESelfOutput(nn.Module):
     """
     The residual connection is defined in AudioMAELayer instead of here (as is the case with other models), due to the
@@ -456,38 +499,19 @@ class AudioMAESelfOutput(nn.Module):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->AudioMAE
+#DONE
 class AudioMAEAttention(nn.Module):
     def __init__(self, config: AudioMAEConfig) -> None:
         super().__init__()
         self.attention = AudioMAESelfAttention(config)
         self.output = AudioMAESelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: Set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
+        self_outputs = self.attention(hidden_states, output_attentions)
 
         attention_output = self.output(self_outputs[0], hidden_states)
 
@@ -496,10 +520,11 @@ class AudioMAEAttention(nn.Module):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTIntermediate ViT->AudioMAE
+#DONE
 class AudioMAEIntermediate(nn.Module):
     def __init__(self, config: AudioMAEConfig) -> None:
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.dense = nn.Linear(config.hidden_size, config.mlp_ratio*config.hidden_size)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
@@ -513,10 +538,11 @@ class AudioMAEIntermediate(nn.Module):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTOutput ViT->AudioMAE
+#DONE
 class AudioMAEOutput(nn.Module):
     def __init__(self, config: AudioMAEConfig) -> None:
         super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.dense = nn.Linear(config.mlp_ratio*config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
@@ -529,6 +555,7 @@ class AudioMAEOutput(nn.Module):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->AudioMAE
+#DONE
 class AudioMAELayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -545,12 +572,10 @@ class AudioMAELayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in AudioMAE, layernorm is applied before self-attention
-            head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
@@ -570,8 +595,286 @@ class AudioMAELayer(nn.Module):
 
         return outputs
 
+class Swinv2SelfAttention(nn.Module):
+    def __init__(self, config, dim, window_size, num_heads):
+        super().__init__()
+        if dim % num_heads != 0:
+            raise ValueError(
+                f"The hidden size ({dim}) is not a multiple of the number of attention heads ({num_heads})"
+            )
+
+        self.num_attention_heads = num_heads
+        self.attention_head_size = int(dim / num_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.window_size = (
+            window_size if isinstance(window_size, collections.abc.Iterable) else (window_size, window_size)
+        )
+        # mlp to generate continuous relative position bias
+        self.register_parameter("tau", torch.nn.Parameter(torch.ones(num_heads)))
+        self.meta_mlp = nn.Sequential(
+            nn.Linear(2, 384, bias=True), nn.ReLU(inplace=True), nn.Dropout(0.1), nn.Linear(384, num_heads, bias=True), nn.Dropout(0.1)
+        )
+        # get relative_coords_table
+        coordinates = torch.stack(torch.meshgrid([
+            torch.arange(self.window_size[0], device=self.tau.device),
+            torch.arange(self.window_size[1], device=self.tau.device)], indexing='ij'), dim=0).flatten(1)
+        relative_coordinates = coordinates[:, :, None] - coordinates[:, None, :]
+        relative_coordinates = relative_coordinates.permute(1, 2, 0).reshape(-1, 2).float()
+        relative_coordinates_log = torch.sign(relative_coordinates) * torch.log(
+            1.0 + relative_coordinates.abs())
+        self.register_buffer("relative_coordinates_log", relative_coordinates_log, persistent=False)
+        
+        self.qkv = nn.Linear(self.all_head_size, self.all_head_size*3, bias=config.qkv_bias)
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        
+    def _relative_positional_encodings(self) -> torch.Tensor:
+        """Method computes the relative positional encodings
+
+        Returns:
+            relative_position_bias (torch.Tensor): Relative positional encodings
+            (1, number of heads, window size ** 2, window size ** 2)
+        """
+        window_area = self.window_size[0] * self.window_size[1]
+        relative_position_bias = self.meta_mlp(self.relative_coordinates_log)
+        relative_position_bias = relative_position_bias.transpose(1, 0).reshape(
+            self.num_heads, window_area, window_area
+        )
+        relative_position_bias = relative_position_bias.unsqueeze(0)
+        return relative_position_bias
+    
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
+        batch_size, dim, num_channels = hidden_states.shape
+        qkv = self.qkv(hidden_states).view(batch_size, dim, 3, self.num_heads, num_channels // self.num_heads).permute(2, 0, 3, 1, 4)
+        query, key, value = qkv.unbind(0)
+        
+        denom = torch.norm(query, dim=-1, keepdim=True) @ torch.norm(key, dim=-1, keepdim=True).transpose(-2, -1)
+        attention_scores = query @ key.transpose(-2, -1) / denom.clamp(min=1e-6)
+        attention_scores = attention_scores / self.tau.clamp(min=0.01).reshape(1, self.num_heads, 1, 1)
+        
+        attention_scores = attention_scores + self._relative_positional_encodings()
+
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in Swinv2Model forward() function)
+            num_win = attention_mask.shape[0]
+            attention_scores = attention_scores.view(
+                batch_size // num_win, num_win, self.num_attention_heads, dim, dim
+            )
+            attention_scores = attention_scores + attention_mask.unsqueeze(1).unsqueeze(0)
+            attention_scores = attention_scores.view(-1, self.num_attention_heads, dim, dim)
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        context_layer = torch.matmul(attention_probs, value)
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous().reshape(batch_size, dim, -1)
+
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
+        return outputs
+
+
+# Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->Swinv2
+class Swinv2SelfOutput(nn.Module):
+    def __init__(self, config, dim):
+        super().__init__()
+        self.dense = nn.Linear(dim, dim)
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+
+        return hidden_states
+
+
+class Swinv2Attention(nn.Module):
+    def __init__(self, config, dim, window_size, num_heads):
+        super().__init__()
+        self.self = Swinv2SelfAttention(
+            config=config,
+            dim=dim,
+            window_size=window_size,
+            num_heads=num_heads,
+        )
+        self.output = Swinv2SelfOutput(config, dim)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
+        self_outputs = self.self(hidden_states, attention_mask, output_attentions)
+        attention_output = self.output(self_outputs[0], hidden_states)
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        return outputs
+
+
+# Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->Swinv2
+class Swinv2Intermediate(nn.Module):
+    def __init__(self, config, dim):
+        super().__init__()
+        self.dense = nn.Linear(dim, int(config.mlp_ratio * dim))
+        if isinstance(config.hidden_act, str):
+            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.intermediate_act_fn = config.hidden_act
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states
+
+
+# Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->Swinv2
+class Swinv2Output(nn.Module):
+    def __init__(self, config, dim):
+        super().__init__()
+        self.dense = nn.Linear(int(config.mlp_ratio * dim), dim)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states
+
+# Copied from transformers.models.swin.modeling_swin.SwinDropPath with Swin->Swinv2
+class Swinv2DropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+
+    def __init__(self, drop_prob: Optional[float] = None) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return "p={}".format(self.drop_prob)
+
+class Swinv2Layer(nn.Module):
+    def __init__(self, config, dim: int, num_heads: int, input_resolution: Tuple[int, int], window_size: Tuple[int, int], shift_size: Tuple[int, int]):
+        super().__init__()
+        self.dim = dim
+        self.input_resolution = input_resolution
+        self.window_size, self.shift_size = self._compute_window_shift(window_size, shift_size)
+        self.num_heads = num_heads
+        self.attention = Swinv2Attention(
+            config=config,
+            dim=self.dim,
+            window_size=self.window_size,
+            num_heads=self.num_heads,
+        )
+        self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
+        self.drop_path = Swinv2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.intermediate = Swinv2Intermediate(config, dim)
+        self.output = Swinv2Output(config, dim)
+        self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
+        # Extra main branch norm layer mentioned for Huge/Giant models in V2 paper.
+        # Also being used as final network norm and optional stage ending norm while still in a C-last format.
+        self.layernorm_extra = nn.LayerNorm(dim, eps=config.layer_norm_eps)
+
+    def _compute_window_shift(self, target_window_size, target_shift_size) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+        window_size = [r if r <= w else w for r, w in zip(self.input_resolution, target_window_size)]
+        shift_size = [0 if r <= w else s for r, w, s in zip(self.input_resolution, window_size, target_shift_size)]
+        return window_size, shift_size
+
+    def get_attn_mask(self, dtype):
+        if self.shift_size[0] > 0 or self.shift_size[1] > 0:
+            height, width = self.input_resolution
+            # calculate attention mask for shifted window multihead self attention
+            img_mask = torch.zeros((1, height, width, 1), dtype=dtype)
+            height_slices = (
+                slice(0, -self.window_size[0]),
+                slice(-self.window_size[0], -self.shift_size[0]),
+                slice(-self.shift_size[0], None),
+            )
+            width_slices = (
+                slice(0, -self.window_size[1]),
+                slice(-self.window_size[1], -self.shift_size[1]),
+                slice(-self.shift_size[1], None),
+            )
+            count = 0
+            for height_slice in height_slices:
+                for width_slice in width_slices:
+                    img_mask[:, height_slice, width_slice, :] = count
+                    count += 1
+
+            mask_windows = window_partition(img_mask, self.window_size)
+            mask_windows = mask_windows.view(-1, self.window_size[0] * self.window_size[1])
+            attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
+            attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
+        else:
+            attn_mask = None
+        return attn_mask
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        input_dimensions: Tuple[int, int],
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        height, width = input_dimensions
+        batch_size, _, channels = hidden_states.size()
+        shortcut = hidden_states
+
+        hidden_states = hidden_states.view(batch_size, height, width, channels)
+        # cyclic shift
+        if self.shift_size[0] > 0 or self.shift_size[1] > 0:
+            shifted_hidden_states = torch.roll(hidden_states, shifts=(-self.shift_size[0], -self.shift_size[1]), dims=(1, 2))
+        else:
+            shifted_hidden_states = hidden_states
+
+        # partition windows
+        hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
+        hidden_states_windows = hidden_states_windows.view(-1, self.window_size[0] * self.window_size[1], channels)
+        attn_mask = self.get_attn_mask(dtype=hidden_states.dtype)
+        
+        if attn_mask is not None:
+            attn_mask = attn_mask.to(hidden_states_windows.device)
+        
+        attention_outputs = self.attention(
+            hidden_states_windows, attn_mask, output_attentions=output_attentions
+        )
+
+        attention_output = attention_outputs[0]
+
+        attention_windows = attention_output.view(-1, self.window_size[0], self.window_size[1], channels)
+        attention_windows = window_reverse(attention_windows, self.window_size, height, width)
+
+        # reverse cyclic shift
+        if self.shift_size[0] > 0 or self.shift_size[1] > 0:
+            attention_windows = torch.roll(attention_windows, shifts=(self.shift_size[0], self.shift_size[1]), dims=(1, 2))
+        else:
+            attention_windows = attention_windows
+
+        attention_windows = attention_windows.view(batch_size, height * width, channels)
+        
+        
+        hidden_states = self.layernorm_before(attention_windows)
+        hidden_states = shortcut + self.drop_path(hidden_states)
+
+        layer_output = self.intermediate(hidden_states)
+        layer_output = self.output(layer_output)
+        layer_output = hidden_states + self.drop_path(self.layernorm_after(layer_output))
+        layer_output = self.layernorm_extra(layer_output)
+
+        layer_outputs = (layer_output, attention_outputs[1]) if output_attentions else (layer_output,)
+        return layer_outputs
 
 # Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->AudioMAE
+#DONE
 class AudioMAEEncoder(nn.Module):
     def __init__(self, config: AudioMAEConfig) -> None:
         super().__init__()
@@ -582,7 +885,6 @@ class AudioMAEEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -594,17 +896,14 @@ class AudioMAEEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     layer_module.__call__,
                     hidden_states,
-                    layer_head_mask,
                     output_attentions,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
+                layer_outputs = layer_module(hidden_states, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -664,13 +963,6 @@ VIT_MAE_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
             for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -704,21 +996,12 @@ class AudioMAEModel(AudioMAEPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     @add_start_docstrings_to_model_forward(VIT_MAE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AudioMAEModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         noise: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -752,18 +1035,10 @@ class AudioMAEModel(AudioMAEPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         embedding_output, mask, ids_restore = self.embeddings(pixel_values, noise=noise)
 
         encoder_outputs = self.encoder(
             embedding_output,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -782,25 +1057,34 @@ class AudioMAEModel(AudioMAEPreTrainedModel):
             attentions=encoder_outputs.attentions,
         )
 
-
+#TODO Will handle this later on, first work on encoder part alone.
 # Copied from transformers.models.vit_mae.modeling_vit_mae.ViTMAEDecoder with ViTMAE->AudioMAE
 class AudioMAEDecoder(nn.Module):
     def __init__(self, config, num_patches):
         super().__init__()
         self.decoder_embed = nn.Linear(config.hidden_size, config.decoder_hidden_size, bias=True)
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
+        self.patch_embedding_patch_hw = (config.max_length//config.patch_size, config.num_mel_bins//config.patch_size)
         self.decoder_pos_embed = nn.Parameter(
             torch.zeros(1, num_patches + 1, config.decoder_hidden_size), requires_grad=False
         )  # fixed sin-cos embedding
-
-        decoder_config = deepcopy(config)
-        decoder_config.hidden_size = config.decoder_hidden_size
-        decoder_config.num_hidden_layers = config.decoder_num_hidden_layers
-        decoder_config.num_attention_heads = config.decoder_num_attention_heads
-        decoder_config.intermediate_size = config.decoder_intermediate_size
-        self.decoder_layers = nn.ModuleList(
-            [AudioMAELayer(decoder_config) for _ in range(config.decoder_num_hidden_layers)]
-        )
+        decoder_modules = []
+        for index in range(config.decoder_num_hidden_layers):
+            if (index % 2) == 0:
+                shift_size = (0,0)
+            else:
+                shift_size = (2,0)
+            decoder_modules.append(
+                Swinv2Layer(
+                    config, #TODO decoder_config or config which to pass?
+                    dim=config.decoder_hidden_size,
+                    input_resolution=config.decoder_input_resolution,
+                    num_heads=config.decoder_num_attention_heads,
+                    window_size= config.window_size,
+                    shift_size = shift_size,
+                )
+            )
+        self.decoder_layers = nn.ModuleList(decoder_modules)
 
         self.decoder_norm = nn.LayerNorm(config.decoder_hidden_size, eps=config.layer_norm_eps)
         self.decoder_pred = nn.Linear(
@@ -808,12 +1092,12 @@ class AudioMAEDecoder(nn.Module):
         )  # encoder to decoder
         self.gradient_checkpointing = False
         self.config = config
-        self.initialize_weights(num_patches)
+        self.initialize_weights()
 
-    def initialize_weights(self, num_patches):
+    def initialize_weights(self):
         # initialize (and freeze) position embeddings by sin-cos embedding
         decoder_pos_embed = get_2d_sincos_pos_embed(
-            self.decoder_pos_embed.shape[-1], int(num_patches**0.5), add_cls_token=True
+            self.decoder_pos_embed.shape[-1],  self.patch_embedding_patch_hw, add_cls_token=True
         )
         self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
 
@@ -839,8 +1123,9 @@ class AudioMAEDecoder(nn.Module):
 
         # add pos embed
         hidden_states = x + self.decoder_pos_embed
-
-        # apply Transformer layers (blocks)
+        x = x[:, 1:, :] # remove cls token
+        
+        # apply Swin Transformer layers (blocks)
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         for i, layer_module in enumerate(self.decoder_layers):
@@ -855,7 +1140,7 @@ class AudioMAEDecoder(nn.Module):
                     output_attentions,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, head_mask=None, output_attentions=output_attentions)
+                layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -869,9 +1154,6 @@ class AudioMAEDecoder(nn.Module):
 
         # predictor projection
         logits = self.decoder_pred(hidden_states)
-
-        # remove cls token
-        logits = logits[:, 1:, :]
 
         if not return_dict:
             return tuple(v for v in [logits, all_hidden_states, all_self_attentions] if v is not None)
@@ -910,14 +1192,6 @@ class AudioMAEForPreTraining(AudioMAEPreTrainedModel):
     def get_input_embeddings(self):
         return self.vit.embeddings.patch_embeddings
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     def patchify(self, pixel_values):
         """
         Args:
@@ -928,25 +1202,11 @@ class AudioMAEForPreTraining(AudioMAEPreTrainedModel):
             `torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
                 Patchified pixel values.
         """
-        patch_size, num_channels = self.config.patch_size, self.config.num_channels
-        # sanity checks
-        if (pixel_values.shape[2] != pixel_values.shape[3]) or (pixel_values.shape[2] % patch_size != 0):
-            raise ValueError("Make sure the pixel values have a squared size that is divisible by the patch size")
-        if pixel_values.shape[1] != num_channels:
-            raise ValueError(
-                "Make sure the number of channels of the pixel values is equal to the one set in the configuration"
-            )
-
-        # patchify
-        batch_size = pixel_values.shape[0]
-        num_patches_one_direction = pixel_values.shape[2] // patch_size
-        patchified_pixel_values = pixel_values.reshape(
-            batch_size, num_channels, num_patches_one_direction, patch_size, num_patches_one_direction, patch_size
-        )
-        patchified_pixel_values = torch.einsum("nchpwq->nhwpqc", patchified_pixel_values)
-        patchified_pixel_values = patchified_pixel_values.reshape(
-            batch_size, num_patches_one_direction * num_patches_one_direction, patch_size**2 * num_channels
-        )
+        batch_size, num_channels, height, width  = pixel_values.shape
+        patch_size = self.config.patch_size
+        patchified_pixel_values = pixel_values.reshape(batch_size, num_channels, height//patch_size, width/patch_size, patch_size, patch_size)
+        patchified_pixel_values = torch.einsum('nchpwq->nhwpqc', patchified_pixel_values)
+        patchified_pixel_values = patchified_pixel_values.reshape(shape=(batch_size, height * width, patch_size**2 * num_channels))
         return patchified_pixel_values
 
     def unpatchify(self, patchified_pixel_values):
@@ -959,29 +1219,13 @@ class AudioMAEForPreTraining(AudioMAEPreTrainedModel):
             `torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`:
                 Pixel values.
         """
-        patch_size, num_channels = self.config.patch_size, self.config.num_channels
-        num_patches_one_direction = int(patchified_pixel_values.shape[1] ** 0.5)
-        # sanity check
-        if num_patches_one_direction**2 != patchified_pixel_values.shape[1]:
-            raise ValueError("Make sure that the number of patches can be squared")
-
-        # unpatchify
+        patch_size = self.config.patch_size  
+        height = self.config.max_length//patch_size
+        width = self.config.num_mel_bins//patch_size
         batch_size = patchified_pixel_values.shape[0]
-        patchified_pixel_values = patchified_pixel_values.reshape(
-            batch_size,
-            num_patches_one_direction,
-            num_patches_one_direction,
-            patch_size,
-            patch_size,
-            num_channels,
-        )
-        patchified_pixel_values = torch.einsum("nhwpqc->nchpwq", patchified_pixel_values)
-        pixel_values = patchified_pixel_values.reshape(
-            batch_size,
-            num_channels,
-            num_patches_one_direction * patch_size,
-            num_patches_one_direction * patch_size,
-        )
+        patchified_pixel_values = patchified_pixel_values.reshape(shape=(batch_size, height, width, patch_size, patch_size, self.config.num_channels))
+        patchified_pixel_values = torch.einsum('nhwpqc->nchpwq', patchified_pixel_values)
+        pixel_values = patchified_pixel_values.reshape(shape=(batch_size, self.config.num_channels, height * patch_size, width * patch_size))
         return pixel_values
 
     def forward_loss(self, pixel_values, pred, mask):
@@ -1015,7 +1259,6 @@ class AudioMAEForPreTraining(AudioMAEPreTrainedModel):
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         noise: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1047,7 +1290,6 @@ class AudioMAEForPreTraining(AudioMAEPreTrainedModel):
         outputs = self.vit(
             pixel_values,
             noise=noise,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
