@@ -19,11 +19,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "tanreinama/GPTSAN-2.8B-spout_is_uniform": (
-        "https://huggingface.co/tanreinama/GPTSAN-2.8B-spout_is_uniform/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class GPTSanJapaneseConfig(PretrainedConfig):

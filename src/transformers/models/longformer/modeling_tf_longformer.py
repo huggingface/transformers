@@ -56,14 +56,8 @@ _CONFIG_FOR_DOC = "LongformerConfig"
 
 LARGE_NEGATIVE = -1e8
 
-TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "allenai/longformer-base-4096",
-    "allenai/longformer-large-4096",
-    "allenai/longformer-large-4096-finetuned-triviaqa",
-    "allenai/longformer-base-4096-extra.pos.embd.only",
-    "allenai/longformer-large-4096-extra.pos.embd.only",
-    # See all Longformer models at https://huggingface.co/models?filter=longformer
-]
+
+from ..deprecated._archive_maps import TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass

@@ -20,7 +20,8 @@ import warnings
 
 import torch
 
-from transformers import LlamaConfig, LlamaForCausalLM, LlamaTokenizer
+from transformers import LlamaConfig, LlamaForCausalLM, LlamaTokenizer, PreTrainedTokenizerFast
+from transformers.convert_slow_tokenizer import TikTokenConverter
 
 
 try:
@@ -51,10 +52,31 @@ tokenizer = LlamaTokenizer.from_pretrained("/output/path")
 
 Important note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
 come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM).
+
+If you want you tokenizer to add a bos automatically you should update the tokenizer._tokenizers.post_processor:
+
+```py
+from tokenizers import processors
+bos = "<|begin_of_text|>"
+tokenizer._tokenizers.post_processor = processors.Sequence(
+    [
+        processors.ByteLevel(trim_offsets=False),
+        processors.TemplateProcessing(
+            single=f"{bos}:0 $A:0",
+            pair=f"{bos}:0 $A:0 {bos}:1 $B:1",
+            special_tokens=[
+                (bos, tokenizer.encode(bos)),
+            ],
+        ),
+    ]
+)
+```
 """
 
 NUM_SHARDS = {
     "7B": 1,
+    "8B": 1,
+    "8Bf": 1,
     "7Bf": 1,
     "13B": 2,
     "13Bf": 2,
@@ -81,7 +103,12 @@ def write_json(text, path):
 
 
 def write_model(
-    model_path, input_base_path, model_size, tokenizer_path=None, safe_serialization=True, llama_version=1
+    model_path,
+    input_base_path,
+    model_size,
+    safe_serialization=True,
+    llama_version=1,
+    vocab_size=None,
 ):
     # for backward compatibility, before you needed the repo to be called `my_repo/model_size`
     if not os.path.isfile(os.path.join(input_base_path, "params.json")):
@@ -101,7 +128,7 @@ def write_model(
     dims_per_head = dim // n_heads
     base = params.get("rope_theta", 10000.0)
     inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
-    if base > 10000.0:
+    if base > 10000.0 and llama_version != 3:
         max_position_embeddings = 16384
     else:
         # Depending on the Llama version, the default max_position_embeddings has different values.
@@ -109,18 +136,10 @@ def write_model(
             max_position_embeddings = 2048
         elif llama_version == 2:
             max_position_embeddings = 4096
-        else:
-            raise NotImplementedError(
-                f"Version {llama_version} of llama is not supported yet. "
-                "Current supported versions of llama are [1, 2]."
-            )
+        elif llama_version == 3:
+            max_position_embeddings = 8192
 
-    tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
-    if tokenizer_path is not None:
-        tokenizer = tokenizer_class(tokenizer_path)
-        tokenizer.save_pretrained(model_path)
-    vocab_size = tokenizer.vocab_size if tokenizer_path is not None else 32000
-
+    vocab_size = vocab_size if vocab_size is not None else 32000
     if params.get("n_kv_heads", None) is not None:
         num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
         num_local_key_value_heads = n_heads_per_shard // num_key_value_heads
@@ -131,7 +150,7 @@ def write_model(
         key_value_dim = dim
 
     # permute for sliced rotary
-    def permute(w, n_heads=n_heads, dim1=dim, dim2=dim):
+    def permute(w, n_heads, dim1=dim, dim2=dim):
         return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
@@ -154,10 +173,12 @@ def write_model(
             # Unsharded
             state_dict = {
                 f"model.layers.{layer_i}.self_attn.q_proj.weight": permute(
-                    loaded[f"layers.{layer_i}.attention.wq.weight"]
+                    loaded[f"layers.{layer_i}.attention.wq.weight"], n_heads=n_heads
                 ),
                 f"model.layers.{layer_i}.self_attn.k_proj.weight": permute(
-                    loaded[f"layers.{layer_i}.attention.wk.weight"]
+                    loaded[f"layers.{layer_i}.attention.wk.weight"],
+                    n_heads=num_key_value_heads,
+                    dim1=dim // num_local_key_value_heads,
                 ),
                 f"model.layers.{layer_i}.self_attn.v_proj.weight": loaded[f"layers.{layer_i}.attention.wv.weight"],
                 f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[f"layers.{layer_i}.attention.wo.weight"],
@@ -188,7 +209,8 @@ def write_model(
                         for i in range(num_shards)
                     ],
                     dim=0,
-                ).reshape(dim, dim)
+                ).reshape(dim, dim),
+                n_heads=n_heads,
             )
             state_dict[f"model.layers.{layer_i}.self_attn.k_proj.weight"] = permute(
                 torch.cat(
@@ -242,10 +264,11 @@ def write_model(
             "lm_head.weight": loaded["output.weight"],
         }
     else:
+        concat_dim = 0 if llama_version == 3 else 1
         state_dict = {
             "model.norm.weight": loaded[0]["norm.weight"],
             "model.embed_tokens.weight": torch.cat(
-                [loaded[i]["tok_embeddings.weight"] for i in range(num_shards)], dim=1
+                [loaded[i]["tok_embeddings.weight"] for i in range(num_shards)], dim=concat_dim
             ),
             "lm_head.weight": torch.cat([loaded[i]["output.weight"] for i in range(num_shards)], dim=0),
         }
@@ -270,6 +293,8 @@ def write_model(
         vocab_size=vocab_size,
         rope_theta=base,
         max_position_embeddings=max_position_embeddings,
+        bos_token_id=128000 if llama_version == 3 else 1,
+        eos_token_id=128001 if llama_version == 3 else 2,
     )
     config.save_pretrained(tmp_model_path)
 
@@ -288,12 +313,54 @@ def write_model(
     shutil.rmtree(tmp_model_path)
 
 
-def write_tokenizer(tokenizer_path, input_tokenizer_path):
-    # Initialize the tokenizer based on the `spm` model
+class Llama3Converter(TikTokenConverter):
+    def __init__(self, vocab_file, num_reserved_special_tokens=256, **kwargs):
+        super().__init__(vocab_file, **kwargs)
+        tokenizer = self.converted()
+        chat_template = (
+            "{% set loop_messages = messages %}"
+            "{% for message in loop_messages %}"
+            "{% set content = '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n'+ message['content'] | trim + '<|eot_id|>' %}"
+            "{% if loop.index0 == 0 %}"
+            "{% set content = bos_token + content %}"
+            "{% endif %}"
+            "{{ content }}"
+            "{% endfor %}"
+            "{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
+        )
+        num_reserved_special_tokens = 256
+        special_tokens = [
+            "<|begin_of_text|>",
+            "<|end_of_text|>",
+            "<|reserved_special_token_0|>",
+            "<|reserved_special_token_1|>",
+            "<|reserved_special_token_2|>",
+            "<|reserved_special_token_3|>",
+            "<|start_header_id|>",
+            "<|end_header_id|>",
+            "<|reserved_special_token_4|>",
+            "<|eot_id|>",  # end of turn
+        ] + [f"<|reserved_special_token_{i}|>" for i in range(5, num_reserved_special_tokens - 5)]
+        tokenizer.add_special_tokens(special_tokens)
+
+        self.tokenizer = PreTrainedTokenizerFast(
+            tokenizer_object=tokenizer,
+            bos_token="<|begin_of_text|>",
+            eos_token="<|end_of_text|>",
+            chat_template=chat_template,
+            model_input_names=["input_ids", "attention_mask"],
+        )
+
+
+def write_tokenizer(tokenizer_path, input_tokenizer_path, llama_version=2):
     tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
+    if llama_version == 3:
+        tokenizer = Llama3Converter(input_tokenizer_path).tokenizer
+    else:
+        tokenizer = tokenizer_class(input_tokenizer_path)
     print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
-    tokenizer = tokenizer_class(input_tokenizer_path)
     tokenizer.save_pretrained(tokenizer_path)
+    return tokenizer
 
 
 def main():
@@ -304,35 +371,36 @@ def main():
     )
     parser.add_argument(
         "--model_size",
-        choices=["7B", "7Bf", "13B", "13Bf", "30B", "34B", "65B", "70B", "70Bf", "tokenizer_only"],
+        choices=["7B", "8B", "8Bf", "7Bf", "13B", "13Bf", "30B", "34B", "65B", "70B", "70Bf", "tokenizer_only"],
         help="'f' models correspond to the finetuned versions, and are specific to the Llama2 official release. For more details on Llama2, checkout the original repo: https://huggingface.co/meta-llama",
     )
     parser.add_argument(
         "--output_dir",
         help="Location to write HF model and tokenizer",
     )
-    parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
+    parser.add_argument(
+        "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
+    )
     # Different Llama versions used different default values for max_position_embeddings, hence the need to be able to specify which version is being used.
     parser.add_argument(
         "--llama_version",
-        choices=[1, 2],
+        choices=[1, 2, 3],
         default=1,
         type=int,
         help="Version of the Llama model to convert. Currently supports Llama1 and Llama2. Controls the context size",
     )
     args = parser.parse_args()
     spm_path = os.path.join(args.input_dir, "tokenizer.model")
+    vocab_size = len(write_tokenizer(args.output_dir, spm_path, llama_version=args.llama_version))
     if args.model_size != "tokenizer_only":
         write_model(
             model_path=args.output_dir,
             input_base_path=args.input_dir,
             model_size=args.model_size,
             safe_serialization=args.safe_serialization,
-            tokenizer_path=spm_path,
             llama_version=args.llama_version,
+            vocab_size=vocab_size,
         )
-    else:
-        write_tokenizer(args.output_dir, spm_path)
 
 
 if __name__ == "__main__":

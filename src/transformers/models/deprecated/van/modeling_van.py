@@ -47,10 +47,8 @@ _EXPECTED_OUTPUT_SHAPE = [1, 512, 7, 7]
 _IMAGE_CLASS_CHECKPOINT = "Visual-Attention-Network/van-base"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-VAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Visual-Attention-Network/van-base",
-    # See all VAN models at https://huggingface.co/models?filter=van
-]
+
+from .._archive_maps import VAN_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.convnext.modeling_convnext.drop_path

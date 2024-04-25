@@ -62,10 +62,8 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RemBertConfig"
 
-TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/rembert",
-    # See all RemBERT models at https://huggingface.co/models?filter=rembert
-]
+
+from ..deprecated._archive_maps import TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class TFRemBertEmbeddings(keras.layers.Layer):

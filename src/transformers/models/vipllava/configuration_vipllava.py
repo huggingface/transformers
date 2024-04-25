@@ -22,9 +22,8 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ybelkada/vip-llava-7b-hf": "https://huggingface.co/llava-hf/vip-llava-7b-hf/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class VipLlavaConfig(PretrainedConfig):

@@ -52,10 +52,8 @@ _EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
 _IMAGE_CLASS_CHECKPOINT = "google/efficientnet-b7"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/efficientnet-b7",
-    # See all EfficientNet models at https://huggingface.co/models?filter=efficientnet
-]
+
+from ..deprecated._archive_maps import EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 EFFICIENTNET_START_DOCSTRING = r"""
@@ -486,6 +484,7 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
     config_class = EfficientNetConfig
     base_model_prefix = "efficientnet"
     main_input_name = "pixel_values"
+    _no_split_modules = []
 
     def _init_weights(self, module):
         """Initialize the weights"""

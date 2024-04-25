@@ -20,9 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    # See all MEGATRON_BERT models at https://huggingface.co/models?filter=bert
-}
+
+from ..deprecated._archive_maps import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class MegatronBertConfig(PretrainedConfig):

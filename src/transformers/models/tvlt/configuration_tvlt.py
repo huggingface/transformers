@@ -20,9 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ZinengTang/tvlt-base": "https://huggingface.co/ZinengTang/tvlt-base/blob/main/config.json",
-}
+
+from ..deprecated._archive_maps import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class TvltConfig(PretrainedConfig):

@@ -44,10 +44,8 @@ _CHECKPOINT_FOR_DOC = "Tanrei/GPTSAN-japanese"
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
-GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Tanrei/GPTSAN-japanese",
-    # See all GPTSAN-japanese models at https://huggingface.co/models?filter=gptsan-japanese
-]
+
+from ..deprecated._archive_maps import GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.switch_transformers.modeling_switch_transformers.router_z_loss_func

@@ -20,12 +20,7 @@ from ....utils import logging
 
 logger = logging.get_logger(__name__)
 
-# TODO: upload to AWS
-RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "yjernite/retribert-base-uncased": (
-        "https://huggingface.co/yjernite/retribert-base-uncased/resolve/main/config.json"
-    ),
-}
+from .._archive_maps import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class RetriBertConfig(PretrainedConfig):

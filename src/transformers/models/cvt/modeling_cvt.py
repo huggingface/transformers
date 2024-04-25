@@ -45,15 +45,7 @@ _IMAGE_CLASS_CHECKPOINT = "microsoft/cvt-13"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-CVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/cvt-13",
-    "microsoft/cvt-13-384",
-    "microsoft/cvt-13-384-22k",
-    "microsoft/cvt-21",
-    "microsoft/cvt-21-384",
-    "microsoft/cvt-21-384-22k",
-    # See all Cvt models at https://huggingface.co/models?filter=cvt
-]
+from ..deprecated._archive_maps import CVT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -542,6 +534,7 @@ class CvtPreTrainedModel(PreTrainedModel):
     config_class = CvtConfig
     base_model_prefix = "cvt"
     main_input_name = "pixel_values"
+    _no_split_modules = ["CvtLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

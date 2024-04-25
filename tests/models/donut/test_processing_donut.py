@@ -35,6 +35,8 @@ class DonutProcessorTest(unittest.TestCase):
             "zip": "30301",
             "phone": "123-4567",
             "nicknames": [{"nickname": "Johnny"}, {"nickname": "JD"}],
+            "multiline": "text\nwith\nnewlines",
+            "empty": "",
         }
 
         sequence = (
@@ -42,6 +44,8 @@ class DonutProcessorTest(unittest.TestCase):
             "<s_state>GA</s_state><s_zip>30301</s_zip><s_phone>123-4567</s_phone>"
             "<s_nicknames><s_nickname>Johnny</s_nickname>"
             "<sep/><s_nickname>JD</s_nickname></s_nicknames>"
+            "<s_multiline>text\nwith\nnewlines</s_multiline>"
+            "<s_empty></s_empty>"
         )
         actual_json = self.processor.token2json(sequence)
 

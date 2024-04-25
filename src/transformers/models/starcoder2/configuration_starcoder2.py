@@ -20,7 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+
+from ..deprecated._archive_maps import STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class Starcoder2Config(PretrainedConfig):

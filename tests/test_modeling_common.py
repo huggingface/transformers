@@ -60,6 +60,7 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
 from transformers.testing_utils import (
@@ -220,6 +221,7 @@ class ModelTesterMixin:
                 *get_values(MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES),
                 *get_values(MODEL_FOR_MASKED_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
+                *get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES),
             ]:
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
@@ -462,10 +464,10 @@ class ModelTesterMixin:
             ([0.2975, 0.2131, -0.1379, -0.0796, -0.3012, -0.0057, -0.2381, -0.2439, -0.0174, 0.0475])
         )
         init_instance = MyClass()
-        torch.testing.assert_allclose(init_instance.linear.bias, expected_bias, rtol=1e-3, atol=1e-4)
+        torch.testing.assert_close(init_instance.linear.bias, expected_bias, rtol=1e-3, atol=1e-4)
 
         set_seed(0)
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             init_instance.linear.weight, nn.init.kaiming_uniform_(no_init_instance.linear.weight, np.sqrt(5))
         )
 
@@ -2023,8 +2025,8 @@ class ModelTesterMixin:
             tied_weight_keys = model_tied._tied_weights_keys if model_tied._tied_weights_keys is not None else []
             # Detect we get a hit for each key
             for key in tied_weight_keys:
-                if not any(re.search(key, p) for group in tied_params for p in group):
-                    raise ValueError(f"{key} is not a tied weight key for {model_class}.")
+                is_tied_key = any(re.search(key, p) for group in tied_params for p in group)
+                self.assertTrue(is_tied_key, f"{key} is not a tied weight key for {model_class}.")
 
             # Removed tied weights found from tied params -> there should only be one left after
             for key in tied_weight_keys:
@@ -2905,7 +2907,10 @@ class ModelTesterMixin:
                 torch.manual_seed(0)
                 new_output = new_model(**inputs_dict_class)
 
-                self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
+                if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
+                    self.assertTrue(torch.allclose(a, b, atol=1e-5) for a, b in zip(base_output[0], new_output[0]))
+                else:
+                    self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
 
     @require_accelerate
     @mark.accelerate_tests
@@ -2937,7 +2942,10 @@ class ModelTesterMixin:
                 torch.manual_seed(0)
                 new_output = new_model(**inputs_dict_class)
 
-                self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
+                if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
+                    self.assertTrue(torch.allclose(a, b, atol=1e-5) for a, b in zip(base_output[0], new_output[0]))
+                else:
+                    self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
 
     @require_accelerate
     @mark.accelerate_tests
@@ -2973,7 +2981,10 @@ class ModelTesterMixin:
                     torch.manual_seed(0)
                     new_output = new_model(**inputs_dict_class)
 
-                    self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
+                    if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
+                        self.assertTrue(torch.allclose(a, b, atol=1e-5) for a, b in zip(base_output[0], new_output[0]))
+                    else:
+                        self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
 
     @require_accelerate
     @mark.accelerate_tests
@@ -3009,7 +3020,10 @@ class ModelTesterMixin:
                     torch.manual_seed(0)
                     new_output = new_model(**inputs_dict_class)
 
-                    self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
+                    if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
+                        self.assertTrue(torch.allclose(a, b, atol=1e-5) for a, b in zip(base_output[0], new_output[0]))
+                    else:
+                        self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
 
     def test_problem_types(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -3245,7 +3259,8 @@ class ModelTesterMixin:
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    def test_flash_attn_2_inference(self):
+    @is_flaky
+    def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
@@ -3260,9 +3275,7 @@ class ModelTesterMixin:
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
@@ -3340,7 +3353,8 @@ class ModelTesterMixin:
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    def test_flash_attn_2_inference_padding_right(self):
+    @is_flaky
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
@@ -3355,9 +3369,7 @@ class ModelTesterMixin:
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
@@ -3431,6 +3443,7 @@ class ModelTesterMixin:
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
+    @is_flaky
     def test_flash_attn_2_generate_left_padding(self):
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
@@ -3474,6 +3487,7 @@ class ModelTesterMixin:
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
+    @is_flaky
     @slow
     def test_flash_attn_2_generate_padding_right(self):
         for model_class in self.all_generative_model_classes:
@@ -3771,6 +3785,42 @@ class ModelTesterMixin:
                 self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
 
     @require_torch_sdpa
+    @require_torch_gpu
+    @slow
+    def test_sdpa_can_dispatch_on_flash(self):
+        compute_capability = torch.cuda.get_device_capability()
+        major, _ = compute_capability
+
+        if not torch.version.cuda or major < 8:
+            self.skipTest("This test requires an NVIDIA GPU with compute capability >= 8.0")
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_sdpa:
+                self.skipTest(f"{model_class.__name__} does not support SDPA")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if config.model_type in ["llava", "llava_next", "vipllava"]:
+                self.skipTest("Llava-like models currently (transformers==4.39.1) requires an attention_mask input")
+            if config.model_type in ["idefics"]:
+                self.skipTest("Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="sdpa")
+                model.to(torch_device)
+
+                inputs_dict.pop("attention_mask", None)
+                inputs_dict.pop("decoder_attention_mask", None)
+
+                for name, inp in inputs_dict.items():
+                    if isinstance(inp, torch.Tensor) and inp.dtype in [torch.float32, torch.float16]:
+                        inputs_dict[name] = inp.to(torch.float16)
+
+                with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
+                    _ = model(**inputs_dict)
+
+    @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
         max_new_tokens = 30
@@ -3839,6 +3889,57 @@ class ModelTesterMixin:
 
                 self.assertTrue(torch.allclose(res_eager, res_sdpa))
 
+    @require_torch_sdpa
+    def test_sdpa_matches_eager_sliding_window(self):
+        WINDOW_ATTENTION_MODELS = ["mistral", "mixtral", "qwen2", "qwen_moe", "starcoder2"]
+
+        if len(self.all_generative_model_classes) == 0:
+            self.skipTest(f"No generative model classes for {self.__class__.__name__}")
+
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            if config.model_type not in WINDOW_ATTENTION_MODELS:
+                self.skipTest(f"{config.model_type} does not use window attention")
+
+            config.sliding_window = 2
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            attention_mask = inputs_dict["attention_mask"]
+
+            self.assertTrue(dummy_input.ndim == 2)
+            self.assertTrue(dummy_input.shape[1] > 6)
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                with torch.device(torch_device):
+                    model_eager = AutoModelForCausalLM.from_config(
+                        config, attn_implementation="eager", torch_dtype=torch.float32
+                    )
+
+                model_eager.save_pretrained(tmpdir)
+
+                with torch.device(torch_device):
+                    model_sdpa = AutoModelForCausalLM.from_pretrained(
+                        tmpdir, attn_implementation="sdpa", torch_dtype=torch.float32
+                    )
+
+                model_eager = model_eager.eval()
+                model_sdpa = model_sdpa.eval()
+
+                with torch.no_grad():
+                    with torch.backends.cuda.sdp_kernel(
+                        enable_flash=False,
+                        enable_math=True,
+                        enable_mem_efficient=False,
+                    ):
+                        res_eager = model_eager(**inputs_dict, return_dict=False)[0]
+                        res_sdpa = model_sdpa(**inputs_dict, return_dict=False)[0]
+
+                # Only non-padding tokens are expected to match.
+                self.assertTrue(
+                    torch.allclose(res_eager[attention_mask == 1], res_sdpa[attention_mask == 1], rtol=1e-4, atol=1e-4)
+                )
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -3892,19 +3993,20 @@ class ModelTesterMixin:
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
-
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
                 dummy_input = inputs_dict[model.main_input_name]
                 dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+                batch_size = dummy_attention_mask.shape[0]
 
-                if model.config.is_encoder_decoder:
-                    dummy_decoder_input_ids = inputs_dict["decoder_input_ids"]
-                    dummy_decoder_attention_mask = inputs_dict["decoder_attention_mask"]
+                is_padding_right = dummy_attention_mask[:, -1].sum().item() != batch_size
+
+                # To avoid errors with padding_side=="right"
+                if is_padding_right:
+                    dummy_attention_mask = torch.ones_like(dummy_input)
 
                 model = model_class.from_pretrained(
                     tmpdirname,
@@ -3920,6 +4022,9 @@ class ModelTesterMixin:
                         param.data = param.data.to(torch.float32)
 
                 if model.config.is_encoder_decoder:
+                    dummy_decoder_input_ids = inputs_dict["decoder_input_ids"]
+                    dummy_decoder_attention_mask = inputs_dict["decoder_attention_mask"]
+
                     _ = model(dummy_input, decoder_input_ids=dummy_decoder_input_ids)
                     # with attention mask
                     _ = model(

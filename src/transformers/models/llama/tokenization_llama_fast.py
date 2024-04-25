@@ -33,14 +33,6 @@ else:
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "hf-internal-testing/llama-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer.model",
-    },
-    "tokenizer_file": {
-        "hf-internal-testing/llama-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer_config.json",
-    },
-}
 B_INST, E_INST = "[INST]", "[/INST]"
 B_SYS, E_SYS = "<<SYS>>\n", "\n<</SYS>>\n\n"
 
@@ -99,13 +91,35 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         add_eos_token (`bool`, *optional*, defaults to `False`):
             Whether or not to add an `eos_token` at the end of sequences.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
-            Whether or not the default system prompt for Llama should be used.
+            Whether or not the default system prompt for Llama should be used
+        legacy (`bool`, *optional*):
+            Whether or not the `legacy` behavior of the tokenizer should be used. Legacy is before the merge of #24622
+            and #25224 which includes fixes to properly handle tokens that appear after special tokens.
+            Make sure to also set `from_slow` to `True`.
+            A simple example:
+
+            - `legacy=True`:
+            ```python
+            >>> from transformers import LlamaTokenizerFast
+
+            >>> tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=True, from_slow=True)
+            >>> tokenizer.encode("Hello <s>.") # 869 is '▁.'
+            [1, 15043, 29871, 1, 869]
+            ```
+            - `legacy=False`:
+            ```python
+            >>> from transformers import LlamaTokenizerFast
+
+            >>> tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=False, from_slow=True)
+            >>> tokenizer.encode("Hello <s>.")  # 29889 is '.'
+            [1, 15043, 29871, 1, 29889]
+            ```
+            Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
         add_prefix_space (`bool`, *optional*):
             Whether or not the tokenizer should automatically add a prefix space
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     slow_tokenizer_class = LlamaTokenizer
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
@@ -121,9 +135,21 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         add_bos_token=True,
         add_eos_token=False,
         use_default_system_prompt=False,
+        legacy=None,
         add_prefix_space=None,
         **kwargs,
     ):
+        if legacy is None:
+            logger.warning_once(
+                f"You are using the default legacy behaviour of the {self.__class__}. This is"
+                " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
+                " If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it"
+                " means, and thoroughly read the reason why this was added as explained in"
+                " https://github.com/huggingface/transformers/pull/24565"
+            )
+            legacy = True
+        self.legacy = legacy
+
         if add_prefix_space is not None:
             logger.warning_once(
                 "You set `add_prefix_space`. The tokenizer needs to be converted from the slow tokenizers"
@@ -236,10 +262,11 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         in the original repository.
         """
         logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using the default template "
-            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+            "No chat template is set for this tokenizer, falling back to a default class-level template. "
+            "This is very error-prone, because models are often trained with templates different from the class "
+            "default! Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
+            "point any code depending on them will stop working. We recommend setting a valid chat template before "
+            "then to ensure that this model continues working without issues."
         )
         template = (
             "{% if messages[0]['role'] == 'system' %}"

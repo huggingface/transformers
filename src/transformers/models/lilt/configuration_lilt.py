@@ -20,11 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-LILT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "SCUT-DLVCLab/lilt-roberta-en-base": (
-        "https://huggingface.co/SCUT-DLVCLab/lilt-roberta-en-base/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import LILT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class LiltConfig(PretrainedConfig):

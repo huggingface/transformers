@@ -22,9 +22,8 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 logger = logging.get_logger(__name__)
 
-CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/convnextv2-tiny-1k-224": "https://huggingface.co/facebook/convnextv2-tiny-1k-224/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class ConvNextV2Config(BackboneConfigMixin, PretrainedConfig):

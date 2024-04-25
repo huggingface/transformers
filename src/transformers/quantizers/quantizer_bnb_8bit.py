@@ -87,7 +87,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
                     """
                     Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit the
                     quantized model. If you want to dispatch the model on the CPU or the disk while keeping these modules
-                    in 32-bit, you need to set `load_in_8bit_fp32_cpu_offload=True` and pass a custom `device_map` to
+                    in 32-bit, you need to set `llm_int8_enable_fp32_cpu_offload=True` and pass a custom `device_map` to
                     `from_pretrained`. Check
                     https://huggingface.co/docs/transformers/main/en/main_classes/quantization#offload-between-cpu-and-gpu
                     for more details.
@@ -171,7 +171,10 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         import bitsandbytes as bnb
 
         fp16_statistics_key = param_name.replace("weight", "SCB")
+        fp16_weights_format_key = param_name.replace("weight", "weight_format")
+
         fp16_statistics = state_dict.get(fp16_statistics_key, None)
+        fp16_weights_format = state_dict.get(fp16_weights_format_key, None)
 
         module, tensor_name = get_module_from_name(model, param_name)
         if tensor_name not in module._parameters:
@@ -209,6 +212,11 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             setattr(module.weight, "SCB", fp16_statistics.to(target_device))
             if unexpected_keys is not None:
                 unexpected_keys.remove(fp16_statistics_key)
+
+        # We just need to pop the `weight_format` keys from the state dict to remove unneeded
+        # messages. The correct format is correctly retrieved during the first forward pass.
+        if fp16_weights_format is not None and unexpected_keys is not None:
+            unexpected_keys.remove(fp16_weights_format_key)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         model.is_loaded_in_8bit = True

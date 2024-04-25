@@ -31,7 +31,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.models.roberta.modeling_tf_roberta import (
-        TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFRobertaForCausalLM,
         TFRobertaForMaskedLM,
         TFRobertaForMultipleChoice,
@@ -655,9 +654,9 @@ class TFRobertaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFRobertaModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "FacebookAI/roberta-base"
+        model = TFRobertaModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_tf

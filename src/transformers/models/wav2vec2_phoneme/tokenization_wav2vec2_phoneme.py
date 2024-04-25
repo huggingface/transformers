@@ -16,7 +16,6 @@
 
 import json
 import os
-import sys
 from dataclasses import dataclass
 from itertools import groupby
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
@@ -53,21 +52,8 @@ VOCAB_FILES_NAMES = {
     "tokenizer_config_file": "tokenizer_config.json",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/wav2vec2-lv-60-espeak-cv-ft": (
-            "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft/resolve/main/vocab.json"
-        ),
-    },
-    "tokenizer_config_file": {
-        "facebook/wav2vec2-lv-60-espeak-cv-ft": (
-            "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft/resolve/main/tokenizer_config.json"
-        ),
-    },
-}
 
 # Wav2Vec2Phoneme has no max input length
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/wav2vec2-lv-60-espeak-cv-ft": sys.maxsize}
 
 
 ListOfDict = List[Dict[str, Union[int, str]]]
@@ -125,8 +111,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(

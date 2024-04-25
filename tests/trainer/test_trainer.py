@@ -24,6 +24,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from functools import partial
 from itertools import product
 from pathlib import Path
 from typing import Dict, List
@@ -92,6 +93,7 @@ from transformers.utils import (
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
     is_safetensors_available,
@@ -121,12 +123,14 @@ if is_torch_available():
         Trainer,
         TrainerState,
     )
-    from transformers.modeling_utils import unwrap_model
     from transformers.trainer_pt_utils import AcceleratorConfig
 
     if is_safetensors_available():
         import safetensors.torch
 
+# for version specific tests in TrainerIntegrationTest
+require_accelerate_version_min_0_28 = partial(require_accelerate, min_version="0.28")
+GRAD_ACCUM_KWARGS_VERSION_AVAILABLE = is_accelerate_available("0.28")
 
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
 
@@ -706,13 +710,36 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(sched1.lr_lambdas[0].args, sched2.lr_lambdas[0].args)
         self.assertEqual(sched1.lr_lambdas[0].keywords, sched2.lr_lambdas[0].keywords)
 
+    def test_cosine_with_min_lr_scheduler(self):
+        train_dataset = RegressionDataset()
+        model = RegressionModel()
+        num_steps, num_warmup_steps = 10, 2
+        extra_kwargs = {"min_lr": 1e-5}  # Non-default arguments
+        args = TrainingArguments(
+            "./regression",
+            lr_scheduler_type="cosine_with_min_lr",
+            lr_scheduler_kwargs=extra_kwargs,
+            learning_rate=0.2,
+            warmup_steps=num_warmup_steps,
+        )
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
+
+        # Checking that the scheduler was created
+        self.assertIsNotNone(trainer.lr_scheduler)
+
+        # Check the last learning rate
+        for _ in range(num_steps):
+            trainer.lr_scheduler.step()
+        self.assertEqual(trainer.lr_scheduler.get_last_lr()[0], 1e-5)
+
     def test_reduce_lr_on_plateau_args(self):
         # test passed arguments for a custom ReduceLROnPlateau scheduler
         train_dataset = RegressionDataset(length=64)
         eval_dataset = RegressionDataset(length=64)
         args = TrainingArguments(
             "./regression",
-            evaluation_strategy="epoch",
+            eval_strategy="epoch",
             metric_for_best_model="eval_loss",
         )
         model = RegressionModel()
@@ -744,7 +771,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         args = TrainingArguments(
             "./regression",
             lr_scheduler_type="reduce_lr_on_plateau",
-            evaluation_strategy="epoch",
+            eval_strategy="epoch",
             metric_for_best_model="eval_loss",
             num_train_epochs=10,
             learning_rate=0.2,
@@ -2182,7 +2209,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 output_dir=tmpdir,
                 learning_rate=0.1,
                 eval_steps=5,
-                evaluation_strategy="steps",
+                eval_strategy="steps",
                 save_steps=5,
                 load_best_model_at_end=True,
             )
@@ -2198,7 +2225,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 output_dir=tmpdir,
                 learning_rate=0.1,
                 eval_steps=5,
-                evaluation_strategy="steps",
+                eval_strategy="steps",
                 save_steps=5,
                 load_best_model_at_end=True,
                 metric_for_best_model="accuracy",
@@ -2215,7 +2242,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 b=2.5,
                 output_dir=tmpdir,
                 learning_rate=0.1,
-                evaluation_strategy="epoch",
+                eval_strategy="epoch",
                 save_strategy="epoch",
                 load_best_model_at_end=True,
                 metric_for_best_model="accuracy",
@@ -2234,7 +2261,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 output_dir=tmpdir,
                 learning_rate=0.1,
                 eval_steps=5,
-                evaluation_strategy="steps",
+                eval_strategy="steps",
                 save_steps=5,
                 load_best_model_at_end=True,
                 pretrained=False,
@@ -2255,7 +2282,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     output_dir=tmpdir,
                     learning_rate=0.1,
                     eval_steps=5,
-                    evaluation_strategy="steps",
+                    eval_strategy="steps",
                     save_steps=5,
                     load_best_model_at_end=True,
                     save_safetensors=save_safetensors,
@@ -2409,7 +2436,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 gradient_accumulation_steps=1,
                 per_device_train_batch_size=16,
                 load_best_model_at_end=True,
-                evaluation_strategy=IntervalStrategy.EPOCH,
+                eval_strategy=IntervalStrategy.EPOCH,
                 save_strategy=IntervalStrategy.EPOCH,
                 compute_metrics=AlmostAccuracy(),
                 metric_for_best_model="accuracy",
@@ -2425,7 +2452,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 num_train_epochs=20,
                 gradient_accumulation_steps=1,
                 per_device_train_batch_size=16,
-                evaluation_strategy=IntervalStrategy.EPOCH,
+                eval_strategy=IntervalStrategy.EPOCH,
                 compute_metrics=AlmostAccuracy(),
                 metric_for_best_model="accuracy",
             )
@@ -2440,8 +2467,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer = get_regression_trainer(learning_rate=0.1)
 
         def assert_flos_extraction(trainer, wrapped_model_to_check):
-            self.assertEqual(trainer.model, unwrap_model(wrapped_model_to_check))
-            self.assertGreaterEqual(getattr(unwrap_model(wrapped_model_to_check).config, "total_flos", 0), 0)
+            self.assertEqual(trainer.model, trainer.accelerator.unwrap_model(wrapped_model_to_check))
+            self.assertGreaterEqual(
+                getattr(trainer.accelerator.unwrap_model(wrapped_model_to_check).config, "total_flos", 0), 0
+            )
 
         # with plain model
         assert_flos_extraction(trainer, trainer.model)
@@ -2469,7 +2498,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # With best model at end
             trainer = get_regression_trainer(
-                output_dir=tmp_dir, evaluation_strategy="steps", load_best_model_at_end=True, save_total_limit=2
+                output_dir=tmp_dir, eval_strategy="steps", load_best_model_at_end=True, save_total_limit=2
             )
             trainer.state.best_model_checkpoint = os.path.join(tmp_dir, "checkpoint-5")
             self.check_checkpoint_deletion(trainer, tmp_dir, [5, 25])
@@ -2477,13 +2506,51 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # Edge case: we don't always honor save_total_limit=1 if load_best_model_at_end=True to be able to resume
             # from checkpoint
             trainer = get_regression_trainer(
-                output_dir=tmp_dir, evaluation_strategy="steps", load_best_model_at_end=True, save_total_limit=1
+                output_dir=tmp_dir, eval_strategy="steps", load_best_model_at_end=True, save_total_limit=1
             )
             trainer.state.best_model_checkpoint = os.path.join(tmp_dir, "checkpoint-25")
             self.check_checkpoint_deletion(trainer, tmp_dir, [25])
 
             trainer.state.best_model_checkpoint = os.path.join(tmp_dir, "checkpoint-5")
             self.check_checkpoint_deletion(trainer, tmp_dir, [5, 25])
+
+    def test_compare_trainer_and_checkpoint_args_logging(self):
+        logger = logging.get_logger()
+
+        with tempfile.TemporaryDirectory() as tmpdir, CaptureLogger(logger) as cl:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                train_len=128,
+                eval_steps=5,
+                gradient_accumulation_steps=2,
+                per_device_train_batch_size=4,
+                save_steps=5,
+                learning_rate=0.1,
+            )
+            trainer.train()
+
+            checkpoint = os.path.join(tmpdir, "checkpoint-5")
+            checkpoint_trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                train_len=256,
+                eval_steps=10,
+                gradient_accumulation_steps=4,
+                per_device_train_batch_size=8,
+                save_steps=10,
+                learning_rate=0.1,
+            )
+            checkpoint_trainer.train(resume_from_checkpoint=checkpoint)
+
+        self.assertIn("save_steps: 10 (from args) != 5 (from trainer_state.json)", cl.out)
+
+        self.assertIn(
+            "per_device_train_batch_size: 8 (from args) != 4 (from trainer_state.json)",
+            cl.out,
+        )
+        self.assertIn(
+            "eval_steps: 10 (from args) != 5 (from trainer_state.json)",
+            cl.out,
+        )
 
     def check_mem_metrics(self, trainer, check_func):
         metrics = trainer.train().metrics
@@ -2814,6 +2881,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.even_batches, True)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
 
+            if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
+                # gradient accumulation kwargs configures gradient_state
+                self.assertNotIn("sync_each_batch", trainer.accelerator.gradient_state.plugin_kwargs)
+
     def test_accelerator_config_from_dict(self):
         # Checks that accelerator kwargs can be passed through
         # and the accelerator is initialized respectively
@@ -2822,21 +2893,28 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             model = RegressionPreTrainedModel(config)
             eval_dataset = SampleIterableDataset()
 
+            accelerator_config = {
+                "split_batches": True,
+                "dispatch_batches": True,
+                "even_batches": False,
+                "use_seedable_sampler": True,
+            }
+            if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
+                accelerator_config["gradient_accumulation_kwargs"] = {"sync_each_batch": True}
+
             # Leaves all options as something *not* basic
             args = RegressionTrainingArguments(
                 output_dir=tmp_dir,
-                accelerator_config={
-                    "split_batches": True,
-                    "dispatch_batches": True,
-                    "even_batches": False,
-                    "use_seedable_sampler": True,
-                },
+                accelerator_config=accelerator_config,
             )
             trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
             self.assertEqual(trainer.accelerator.split_batches, True)
             self.assertEqual(trainer.accelerator.dispatch_batches, True)
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
+
+            if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
+                self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["sync_each_batch"], True)
 
     def test_accelerator_config_from_yaml(self):
         # Checks that accelerator kwargs can be passed through
@@ -2850,6 +2928,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     "even_batches": False,
                     "use_seedable_sampler": False,
                 }
+                if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
+                    accelerator_config["gradient_accumulation_kwargs"] = {"sync_each_batch": True}
                 json.dump(accelerator_config, f)
             config = RegressionModelConfig(a=1.5, b=2.5)
             model = RegressionPreTrainedModel(config)
@@ -2863,11 +2943,18 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
 
+            if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
+                self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["sync_each_batch"], True)
+
     def test_accelerator_config_from_dataclass(self):
         # Checks that accelerator kwargs can be passed through
         # and the accelerator is initialized respectively
+
         accelerator_config = AcceleratorConfig(
-            split_batches=True, dispatch_batches=True, even_batches=False, use_seedable_sampler=False
+            split_batches=True,
+            dispatch_batches=True,
+            even_batches=False,
+            use_seedable_sampler=False,
         )
         config = RegressionModelConfig(a=1.5, b=2.5)
         model = RegressionPreTrainedModel(config)
@@ -2879,6 +2966,35 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.dispatch_batches, True)
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
+
+    @require_accelerate_version_min_0_28
+    def test_accelerate_config_from_dataclass_grad_accum(self):
+        # Checks that accelerator kwargs can be passed through
+        # and the accelerator is initialized respectively
+
+        grad_acc_kwargs = {
+            "num_steps": 10,
+            "adjust_scheduler": False,
+            "sync_with_dataloader": False,
+            "sync_each_batch": True,
+        }
+        accelerator_config = AcceleratorConfig(
+            split_batches=True,
+            dispatch_batches=True,
+            even_batches=False,
+            use_seedable_sampler=False,
+            gradient_accumulation_kwargs=grad_acc_kwargs,
+        )
+        config = RegressionModelConfig(a=1.5, b=2.5)
+        model = RegressionPreTrainedModel(config)
+        eval_dataset = SampleIterableDataset()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = RegressionTrainingArguments(output_dir=tmp_dir, accelerator_config=accelerator_config)
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["num_steps"], 10)
+            self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["adjust_scheduler"], False)
+            self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["sync_with_dataloader"], False)
+            self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["sync_each_batch"], True)
 
     def test_accelerator_config_from_partial(self):
         # Checks that accelerator kwargs can be passed through
@@ -2950,6 +3066,73 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 eval_dataset = SampleIterableDataset()
                 trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
                 self.assertEqual(trainer.accelerator.split_batches, True)
+
+    @require_accelerate_version_min_0_28
+    def test_accelerator_config_from_dict_grad_accum_num_steps(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            model = RegressionPreTrainedModel(config)
+            eval_dataset = SampleIterableDataset()
+
+            # case - TrainingArguments.gradient_accumulation_steps == 1
+            #      - gradient_accumulation_kwargs['num_steps] == 1
+            # results in grad accum set to 1
+            args = RegressionTrainingArguments(
+                output_dir=tmp_dir,
+                gradient_accumulation_steps=1,
+                accelerator_config={
+                    "gradient_accumulation_kwargs": {
+                        "num_steps": 1,
+                    }
+                },
+            )
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["num_steps"], 1)
+
+            # case - TrainingArguments.gradient_accumulation_steps > 1
+            #      - gradient_accumulation_kwargs['num_steps] specified
+            # results in exception raised
+            args = RegressionTrainingArguments(
+                output_dir=tmp_dir,
+                gradient_accumulation_steps=2,
+                accelerator_config={
+                    "gradient_accumulation_kwargs": {
+                        "num_steps": 10,
+                    }
+                },
+            )
+            with self.assertRaises(Exception) as context:
+                trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertTrue("The `AcceleratorConfig`'s `num_steps` is set but" in str(context.exception))
+
+    def test_accelerator_config_not_instantiated(self):
+        # Checks that accelerator kwargs can be passed through
+        # and the accelerator is initialized respectively
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(NotImplementedError) as context:
+                _ = RegressionTrainingArguments(
+                    output_dir=tmp_dir,
+                    accelerator_config=AcceleratorConfig,
+                )
+            self.assertTrue("Tried passing in a callable to `accelerator_config`" in str(context.exception))
+
+        # Now test with a custom subclass
+        @dataclasses.dataclass
+        class CustomAcceleratorConfig(AcceleratorConfig):
+            pass
+
+        @dataclasses.dataclass
+        class CustomTrainingArguments(TrainingArguments):
+            accelerator_config: dict = dataclasses.field(
+                default=CustomAcceleratorConfig,
+            )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(NotImplementedError) as context:
+                _ = CustomTrainingArguments(
+                    output_dir=tmp_dir,
+                )
+            self.assertTrue("Tried passing in a callable to `accelerator_config`" in str(context.exception))
 
 
 @require_torch
@@ -3159,7 +3342,7 @@ class TrainerHyperParameterOptunaIntegrationTest(unittest.TestCase):
                 output_dir=tmp_dir,
                 learning_rate=0.1,
                 logging_steps=1,
-                evaluation_strategy=IntervalStrategy.EPOCH,
+                eval_strategy=IntervalStrategy.EPOCH,
                 save_strategy=IntervalStrategy.EPOCH,
                 num_train_epochs=4,
                 disable_tqdm=True,
@@ -3208,7 +3391,7 @@ class TrainerHyperParameterMultiObjectOptunaIntegrationTest(unittest.TestCase):
                 output_dir=tmp_dir,
                 learning_rate=0.1,
                 logging_steps=1,
-                evaluation_strategy=IntervalStrategy.EPOCH,
+                eval_strategy=IntervalStrategy.EPOCH,
                 save_strategy=IntervalStrategy.EPOCH,
                 num_train_epochs=10,
                 disable_tqdm=True,
@@ -3266,7 +3449,7 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
                 output_dir=tmp_dir,
                 learning_rate=0.1,
                 logging_steps=1,
-                evaluation_strategy=IntervalStrategy.EPOCH,
+                eval_strategy=IntervalStrategy.EPOCH,
                 save_strategy=IntervalStrategy.EPOCH,
                 num_train_epochs=4,
                 disable_tqdm=True,
@@ -3329,7 +3512,7 @@ class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):
                 output_dir=tmp_dir,
                 learning_rate=0.1,
                 logging_steps=1,
-                evaluation_strategy=IntervalStrategy.EPOCH,
+                eval_strategy=IntervalStrategy.EPOCH,
                 save_strategy=IntervalStrategy.EPOCH,
                 num_train_epochs=4,
                 disable_tqdm=True,
@@ -3749,7 +3932,7 @@ class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
                 output_dir=tmp_dir,
                 learning_rate=0.1,
                 logging_steps=1,
-                evaluation_strategy=IntervalStrategy.EPOCH,
+                eval_strategy=IntervalStrategy.EPOCH,
                 save_strategy=IntervalStrategy.EPOCH,
                 num_train_epochs=4,
                 disable_tqdm=True,
@@ -3769,3 +3952,41 @@ class HyperParameterSearchBackendsTest(unittest.TestCase):
             list(ALL_HYPERPARAMETER_SEARCH_BACKENDS.keys()),
             list(HPSearchBackend),
         )
+
+
+@require_torch
+class OptimizerAndModelInspectionTest(unittest.TestCase):
+    def test_get_num_trainable_parameters(self):
+        model = nn.Sequential(nn.Linear(128, 64), nn.Linear(64, 32))
+        # in_features * out_features + bias
+        layer_1 = 128 * 64 + 64
+        layer_2 = 64 * 32 + 32
+        trainer = Trainer(model=model)
+        self.assertEqual(trainer.get_num_trainable_parameters(), layer_1 + layer_2)
+        # Freeze the last layer
+        for param in model[-1].parameters():
+            param.requires_grad = False
+        self.assertEqual(trainer.get_num_trainable_parameters(), layer_1)
+
+    def test_get_learning_rates(self):
+        model = nn.Sequential(nn.Linear(128, 64))
+        trainer = Trainer(model=model)
+        with self.assertRaises(ValueError):
+            trainer.get_learning_rates()
+        trainer.create_optimizer()
+        self.assertEqual(trainer.get_learning_rates(), [5e-05, 5e-05])
+
+    def test_get_optimizer_group(self):
+        model = nn.Sequential(nn.Linear(128, 64))
+        trainer = Trainer(model=model)
+        # ValueError is raised if optimizer is None
+        with self.assertRaises(ValueError):
+            trainer.get_optimizer_group()
+        trainer.create_optimizer()
+        # Get groups
+        num_groups = len(trainer.get_optimizer_group())
+        self.assertEqual(num_groups, 2)
+        # Get group of parameter
+        param = next(model.parameters())
+        group = trainer.get_optimizer_group(param)
+        self.assertIn(param, group["params"])

@@ -25,20 +25,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/electra-small-generator": "https://huggingface.co/google/electra-small-generator/resolve/main/config.json",
-    "google/electra-base-generator": "https://huggingface.co/google/electra-base-generator/resolve/main/config.json",
-    "google/electra-large-generator": "https://huggingface.co/google/electra-large-generator/resolve/main/config.json",
-    "google/electra-small-discriminator": (
-        "https://huggingface.co/google/electra-small-discriminator/resolve/main/config.json"
-    ),
-    "google/electra-base-discriminator": (
-        "https://huggingface.co/google/electra-base-discriminator/resolve/main/config.json"
-    ),
-    "google/electra-large-discriminator": (
-        "https://huggingface.co/google/electra-large-discriminator/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class ElectraConfig(PretrainedConfig):

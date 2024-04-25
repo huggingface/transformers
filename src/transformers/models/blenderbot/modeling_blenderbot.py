@@ -53,10 +53,7 @@ _CONFIG_FOR_DOC = "BlenderbotConfig"
 _CHECKPOINT_FOR_DOC = "facebook/blenderbot-400M-distill"
 
 
-BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/blenderbot-3B",
-    # See all Blenderbot models at https://huggingface.co/models?filter=blenderbot
-]
+from ..deprecated._archive_maps import BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right

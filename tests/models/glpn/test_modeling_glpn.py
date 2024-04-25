@@ -30,7 +30,6 @@ if is_torch_available():
 
     from transformers import GLPNConfig, GLPNForDepthEstimation, GLPNModel
     from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
-    from transformers.models.glpn.modeling_glpn import GLPN_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -309,9 +308,9 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in GLPN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GLPNModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "vinvino02/glpn-kitti"
+        model = GLPNModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -326,8 +325,8 @@ def prepare_img():
 class GLPNModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_depth_estimation(self):
-        image_processor = GLPNImageProcessor.from_pretrained(GLPN_PRETRAINED_MODEL_ARCHIVE_LIST[0])
-        model = GLPNForDepthEstimation.from_pretrained(GLPN_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
+        image_processor = GLPNImageProcessor.from_pretrained("vinvino02/glpn-kitti")
+        model = GLPNForDepthEstimation.from_pretrained("vinvino02/glpn-kitti").to(torch_device)
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)

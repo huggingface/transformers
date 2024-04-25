@@ -40,10 +40,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "BAAI/AltCLIP"
 _CONFIG_FOR_DOC = "AltCLIPConfig"
 
-ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "BAAI/AltCLIP",
-    # See all AltCLIP models at https://huggingface.co/models?filter=altclip
-]
+
+from ..deprecated._archive_maps import ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 ALTCLIP_START_DOCSTRING = r"""
