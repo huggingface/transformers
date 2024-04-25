@@ -466,6 +466,8 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             with torch.no_grad():
                 model(**inputs)[0]
 
+    # override because ImageGPT main input name is `pixel_values`
+    # NOTE: in latest transformers this is deprecated, `input_ids` should be used. TODO
     def test_inputs_embeds_matches_input_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

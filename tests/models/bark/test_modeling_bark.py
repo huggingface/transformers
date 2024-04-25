@@ -579,6 +579,7 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
             with torch.no_grad():
                 model(**inputs)[0]
 
+    # override as the input arg is called "input_embeds", not "inputs_embeds"
     def test_inputs_embeds_matches_input_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -667,6 +668,7 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             with torch.no_grad():
                 model(**inputs)[0]
 
+    # override as the input arg is called "input_embeds", not "inputs_embeds"
     def test_inputs_embeds_matches_input_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

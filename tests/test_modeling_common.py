@@ -2750,40 +2750,41 @@ class ModelTesterMixin:
             if "inputs_embeds" not in model_forward_args:
                 self.skipTest("This model doesn't use `inputs_embeds`")
 
-            try:
-                wte = model.get_input_embeddings()
-            except NotImplementedError:
-                self.skipTest("This model doesn't use `inputs_embeds`")
-
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
-            if not self.is_encoder_decoder:
-                input_ids = inputs["input_ids"]
-                # some models infer position ids/attn mask differently when input ids
-                # by check if pad_token let's make sure no padding is in input ids
-                not_pad_token_id = pad_token_id + 1 if max(0, pad_token_id - 1) == 0 else pad_token_id - 1
-                input_ids[input_ids == pad_token_id] = not_pad_token_id
+            print(inputs.keys())
 
-                del inputs["input_ids"]
-                inputs_embeds = wte(input_ids)
-                with torch.no_grad():
-                    out_ids = model(input_ids=input_ids, **inputs)[0]
-                    out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            else:
-                encoder_input_ids = inputs["input_ids"]
-                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
-                encoder_input_ids[encoder_input_ids == pad_token_id] = max(0, pad_token_id + 1)
-                decoder_input_ids[decoder_input_ids == pad_token_id] = max(0, pad_token_id + 1)
-                del inputs["input_ids"]
-                inputs.pop("decoder_input_ids", None)
+            try:
+                wte = model.get_input_embeddings()
+                if not self.is_encoder_decoder:
+                    input_ids = inputs["input_ids"]
+                    # some models infer position ids/attn mask differently when input ids
+                    # by check if pad_token let's make sure no padding is in input ids
+                    not_pad_token_id = pad_token_id + 1 if max(0, pad_token_id - 1) == 0 else pad_token_id - 1
+                    input_ids[input_ids == pad_token_id] = not_pad_token_id
 
-                inputs_embeds = wte(encoder_input_ids)
-                decoder_inputs_embeds = wte(decoder_input_ids)
-                with torch.no_grad():
-                    out_ids = model(input_ids=encoder_input_ids, decoder_input_ids=decoder_input_ids, **inputs)[0]
-                    out_embeds = model(
-                        inputs_embeds=inputs_embeds, decoder_inputs_embeds=decoder_inputs_embeds, **inputs
-                    )[0]
+                    del inputs["input_ids"]
+                    inputs_embeds = wte(input_ids)
+                    with torch.no_grad():
+                        out_ids = model(input_ids=input_ids, **inputs)[0]
+                        out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
+                else:
+                    encoder_input_ids = inputs["input_ids"]
+                    decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+                    encoder_input_ids[encoder_input_ids == pad_token_id] = max(0, pad_token_id + 1)
+                    decoder_input_ids[decoder_input_ids == pad_token_id] = max(0, pad_token_id + 1)
+                    del inputs["input_ids"]
+                    inputs.pop("decoder_input_ids", None)
+
+                    inputs_embeds = wte(encoder_input_ids)
+                    decoder_inputs_embeds = wte(decoder_input_ids)
+                    with torch.no_grad():
+                        out_ids = model(input_ids=encoder_input_ids, decoder_input_ids=decoder_input_ids, **inputs)[0]
+                        out_embeds = model(
+                            inputs_embeds=inputs_embeds, decoder_inputs_embeds=decoder_inputs_embeds, **inputs
+                        )[0]
+            except NotImplementedError:
+                self.skipTest("This model doesn't use `inputs_embeds`")
 
             self.assertTrue(torch.allclose(out_embeds, out_ids))
 
