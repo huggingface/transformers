@@ -789,7 +789,7 @@ class WandbCallback(TrainerCallback):
             try:
                 self._wandb.config["model/num_parameters"] = model.num_parameters()
             except AttributeError:
-                pass
+                logger.info("Could not log the number of model parameters in Weights & Biases.")
 
             # log the initial model and architecture to an artifact
             with tempfile.TemporaryDirectory() as temp_dir:
