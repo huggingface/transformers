@@ -14,7 +14,6 @@
 "HQQ (Half-Quadratic Quantization) integration file"
 
 from ..utils import is_hqq_available, is_torch_available, logging
-from ..utils.hqq_utils import autoname_modules, get_linear_tags, name_to_linear_tag
 
 
 if is_torch_available():
@@ -28,6 +27,29 @@ else:
     HQQLinear = None
 
 logger = logging.get_logger(__name__)
+
+
+# Name all modules inside the model
+def autoname_modules(model):
+    for name, module in model.named_modules():
+        module.name = name
+
+
+# Get the linear_tag from a modul name. For example: model.layers.31.self_attn.k_proj -> self_attn.k_proj
+def name_to_linear_tag(name):
+    return ".".join([n for n in name.split(".") if ((n not in ["model", "layers"]) and (not n.isnumeric()))])
+
+
+# Get all linear tags available
+def get_linear_tags(model):
+    if is_hqq_available():
+        from hqq.core.quantize import HQQLinear
+
+    linear_tags = set()
+    for name, module in model.named_modules():
+        if type(module) in [torch.nn.Linear, HQQLinear]:
+            linear_tags.add(name_to_linear_tag(name))
+    return list(linear_tags)
 
 
 def _prepare_for_hqq_linear(model, patch_params, has_been_replaced, current_key_name=None):

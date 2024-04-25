@@ -19,29 +19,6 @@ if is_torch_available():
     import torch
 
 
-# Name all modules inside the model
-def autoname_modules(model):
-    for name, module in model.named_modules():
-        module.name = name
-
-
-# Get the linear_tag from a modul name. For example: model.layers.31.self_attn.k_proj -> self_attn.k_proj
-def name_to_linear_tag(name):
-    return ".".join([n for n in name.split(".") if ((n not in ["model", "layers"]) and (not n.isnumeric()))])
-
-
-# Get all linear tags available
-def get_linear_tags(model):
-    if is_hqq_available():
-        from hqq.core.quantize import HQQLinear
-
-    linear_tags = set()
-    for name, module in model.named_modules():
-        if type(module) in [torch.nn.Linear, HQQLinear]:
-            linear_tags.add(name_to_linear_tag(name))
-    return list(linear_tags)
-
-
 # Finds the parent of a node module named "name"
 def find_parent(model, name):
     module_tree = name.split(".")[:-1]
