@@ -4375,7 +4375,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         if attention_mask is not None:
             position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
+            position_ids = position_ids.masked_fill(attention_mask == 0, 1)
             position_ids = position_ids[..., -seq_length:].view(-1, seq_length)
         else:
             position_ids = torch.arange(past_length, seq_length + past_length, dtype=torch.long, device=device)

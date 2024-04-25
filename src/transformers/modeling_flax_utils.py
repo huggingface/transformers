@@ -1256,6 +1256,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if attention_mask is not None:
             position_ids = jnp.cumsum(attention_mask, axis=-1) - 1
             position_ids = jnp.where(attention_mask == 0, 1, position_ids)
+            position_ids = position_ids[..., -seq_length:]
         else:
             position_ids = jnp.broadcast_to(jnp.arange(seq_length)[None, :], (batch_size, seq_length))
         return position_ids

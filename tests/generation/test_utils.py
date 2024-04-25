@@ -1160,7 +1160,7 @@ class GenerationTesterMixin:
                 assistant_model = model
             assistant_model.generation_config.num_assistant_tokens = 2  # see b)
             assistant_model.generation_config.num_assistant_tokens_schedule = "constant"  # see b)
-            
+
             # test that the output is correct if user pass in position ids into `generate` vs it's calculated internally
             if use_position_ids:
                 model_forward_args = inspect.signature(model.forward).parameters

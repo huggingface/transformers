@@ -4690,6 +4690,7 @@ class GenerationMixin:
             candidate_kwargs = _prepare_attention_mask(
                 candidate_kwargs, candidate_input_ids.shape[1], self.config.is_encoder_decoder
             )
+            candidate_kwargs = _prepare_position_ids(candidate_kwargs, candidate_input_ids.shape[1])
             candidate_kwargs = _prepare_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
             if "cache_position" in candidate_kwargs:
                 candidate_kwargs["cache_position"] = torch.cat(

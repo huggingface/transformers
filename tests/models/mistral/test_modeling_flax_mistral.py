@@ -154,6 +154,9 @@ class FlaxMistralModelTester:
         max_decoder_length = 20
         model = model_class_name(config)
 
+        # make full attn mask since below we are preparing position ids assuming it's all ones
+        attention_mask = jnp.ones_like(attention_mask)
+
         attention_mask_cache = jnp.concatenate(
             [attention_mask, jnp.zeros((attention_mask.shape[0], max_decoder_length - attention_mask.shape[1]))],
             axis=-1,

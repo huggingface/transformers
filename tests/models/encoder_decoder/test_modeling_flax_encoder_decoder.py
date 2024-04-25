@@ -305,6 +305,7 @@ class FlaxEncoderDecoderMixin:
         fx_outputs = fx_model(**inputs_dict).to_tuple()
         self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
         for fx_output, pt_output in zip(fx_outputs, pt_outputs):
+            print("PASSED")
             self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-5)
 
         # PT -> Flax
