@@ -33,11 +33,11 @@ from transformers.testing_utils import require_bitsandbytes, require_torch, slow
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 
 
 if is_torch_available():
     import torch
+    from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 else:
     is_torch_greater_or_equal_than_2_0 = False
 
