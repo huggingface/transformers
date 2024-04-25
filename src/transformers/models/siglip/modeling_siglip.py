@@ -492,6 +492,11 @@ class SiglipPreTrainedModel(PreTrainedModel):
             logit_scale_init = torch.log(torch.tensor(1.0))
             module.logit_scale.data.fill_(logit_scale_init)
             module.logit_bias.data.zero_()
+        elif isinstance(module, SiglipForImageClassification):
+            nn.init.normal_(
+                module.classifier.weight,
+                std=self.config.vision_config.hidden_size**-0.5 * self.config.initializer_factor,
+            )
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
             lecun_normal_(module.weight)
             if module.bias is not None:

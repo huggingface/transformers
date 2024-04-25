@@ -67,6 +67,7 @@ deps = {
     "safetensors": "safetensors>=0.4.1",
     "sagemaker": "sagemaker>=2.31.0",
     "scikit-learn": "scikit-learn",
+    "scipy": "scipy<1.13.0",
     "sentencepiece": "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt": "sigopt",
     "starlette": "starlette",
