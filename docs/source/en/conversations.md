@@ -208,7 +208,7 @@ the broad ideas, and leave the details for the linked documents. The key steps a
 4. We [generate](https://huggingface.co/docs/transformers/en/llm_tutorial) a response from the model.
 5. The tokens output by the model are decoded back to a string
 
-## Advanced: Performance, memory and hardware
+## Performance, memory and hardware
 
 You probably know by now that most machine learning tasks are run on GPUs. However, it is entirely possible
 to generate text from a chat model or language model on a CPU, albeit somewhat more slowly. If you can fit
