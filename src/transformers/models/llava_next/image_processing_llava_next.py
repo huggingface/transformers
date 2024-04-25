@@ -633,13 +633,4 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             pixel_values = np.array(pixel_values)
             new_images.append(pixel_values)
 
-        # max_patch = max(len(x) for x in new_images)
-        # new_images = [
-        #     np.concatenate([x, np.zeros([max_patch - x.shape[0]] + list(x.shape[1:]), dtype=x.dtype)], axis=0)
-        #     if x.shape[0] < max_patch
-        #     else x
-        #     for x in new_images
-        # ]
-        # data = {"pixel_values": new_images, "image_sizes": image_sizes}
-        # return BatchFeature(data=data, tensor_type=return_tensors)
         return self.pad(pixel_values=new_images, image_sizes=image_sizes, return_tensors=return_tensors)
