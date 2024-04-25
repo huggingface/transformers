@@ -22,12 +22,13 @@ import operator
 import os
 import random
 import warnings
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 from torch import nn
-from torch.fx import Graph, GraphModule, Proxy, Tracer
+from torch.fx import Graph, GraphModule, Node, Proxy, Tracer
 from torch.fx._compatibility import compatibility
+from torch.fx.node import Argument
 from torch.fx.proxy import ParameterProxy
 
 from .. import PretrainedConfig, PreTrainedModel, logging
@@ -946,6 +947,11 @@ class HFTracer(Tracer):
             args_metas = torch.fx.node.map_aggregate(args, _proxies_to_metas)
             kwargs_metas = torch.fx.node.map_aggregate(kwargs, _proxies_to_metas)
 
+            should_install_metadata = True
+
+            self._disable_module_getattr = True
+            self._disable_call_module = True
+
             if kind == "call_function":
                 meta_target = _MANUAL_META_OVERRIDES.get(target, target)
                 meta_out = meta_target(*args_metas, **kwargs_metas)
@@ -958,38 +964,35 @@ class HFTracer(Tracer):
             elif kind == "call_module":
                 if not hasattr(self, "orig_forward"):
                     raise AttributeError(f"{self} does not have an attribute called orig_forward")
-                self._disable_module_getattr = True
-                try:
-                    mod = self.root.get_submodule(target)
-                    mod_type = type(mod)
-                    if mod_type in _MANUAL_META_OVERRIDES:
-                        meta_out = _MANUAL_META_OVERRIDES[mod_type](mod, *args_metas, **kwargs_metas)
-                    else:
-                        meta_out = self.orig_forward(*args_metas, **kwargs_metas)
-                finally:
-                    self._disable_module_getattr = False
+                mod = self.root.get_submodule(target)
+                mod_type = type(mod)
+                if mod_type in _MANUAL_META_OVERRIDES:
+                    meta_out = _MANUAL_META_OVERRIDES[mod_type](mod, *args_metas, **kwargs_metas)
+                else:
+                    meta_out = self.orig_forward(*args_metas, **kwargs_metas)
             elif kind == "get_attr":
-                self._disable_module_getattr = True
-                try:
-                    attr_itr = self.root
-                    atoms = target.split(".")
-                    for atom in atoms:
-                        attr_itr = getattr(attr_itr, atom)
-                    if isinstance(attr_itr, torch.Tensor):
-                        meta_out = attr_itr.to(device="meta")
-                    else:
-                        meta_out = attr_itr
-                finally:
-                    self._disable_module_getattr = False
+                attr_itr = self.root
+                atoms = target.split(".")
+                for atom in atoms:
+                    attr_itr = getattr(attr_itr, atom)
+                if isinstance(attr_itr, torch.Tensor):
+                    meta_out = attr_itr.to(device="meta")
+                else:
+                    meta_out = attr_itr
             else:
-                return rv
+                should_install_metadata = False
 
-            if not isinstance(rv, Proxy):
-                raise ValueError("Don't support composite output yet")
-            rv.install_metadata(meta_out)
+            if should_install_metadata:
+                if not isinstance(rv, Proxy):
+                    raise ValueError("Don't support composite output yet")
+                rv.install_metadata(meta_out)
+
         except Exception as e:
             if _IS_IN_DEBUG_MODE:
                 warnings.warn(f"Could not compute metadata for {kind} target {target}: {e}")
+
+        self._disable_module_getattr = False
+        self._disable_call_module = False
 
         return rv
 
@@ -1036,8 +1039,19 @@ class HFTracer(Tracer):
         return self._module_getattr(attr, attr_val, parameter_proxy_cache)
 
     def call_module(self, m, forward, args, kwargs):
+        if getattr(self, "_disable_call_module", False):
+            return m(*args, **kwargs)
         self.orig_forward = forward
         return super().call_module(m, forward, args, kwargs)
+
+    def call_function(
+        self,
+        the_function: Callable[..., Any],
+        args: Optional[Tuple["Argument", ...]] = None,
+        kwargs: Optional[Dict[str, "Argument"]] = None,
+        type_expr: Optional[Any] = None,
+    ) -> Node:
+        return super().call_function(the_function, args=args, kwargs=kwargs, type_expr=type_expr)
 
     def proxy(self, node):
         return HFProxy(node, self)
