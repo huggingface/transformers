@@ -77,14 +77,13 @@ def check_if_hqq_quant_config(quant_config):
 
 
 # Returns a new module from a dummy (meta) module and a dictionary of module name -> state_dict
-@torch.no_grad()
 def load_hqq_module(module, weights, compute_dtype, device):
     if is_hqq_available():
         from hqq.core.quantize import HQQLinear
 
     if module.name not in weights:
         try:
-            return module.to(compute_dtype).cuda(device)
+            return module.to(dtype=compute_dtype, device=device)
         except Exception:
             return module
 
@@ -94,6 +93,10 @@ def load_hqq_module(module, weights, compute_dtype, device):
         module.load_state_dict(state_dict)
     else:
         for key in state_dict:
-            setattr(module, key, torch.nn.Parameter(state_dict[key].to(compute_dtype).to(device), requires_grad=False))
+            setattr(
+                module,
+                key,
+                torch.nn.Parameter(state_dict[key].to(device=device, dtype=compute_dtype), requires_grad=False),
+            )
 
     return module
