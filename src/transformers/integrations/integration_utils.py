@@ -786,15 +786,10 @@ class WandbCallback(TrainerCallback):
             self._wandb.run._label(code="transformers_trainer")
 
             # add number of model parameters to wandb config
-            if any(
-                (
-                    isinstance(model, PreTrainedModel),
-                    isinstance(model, PushToHubMixin),
-                    (is_tf_available() and isinstance(model, TFPreTrainedModel)),
-                    (is_torch_available() and isinstance(model, torch.nn.Module)),
-                )
-            ):
+            try:
                 self._wandb.config["model/num_parameters"] = model.num_parameters()
+            except AttributeError:
+                pass
 
             # log the initial model and architecture to an artifact
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -812,6 +807,7 @@ class WandbCallback(TrainerCallback):
                         "initial_model": True,
                     },
                 )
+                model: PreTrainedModel = model
                 model.save_pretrained(temp_dir)
                 # add the architecture to a separate text file
                 save_model_architecture_to_file(model, temp_dir)
