@@ -612,7 +612,7 @@ class Swinv2SelfAttention(nn.Module):
         # mlp to generate continuous relative position bias
         self.register_parameter("tau", torch.nn.Parameter(torch.ones(num_heads)))
         self.meta_mlp = nn.Sequential(
-            nn.Linear(2, 384, bias=True), nn.ReLU(inplace=True), nn.Dropout(0.1), nn.Linear(384, num_heads, bias=True), nn.Dropout(0.1)
+            nn.Linear(2, 384, bias=True), nn.ReLU(), nn.Dropout(0.1), nn.Linear(384, num_heads, bias=True), nn.Dropout(0.1)
         )
         # get relative_coords_table
         coordinates = torch.stack(torch.meshgrid([
@@ -781,9 +781,6 @@ class Swinv2Layer(nn.Module):
         self.intermediate = Swinv2Intermediate(config, dim)
         self.output = Swinv2Output(config, dim)
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        # Extra main branch norm layer mentioned for Huge/Giant models in V2 paper.
-        # Also being used as final network norm and optional stage ending norm while still in a C-last format.
-        self.layernorm_extra = nn.LayerNorm(dim, eps=config.layer_norm_eps)
 
     def _compute_window_shift(self, target_window_size, target_shift_size) -> Tuple[Tuple[int, int], Tuple[int, int]]:
         window_size = [r if r <= w else w for r, w in zip(self.input_resolution, target_window_size)]
@@ -868,7 +865,6 @@ class Swinv2Layer(nn.Module):
         layer_output = self.intermediate(hidden_states)
         layer_output = self.output(layer_output)
         layer_output = hidden_states + self.drop_path(self.layernorm_after(layer_output))
-        layer_output = self.layernorm_extra(layer_output)
 
         layer_outputs = (layer_output, attention_outputs[1]) if output_attentions else (layer_output,)
         return layer_outputs
