@@ -75,7 +75,8 @@ class HQQHfQuantizer(HfQuantizer):
         if self.using_multi_gpu is False:
             if "device_map" in kwargs:
                 if isinstance(kwargs["device_map"], dict):
-                    self.using_multi_gpu = len({item[1] for item in kwargs["device_map"].items()}) > 1
+                    target_devices = {item[1] for item in kwargs["device_map"].items()} - set({"cpu", "disk"})
+                    self.using_multi_gpu = len(target_devices) > 1
 
     def check_quantized_param(
         self,
