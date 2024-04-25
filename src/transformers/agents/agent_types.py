@@ -210,7 +210,7 @@ class AgentAudio(AgentType):
             return self._path
 
 
-AGENT_TYPE_MAPPING = {"text": AgentText, "image": AgentImage, "audio": AgentAudio}
+AGENT_TYPE_MAPPING = {str: AgentText, "text": AgentText, "image": AgentImage, "audio": AgentAudio}
 INSTANCE_TYPE_MAPPING = {str: AgentText}
 
 if is_vision_available():

@@ -26,9 +26,9 @@ class SpeechToTextTool(Tool):
     inputs = {"audio": {"type": "audio", "description": "The audio to transcribe"}}
     output_type = "text"
 
-    def __init__(self, checkpoint=None):
+    def __init__(self, checkpoint, *args, **kwargs):
         super().__init__(checkpoint=checkpoint)
         self.client = InferenceClient(model='distil-whisper/distil-large-v3')
 
-    def __call__(self, audio):
+    def forward(self, audio):
         return self.client.automatic_speech_recognition(audio).text

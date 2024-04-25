@@ -169,7 +169,7 @@ class CalculatorTool(Tool):
         requires_backends(self, ["numexpr"])
         super().__init__(*args, **kwargs)
 
-    def __call__(self, expression):
+    def forward(self, expression):
         if isinstance(expression, Dict):
             expression = expression["expression"]
         local_dict = {"pi": math.pi, "e": math.e}
@@ -196,7 +196,7 @@ class PythonEvaluatorTool(Tool):
     output_type = "text"
     available_tools = BASE_PYTHON_TOOLS.copy()
 
-    def __call__(self, code):
+    def forward(self, code):
         output = str(evaluate_python_code(code, tools=self.available_tools))
         return output
 
@@ -207,5 +207,5 @@ class FinalAnswerTool(Tool):
     inputs = {"answer": {"type": "text", "description": "The final answer to the problem"}}
     output_type = "text"
 
-    def __call__(self, args):
+    def forward(self, args):
         return args

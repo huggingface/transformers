@@ -131,8 +131,13 @@ class Tool:
             if not isinstance(attr_value, expected_type):
                 raise TypeError(f"Instance attribute {attr} must exist and be of type {expected_type.__name__}")
 
-    def __call__(self, *args, **kwargs):
+    def forward(self, *args, **kwargs):
         return NotImplemented("Write this method in your subclass of `Tool`.")
+
+    def __call__(self, *args, **kwargs):
+        args, kwargs = handle_agent_inputs(*args, **kwargs)
+        outputs = self.forward(*args, **kwargs)
+        return handle_agent_outputs(outputs, self.output_type)
 
     def setup(self):
         """
