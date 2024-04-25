@@ -79,7 +79,7 @@ Lo realmente importante es cargar el modelo solo **una vez**, de modo que no hay
 
 <Tip warning={true}>
 
-El ejemplo de código a continuación está escrito intencionalmente como seudocódigo para facilitar la lectura.
+El ejemplo de código a continuación está escrito intencionalmente como pseudocódigo para facilitar la lectura.
 ¡No lo ejecutes sin verificar si tiene sentido para los recursos de tu sistema!
 
 </Tip>
