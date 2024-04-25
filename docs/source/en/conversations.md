@@ -47,7 +47,7 @@ Notice that in addition to the user's message, we added a **system** message at 
 chat models support system messages, but when they do, they represent high-level directives about how the model
 should behave in the conversation.
 
-Once you have a chat, the quickest way to continue it is using the [Text Generation pipeline](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct).
+Once you have a chat, the quickest way to continue it is using the [`TextGenerationPipeline`]. 
 Let's see this in action with `LLaMA-3`. Note that `LLaMA-3` is a gated model, which means you will need to 
 [apply for access](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct) and log in with your Hugging Face 
 account to use it. We'll also use `device_map="auto"`, which will load the model on GPU if there's enough memory
@@ -248,6 +248,14 @@ for more information.
 
 ### Performance considerations
 
+<Tip>
+
+For a more extensive guide on language model performance and optimization, please see
+the [LLM Inference Optimization guide](./llm_optims).
+
+</Tip>
+
+
 As a general rule, larger chat models will be slower in addition to requiring more memory. It's possible to be
 more concrete about this, though: Generating text from a chat model is unusual in that it is bottlenecked by
 **memory bandwidth** rather than compute power, because every active parameter must be read from memory for each
@@ -276,3 +284,4 @@ can be quite large. They can therefore be several times faster than a normal "de
 techniques like assisted generation are generally ineffective for these models because more parameters will become
 active with each new speculated token, which will negate the bandwidth and speed benefits that the MoE architecture
 provides.
+
