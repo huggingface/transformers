@@ -628,6 +628,10 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         Args:
             image_features (`List[torch.Tensor]` of length num_images, each of shape `(num_patches, image_length, embed_dim)`)
                 List of image feature tensor, each contains all the visual feature of all patches.
+            image_sizes (`torch.Tensor`) of shape `(num_images, 2)`
+                Actual image size of each images (H, W).
+            image_newline (`torch.Tensor`) of shape `(embed_dim)`
+                New line embedding vector.
         Returns:
             image_features (`torch.Tensor` of shape `(all_feat_len, embed_dim)`)
             feature_lens (List[int])
