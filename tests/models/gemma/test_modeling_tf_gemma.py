@@ -359,6 +359,17 @@ class TFGemmaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_past_key_values_format(self):
         pass
 
+    @unittest.skip("TFGemma does not support caching")
+    def test_xla_generate_contrastive(self):
+        pass
+
+    @unittest.skip("TFGemma does not support caching")
+    def test_xla_generate_fast(self):
+        pass
+
+    @unittest.skip("TFGemma does not support caching")
+    def test_xla_generate_slow(self):
+        pass
 
 @slow
 @require_read_token

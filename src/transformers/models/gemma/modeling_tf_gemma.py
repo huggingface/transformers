@@ -260,8 +260,11 @@ class TFGemmaAttention(tf.keras.layers.Layer):
 
         attn_output_shape = shape_list(attn_output)
         expected_shape = [bsz, self.num_heads, q_len, self.head_dim]
-        if attn_output_shape != expected_shape:
-            raise ValueError(f"`attn_output` should be of size {expected_shape}, but is {attn_output_shape}")
+        tf.debugging.assert_equal(
+          attn_output_shape,
+          expected_shape,
+          message=f"`attn_output` should be of size {expected_shape}, but is {attn_output_shape}"
+        )
         attn_output = tf.transpose(attn_output, [0, 2, 1, 3])
         attn_output = tf.reshape(attn_output, [bsz, q_len, -1])
         attn_output = self.o_proj(attn_output)
