@@ -3170,6 +3170,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             torch_dtype = hf_quantizer.update_torch_dtype(torch_dtype)
             device_map = hf_quantizer.update_device_map(device_map)
 
+            # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
+            user_agent["quant"] = hf_quantizer.quantization_config.quant_method.value
+
             # Force-set to `True` for more mem efficiency
             if low_cpu_mem_usage is None:
                 low_cpu_mem_usage = True
