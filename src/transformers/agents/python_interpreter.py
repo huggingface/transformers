@@ -176,6 +176,18 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
         return slice(evaluate_ast(expression.lower, state, tools) if expression.lower is not None else None,
                  evaluate_ast(expression.upper, state, tools) if expression.upper is not None else None,
                  evaluate_ast(expression.step, state, tools) if expression.step is not None else None)
+    elif isinstance(expression, ast.ListComp):
+        result = []
+        vars = {}
+        for generator in expression.generators:
+            var_name = generator.target.id
+            iter_value = evaluate_ast(generator.iter, state, tools)
+            for value in iter_value:
+                vars[var_name] = value
+                if all(evaluate_ast(if_clause, {**state, **vars}, tools) for if_clause in generator.ifs):
+                    elem = evaluate_ast(expression.elt, {**state, **vars}, tools)
+                    result.append(elem)
+        return result
     else:
         # For now we refuse anything else. Let's add things as we need them.
         raise InterpretorError(f"{expression.__class__.__name__} is not supported.")

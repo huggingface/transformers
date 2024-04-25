@@ -161,3 +161,8 @@ recur_fibo(6)"""
         code = "integer = 1\nobj_class = integer.__class__\nobj_class"
         result = evaluate_python_code(code, {}, state={})
         assert result == int
+
+    def test_list_comprehension(self):
+        code="sentence = 'THESEAGULL43'\nmeaningful_sentence = '-'.join([char.lower() for char in sentence if char.isalpha()])"
+        result = evaluate_python_code(code, {"range": range}, state={})
+        assert result == 't-h-e-s-e-a-g-u-l-l'
