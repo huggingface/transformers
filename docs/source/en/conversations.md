@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 If you're reading this article, you're almost certainly aware of **chat models**. Chat models are conversational
 AIs that you can send and receive messages with. The most famous of these is the proprietary ChatGPT, but there are
 now many open-source chat models which match or even substantially exceed its performance. These models are free to
-download and run on a local machine. Although the largest and most intelligent models require high-powered hardware
+download and run on a local machine. Although the largest and most capable models require high-powered hardware
 and lots of memory to run, there are smaller models that will run perfectly well on a single consumer GPU, or even
 an ordinary desktop or notebook CPU. 
 
