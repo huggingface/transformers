@@ -162,7 +162,7 @@ the best models for specialized domains.
 
 ## What happens inside the pipeline?
 
-The quickstart guide above used a high-level pipeline to chat with a chat model, which is convenient, but not the
+The quickstart above used a high-level pipeline to chat with a chat model, which is convenient, but not the
 most flexible. Let's take a more low-level approach, to see each of the steps involved in chat. Let's start with
 a code sample, and then break it down:
 
