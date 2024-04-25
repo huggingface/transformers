@@ -57,7 +57,7 @@ jobs:
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    if: ${{ needs.get_modified_models.outputs.matrix != '[]' && needs.get_modified_models.outputs.matrix != '' }}
+    if: ${{ needs.get_modified_models.outputs.matrix != '[]' && needs.get_modified_models.outputs.matrix != '' && fromJson(needs.get_modified_models.outputs.matrix)[0] != null }}
     strategy:
       fail-fast: false
       matrix: 
@@ -86,7 +86,7 @@ jobs:
       - name: Run FA2 tests
         id: run_fa2_tests
         run:
-          pytest -m "flash_attn_test" --make-reports=${{ matrix.model-name }}_fa2_tests/ tests/${{ matrix.model-name }}/test_modeling_*
+          pytest -rs -m "flash_attn_test" --make-reports=${{ matrix.model-name }}_fa2_tests/ tests/${{ matrix.model-name }}/test_modeling_*
       
       - name: "Test suite reports artifacts: ${{ matrix.model-name }}_fa2_tests"
         if: ${{ always() }}
@@ -108,7 +108,7 @@ jobs:
         id: run_integration_tests
         if: always()
         run:
-          pytest -k "IntegrationTest"  --make-reports=tests_integration_${{ matrix.model-name }} tests/${{ matrix.model-name }}/test_modeling_*
+          pytest -rs -k "IntegrationTest"  --make-reports=tests_integration_${{ matrix.model-name }} tests/${{ matrix.model-name }}/test_modeling_*
       
       - name: "Test suite reports artifacts: tests_integration_${{ matrix.model-name }}"
         if: ${{ always() }}
@@ -127,8 +127,8 @@ jobs:
           slack_token: ${{ secrets.CI_SLACK_BOT_TOKEN }}
 
       - name: Tailscale # In order to be able to SSH when a test fails
-        if: ${{ failure() || runner.debug == '1'}}
-        uses: huggingface/tailscale-action@ssh-improvments
+        if: ${{ runner.debug == '1'}}
+        uses: huggingface/tailscale-action@v1
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
           slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
