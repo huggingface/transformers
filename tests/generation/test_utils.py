@@ -1611,7 +1611,7 @@ class GenerationTesterMixin:
 
     def test_generate_with_and_without_position_ids(self):
         for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, _ = self._get_input_ids_and_config()
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
             model = model_class(config).to(torch_device).eval()
             model_forward_args = inspect.signature(model.forward).parameters
             if "position_ids" not in model_forward_args:
@@ -1633,7 +1633,7 @@ class GenerationTesterMixin:
 
     def test_generate_with_and_without_position_ids_inputs_embeds(self):
         for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, _ = self._get_input_ids_and_config()
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
             model = model_class(config).to(torch_device).eval()
             model_forward_args = inspect.signature(model.forward).parameters
             if "position_ids" not in model_forward_args:
