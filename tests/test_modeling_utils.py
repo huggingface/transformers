@@ -487,9 +487,9 @@ class ModelUtilsTest(TestCasePlus):
             (torch.int16, 2),
             (torch.uint8, 1),
             (torch.int8, 1),
-            (torch.bool, 1),
             (torch.float8_e4m3fn, 1),
             (torch.float8_e5m2, 1),
+            (torch.bool, 0.125),
         ]
 
         for torch_dtype, bytes_per_element in torch_dtypes_and_bytes:
