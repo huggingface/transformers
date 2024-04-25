@@ -161,7 +161,6 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-
         self._src_lang = src_lang if src_lang is not None else "eng_Latn"
         self.cur_lang_code = self.convert_tokens_to_ids(self._src_lang)
         self.tgt_lang = tgt_lang
