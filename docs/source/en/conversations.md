@@ -30,7 +30,7 @@ what exactly chat models are, how to choose an appropriate one, and finally a lo
 steps involved in talking to a chat model.
 
 
-## Quickstart guide
+## Quickstart
 
 If you have no time for details, here's the brief summary: Chat models continue chats. This means that you pass them
 a conversation history, which can be as short as a single user message, and the model will continue the conversation
