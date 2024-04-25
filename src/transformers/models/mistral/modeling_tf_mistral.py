@@ -36,10 +36,10 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     get_initializer,
     get_tf_activation,
+    keras,
     keras_serializable,
     shape_list,
     unpack_inputs,
-    keras,
 )
 from ...utils import (
     add_start_docstrings,
