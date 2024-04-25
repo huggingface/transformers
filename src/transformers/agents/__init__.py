@@ -25,7 +25,7 @@ from ..utils import (
 
 _import_structure = {
     "agents": ["Agent", "CodeAgent", "ReactAgent", "ReactCodeAgent", "ReactJSONAgent"],
-    "tools": ["PipelineTool", "RemoteTool", "Tool", "launch_gradio_demo", "load_tool"],
+    "tools": ["PipelineTool", "Tool", "launch_gradio_demo", "load_tool"],
     "llm_engine": ["HfEngine"],
 }
 
@@ -44,7 +44,7 @@ else:
 
 if TYPE_CHECKING:
     from .agents import Agent, CodeAgent, ReactAgent, ReactCodeAgent, ReactJSONAgent
-    from .tools import PipelineTool, RemoteTool, Tool, launch_gradio_demo, load_tool
+    from .tools import PipelineTool, Tool, launch_gradio_demo, load_tool
     from .llm_engine import HfEngine
 
     try:

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 HuggingFace Inc.
+# Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -223,9 +223,14 @@ def handle_agent_inputs(*args, **kwargs):
     return args, kwargs
 
 
-def handle_agent_outputs(output, output_type):
-    # If the class has defined outputs, we can map directly according to the class definition
+def handle_agent_outputs(output, output_type=None):
     if output_type in AGENT_TYPE_MAPPING:
-        return AGENT_TYPE_MAPPING[output_type](output)
+        # If the class has defined outputs, we can map directly according to the class definition
+        decoded_outputs = AGENT_TYPE_MAPPING[output_type](output)
+        return decoded_outputs
     else:
+        # If the class does not have defined output, then we map according to the type
+        for _k, _v in INSTANCE_TYPE_MAPPING.items():
+            if isinstance(output, _k):
+                return _v(output)
         return AgentType(output)

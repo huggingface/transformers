@@ -18,7 +18,7 @@ import unittest
 from transformers import load_tool
 from transformers.agents.agent_types import AGENT_TYPE_MAPPING, INSTANCE_TYPE_MAPPING
 
-from .test_tools_common import ToolTesterMixin, output_types
+from .test_tools_common import ToolTesterMixin, output_type
 
 
 class FinalAnswerToolTester(unittest.TestCase, ToolTesterMixin):

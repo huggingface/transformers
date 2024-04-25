@@ -68,10 +68,6 @@ Transformers Agents是一个实验性的API，它随时可能发生变化。由�
 
 [[autodoc]] PipelineTool
 
-### RemoteTool
-
-[[autodoc]] RemoteTool
-
 ### launch_gradio_demo
 
 [[autodoc]] launch_gradio_demo

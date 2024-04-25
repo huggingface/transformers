@@ -67,10 +67,6 @@ API または基礎となるモデルは変更される傾向があるため、�
 
 [[autodoc]] PipelineTool
 
-### RemoteTool
-
-[[autodoc]] RemoteTool
-
 ### launch_gradio_demo
 
 [[autodoc]] launch_gradio_demo

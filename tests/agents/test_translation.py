@@ -18,7 +18,7 @@ import unittest
 from transformers import load_tool
 from transformers.agents.agent_types import AGENT_TYPE_MAPPING
 
-from .test_tools_common import ToolTesterMixin, output_types
+from .test_tools_common import ToolTesterMixin, output_type
 
 
 class TranslationToolTester(unittest.TestCase, ToolTesterMixin):
@@ -31,40 +31,22 @@ class TranslationToolTester(unittest.TestCase, ToolTesterMixin):
         result = self.tool("Hey, what's up?", src_lang="English", tgt_lang="French")
         self.assertEqual(result, "- Hé, comment ça va?")
 
-    def test_exact_match_arg_remote(self):
-        result = self.remote_tool("Hey, what's up?", src_lang="English", tgt_lang="French")
-        self.assertEqual(result, "- Hé, comment ça va?")
-
     def test_exact_match_kwarg(self):
         result = self.tool(text="Hey, what's up?", src_lang="English", tgt_lang="French")
         self.assertEqual(result, "- Hé, comment ça va?")
 
-    def test_exact_match_kwarg_remote(self):
-        result = self.remote_tool(text="Hey, what's up?", src_lang="English", tgt_lang="French")
-        self.assertEqual(result, "- Hé, comment ça va?")
-
     def test_call(self):
         inputs = ["Hey, what's up?", "English", "Spanish"]
-        outputs = self.tool(*inputs)
+        output = self.tool(*inputs)
 
-        # There is a single output
-        if len(self.tool.outputs) == 1:
-            outputs = [outputs]
+        self.assertEqual(output_type(output), self.tool.output_type)
 
-        self.assertListEqual(output_types(outputs), self.tool.outputs)
-
-    def test_agent_types_outputs(self):
+    def test_agent_type_output(self):
         inputs = ["Hey, what's up?", "English", "Spanish"]
-        outputs = self.tool(*inputs)
+        output = self.tool(*inputs)
 
-        if not isinstance(outputs, list):
-            outputs = [outputs]
-
-        self.assertEqual(len(outputs), len(self.tool.outputs))
-
-        for output, output_type in zip(outputs, self.tool.outputs):
-            agent_type = AGENT_TYPE_MAPPING[output_type]
-            self.assertTrue(isinstance(output, agent_type))
+        agent_type = AGENT_TYPE_MAPPING[self.tool.output_type]
+        self.assertTrue(isinstance(output, agent_type))
 
     def test_agent_types_inputs(self):
         inputs = ["Hey, what's up?", "English", "Spanish"]

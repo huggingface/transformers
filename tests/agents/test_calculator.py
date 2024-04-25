@@ -16,9 +16,9 @@
 import unittest
 
 from transformers import load_tool
-from transformers.agents.agent_types import AGENT_TYPE_MAPPING, INSTANCE_TYPE_MAPPING
+from transformers.agents.agent_types import AGENT_TYPE_MAPPING, INSTANCE_TYPE_MAPPING, AgentText
 
-from .test_tools_common import ToolTesterMixin, output_types
+from .test_tools_common import ToolTesterMixin, output_type
 
 
 class CalculatorToolTester(unittest.TestCase, ToolTesterMixin):
@@ -34,11 +34,10 @@ class CalculatorToolTester(unittest.TestCase, ToolTesterMixin):
         result = self.tool(expression="(2 / 2) * 4")
         self.assertEqual(result, "4.0")
 
-    def test_agent_types_outputs(self):
-        inputs = ['2 * 2']
-        output = self.tool(*inputs)
-
-        self.assertTrue(isinstance(output, self.tool.output_type))
+    def test_agent_type_output(self):
+        input = '2 * 2'
+        output = self.tool(input)
+        self.assertTrue(isinstance(output, AGENT_TYPE_MAPPING[self.tool.output_type]))
 
     def test_agent_types_inputs(self):
         inputs = ['2 * 2']
@@ -46,12 +45,9 @@ class CalculatorToolTester(unittest.TestCase, ToolTesterMixin):
 
         for _input, expected_input in zip(inputs, self.tool.inputs.values()):
             input_type = expected_input['type']
-            if isinstance(input_type, list):
-                _inputs.append([INSTANCE_TYPE_MAPPING[_input_type](_input) for _input_type in input_type])
-            else:
-                _inputs.append(INSTANCE_TYPE_MAPPING[input_type](_input))
+            _inputs.append(AGENT_TYPE_MAPPING[input_type](_input))
 
-        # Should not raise an error
         output = self.tool(*inputs)
+        self.assertTrue(isinstance(output, AgentText))
 
-        self.assertTrue(isinstance(output, self.tool.output_type))
+        self.assertTrue(isinstance(output, AGENT_TYPE_MAPPING[self.tool.output_type]))

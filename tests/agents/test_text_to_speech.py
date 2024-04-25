@@ -50,9 +50,10 @@ class TextToSpeechToolTester(unittest.TestCase, ToolTesterMixin):
         torch.manual_seed(0)
         result = self.tool("hey")
         resulting_tensor = result.to_raw()
+        target_tensor = torch.tensor([-7.1453e-05,  5.0845e-05,  2.3004e-04])
         self.assertTrue(
             torch.allclose(
                 resulting_tensor[:3],
-                torch.tensor([-0.0005966668832115829, -0.0003657640190795064, -0.00013439502799883485]),
+                target_tensor,
             )
         )

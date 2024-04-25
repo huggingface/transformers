@@ -18,7 +18,7 @@ from typing import List, Dict
 
 from transformers import is_torch_available, is_vision_available
 from transformers.testing_utils import get_tests_dir, is_tool_test
-from transformers.agents.agent_types import AGENT_TYPE_MAPPING, AgentAudio, AgentImage, AgentText, INSTANCE_TYPE_MAPPING
+from transformers.agents.agent_types import AGENT_TYPE_MAPPING, AgentAudio, AgentImage, AgentText, INSTANCE_TYPE_MAPPING, AgentType
 
 if is_torch_available():
     import torch
@@ -27,42 +27,21 @@ if is_vision_available():
     from PIL import Image
 
 
-AUTHORIZED_TYPES = {
-    'text': (AgentText, str),
-    'audio': (AgentAudio,),
-    'image': (AgentImage, Image.Image),
-}
-
-
-def is_authorized_type(_type):
-
-    for authorized_type in AUTHORIZED_TYPES.values():
-        if _type in authorized_type:
-            print(_type, 'is in', authorized_type)
-            return True
-    return False
+AUTHORIZED_TYPES = ['text', 'audio', 'image']
 
 
 def create_inputs(tool_inputs: Dict[str, Dict[str | type, str]]):
     input_types = {v['type'] for v in tool_inputs.values()}
     inputs = []
     for input_type in input_types:
-        authorized_type = None
 
-        for k, v in AUTHORIZED_TYPES.items():
-            if input_type in v:
-                authorized_type = k
-
-        if authorized_type is None:
-            raise ValueError(f"Invalid type requested: {input_type}")
-
-        if authorized_type == "text":
+        if input_type == "text":
             inputs.append("Text input")
-        elif authorized_type == "image":
+        elif input_type == "image":
             inputs.append(
                 Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png").resize((512, 512))
             )
-        elif authorized_type == "audio":
+        elif input_type == "audio":
             inputs.append(torch.ones(3000))
         else:
             raise ValueError(f"Invalid type requested: {input_type}")
@@ -70,39 +49,33 @@ def create_inputs(tool_inputs: Dict[str, Dict[str | type, str]]):
     return inputs
 
 
-def output_types(outputs: List):
-    output_types = []
-
-    for output in outputs:
-        if isinstance(output, (str, AgentText)):
-            output_types.append("text")
-        elif isinstance(output, (Image.Image, AgentImage)):
-            output_types.append("image")
-        elif isinstance(output, (torch.Tensor, AgentAudio)):
-            output_types.append("audio")
-        else:
-            raise ValueError(f"Invalid output: {output}")
-
-    return output_types
-
+def output_type(output):
+    if isinstance(output, (str, AgentText)):
+        return "text"
+    elif isinstance(output, (Image.Image, AgentImage)):
+        return "image"
+    elif isinstance(output, (torch.Tensor, AgentAudio)):
+        return "audio"
+    else:
+        raise ValueError(f"Invalid output: {output}")
 
 @is_tool_test
 class ToolTesterMixin:
-    def test_inputs_outputs(self):
+    def test_inputs_output(self):
         self.assertTrue(hasattr(self.tool, "inputs"))
         self.assertTrue(hasattr(self.tool, "output_type"))
 
         inputs = self.tool.inputs
         self.assertTrue(isinstance(inputs, dict))
 
-        for input_name, input_spec in inputs.items():
+        for _, input_spec in inputs.items():
             self.assertTrue('type' in input_spec)
             self.assertTrue('description' in input_spec)
-            self.assertTrue(is_authorized_type(input_spec['type']))
+            self.assertTrue(input_spec['type'] in AUTHORIZED_TYPES)
             self.assertTrue(isinstance(input_spec['description'], str))
 
-        output = self.tool.output_type
-        self.assertTrue(type(output) == type)
+        output_type = self.tool.output_type
+        self.assertTrue(output_type in AUTHORIZED_TYPES)
 
     def test_common_attributes(self):
         self.assertTrue(hasattr(self.tool, "description"))
@@ -110,10 +83,11 @@ class ToolTesterMixin:
         self.assertTrue(hasattr(self.tool, "inputs"))
         self.assertTrue(hasattr(self.tool, "output_type"))
 
-    def test_agent_types_outputs(self):
+    def test_agent_type_output(self):
         inputs = create_inputs(self.tool.inputs)
         output = self.tool(*inputs)
-        self.assertTrue(isinstance(output, self.tool.output_type))
+        agent_type = AGENT_TYPE_MAPPING[self.tool.output_type]
+        self.assertTrue(isinstance(output, agent_type))
 
     def test_agent_types_inputs(self):
         inputs = create_inputs(self.tool.inputs)
@@ -122,9 +96,10 @@ class ToolTesterMixin:
 
         for _input, expected_input in zip(inputs, self.tool.inputs.values()):
             input_type = expected_input['type']
-            _inputs.append(INSTANCE_TYPE_MAPPING[input_type](_input))
+            _inputs.append(AGENT_TYPE_MAPPING[input_type](_input))
+
+        output_type = AGENT_TYPE_MAPPING[self.tool.output_type]
 
         # Should not raise an error
         output = self.tool(*inputs)
-
-        self.assertTrue(isinstance(output, self.tool.output_type))
+        self.assertTrue(isinstance(output, output_type))

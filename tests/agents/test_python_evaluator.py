@@ -18,7 +18,7 @@ import unittest
 from transformers import load_tool
 from transformers.agents.agent_types import AGENT_TYPE_MAPPING, INSTANCE_TYPE_MAPPING
 
-from .test_tools_common import ToolTesterMixin, output_types
+from .test_tools_common import ToolTesterMixin, output_type
 
 
 class PythonEvaluatorToolTester(unittest.TestCase, ToolTesterMixin):
@@ -28,11 +28,11 @@ class PythonEvaluatorToolTester(unittest.TestCase, ToolTesterMixin):
 
     def test_exact_match_arg(self):
         result = self.tool("(2 / 2) * 4")
-        self.assertEqual(result, "(4.0, '')")
+        self.assertEqual(result, "4.0")
 
     def test_exact_match_kwarg(self):
         result = self.tool(code="(2 / 2) * 4")
-        self.assertEqual(result, "(4.0, '')")
+        self.assertEqual(result, "4.0")
 
     def test_agent_types_outputs(self):
         inputs = ['2 * 2']

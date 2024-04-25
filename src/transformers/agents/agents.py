@@ -31,7 +31,6 @@ from .tools import (
     Tool,
     get_tool_description_with_args,
     load_tool,
-    supports_remote,
 )
 
 
@@ -153,12 +152,11 @@ class Toolbox:
         """Clears the toolbox"""
         self._tools = {}
 
-    def load_tools_if_needed(self, remote: bool=False):
+    def load_tools_if_needed(self):
         for name, tool in self._tools.items():
             if not isinstance(tool, Tool):
                 task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id
-                _remote = remote and supports_remote(task_or_repo_id)
-                self._tools[name] = load_tool(task_or_repo_id, remote=_remote)
+                self._tools[name] = load_tool(task_or_repo_id)
 
 
 def format_prompt(toolbox: Toolbox, prompt_template: str, tool_description_template: str) -> str:

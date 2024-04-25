@@ -13,16 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pytest
 import unittest
 
 from transformers.testing_utils import CaptureStdout
-from transformers.agents.python_interpreter import evaluate_python_code
+from transformers.agents.python_interpreter import evaluate_python_code, InterpretorError
 
 
 # Fake function we will use as tool
 def add_two(x):
     return x + 2
-
 
 class PythonInterpreterTester(unittest.TestCase):
     def test_evaluate_assign(self):
@@ -46,11 +46,10 @@ class PythonInterpreterTester(unittest.TestCase):
         assert result == 5
         self.assertDictEqual(state, {"x": 3, "y": 5, 'print_outputs': ''})
 
-        # Won't work without the tool
-        with CaptureStdout() as out:
-            result = evaluate_python_code(code, {}, state=state)
-        assert result is None
-        assert "tried to execute add_two" in out.out
+        # Should not work without the tool
+        with pytest.raises(InterpretorError) as e:
+            evaluate_python_code(code, {}, state=state)
+        assert "tried to execute add_two" in str(e.value)
 
     def test_evaluate_constant(self):
         code = "x = 3"
@@ -137,7 +136,7 @@ class PythonInterpreterTester(unittest.TestCase):
         assert result == 9
         self.assertDictEqual(state, {"x": 3, "y": 6, 'print_outputs': ''})
 
-    def test_evaluate_recursive_function(self):
+    def test_recursive_function(self):
         code = """
 def recur_fibo(n):
     if n <= 1:
@@ -148,9 +147,8 @@ recur_fibo(6)"""
         result = evaluate_python_code(code, {}, state={})
         assert result == 8
 
-
     def test_evaluate_string_methods(self):
-        code = "string = 'hello'\nstring = string.replace('h', 'o')\nstring.split('e')"
+        code = "'hello'.replace('h', 'o').split('e')"
         result = evaluate_python_code(code, {}, state={})
         assert result == ["o", "llo"]
 
@@ -158,3 +156,8 @@ recur_fibo(6)"""
         code = "'hello'[1:3][::-1]"
         result = evaluate_python_code(code, {}, state={})
         assert result == "le"
+
+    def test_access_attributes(self):
+        code = "integer = 1\nobj_class = integer.__class__\nobj_class"
+        result = evaluate_python_code(code, {}, state={})
+        assert result == int

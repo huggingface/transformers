@@ -248,17 +248,17 @@ class TranslationTool(PipelineTool):
     lang_to_code = LANGUAGE_CODES
 
     inputs = {
-        "text": {"type": str, "description": "The text to translate"},
+        "text": {"type": "text", "description": "The text to translate"},
         "src_lang": {
-            "type": str,
+            "type": "text",
             "description": "The language of the text to translate. Written in plain English, such as 'Romanian', or 'Albanian'",
         },
         "tgt_lang": {
-            "type": str,
+            "type": "text",
             "description": "The language for the desired ouput language. Written in plain English, such as 'Romanian', or 'Albanian'",
         },
     }
-    output_type = str
+    output_type = "text"
 
     def encode(self, text, src_lang, tgt_lang):
         if src_lang not in self.lang_to_code:

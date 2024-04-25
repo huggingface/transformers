@@ -40,12 +40,12 @@ class DocumentQuestionAnsweringTool(PipelineTool):
 
     inputs= {
         "document": {
-            "type": Union[Image.Image, str],
+            "type": "image",
             "description": "The image containing the information. Can be a PIL Image or a string path to the image.",
         },
-        "question": {"type": str, "description": "The question in English"},
+        "question": {"type": "text", "description": "The question in English"},
     }
-    output_type = str
+    output_type = "text"
 
     def __init__(self, *args, **kwargs):
         if not is_vision_available():

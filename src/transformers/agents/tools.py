@@ -207,7 +207,6 @@ class Tool:
         repo_id: str,
         model_repo_id: Optional[str] = None,
         token: Optional[str] = None,
-        remote: bool = False,
         **kwargs,
     ):
         """
@@ -230,21 +229,11 @@ class Tool:
             token (`str`, *optional*):
                 The token to identify you on hf.co. If unset, will use the token generated when running
                 `huggingface-cli login` (stored in `~/.huggingface`).
-            remote (`bool`, *optional*, defaults to `False`):
-                Whether to use your tool by downloading the model or (if it is available) with an inference endpoint.
             kwargs (additional keyword arguments, *optional*):
                 Additional keyword arguments that will be split in two: all arguments relevant to the Hub (such as
                 `cache_dir`, `revision`, `subfolder`) will be used when downloading the files for your tool, and the
                 others will be passed along to its init.
         """
-        if remote and model_repo_id is None:
-            endpoints = get_default_endpoints()
-            if repo_id not in endpoints:
-                raise ValueError(
-                    f"Could not infer a default endpoint for {repo_id}, you need to pass one using the "
-                    "`model_repo_id` argument."
-                )
-            model_repo_id = endpoints[repo_id]
         hub_kwargs_names = [
             "cache_dir",
             "force_download",
@@ -322,8 +311,6 @@ class Tool:
         if tool_class.output_type != custom_tool["output_type"]:
             tool_class.output_type = custom_tool["output_type"]
 
-        if remote:
-            return RemoteTool(model_repo_id, token=token, tool_class=tool_class)
         return tool_class(model_repo_id, token=token, **kwargs)
 
     def push_to_hub(
@@ -491,68 +478,6 @@ def compile_jinja_template(template):
     jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
     jinja_env.globals["raise_exception"] = raise_exception
     return jinja_env.from_string(template)
-
-
-class RemoteTool(Tool):
-    """
-    A [`Tool`] that will make requests to an inference endpoint.
-
-    Args:
-        endpoint_url (`str`, *optional*):
-            The url of the endpoint to use.
-        token (`str`, *optional*):
-            The token to use as HTTP bearer authorization for remote files. If unset, will use the token generated when
-            running `huggingface-cli login` (stored in `~/.huggingface`).
-        tool_class (`type`, *optional*):
-            The corresponding `tool_class` if this is a remote version of an existing tool. Will help determine when
-            the output should be converted to another type (like images).
-    """
-
-    name = "remote tool"
-    description = "a remote tool"
-    inputs = {"default": Any}
-    output_type = str
-
-    def __init__(self, endpoint_url, name, description, inputs, output_type, token=None):
-        self.endpoint_url = endpoint_url
-        self.client = EndpointClient(endpoint_url, token=token)
-        self.name = name
-        self.description = description
-        self.inputs = inputs
-        self.output_type = output_type
-
-    def prepare_inputs(self, *args, **kwargs):
-        """
-        Prepare the inputs received for the HTTP client sending data to the endpoint. Images will be encoded into
-        bytes.
-
-        You can override this method in your custom class of [`RemoteTool`].
-        """
-        inputs = kwargs.copy()
-        for key, value in inputs.items():
-            if is_pil_image(value):
-                inputs[key] = self.client.encode_image(value)
-        return {"inputs": inputs}
-
-    def extract_outputs(self, outputs):
-        """
-        You can override this method in your custom class of [`RemoteTool`] to apply some custom post-processing of the
-        outputs of the endpoint.
-        """
-        return outputs
-
-    def __call__(self, *args, **kwargs):
-        output_image = False
-        if is_vision_available():
-            output_image = self.output_type == PIL.Image.Image
-        inputs = self.prepare_inputs(*args, **kwargs)
-        if isinstance(inputs, dict):
-            outputs = self.client(**inputs, output_image=output_image)
-        else:
-            outputs = self.client(inputs, output_image=output_image)
-        if isinstance(outputs, list) and len(outputs) == 1 and isinstance(outputs[0], list):
-            outputs = outputs[0]
-        return self.extract_outputs(outputs)
 
 
 class PipelineTool(Tool):
@@ -763,23 +688,7 @@ TASK_MAPPING = {
 }
 
 
-def get_default_endpoints():
-    endpoints_file = cached_file(
-        "huggingface-tools/default-endpoints",
-        "default_endpoints.json",
-        repo_type="dataset",
-    )
-    with open(endpoints_file, "r", encoding="utf-8") as f:
-        endpoints = json.load(f)
-    return endpoints
-
-
-def supports_remote(task_or_repo_id):
-    endpoints = get_default_endpoints()
-    return task_or_repo_id in endpoints
-
-
-def load_tool(task_or_repo_id, model_repo_id=None, remote=False, token=None, **kwargs):
+def load_tool(task_or_repo_id, model_repo_id=None, token=None, **kwargs):
     """
     Main function to quickly load a tool, be it on the Hub or in the Transformers library.
 
@@ -809,8 +718,6 @@ def load_tool(task_or_repo_id, model_repo_id=None, remote=False, token=None, **k
 
         model_repo_id (`str`, *optional*):
             Use this argument to use a different model than the default one for the tool you selected.
-        remote (`bool`, *optional*, defaults to `False`):
-            Whether to use your tool by downloading the model or (if it is available) with an inference endpoint.
         token (`str`, *optional*):
             The token to identify you on hf.co. If unset, will use the token generated when running `huggingface-cli
             login` (stored in `~/.huggingface`).
@@ -825,18 +732,7 @@ def load_tool(task_or_repo_id, model_repo_id=None, remote=False, token=None, **k
         tools_module = main_module.agents
         tool_class = getattr(tools_module, tool_class_name)
 
-        if remote:
-            if model_repo_id is None:
-                endpoints = get_default_endpoints()
-                if task_or_repo_id not in endpoints:
-                    raise ValueError(
-                        f"Could not infer a default endpoint for {task_or_repo_id}, you need to pass one using the "
-                        "`model_repo_id` argument."
-                    )
-                model_repo_id = endpoints[task_or_repo_id]
-            return RemoteTool(model_repo_id, token=token, tool_class=tool_class)
-        else:
-            return tool_class(model_repo_id, token=token, **kwargs)
+        return tool_class(model_repo_id, token=token, **kwargs)
     else:
         logger.warning_once(
             f"You're loading a tool from the Hub from {model_repo_id}. Please make sure this is a source that you "
@@ -844,7 +740,7 @@ def load_tool(task_or_repo_id, model_repo_id=None, remote=False, token=None, **k
             f"the tools that you load. We recommend specifying a `revision` to ensure you're loading the "
             f"code that you have checked."
         )
-        return Tool.from_hub(task_or_repo_id, model_repo_id=model_repo_id, token=token, remote=remote, **kwargs)
+        return Tool.from_hub(task_or_repo_id, model_repo_id=model_repo_id, token=token, **kwargs)
 
 
 def add_description(description):

@@ -84,6 +84,7 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
             The functions that may be called during the evaluation. Any call to another function will fail with an
             `InterpretorError`.
     """
+
     if isinstance(expression, ast.Assign):
         # Assignement -> we evaluate the assignement which should update the state
         # We return the variable assigned as it may be used to determine the final result.
@@ -170,16 +171,7 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
             return evaluate_ast(expression.orelse, state, tools)
     elif isinstance(expression, ast.Attribute):
         obj = evaluate_ast(expression.value, state, tools)
-        if not isinstance(obj, str):
-            raise InterpretorError("Attribute access is only supported for strings")
-        if expression.attr =='replace':
-            args = [evaluate_ast(arg, state, tools) for arg in expression.args.args]
-            return obj.replace(*args)
-        elif expression.attr =='split':
-            args = [evaluate_ast(arg, state, tools) if arg is not None else None for arg in expression.args.args]
-            return obj.split(*args)
-        else:
-            raise InterpretorError(f"Attribute {expression.attr} is not supported")
+        return getattr(obj, expression.attr)
     elif isinstance(expression, ast.Slice):
         return slice(evaluate_ast(expression.lower, state, tools) if expression.lower is not None else None,
                  evaluate_ast(expression.upper, state, tools) if expression.upper is not None else None,
@@ -278,6 +270,9 @@ def evaluate_call(call, state, tools):
         if not hasattr(obj, func_name):
             raise InterpretorError(f"Object {obj} has no attribute {func_name}")
         func = getattr(obj, func_name)
+        args = [evaluate_ast(arg, state, tools) for arg in call.args]
+        kwargs = {keyword.arg: evaluate_ast(keyword.value, state, tools) for keyword in call.keywords}
+        return func(*args, **kwargs)
 
     elif isinstance(call.func, ast.Name):
         func_name = call.func.id

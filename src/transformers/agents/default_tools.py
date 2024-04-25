@@ -83,7 +83,7 @@ BASE_PYTHON_TOOLS = {
 @dataclass
 class PreTool:
     name: str
-    inputs: Dict[str, type]
+    inputs: Dict[str, str]
     output_type: type
     task: str
     description: str
@@ -159,11 +159,11 @@ class CalculatorTool(Tool):
 
     inputs = {
         "expression": {
-            "type": str,
+            "type": "text",
             "description": "The expression to be evaluated.The variables used CANNOT be placeholders like 'x' or 'mike's age', they must be numbers",
         }
     }
-    output_type = str
+    output_type = "text"
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["numexpr"])
@@ -189,11 +189,11 @@ class PythonEvaluatorTool(Tool):
 
     inputs = {
         "code": {
-            "type": str,
+            "type": "text",
             "description": "The code snippet to evaluate. All variables used in this snippet must be defined in this same snippet, else you will get an error.",
         }
     }
-    output_type = str
+    output_type = "text"
     available_tools = BASE_PYTHON_TOOLS.copy()
 
     def __call__(self, code):
@@ -204,8 +204,8 @@ class PythonEvaluatorTool(Tool):
 class FinalAnswerTool(Tool):
     name = "final_answer"
     description = "Provides a final answer to the given problem"
-    inputs = {"answer": {"type": str, "description": "The final answer to the problem"}}
-    output_type = str
+    inputs = {"answer": {"type": "text", "description": "The final answer to the problem"}}
+    output_type = "text"
 
     def __call__(self, args):
         return args

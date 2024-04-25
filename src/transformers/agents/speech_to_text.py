@@ -14,7 +14,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any
 
 from .tools import Tool
 from huggingface_hub import InferenceClient
@@ -24,12 +23,12 @@ class SpeechToTextTool(Tool):
     description = "This is a tool that transcribes an audio into text. It returns the transcribed text."
     name = "transcriber"
 
-    inputs = {"audio": {"type": Any, "description": "The audio to transcribe"}}
-    output_type = str
+    inputs = {"audio": {"type": "audio", "description": "The audio to transcribe"}}
+    output_type = "text"
 
     def __init__(self, checkpoint=None):
         super().__init__(checkpoint=checkpoint)
-        self.client = InferenceClient()
+        self.client = InferenceClient(model='distil-whisper/distil-large-v3')
 
     def __call__(self, audio):
         return self.client.automatic_speech_recognition(audio).text

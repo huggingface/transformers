@@ -65,10 +65,6 @@ We provide two types of agents, based on the main [`Agent`] class:
 
 [[autodoc]] PipelineTool
 
-### RemoteTool
-
-[[autodoc]] RemoteTool
-
 ### launch_gradio_demo
 
 [[autodoc]] launch_gradio_demo
