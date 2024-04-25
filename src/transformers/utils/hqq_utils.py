@@ -18,11 +18,6 @@ from . import is_hqq_available, is_torch_available
 if is_torch_available():
     import torch
 
-if is_hqq_available():
-    from hqq.core.quantize import HQQLinear
-else:
-    HQQLinear = None
-
 
 # Name all modules inside the model
 def autoname_modules(model):
@@ -37,6 +32,9 @@ def name_to_linear_tag(name):
 
 # Get all linear tags available
 def get_linear_tags(model):
+    if is_hqq_available():
+        from hqq.core.quantize import HQQLinear
+
     linear_tags = set()
     for name, module in model.named_modules():
         if type(module) in [torch.nn.Linear, HQQLinear]:
@@ -81,6 +79,9 @@ def check_if_hqq_quant_config(quant_config):
 # Returns a new module from a dummy (meta) module and a dictionary of module name -> state_dict
 @torch.no_grad()
 def load_hqq_module(module, weights, compute_dtype, device):
+    if is_hqq_available():
+        from hqq.core.quantize import HQQLinear
+
     if module.name not in weights:
         try:
             return module.to(compute_dtype).cuda(device)

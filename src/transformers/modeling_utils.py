@@ -810,12 +810,12 @@ def _load_state_dict_into_meta_model(
         state_dict[new_key] = state_dict.pop(old_key)
 
     # Show shard-level progress. Useful to monitor quantization progress
-    show_progress = False
+    quant_show_progress = False
     if hf_quantizer is not None:
         if hasattr(hf_quantizer, "show_progress"):
-            show_progress = hf_quantizer.show_progress
+            quant_show_progress = hf_quantizer.show_progress
 
-    for param_name, param in tqdm_lib(state_dict.items(), disable=not show_progress):
+    for param_name, param in tqdm_lib(state_dict.items(), disable=not quant_show_progress):
         # First part of the test is always true as load_state_dict_keys always contains state_dict keys.
         if param_name not in loaded_state_dict_keys or param_name not in expected_keys:
             continue
@@ -3745,7 +3745,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if "skip_keys" in inspect.signature(dispatch_model).parameters:
                 device_map_kwargs["skip_keys"] = model._skip_keys_device_placement
             # For HQQ method we force-set the hooks for single GPU envs
-            if "force_hooks" in inspect.signature(dispatch_model).parameters and hf_quantizer is not None and hf_quantizer.quantization_config.quant_method == QuantizationMethod.HQQ:
+            if (
+                "force_hooks" in inspect.signature(dispatch_model).parameters
+                and hf_quantizer is not None
+                and hf_quantizer.quantization_config.quant_method == QuantizationMethod.HQQ
+            ):
                 device_map_kwargs["force_hooks"] = True
             if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
                 dispatch_model(model, **device_map_kwargs)

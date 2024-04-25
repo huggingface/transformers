@@ -13,11 +13,14 @@
 # limitations under the License.
 "HQQ (Half-Quadratic Quantization) integration file"
 
-import torch
-
-from ..utils import is_hqq_available, logging
+from ..utils import is_hqq_available, is_torch_available, logging
 from ..utils.hqq_utils import autoname_modules, get_linear_tags, name_to_linear_tag
 
+
+if is_torch_available():
+    import torch
+else:
+    torch = None
 
 if is_hqq_available():
     from hqq.core.quantize import HQQLinear

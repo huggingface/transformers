@@ -32,11 +32,8 @@ if is_torch_available():
 
 if is_hqq_available():
     from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
-
-    hqq_default_config = HQQBaseQuantizeConfig(nbits=4, group_size=64, offload_meta=False)
 else:
     HQQBaseQuantizeConfig = None
-    hqq_default_config = None
 
 
 logger = logging.get_logger(__name__)
@@ -260,12 +257,6 @@ class HqqConfig(QuantizationConfigMixin):
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
         pass
-
-    def is_quantizable(self):
-        r"""
-        Returns `True` if the model is quantizable, `False` otherwise.
-        """
-        return True
 
     def to_dict(self) -> Dict[str, Any]:
         """

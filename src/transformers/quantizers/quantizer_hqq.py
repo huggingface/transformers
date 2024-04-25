@@ -32,11 +32,6 @@ if is_accelerate_available():
 if is_torch_available():
     import torch
 
-if is_hqq_available():
-    from hqq.core.quantize import HQQLinear
-else:
-    HQQLinear = None
-
 logger = logging.get_logger(__name__)
 
 
@@ -97,8 +92,6 @@ class HQQHfQuantizer(HfQuantizer):
         else:
             return False
 
-        return True
-
     def create_quantized_param(
         self,
         model: "PreTrainedModel",
@@ -113,6 +106,9 @@ class HQQHfQuantizer(HfQuantizer):
         We first check if the corresponding module state_dict contains already HQQ quantized parameters.
         If not, we create a temp linear layer with the module state_dict params and use it for quantization
         """
+
+        if is_hqq_available():
+            from hqq.core.quantize import HQQLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
 
