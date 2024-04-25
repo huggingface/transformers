@@ -39,6 +39,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     shape_list,
     unpack_inputs,
+    keras,
 )
 from ...utils import (
     add_start_docstrings,
@@ -53,7 +54,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MistralConfig"
 
 
-class TFMistralRMSNorm(tf.keras.layers.Layer):
+class TFMistralRMSNorm(keras.layers.Layer):
     def __init__(self, hidden_size, eps=1e-6, **kwargs):
         """
         TFMistralRMSNorm is equivalent to T5LayerNorm
@@ -80,7 +81,7 @@ class TFMistralRMSNorm(tf.keras.layers.Layer):
         return self.weight * tf.cast(hidden_states, input_dtype)
 
 
-class TFMistralRotaryEmbedding(tf.keras.layers.Layer):
+class TFMistralRotaryEmbedding(keras.layers.Layer):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, **kwargs):
         super().__init__(**kwargs)
 
@@ -153,15 +154,15 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class TFMistralMLP(tf.keras.layers.Layer):
+class TFMistralMLP(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = tf.keras.layers.Dense(self.intermediate_size, use_bias=False, name="gate_proj")
-        self.up_proj = tf.keras.layers.Dense(self.intermediate_size, use_bias=False, name="up_proj")
-        self.down_proj = tf.keras.layers.Dense(self.hidden_size, use_bias=False, name="down_proj")
+        self.gate_proj = keras.layers.Dense(self.intermediate_size, use_bias=False, name="gate_proj")
+        self.up_proj = keras.layers.Dense(self.intermediate_size, use_bias=False, name="up_proj")
+        self.down_proj = keras.layers.Dense(self.hidden_size, use_bias=False, name="down_proj")
         self.act_fn = get_tf_activation(config.hidden_act)
 
     def call(self, x):
@@ -194,7 +195,7 @@ def repeat_kv(hidden_states: tf.Tensor, n_rep: int) -> tf.Tensor:
     return tf.reshape(hidden_states, (batch, num_key_value_heads * n_rep, slen, head_dim))
 
 
-class TFMistralAttention(tf.keras.layers.Layer):
+class TFMistralAttention(keras.layers.Layer):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
     and "Generating Long Sequences with Sparse Transformers".
@@ -226,10 +227,10 @@ class TFMistralAttention(tf.keras.layers.Layer):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.q_proj = tf.keras.layers.Dense(self.num_heads * self.head_dim, use_bias=False, name="q_proj")
-        self.k_proj = tf.keras.layers.Dense(self.num_key_value_heads * self.head_dim, use_bias=False, name="k_proj")
-        self.v_proj = tf.keras.layers.Dense(self.num_key_value_heads * self.head_dim, use_bias=False, name="v_proj")
-        self.o_proj = tf.keras.layers.Dense(self.hidden_size, use_bias=False, name="o_proj")
+        self.q_proj = keras.layers.Dense(self.num_heads * self.head_dim, use_bias=False, name="q_proj")
+        self.k_proj = keras.layers.Dense(self.num_key_value_heads * self.head_dim, use_bias=False, name="k_proj")
+        self.v_proj = keras.layers.Dense(self.num_key_value_heads * self.head_dim, use_bias=False, name="v_proj")
+        self.o_proj = keras.layers.Dense(self.hidden_size, use_bias=False, name="o_proj")
 
         self.rotary_emb = TFMistralRotaryEmbedding(
             self.head_dim,
@@ -237,8 +238,8 @@ class TFMistralAttention(tf.keras.layers.Layer):
             base=self.rope_theta,
             name="rotary_emb",
         )
-        self.softmax = tf.keras.layers.Softmax(axis=-1)
-        self.dropout = tf.keras.layers.Dropout(rate=self.attention_dropout)
+        self.softmax = keras.layers.Softmax(axis=-1)
+        self.dropout = keras.layers.Dropout(rate=self.attention_dropout)
 
     def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
         tensor = tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim))
@@ -362,7 +363,7 @@ class TFMistralAttention(tf.keras.layers.Layer):
                 self.o_proj.build((self.num_heads * self.head_dim,))
 
 
-class TFMistralDecoderLayer(tf.keras.layers.Layer):
+class TFMistralDecoderLayer(keras.layers.Layer):
     def __init__(self, config: MistralConfig, layer_idx: int, **kwargs):
         super().__init__(**kwargs)
         self.hidden_size = config.hidden_size
@@ -453,7 +454,7 @@ class TFMistralDecoderLayer(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFMistralMainLayer(tf.keras.layers.Layer):
+class TFMistralMainLayer(keras.layers.Layer):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MistralDecoderLayer`]
 
@@ -470,7 +471,7 @@ class TFMistralMainLayer(tf.keras.layers.Layer):
         self.hidden_size = config.hidden_size
 
         # TF and PT Embedding check: https://colab.research.google.com/gist/ariG23498/2b9826818875c9c4968c79cb19f55f2c/scratchpad.ipynb
-        self.embed_tokens = tf.keras.layers.Embedding(
+        self.embed_tokens = keras.layers.Embedding(
             input_dim=config.vocab_size,
             output_dim=config.hidden_size,
             mask_zero=True,
@@ -807,7 +808,7 @@ class TFMistralForCausalLM(TFMistralPreTrainedModel, TFCausalLanguageModelingLos
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.model = TFMistralMainLayer(config, name="model")
-        self.lm_head = tf.keras.layers.Dense(
+        self.lm_head = keras.layers.Dense(
             config.vocab_size,
             use_bias=False,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -997,7 +998,7 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
         self.model = TFMistralMainLayer(config, name="model")
-        self.score = tf.keras.layers.Dense(
+        self.score = keras.layers.Dense(
             self.num_labels,
             use_bias=False,
             kernel_initializer=get_initializer(config.initializer_range),
