@@ -18,19 +18,15 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict, validate_preprocess_arguments
 from ...image_transforms import rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
     infer_channel_dimension_format,
-    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
-    valid_images,
-    validate_kwargs,
-    validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
 
@@ -115,6 +111,11 @@ class ImageGPTImageProcessor(BaseImageProcessor):
             "data_format",
             "input_data_format",
         ]
+
+    def _validate_preprocess_arguments(self, do_resize, size, resample):
+        # normalize() uses a constant factor to divide pixel values.
+        # hence, the method does not need iamge_mean and image_std.
+        validate_preprocess_arguments(do_resize=do_resize, size=size, resample=resample)
 
     # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
     def resize(
@@ -251,33 +252,11 @@ class ImageGPTImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
-        if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
-
-        # Here, normalize() is using a constant factor to divide pixel values.
-        # hence, the method does not need iamge_mean and image_std.
-        validate_preprocess_arguments(
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
-
         if do_color_quantize and clusters is None:
             raise ValueError("Clusters must be specified if do_color_quantize is True.")
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
-
-        if is_scaled_image(images[0]) and do_normalize:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If you wish to do this, "
-                "make sure to set `do_normalize` to `False` and that pixel values are between [-1, 1].",
-            )
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.

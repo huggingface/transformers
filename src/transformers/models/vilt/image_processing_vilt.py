@@ -18,7 +18,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict, validate_preprocess_arguments
 from ...image_transforms import PaddingMode, pad, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -28,12 +28,8 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
-    valid_images,
-    validate_kwargs,
-    validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
 
@@ -208,6 +204,22 @@ class ViltImageProcessor(BaseImageProcessor):
             "data_format",
             "input_data_format",
         ]
+
+    def _validate_preprocess_arguments(
+        self, do_rescale, rescale_factor, do_normalize, image_mean, image_std, do_resize, size, resample
+    ):
+        # pad() method does not require any additional argument as it takes the maximum of (height, width).
+        # Hence, it does not need to be passed to a validate_preprocess_arguments() method.
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -433,35 +445,8 @@ class ViltImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
-        if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
-
-        # Here the pad() method does not require any additional argument as it takes the maximum of (height, width).
-        # Hence, it does not need to be passed to a validate_preprocess_arguments() method.
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
-
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
-
-        if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.

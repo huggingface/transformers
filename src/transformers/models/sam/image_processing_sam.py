@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict, validate_preprocess_arguments
 from ...image_transforms import convert_to_rgb, pad, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -30,12 +30,8 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
-    valid_images,
-    validate_kwargs,
-    validate_preprocess_arguments,
 )
 from ...utils import (
     TensorType,
@@ -181,6 +177,33 @@ class SamImageProcessor(BaseImageProcessor):
             "data_format",
             "input_data_format",
         ]
+
+    def _validate_preprocess_arguments(
+        self,
+        do_rescale,
+        rescale_factor,
+        do_normalize,
+        image_mean,
+        image_std,
+        do_pad,
+        size_divisibility,
+        do_resize,
+        size,
+        resample,
+        pad_size,
+    ):
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_pad=do_pad,
+            size_divisibility=pad_size,  # _preprocess needs do_pad and pad_size.
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
 
     def pad_image(
         self,
@@ -334,12 +357,6 @@ class SamImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
-
-        if is_scaled_image(image) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
 
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
@@ -512,34 +529,8 @@ class SamImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
-        if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
-
         if segmentation_maps is not None:
             segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
-
-            if not valid_images(segmentation_maps):
-                raise ValueError(
-                    "Invalid segmentation map type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                    "torch.Tensor, tf.Tensor or jax.ndarray."
-                )
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_pad=do_pad,
-            size_divisibility=pad_size,  # Here _preprocess needs do_pad and pad_size.
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
 
         images, original_sizes, reshaped_input_sizes = zip(
             *(

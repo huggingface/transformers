@@ -20,7 +20,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Un
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import BaseImageProcessor, get_size_dict
+from ...image_processing_utils import BaseImageProcessor, get_size_dict, validate_preprocess_arguments
 from ...image_transforms import (
     PaddingMode,
     center_to_corners_format,
@@ -42,13 +42,9 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
-    valid_images,
     validate_annotations,
-    validate_kwargs,
-    validate_preprocess_arguments,
 )
 from ...utils import (
     TensorType,
@@ -772,6 +768,21 @@ class YolosImageProcessor(BaseImageProcessor):
             "input_data_format",
         ]
 
+    def _validate_preprocess_arguments(
+        self, do_rescale, rescale_factor, do_normalize, image_mean, image_std, do_resize, size, resample
+    ):
+        # Here the pad() method pads using the max of (width, height) and does not need to be validated.
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
+
     @classmethod
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.from_dict with Detr->Yolos
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -1213,26 +1224,8 @@ class YolosImageProcessor(BaseImageProcessor):
         )
         do_pad = self.do_pad if do_pad is None else do_pad
         format = self.format if format is None else format
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         images = make_list_of_images(images)
-
-        if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
-        # Here the pad() method pads using the max of (width, height) and does not need to be validated.
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
 
         if annotations is not None and isinstance(annotations, dict):
             annotations = [annotations]
@@ -1258,12 +1251,6 @@ class YolosImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays
         images = [to_numpy_array(image) for image in images]
-
-        if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.

@@ -18,7 +18,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict, validate_preprocess_arguments
 from ...image_transforms import PaddingMode, center_crop, pad, resize, to_channel_dimension_format
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
@@ -29,11 +29,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_batched,
-    is_scaled_image,
     to_numpy_array,
-    valid_images,
-    validate_kwargs,
-    validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
 
@@ -223,6 +219,37 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             "data_format",
             "input_data_format",
         ]
+
+    def _validate_preprocess_arguments(
+        self,
+        do_rescale,
+        rescale_factor,
+        do_normalize,
+        image_mean,
+        image_std,
+        do_pad,
+        size_divisor,
+        do_center_crop,
+        crop_size,
+        do_resize,
+        size,
+        resample,
+    ):
+        # crop_size is used only if it is set, else size will be used.
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_pad=do_pad,
+            size_divisibility=size_divisor,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
 
     # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor.resize
     def resize(
@@ -484,39 +511,11 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
         if not is_batched(images):
             images = [images]
 
-        if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
-        # Here, crop_size is used only if it is set, else size will be used.
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_pad=do_pad,
-            size_divisibility=size_divisor,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
-
-        if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
 
         if do_resize:
             images = [

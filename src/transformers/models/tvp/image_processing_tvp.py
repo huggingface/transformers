@@ -18,7 +18,7 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict, validate_preprocess_arguments
 from ...image_transforms import (
     PaddingMode,
     flip_channel_order,
@@ -33,11 +33,10 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     get_image_size,
+    is_scaled_image,
     is_valid_image,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
-    validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
 
@@ -195,6 +194,49 @@ class TvpImageProcessor(BaseImageProcessor):
             "input_data_format",
         ]
 
+    def _validate_image_inputs(self, images, segmentation_maps=None, do_rescale=False):
+        if not valid_images(images[0]):
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+
+        if is_scaled_image(to_numpy_array(images[0][0])) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
+
+    def _validate_preprocess_arguments(
+        self,
+        do_rescale,
+        rescale_factor,
+        do_normalize,
+        image_mean,
+        image_std,
+        do_pad,
+        pad_size,
+        do_center_crop,
+        crop_size,
+        do_resize,
+        size,
+        resample,
+    ):
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_pad=do_pad,
+            size_divisibility=pad_size,  # pad() method simply requires the pad_size argument.
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
+
     def resize(
         self,
         image: np.ndarray,
@@ -308,21 +350,6 @@ class TvpImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> np.ndarray:
         """Preprocesses a single image."""
-
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_pad=do_pad,
-            size_divisibility=pad_size,  # here the pad() method simply requires the pad_size argument.
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
 
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
@@ -458,14 +485,6 @@ class TvpImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size")
-
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
-        if not valid_images(videos):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
 
         videos = make_batched(videos)
 

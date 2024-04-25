@@ -32,7 +32,6 @@ from ...image_utils import (
     is_valid_image,
     to_numpy_array,
     valid_images,
-    validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
 
@@ -245,6 +244,19 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_pad = do_pad
         self.do_image_splitting = do_image_splitting
+
+    def _validate_image_inputs(self, images, segmentation_maps=None, do_rescale=False):
+        if not valid_images(images[0]):
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+
+        if is_scaled_image(to_numpy_array(images[0][0])) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
 
     def resize(
         self,
@@ -505,34 +517,11 @@ class Idefics2ImageProcessor(BaseImageProcessor):
 
         images_list = make_list_of_images(images)
 
-        if not valid_images(images_list[0]):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
-
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
-
         if do_convert_rgb:
             images_list = [[convert_to_rgb(image) for image in images] for images in images_list]
 
         # All transformations expect numpy arrays.
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
-
-        if is_scaled_image(images_list[0][0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
