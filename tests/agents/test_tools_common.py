@@ -15,6 +15,7 @@
 import unittest
 from pathlib import Path
 from typing import List, Dict, Union
+import numpy as np
 
 from transformers import is_torch_available, is_vision_available
 from transformers.testing_utils import get_tests_dir, is_tool_test
@@ -42,7 +43,7 @@ def create_inputs(tool_inputs: Dict[str, Dict[Union[str, type], str]]):
                 Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png").resize((512, 512))
             )
         elif input_type == "audio":
-            inputs.append(torch.ones(3000))
+            inputs.append(np.ones(3000).tobytes())
         else:
             raise ValueError(f"Invalid type requested: {input_type}")
 

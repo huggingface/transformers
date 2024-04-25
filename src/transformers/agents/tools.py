@@ -678,13 +678,8 @@ def launch_gradio_demo(tool_class: Tool):
 
 TASK_MAPPING = {
     "document-question-answering": "DocumentQuestionAnsweringTool",
-    # "image-captioning": "ImageCaptioningTool",
     "image-question-answering": "ImageQuestionAnsweringTool",
-    # "image-segmentation": "ImageSegmentationTool",
     "speech-to-text": "SpeechToTextTool",
-    # "summarization": "TextSummarizationTool",
-    # "text-classification": "TextClassificationTool",
-    # "text-question-answering": "TextQuestionAnsweringTool",
     "text-to-speech": "TextToSpeechTool",
     "translation": "TranslationTool",
     "calculator": "CalculatorTool",
@@ -711,13 +706,8 @@ def load_tool(task_or_repo_id, model_repo_id=None, token=None, **kwargs):
             are:
 
             - `"document-question-answering"`
-            - `"image-captioning"`
             - `"image-question-answering"`
-            - `"image-segmentation"`
             - `"speech-to-text"`
-            - `"summarization"`
-            - `"text-classification"`
-            - `"text-question-answering"`
             - `"text-to-speech"`
             - `"translation"`
 
@@ -736,7 +726,6 @@ def load_tool(task_or_repo_id, model_repo_id=None, token=None, **kwargs):
         main_module = importlib.import_module("transformers")
         tools_module = main_module.agents
         tool_class = getattr(tools_module, tool_class_name)
-
         return tool_class(model_repo_id, token=token, **kwargs)
     else:
         logger.warning_once(

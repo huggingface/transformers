@@ -32,6 +32,7 @@ from .tools import (
     get_tool_description_with_args,
     load_tool,
 )
+from .agent_types import AgentAudio, AgentImage, AgentText
 
 
 logger = logging.get_logger(__name__)
@@ -602,11 +603,13 @@ class ReactJSONAgent(ReactAgent):
             observation = self.execute(tool_name, arguments)
 
             observation_type = type(observation)
-            if observation_type in [str, int, float, bool]:
+            if observation_type == AgentText:
                 updated_information = str(observation).strip()
-            else:  # if the execution result is an object, store it
-                if observation_type == Image.Image:
+            else:
+                if observation_type == AgentImage:
                     observation_name = "image.png"
+                elif observation_type == AgentAudio:
+                    observation_name = "audio.mp3"
                 else:
                     observation_name = "object.object"
                 # TODO: improve observation name choice

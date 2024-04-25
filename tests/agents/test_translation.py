@@ -56,7 +56,6 @@ class TranslationToolTester(unittest.TestCase, ToolTesterMixin):
         }
 
         _inputs = []
-
         for input_name in example_inputs.keys():
             example_input = example_inputs[input_name]
             input_description = self.tool.inputs[input_name]
