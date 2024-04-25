@@ -219,16 +219,16 @@ class AudioMAEFeatureExtractor(SequenceFeatureExtractor):
         features = [self._extract_fbank_features(waveform, max_length=self.max_length) for waveform in raw_speech]
 
         # convert into BatchFeature
-        padded_inputs = BatchFeature({"input_values": features})
+        padded_inputs = BatchFeature({"pixel_values": features})
 
         # make sure list is in array format
-        input_values = padded_inputs.get("input_values")
+        input_values = padded_inputs.get("pixel_values")
         if isinstance(input_values[0], list):
-            padded_inputs["input_values"] = [np.asarray(feature, dtype=np.float32) for feature in input_values]
+            padded_inputs["pixel_values"] = [np.asarray(feature, dtype=np.float32) for feature in input_values]
 
         # normalization
         if self.do_normalize:
-            padded_inputs["input_values"] = [self.normalize(feature) for feature in input_values]
+            padded_inputs["pixel_values"] = [self.normalize(feature) for feature in input_values]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)

@@ -503,7 +503,7 @@ class AudioMAESelfOutput(nn.Module):
 class AudioMAEAttention(nn.Module):
     def __init__(self, config: AudioMAEConfig) -> None:
         super().__init__()
-        self.attention = AudioMAESelfAttention(config)
+        self.self = AudioMAESelfAttention(config)
         self.output = AudioMAESelfOutput(config)
 
     def forward(
@@ -511,7 +511,7 @@ class AudioMAEAttention(nn.Module):
         hidden_states: torch.Tensor,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, output_attentions)
+        self_outputs = self.self(hidden_states, output_attentions)
 
         attention_output = self.output(self_outputs[0], hidden_states)
 
@@ -598,21 +598,16 @@ class AudioMAELayer(nn.Module):
 class Swinv2SelfAttention(nn.Module):
     def __init__(self, config, dim, window_size, num_heads):
         super().__init__()
-        if dim % num_heads != 0:
-            raise ValueError(
-                f"The hidden size ({dim}) is not a multiple of the number of attention heads ({num_heads})"
-            )
-
-        self.num_attention_heads = num_heads
-        self.attention_head_size = int(dim / num_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.num_heads = num_heads
+        self.attention_head_size = int(dim / self.num_heads)
+        self.all_head_size = self.num_heads * self.attention_head_size
         self.window_size = (
             window_size if isinstance(window_size, collections.abc.Iterable) else (window_size, window_size)
         )
         # mlp to generate continuous relative position bias
-        self.register_parameter("tau", torch.nn.Parameter(torch.ones(num_heads)))
+        self.register_parameter("tau", torch.nn.Parameter(torch.ones(self.num_heads)))
         self.meta_mlp = nn.Sequential(
-            nn.Linear(2, 384, bias=True), nn.ReLU(), nn.Dropout(0.1), nn.Linear(384, num_heads, bias=True), nn.Dropout(0.1)
+            nn.Linear(2, 384, bias=True), nn.ReLU(), nn.Dropout(0.1), nn.Linear(384, self.num_heads, bias=True), nn.Dropout(0.1)
         )
         # get relative_coords_table
         coordinates = torch.stack(torch.meshgrid([
@@ -624,7 +619,10 @@ class Swinv2SelfAttention(nn.Module):
             1.0 + relative_coordinates.abs())
         self.register_buffer("relative_coordinates_log", relative_coordinates_log, persistent=False)
         
-        self.qkv = nn.Linear(self.all_head_size, self.all_head_size*3, bias=config.qkv_bias)
+        self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
+
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         
     def _relative_positional_encodings(self) -> torch.Tensor:
@@ -649,8 +647,9 @@ class Swinv2SelfAttention(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         batch_size, dim, num_channels = hidden_states.shape
-        qkv = self.qkv(hidden_states).view(batch_size, dim, 3, self.num_heads, num_channels // self.num_heads).permute(2, 0, 3, 1, 4)
-        query, key, value = qkv.unbind(0)
+        query = self.query(hidden_states).view(batch_size, dim, self.num_heads, num_channels // self.num_heads).permute(0, 2, 1, 3)
+        key = self.key(hidden_states).view(batch_size, dim, self.num_heads, num_channels // self.num_heads).permute(0, 2, 1, 3)
+        value = self.key(hidden_states).view(batch_size, dim, self.num_heads, num_channels // self.num_heads).permute(0, 2, 1, 3)
         
         denom = torch.norm(query, dim=-1, keepdim=True) @ torch.norm(key, dim=-1, keepdim=True).transpose(-2, -1)
         attention_scores = query @ key.transpose(-2, -1) / denom.clamp(min=1e-6)
@@ -662,10 +661,10 @@ class Swinv2SelfAttention(nn.Module):
             # Apply the attention mask is (precomputed for all layers in Swinv2Model forward() function)
             num_win = attention_mask.shape[0]
             attention_scores = attention_scores.view(
-                batch_size // num_win, num_win, self.num_attention_heads, dim, dim
+                batch_size // num_win, num_win, self.num_heads, dim, dim
             )
             attention_scores = attention_scores + attention_mask.unsqueeze(1).unsqueeze(0)
-            attention_scores = attention_scores.view(-1, self.num_attention_heads, dim, dim)
+            attention_scores = attention_scores.view(-1, self.num_heads, dim, dim)
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
@@ -819,13 +818,12 @@ class Swinv2Layer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        input_dimensions: Tuple[int, int],
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        height, width = input_dimensions
+        print(f'shape inside decoder {hidden_states.shape}')
+        height, width = self.input_resolution
         batch_size, _, channels = hidden_states.size()
         shortcut = hidden_states
-
         hidden_states = hidden_states.view(batch_size, height, width, channels)
         # cyclic shift
         if self.shift_size[0] > 0 or self.shift_size[1] > 0:
@@ -875,7 +873,7 @@ class AudioMAEEncoder(nn.Module):
     def __init__(self, config: AudioMAEConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([AudioMAELayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([AudioMAELayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -888,7 +886,7 @@ class AudioMAEEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        for i, layer_module in enumerate(self.layer):
+        for i, layer_module in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -926,7 +924,7 @@ class AudioMAEPreTrainedModel(PreTrainedModel):
     """
 
     config_class = AudioMAEConfig
-    base_model_prefix = "vit"
+    base_model_prefix = "audiomae"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
@@ -980,7 +978,7 @@ class AudioMAEModel(AudioMAEPreTrainedModel):
         super().__init__(config)
         self.config = config
         #TODO do we need to set mask_2d is true here or somewhere else? this will be for finetuning.
-        self.config.mask_2d = True
+        # self.config.mask_2d = True
         self.embeddings = AudioMAEEmbeddings(config)
         self.encoder = AudioMAEEncoder(config)
 
@@ -1032,13 +1030,15 @@ class AudioMAEModel(AudioMAEPreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         embedding_output, mask, ids_restore = self.embeddings(pixel_values, noise=noise)
-
+        print(f'masking is {mask.sum()}')
+        print(f'shape after embed layer is {embedding_output.shape}')
         encoder_outputs = self.encoder(
             embedding_output,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        print(f'shape after encoder is {encoder_outputs[0].shape}')
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
 
@@ -1109,18 +1109,21 @@ class AudioMAEDecoder(nn.Module):
         return_dict=True,
     ):
         # embed tokens
-        x = self.decoder_embed(hidden_states)
+        hidden_states = self.decoder_embed(hidden_states)
 
         # append mask tokens to sequence
-        mask_tokens = self.mask_token.repeat(x.shape[0], ids_restore.shape[1] + 1 - x.shape[1], 1)
-        x_ = torch.cat([x[:, 1:, :], mask_tokens], dim=1)  # no cls token
-        x_ = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))  # unshuffle
-        x = torch.cat([x[:, :1, :], x_], dim=1)  # append cls token
+        mask_tokens = self.mask_token.repeat(hidden_states.shape[0], ids_restore.shape[1] + 1 - hidden_states.shape[1], 1)
+        hidden_states_ = torch.cat([hidden_states[:, 1:, :], mask_tokens], dim=1)  # no cls token
+        hidden_states_ = torch.gather(hidden_states_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2]))  # unshuffle
+        hidden_states = torch.cat([hidden_states[:, :1, :], hidden_states_], dim=1)  # append cls token
 
         # add pos embed
-        hidden_states = x + self.decoder_pos_embed
-        x = x[:, 1:, :] # remove cls token
-        
+        hidden_states = hidden_states + self.decoder_pos_embed
+        print(f'shape after pos_embed block {hidden_states.shape}')
+
+        hidden_states = hidden_states[:, 1:, :] # remove cls token
+        print(f'shape before decoder block {hidden_states.shape}')
+
         # apply Swin Transformer layers (blocks)
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -1179,14 +1182,14 @@ class AudioMAEForPreTraining(AudioMAEPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.vit = AudioMAEModel(config)
-        self.decoder = AudioMAEDecoder(config, num_patches=self.vit.embeddings.num_patches)
+        self.audiomae = AudioMAEModel(config)
+        self.decoder = AudioMAEDecoder(config, num_patches=self.audiomae.embeddings.num_patches)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.vit.embeddings.patch_embeddings
+        return self.audiomae.embeddings.patch_embeddings
 
     def patchify(self, pixel_values):
         """
@@ -1200,9 +1203,10 @@ class AudioMAEForPreTraining(AudioMAEPreTrainedModel):
         """
         batch_size, num_channels, height, width  = pixel_values.shape
         patch_size = self.config.patch_size
-        patchified_pixel_values = pixel_values.reshape(batch_size, num_channels, height//patch_size, width/patch_size, patch_size, patch_size)
+        patch_height, patch_width = (height//patch_size, width//patch_size)
+        patchified_pixel_values = pixel_values.reshape(batch_size, num_channels, patch_height, patch_width, patch_size, patch_size)
         patchified_pixel_values = torch.einsum('nchpwq->nhwpqc', patchified_pixel_values)
-        patchified_pixel_values = patchified_pixel_values.reshape(shape=(batch_size, height * width, patch_size**2 * num_channels))
+        patchified_pixel_values = patchified_pixel_values.reshape(shape=(batch_size, patch_height * patch_width, patch_size**2 * num_channels))
         return patchified_pixel_values
 
     def unpatchify(self, patchified_pixel_values):
@@ -1283,21 +1287,20 @@ class AudioMAEForPreTraining(AudioMAEPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.vit(
+        outputs = self.audiomae(
             pixel_values,
             noise=noise,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
         latent = outputs.last_hidden_state
         ids_restore = outputs.ids_restore
         mask = outputs.mask
-
+        print(f'shape after encoder complete is {latent.shape} and {latent[0, 0:3, 0:3]}')
         decoder_outputs = self.decoder(latent, ids_restore)
         logits = decoder_outputs.logits  # shape (batch_size, num_patches, patch_size*patch_size*num_channels)
-
+        print(logits)
         loss = self.forward_loss(pixel_values, logits, mask)
 
         if not return_dict:

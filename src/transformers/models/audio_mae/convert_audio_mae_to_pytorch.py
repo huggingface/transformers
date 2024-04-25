@@ -16,12 +16,10 @@
 
 import argparse
 from pathlib import Path
-
-import requests
+import pickle
 import torch
 import numpy as np
 import random
-from PIL import Image
 
 from transformers import AudioMAEConfig, AudioMAEForPreTraining, AudioMAEFeatureExtractor
 from datasets import load_dataset, Audio
@@ -34,21 +32,19 @@ random.seed(seed_value)
 
 def rename_key(name):
     if "cls_token" in name:
-        name = name.replace("cls_token", "vit.embeddings.cls_token")
+        name = name.replace("cls_token", "audiomae.embeddings.cls_token")
+    if "pos_embed" in name and "decoder" not in name:
+        name = name.replace("pos_embed", "audiomae.embeddings.position_embeddings")
     if "mask_token" in name:
         name = name.replace("mask_token", "decoder.mask_token")
     if "decoder_pos_embed" in name:
         name = name.replace("decoder_pos_embed", "decoder.decoder_pos_embed")
-    if "pos_embed" in name and "decoder" not in name:
-        name = name.replace("pos_embed", "vit.embeddings.position_embeddings")
     if "patch_embed.proj" in name:
-        name = name.replace("patch_embed.proj", "vit.embeddings.patch_embeddings.projection")
-    if "patch_embed.norm" in name:
-        name = name.replace("patch_embed.norm", "vit.embeddings.norm")
+        name = name.replace("patch_embed.proj", "audiomae.embeddings.patch_embeddings.projection")
     if "decoder_blocks" in name:
         name = name.replace("decoder_blocks", "decoder.decoder_layers")
     if "blocks" in name:
-        name = name.replace("blocks", "vit.encoder.layer")
+        name = name.replace("blocks", "audiomae.encoder.layers")
     if "attn.proj" in name:
         name = name.replace("attn.proj", "attention.output.dense")
     if "attn" in name:
@@ -57,10 +53,15 @@ def rename_key(name):
         name = name.replace("norm1", "layernorm_before")
     if "norm2" in name:
         name = name.replace("norm2", "layernorm_after")
-    if "mlp.fc1" in name:
+    if "mlp.fc1" in name and 'meta' not in name:
         name = name.replace("mlp.fc1", "intermediate.dense")
-    if "mlp.fc2" in name:
+    if "mlp.fc2" in name and 'meta' not in name:
         name = name.replace("mlp.fc2", "output.dense")
+    #TODO need to convert meta_mlp into somebetter name.
+    if 'meta_mlp.fc1' in name:
+        name = name.replace('meta_mlp.fc1', 'meta_mlp.0')
+    if 'meta_mlp.fc2' in name:
+        name = name.replace('meta_mlp.fc2', 'meta_mlp.3')
     if "decoder_embed" in name:
         name = name.replace("decoder_embed", "decoder.decoder_embed")
     if "decoder_norm" in name:
@@ -68,10 +69,9 @@ def rename_key(name):
     if "decoder_pred" in name:
         name = name.replace("decoder_pred", "decoder.decoder_pred")
     if "norm.weight" in name and "decoder" not in name:
-        name = name.replace("norm.weight", "vit.layernorm.weight")
+        name = name.replace("norm.weight", "audiomae.layernorm.weight")
     if "norm.bias" in name and "decoder" not in name:
-        name = name.replace("norm.bias", "vit.layernorm.bias")
-
+        name = name.replace("norm.bias", "audiomae.layernorm.bias")
     return name
 
 
@@ -86,53 +86,38 @@ def convert_state_dict(orig_state_dict, config):
                 dim = config.decoder_hidden_size
                 prefix = "decoder.decoder_layers."
                 if "weight" in key:
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.weight"] = val[dim : dim * 2, :]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.self.query.weight"] = val[:dim, :]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.self.key.weight"] = val[dim : dim * 2, :]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.self.value.weight"] = val[-dim:, :]
                 elif "bias" in key:
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.bias"] = val[:dim]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.bias"] = val[-dim:]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.self.query.bias"] = val[:dim]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.self.key.bias"] = val[dim : dim * 2]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.self.value.bias"] = val[-dim:]
             else:
                 dim = config.hidden_size
-                prefix = "vit.encoder.layer."
+                prefix = "audiomae.encoder.layers."
                 if "weight" in key:
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.weight"] = val[dim : dim * 2, :]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.self.query.weight"] = val[:dim, :]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.self.key.weight"] = val[dim : dim * 2, :]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.self.value.weight"] = val[-dim:, :]
                 elif "bias" in key:
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.bias"] = val[:dim]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.bias"] = val[-dim:]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.self.query.bias"] = val[:dim]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.self.key.bias"] = val[dim : dim * 2]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.self.value.bias"] = val[-dim:]
 
         else:
             orig_state_dict[rename_key(key)] = val
 
     return orig_state_dict
 
-def checkpoint_filter_fn(state_dict, model):
-    """ convert patch embedding weight from manual patchify + linear proj to conv"""
-    state_dict = state_dict.get('model', state_dict)
-    state_dict = state_dict.get('state_dict', state_dict)
-    if 'head.fc.weight' in state_dict:
-        return state_dict
-    out_dict = {}
-    for k, v in state_dict.items():
-        if 'tau' in k:
-            # convert old tau based checkpoints -> logit_scale (inverse)
-            v = torch.log(1 / v)
-            k = k.replace('tau', 'logit_scale')
-        k = k.replace('head.', 'head.fc.')
-        out_dict[k] = v
-    return out_dict
-
 def convert_audio_mae_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub=False):
     config = AudioMAEConfig()
 
     model = AudioMAEForPreTraining(config)
 
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
-    checkpoint = checkpoint_filter_fn(checkpoint)
+    # state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
+    checkpoint = torch.load('/Users/subhashp/Documents/Open-Source/AudioMAE/ckpt/pretrained.pth', map_location='cpu')
+    state_dict = checkpoint['model']
 
     new_state_dict = convert_state_dict(state_dict, config)
 
@@ -142,38 +127,38 @@ def convert_audio_mae_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_
     #TODO we need to load an audio file, and compute the model logits from it.
     feature_extractor = AudioMAEFeatureExtractor()
 
-    dataset = load_dataset("agkphysics/audioset", split="train", streaming=True).take(1)
-    dataset.cast_column('flac', Audio(sampling_rate=16_000))
-    
-    waveform = next(iter(dataset))["flac"]["array"]
-    waveform = waveform.squeeze().numpy()
-    inputs = feature_extractor(waveform, sampling_rate=16000, return_tensors="pt")
-
+    # Load the waveform from file
+    with open('waveform.pickle', 'rb') as f:
+        waveform = pickle.load(f)
+    inputs = feature_extractor([waveform], sampling_rate=16000, return_tensors="pt")
+    inputs['pixel_values'] = inputs['pixel_values'].unsqueeze(dim=0)
+    print(inputs['pixel_values'].shape)
     # forward pass
     outputs = model(**inputs)
     logits = outputs.logits
+    print(logits)
 
-    #TODO update this expected slice value
-    expected_slice = torch.tensor(
-        [[-0.9192, -0.8481, -1.1259], [-1.1349, -1.0034, -1.2599], [-1.1757, -1.0429, -1.2726]]
-    )
+    # #TODO update this expected slice value
+    # expected_slice = torch.tensor(
+    #     [[-0.9192, -0.8481, -1.1259], [-1.1349, -1.0034, -1.2599], [-1.1757, -1.0429, -1.2726]]
+    # )
 
-    # verify logits
-    if not torch.allclose(logits[0, :3], expected_slice, atol=1e-4):
-        raise ValueError("Logits don't match")
-    print("Looks ok!")
+    # # verify logits
+    # if not torch.allclose(logits[0, :3], expected_slice, atol=1e-4):
+    #     raise ValueError("Logits don't match")
+    # print("Looks ok!")
         
-    if pytorch_dump_folder_path is not None:
-        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-        print(f"Saving model AudioMAE to {pytorch_dump_folder_path}")
-        model.save_pretrained(pytorch_dump_folder_path)
-        print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-        feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    # if pytorch_dump_folder_path is not None:
+    #     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+    #     print(f"Saving model AudioMAE to {pytorch_dump_folder_path}")
+    #     model.save_pretrained(pytorch_dump_folder_path)
+    #     print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+    #     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
-    if push_to_hub:
-        print("Pushing model and feature extractor to the hub...")
-        model.push_to_hub(f"MIT/AudioMAE")
-        feature_extractor.push_to_hub(f"MIT/AudioMAE")
+    # if push_to_hub:
+    #     print("Pushing model and feature extractor to the hub...")
+    #     model.push_to_hub(f"MIT/AudioMAE")
+    #     feature_extractor.push_to_hub(f"MIT/AudioMAE")
 
 
 if __name__ == "__main__":
