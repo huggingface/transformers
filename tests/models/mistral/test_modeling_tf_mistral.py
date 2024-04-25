@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TF 2.0 Mistral model. """
+"""Testing suite for the TF 2.0 Mistral model."""
 
 import unittest
 
@@ -298,7 +298,6 @@ class TFMistralModelTest(TFModelTesterMixin, TFGenerationIntegrationTests, Pipel
 
     def test_Mistral_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        print(config)
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = tf.not_equal(input_ids, 1)
@@ -378,7 +377,8 @@ class TFMistralIntegrationTest(unittest.TestCase):
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
         model = TFMistralForCausalLM.from_pretrained(
-            "mistralai/Mistral-7B-v0.1", device_map="auto",
+            "mistralai/Mistral-7B-v0.1",
+            device_map="auto",
         )
         input_ids = tokenizer.encode(prompt, return_tensors="tf").to(model.model.embed_tokens.weight.device)
 

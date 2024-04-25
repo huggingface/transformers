@@ -512,7 +512,7 @@ class TFMistralMainLayer(tf.keras.layers.Layer):
             batch_size, seq_length, _ = shape_list(inputs_embeds)
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
-        
+
         seq_length_with_past = seq_length
         past_key_values_length = 0
 
@@ -560,7 +560,7 @@ class TFMistralMainLayer(tf.keras.layers.Layer):
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            
+
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             layer_outputs = decoder_layer(
@@ -790,16 +790,16 @@ def tf_index_select(input_, dim, indices):
     """
     shape = input_.get_shape().as_list()
     if dim == -1:
-        dim = len(shape)-1
+        dim = len(shape) - 1
     shape[dim] = 1
-    
+
     tmp = []
     for idx in indices:
-        begin = [0]*len(shape)
+        begin = [0] * len(shape)
         begin[dim] = idx
         tmp.append(tf.slice(input_, begin, shape))
     res = tf.concat(tmp, axis=dim)
-    
+
     return res
 
 
@@ -929,10 +929,13 @@ class TFMistralForCausalLM(TFMistralPreTrainedModel, TFCausalLanguageModelingLos
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
-            position_ids = tf.math.cumsum(
-                tf.cast(attention_mask, tf.int64),
-                axis=-1,
-            ) - 1
+            position_ids = (
+                tf.math.cumsum(
+                    tf.cast(attention_mask, tf.int64),
+                    axis=-1,
+                )
+                - 1
+            )
             position_ids = tf.where(attention_mask, tf.fill(tf.shape(position_ids), 1), position_ids)
             if past_key_values:
                 position_ids = position_ids[:, -shape_list(input_ids)[1] :]
@@ -957,9 +960,7 @@ class TFMistralForCausalLM(TFMistralPreTrainedModel, TFCausalLanguageModelingLos
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
-            reordered_past += (
-                tuple(tf_index_select(past_state, 0, beam_idx) for past_state in layer_past)
-            )
+            reordered_past += tuple(tf_index_select(past_state, 0, beam_idx) for past_state in layer_past)
         return reordered_past
 
     def build(self, input_shape=None):
@@ -1045,6 +1046,8 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
         )
         hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)
+        logits_shape = shape_list(logits)
+        in_logits = None
 
         if input_ids is not None:
             batch_size = shape_list(input_ids)[0]
@@ -1057,14 +1060,34 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = tf.equal(input_ids, self.config.pad_token_id)
-                sequence_lengths = tf.cast(sequence_lengths, tf.int32)
-                sequence_lengths = tf.argmax(sequence_lengths, axis=-1) - 1                
+                sequence_lengths = (
+                    tf.argmax(tf.cast(tf.math.equal(input_ids, self.config.pad_token_id), input_ids.dtype), axis=-1)
+                    - 1
+                )
+                sequence_lengths = tf.where(
+                    sequence_lengths >= 0,
+                    sequence_lengths,
+                    tf.cast(shape_list(input_ids[-1]), sequence_lengths.dtype) - 1,
+                )
+                in_logits = tf.gather(logits, sequence_lengths, batch_dims=1, axis=1)
             else:
                 sequence_lengths = -1
+                logger.warning(
+                    f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                )
 
-        pooled_logits = tf.gather_nd(logits, tf.stack([tf.range(batch_size, dtype=tf.int64), sequence_lengths], axis=1)) 
-        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=pooled_logits)
+        loss = None
+
+        if labels is not None:
+            if self.config.pad_token_id is None and logits_shape[0] != 1:
+                raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+
+            if not tf.is_tensor(sequence_lengths):
+                in_logits = logits[0 : logits_shape[0], sequence_lengths]
+
+            loss = self.hf_compute_loss(tf.reshape(labels, [-1]), tf.reshape(in_logits, [-1, self.num_labels]))
+        pooled_logits = in_logits if in_logits is not None else logits
 
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
@@ -1077,7 +1100,6 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
-
 
     def build(self, input_shape=None):
         if self.built:
