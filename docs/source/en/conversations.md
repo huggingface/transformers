@@ -230,7 +230,7 @@ quantization_config = BitsAndBytesConfig(load_in_8bit=True)  # You can also try 
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct", device_map="auto", quantization_config=quantization_config)
 ```
 
-Or, we can do the same thing using the `pipeline` API:
+Or we can do the same thing using the `pipeline` API:
 
 ```python
 from transformers import pipeline, BitsAndBytesConfig
