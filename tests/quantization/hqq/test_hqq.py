@@ -36,19 +36,6 @@ if is_hqq_available():
     from hqq.core.quantize import HQQBackend, HQQLinear
 
 
-@require_torch_gpu
-class HqqConfigTest(unittest.TestCase):
-    def test_to_dict(self):
-        """
-        Makes sure the config format is properly set
-        """
-        quantization_config = HqqConfig()
-        hqq_orig_config = quantization_config.to_dict()
-
-        for key in hqq_orig_config:
-            self.assertEqual(quantization_config.quant_config[key], hqq_orig_config[key])
-
-
 class HQQLLMRunner:
     def __init__(self, model_id, quant_config, compute_dtype, device, cache_dir):
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -69,7 +56,7 @@ def cleanup():
     gc.collect()
 
 
-def test_hqqlayer(self, hqq_layer, batch_size=1, context_size=1024):
+def check_hqqlayer(test_module, hqq_layer, batch_size=1, context_size=1024):
     # Test HQQ layer
     W_r = hqq_layer.dequantize()
     x = (
@@ -82,23 +69,36 @@ def test_hqqlayer(self, hqq_layer, batch_size=1, context_size=1024):
     )
     with torch.no_grad():
         y = hqq_layer(x)
-    self.assertEqual(y.shape[-1], W_r.shape[0])
-    self.assertEqual(y.dtype, hqq_layer.compute_dtype)
+    test_module.assertEqual(y.shape[-1], W_r.shape[0])
+    test_module.assertEqual(y.dtype, hqq_layer.compute_dtype)
     del W_r, x, y
     cleanup()
 
 
-def test_forward(self, model, batch_size=1, context_size=1024):
+def check_forward(test_module, model, batch_size=1, context_size=1024):
     # Test forward pass
     with torch.no_grad():
         out = model(torch.zeros([batch_size, context_size], device=model.device, dtype=torch.int32)).logits
-    self.assertEqual(out.shape[0], batch_size)
-    self.assertEqual(out.shape[1], context_size)
+    test_module.assertEqual(out.shape[0], batch_size)
+    test_module.assertEqual(out.shape[1], context_size)
     cleanup()
 
 
 model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 # model_id ="mistralai/Mistral-7B-Instruct-v0.2"
+
+
+@require_torch_gpu
+class HqqConfigTest(unittest.TestCase):
+    def test_to_dict(self):
+        """
+        Makes sure the config format is properly set
+        """
+        quantization_config = HqqConfig()
+        hqq_orig_config = quantization_config.to_dict()
+
+        for key in hqq_orig_config:
+            self.assertEqual(quantization_config.quant_config[key], hqq_orig_config[key])
 
 
 @slow
@@ -126,8 +126,8 @@ class HQQTest(unittest.TestCase):
             cache_dir=cache_dir,
         )
 
-        test_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
-        test_forward(self, hqq_runner.model)
+        check_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
+        check_forward(self, hqq_runner.model)
 
     def test_bfp16_quantized_model_with_offloading(self):
         """
@@ -159,8 +159,8 @@ class HQQTest(unittest.TestCase):
             cache_dir=cache_dir,
         )
 
-        test_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
-        test_forward(self, hqq_runner.model)
+        check_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
+        check_forward(self, hqq_runner.model)
 
 
 @slow
@@ -188,5 +188,5 @@ class HQQTestMultiGPU(unittest.TestCase):
             cache_dir=cache_dir,
         )
 
-        test_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
-        test_forward(self, hqq_runner.model)
+        check_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
+        check_forward(self, hqq_runner.model)
