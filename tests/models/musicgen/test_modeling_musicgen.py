@@ -35,6 +35,7 @@ from transformers.testing_utils import (
     is_torch_available,
     require_flash_attn,
     require_torch,
+    require_torch_accelerator,
     require_torch_fp16,
     require_torch_gpu,
     require_torch_sdpa,
@@ -1563,6 +1564,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             self.assertIsNotNone(output_ids_generate)
 
     @require_torch_fp16
+    @require_torch_accelerator  # not all operations are supported in fp16 on CPU
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
 
