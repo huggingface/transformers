@@ -428,7 +428,6 @@ class LlamaFlashAttention2(LlamaAttention):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-
         if isinstance(past_key_value, StaticCache):
             raise ValueError(
                 "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
@@ -959,13 +958,12 @@ class LlamaModel(LlamaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and not isinstance(past_key_values, Cache): # kept for BC (non `Cache` `past_key_values` inputs)
+        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                0, inputs_embeds.shape[1], device=inputs_embeds.device
             )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
@@ -1023,7 +1021,9 @@ class LlamaModel(LlamaPreTrainedModel):
         next_cache = None
         if use_cache:
             next_cache = (
-                next_decoder_cache.to_legacy_cache() if isinstance(next_decoder_cache, DynamicCache) else next_decoder_cache
+                next_decoder_cache.to_legacy_cache()
+                if isinstance(next_decoder_cache, DynamicCache)
+                else next_decoder_cache
             )
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
@@ -1089,6 +1089,8 @@ class LlamaModel(LlamaPreTrainedModel):
                 # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
                 # cache. In that case, the 4D attention mask attends to the newest tokens only.
                 if attention_mask.shape[-2] < cache_position[0] + sequence_length:
+                    logger.warning_once("Passing a 4d mask shorter than the input lenght is deprecated and will be "
+                                        "removed in transformers v4.42.0")
                     offset = cache_position[0]
                 else:
                     offset = 0
