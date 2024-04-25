@@ -69,7 +69,11 @@ from .models.auto.modeling_auto import (
     MODEL_MAPPING_NAMES,
 )
 from .optimization import Adafactor, get_scheduler
-from .pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
+from .pytorch_utils import (
+    ALL_LAYERNORM_LAYERS,
+    is_torch_greater_or_equal_than_1_13,
+    is_torch_greater_or_equal_than_2_3,
+)
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -620,7 +624,8 @@ class Trainer:
         if (args.fp16 or args.bf16) and args.half_precision_backend == "auto":
             if args.device == torch.device("cpu"):
                 if args.fp16:
-                    raise ValueError("Tried to use `fp16` but it is not supported on cpu")
+                    if not is_torch_greater_or_equal_than_2_3:
+                        raise ValueError("Tried to use `fp16` but it is not supported on cpu")
                 else:
                     args.half_precision_backend = "cpu_amp"
             logger.info(f"Using {args.half_precision_backend} half precision backend")
@@ -3267,7 +3272,8 @@ class Trainer:
         logger.info(f"Saving model checkpoint to {output_dir}")
         model = self.model
         xm.mark_step()
-        model.to("cpu")
+        if self.args.save_safetensors:
+            model.to("cpu")
 
         if xm.is_master_ordinal():
             os.makedirs(output_dir, exist_ok=True)
@@ -3302,7 +3308,8 @@ class Trainer:
 
         # We moved the model from TPU -> CPU for saving the weights.
         # Now we should move it back to subsequent compute still works.
-        model.to(self.args.device)
+        if self.args.save_safetensors:
+            model.to(self.args.device)
 
     def _save(self, output_dir: Optional[str] = None, state_dict=None):
         # If we are executing this function, we are the process zero, so we don't check for that.
@@ -4354,6 +4361,18 @@ class Trainer:
                 even_batches=accelerator_config.pop("even_batches"),
                 use_seedable_sampler=accelerator_config.pop("use_seedable_sampler"),
             )
+        non_blocking = accelerator_config.pop("non_blocking")
+        if not is_accelerate_available("0.30.0"):
+            if non_blocking:
+                raise ImportError(
+                    "`non_blocking` is only supported in accelerate v0.30.0 and above. Please upgrade accelerate to use this feature."
+                )
+        else:
+            if non_blocking and not self.args.dataloader_pin_memory:
+                logger.warning(
+                    "`non_blocking` is enabled but `dataloader_pin_memory` is not. For the best performance, it's recommended to enable both."
+                )
+            dataloader_config.non_blocking = non_blocking
         # this would have been updated above, no need for it anymore
         accelerator_config.pop("gradient_accumulation_kwargs")
 
