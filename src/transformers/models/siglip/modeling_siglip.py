@@ -1243,9 +1243,7 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> # Head will be randomly initialized, predictions will be random if seed is not set.
         >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
-
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
