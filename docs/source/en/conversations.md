@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Chatting with Transformers: A Beginner's Guide
+# Chatting with Transformers
 
 If you're reading this article, you're almost certainly aware of **chat models**. Chat models are conversational
 AIs that you can send and receive messages with. The most famous of these is the proprietary ChatGPT, but there are
