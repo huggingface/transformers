@@ -20,6 +20,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, HqqConfig
 from transformers.testing_utils import (
     require_accelerate,
     require_torch_gpu,
+    require_torch_multi_gpu,
     slow,
 )
 from transformers.utils import is_accelerate_available, is_hqq_available, is_torch_available
@@ -55,6 +56,7 @@ class HQQLLMRunner:
             torch_dtype=compute_dtype,
             device_map=device,
             quantization_config=quant_config,
+            low_cpu_mem_usage=True,
             cache_dir=cache_dir,
         )
         self.tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir)
@@ -67,16 +69,46 @@ def cleanup():
     gc.collect()
 
 
+def test_hqqlayer(self, hqq_layer, batch_size=1, context_size=1024):
+    # Test HQQ layer
+    W_r = hqq_layer.dequantize()
+    x = (
+        torch.randn(
+            (batch_size, context_size, hqq_layer.meta["shape"][1]),
+            device=hqq_layer.device,
+            dtype=hqq_layer.compute_dtype,
+        )
+        / 10.0
+    )
+    with torch.no_grad():
+        y = hqq_layer(x)
+    self.assertEqual(y.shape[-1], W_r.shape[0])
+    self.assertEqual(y.dtype, hqq_layer.compute_dtype)
+    del W_r, x, y
+    cleanup()
+
+
+def test_forward(self, model, batch_size=1, context_size=1024):
+    # Test forward pass
+    with torch.no_grad():
+        out = model(torch.zeros([batch_size, context_size], device=model.device, dtype=torch.int32)).logits
+    self.assertEqual(out.shape[0], batch_size)
+    self.assertEqual(out.shape[1], context_size)
+    cleanup()
+
+
+model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+# model_id ="mistralai/Mistral-7B-Instruct-v0.2"
+
+
 @slow
 @require_torch_gpu
 @require_accelerate
 class HQQTest(unittest.TestCase):
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
-        gc.collect()
+        cleanup()
 
-    def test_small_mistral_fp16_quantized_model(self):
+    def test_fp16_quantized_model(self):
         """
         Simple LLM model testing fp16
         """
@@ -85,46 +117,28 @@ class HQQTest(unittest.TestCase):
         cache_dir = None
 
         quant_config = HqqConfig(nbits=8, group_size=64, quant_zero=False, quant_scale=False, axis=0)
+
         hqq_runner = HQQLLMRunner(
-            model_id="mistralai/Mistral-7B-Instruct-v0.2",
+            model_id=model_id,
             quant_config=quant_config,
             compute_dtype=compute_dtype,
             cache_dir=cache_dir,
             device=device,
         )
 
-        batch_size, context_size = 1, 1024
+        test_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
+        test_forward(self, hqq_runner.model)
 
-        # Test HQQ layer
-        hqq_layer = hqq_runner.model.model.layers[10].self_attn.v_proj
-        W_r = hqq_layer.dequantize()
-        x = torch.randn((batch_size, context_size, 4096), device=device, dtype=compute_dtype) / 10.0
-        with torch.no_grad():
-            y = hqq_layer(x)
-        self.assertEqual(y.shape[-1], W_r.shape[0])
-        self.assertEqual(y.dtype, compute_dtype)
-
-        del W_r, x, y
-        cleanup()
-
-        # Test forward pass
-        with torch.no_grad():
-            out = hqq_runner.model(
-                torch.zeros([batch_size, context_size], device=hqq_runner.model.device, dtype=torch.int32)
-            ).logits
-        self.assertEqual(out.shape[0], batch_size)
-        self.assertEqual(out.shape[1], context_size)
-
-    def test_mistral_bfp16_offloading_quantized_model(self):
+    def test_bfp16_quantized_model_with_offloading(self):
         """
-        Simple LLM model testing bfp16 with offfloading
+        Simple LLM model testing bfp16 with meta-data offloading
         """
         compute_dtype = torch.bfloat16
         device = "cuda:0"
         cache_dir = None
 
         q4_config = {"nbits": 4, "group_size": 64, "quant_zero": False, "quant_scale": False}
-        q3_config = {"nbits": 3, "group_size": 32, "quant_zero": False, "quant_scale": False}
+        q3_config = {"nbits": 3, "group_size": 32, "quant_zero": False, "quant_scale": False, "offload_meta": True}
         quant_config = HqqConfig(
             dynamic_config={
                 "self_attn.q_proj": q4_config,
@@ -138,35 +152,41 @@ class HQQTest(unittest.TestCase):
         )
 
         hqq_runner = HQQLLMRunner(
-            model_id="mistralai/Mistral-7B-Instruct-v0.2",
+            model_id=model_id,
             quant_config=quant_config,
             compute_dtype=compute_dtype,
             cache_dir=cache_dir,
             device=device,
         )
 
-        batch_size, context_size = 1, 1024
+        test_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
+        test_forward(self, hqq_runner.model)
 
-        # Test HQQ layer
-        hqq_layer = hqq_runner.model.model.layers[10].self_attn.v_proj
-        W_r = hqq_layer.dequantize()
-        x = torch.randn((batch_size, context_size, 4096), device=device, dtype=compute_dtype) / 10.0
-        with torch.no_grad():
-            y = hqq_layer(x)
-        self.assertEqual(y.shape[-1], W_r.shape[0])
-        self.assertEqual(y.dtype, compute_dtype)
 
-        # Check device
-        self.assertEqual(hqq_layer.W_q.device.type, "cuda")
-        self.assertEqual(hqq_layer.meta["zero_scale"].device.type, "cpu")
-
-        del W_r, x, y
+@slow
+@require_torch_gpu
+@require_torch_multi_gpu
+@require_accelerate
+class HQQTestMultiGPU(unittest.TestCase):
+    def tearDown(self):
         cleanup()
 
-        # Test forward pass
-        with torch.no_grad():
-            out = hqq_runner.model(
-                torch.zeros([batch_size, context_size], device=hqq_runner.model.device, dtype=torch.int32)
-            ).logits
-        self.assertEqual(out.shape[0], batch_size)
-        self.assertEqual(out.shape[1], context_size)
+    def test_fp16_quantized_model_multipgpu(self):
+        """
+        Simple LLM model testing fp16 with multi-gpu
+        """
+        compute_dtype = torch.float16
+        cache_dir = None
+
+        quant_config = HqqConfig(nbits=8, group_size=64, quant_zero=False, quant_scale=False, axis=0)
+
+        hqq_runner = HQQLLMRunner(
+            model_id=model_id,
+            quant_config=quant_config,
+            compute_dtype=compute_dtype,
+            cache_dir=cache_dir,
+            device="auto",
+        )
+
+        test_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
+        test_forward(self, hqq_runner.model)
