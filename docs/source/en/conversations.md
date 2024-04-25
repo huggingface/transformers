@@ -46,7 +46,10 @@ chat = [
 
 Notice that in addition to the user's message, we added a **system** message at the start of the conversation. Not all
 chat models support system messages, but when they do, they represent high-level directives about how the model
-should behave in the conversation.
+should behave in the conversation. You can use this to guide the model - whether you want short or long responses,
+lighthearted or serious ones, and so on. If you prefer that the model does useful work rather than
+working on its improv routine, you can either omit the system message or try a terse one such as "You are a helpful and intelligent
+AI assistant who responds to user queries."
 
 Once you have a chat, the quickest way to continue it is using the [`TextGenerationPipeline`]. 
 Let's see this in action with `LLaMA-3`. Note that `LLaMA-3` is a gated model, which means you will need to 
