@@ -18,8 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.40.0.dev0"
-
+__version__ = "4.41.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -328,6 +327,7 @@ _import_structure = {
         "Data2VecTextConfig",
         "Data2VecVisionConfig",
     ],
+    "models.dbrx": ["DbrxConfig"],
     "models.deberta": [
         "DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DebertaConfig",
@@ -709,6 +709,7 @@ _import_structure = {
     ],
     "models.persimmon": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "PersimmonConfig"],
     "models.phi": ["PHI_PRETRAINED_CONFIG_ARCHIVE_MAP", "PhiConfig"],
+    "models.phi3": ["PHI3_PRETRAINED_CONFIG_ARCHIVE_MAP", "Phi3Config"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1126,7 +1127,14 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
-    "utils.quantization_config": ["AqlmConfig", "AwqConfig", "BitsAndBytesConfig", "GPTQConfig", "QuantoConfig"],
+    "utils.quantization_config": [
+        "AqlmConfig",
+        "AwqConfig",
+        "BitsAndBytesConfig",
+        "EetqConfig",
+        "GPTQConfig",
+        "QuantoConfig",
+    ],
 }
 
 # sentencepiece-backed objects
@@ -1941,6 +1949,13 @@ else:
             "Data2VecVisionForSemanticSegmentation",
             "Data2VecVisionModel",
             "Data2VecVisionPreTrainedModel",
+        ]
+    )
+    _import_structure["models.dbrx"].extend(
+        [
+            "DbrxForCausalLM",
+            "DbrxModel",
+            "DbrxPreTrainedModel",
         ]
     )
     _import_structure["models.deberta"].extend(
@@ -3041,6 +3056,16 @@ else:
             "PhiForTokenClassification",
             "PhiModel",
             "PhiPreTrainedModel",
+        ]
+    )
+    _import_structure["models.phi3"].extend(
+        [
+            "PHI3_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Phi3ForCausalLM",
+            "Phi3ForSequenceClassification",
+            "Phi3ForTokenClassification",
+            "Phi3Model",
+            "Phi3PreTrainedModel",
         ]
     )
     _import_structure["models.pix2struct"].extend(
@@ -4510,6 +4535,14 @@ else:
             "TFSpeech2TextPreTrainedModel",
         ]
     )
+    _import_structure["models.swiftformer"].extend(
+        [
+            "TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFSwiftFormerForImageClassification",
+            "TFSwiftFormerModel",
+            "TFSwiftFormerPreTrainedModel",
+        ]
+    )
     _import_structure["models.swin"].extend(
         [
             "TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5268,6 +5301,7 @@ if TYPE_CHECKING:
         Data2VecTextConfig,
         Data2VecVisionConfig,
     )
+    from .models.dbrx import DbrxConfig
     from .models.deberta import (
         DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DebertaConfig,
@@ -5646,6 +5680,7 @@ if TYPE_CHECKING:
         PersimmonConfig,
     )
     from .models.phi import PHI_PRETRAINED_CONFIG_ARCHIVE_MAP, PhiConfig
+    from .models.phi3 import PHI3_PRETRAINED_CONFIG_ARCHIVE_MAP, Phi3Config
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6055,7 +6090,14 @@ if TYPE_CHECKING:
     )
 
     # bitsandbytes config
-    from .utils.quantization_config import AqlmConfig, AwqConfig, BitsAndBytesConfig, GPTQConfig, QuantoConfig
+    from .utils.quantization_config import (
+        AqlmConfig,
+        AwqConfig,
+        BitsAndBytesConfig,
+        EetqConfig,
+        GPTQConfig,
+        QuantoConfig,
+    )
 
     try:
         if not is_sentencepiece_available():
@@ -6781,6 +6823,13 @@ if TYPE_CHECKING:
             Data2VecVisionForSemanticSegmentation,
             Data2VecVisionModel,
             Data2VecVisionPreTrainedModel,
+        )
+
+        # PyTorch model imports
+        from .models.dbrx import (
+            DbrxForCausalLM,
+            DbrxModel,
+            DbrxPreTrainedModel,
         )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7677,6 +7726,14 @@ if TYPE_CHECKING:
             PhiForTokenClassification,
             PhiModel,
             PhiPreTrainedModel,
+        )
+        from .models.phi3 import (
+            PHI3_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Phi3ForCausalLM,
+            Phi3ForSequenceClassification,
+            Phi3ForTokenClassification,
+            Phi3Model,
+            Phi3PreTrainedModel,
         )
         from .models.pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -8885,6 +8942,12 @@ if TYPE_CHECKING:
             TFSpeech2TextForConditionalGeneration,
             TFSpeech2TextModel,
             TFSpeech2TextPreTrainedModel,
+        )
+        from .models.swiftformer import (
+            TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSwiftFormerForImageClassification,
+            TFSwiftFormerModel,
+            TFSwiftFormerPreTrainedModel,
         )
         from .models.swin import (
             TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
