@@ -285,7 +285,7 @@ torch_and_tf_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
-        # Without --no-deps we can't pin PyTorch versions in the future
+        # Without --no-deps we can't pin dependency versions in the future
         "pip install -U --upgrade-strategy eager --no-deps -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
         # TODO: remove this one after fixing the dependency issue(s) above
         "pip install -U --upgrade-strategy eager torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu",
@@ -302,7 +302,7 @@ torch_and_flax_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install -U --upgrade-strategy eager --upgrade pip",
         "pip install -U --upgrade-strategy eager .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]",
-        # Without --no-deps we can't pin PyTorch versions in the future
+        # Without --no-deps we can't pin dependency versions in the future
         "pip install -U --upgrade-strategy eager --no-deps -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
     ],
     marker="is_pt_flax_cross_test",
@@ -316,7 +316,7 @@ torch_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
-        # Without --no-deps we can't pin PyTorch versions in the future
+        # Without --no-deps we can't pin dependency versions in the future
         "pip install -U --upgrade-strategy eager --no-deps -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
     ],
     parallelism=1,
@@ -411,7 +411,7 @@ examples_torch_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,sentencepiece,testing,torch-speech]",
         "pip install -U --upgrade-strategy eager -r examples/pytorch/_tests_requirements.txt",
-        # Without --no-deps we can't pin PyTorch versions in the future
+        # Without --no-deps we can't pin dependency versions in the future
         "pip install -U --upgrade-strategy eager --no-deps -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
     ],
     pytest_num_workers=1,
@@ -524,7 +524,7 @@ doc_test_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time ffmpeg",
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager -e .[dev]",
-        # Without --no-deps we can't pin PyTorch versions in the future
+        # Without --no-deps we can't pin dependency versions in the future
         "pip install -U --upgrade-strategy eager --no-deps -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
         "pip install --upgrade --upgrade-strategy eager 'pytest<8.0.0' pytest-sugar",
         "pip install -U --upgrade-strategy eager natten==0.15.1+torch210cpu -f https://shi-labs.com/natten/wheels",
