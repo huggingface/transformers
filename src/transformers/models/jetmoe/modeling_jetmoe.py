@@ -714,7 +714,7 @@ class JetMoeAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        # repeat k/v heads
+        # repeat k/v heads for top-k attention experts
         key_states = key_states.repeat(1, self.top_k, 1, 1)
         value_states = value_states.repeat(1, self.top_k, 1, 1)
 
@@ -802,6 +802,7 @@ class JetMoeSdpaAttention(JetMoeAttention):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
+        # repeat k/v heads for top-k attention experts
         key_states = key_states.repeat(1, self.top_k, 1, 1)
         value_states = value_states.repeat(1, self.top_k, 1, 1)
 
@@ -895,6 +896,7 @@ class JetMoeFlashAttention2(JetMoeAttention):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
+        # repeat k/v heads for top-k attention experts
         key_states = key_states.repeat(1, self.top_k, 1, 1)
         value_states = value_states.repeat(1, self.top_k, 1, 1)
 
