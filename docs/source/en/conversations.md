@@ -221,9 +221,26 @@ or newer), you can load the model in `bfloat16` precision, using the `torch_dtyp
 It is possible to go even lower than 16-bits using "quantization", a method to lossily compress model weights. This
 allows each parameter to be squeezed down to 8 bits, 4 bits or even less. Note that, especially at 4 bits,
 the model's outputs may be negatively affected, but often this is a tradeoff worth making to fit a larger and more
-capable chat model in memory. For more details, please see the [Quantization guide](https://huggingface.co/docs/transformers/en/quantizationhttps://huggingface.co/docs/transformers/en/quantization), 
-and note that quantization arguments for the model can be passed directly to `from_pretrained()`, or to the pipeline
-via the `model_kwargs` argument.
+capable chat model in memory. Let's see this in action with `bitsandbytes`:
+
+```python
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+
+quantization_config = BitsAndBytesConfig(load_in_8bit=True)  # You can also try load_in_4bit
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct", device_map="auto", quantization_config=quantization_config)
+```
+
+Or, we can do the same thing using the `pipeline` API:
+
+```python
+from transformers import pipeline, BitsAndBytesConfig
+
+quantization_config = BitsAndBytesConfig(load_in_8bit=True)  # You can also try load_in_4bit
+pipe = pipeline("text-generation", "meta-llama/Meta-Llama-3-8B-Instruct", device_map="auto", model_kwargs={"quantization_config": quantization_config})
+```
+
+Note that there are several other options for quantizing models - please see the [Quantization guide](https://huggingface.co/docs/transformers/en/quantizationhttps://huggingface.co/docs/transformers/en/quantization)
+for more information.
 
 ### Performance considerations
 
@@ -251,7 +268,7 @@ be generated per forward pass, which greatly alleviates the bandwidth bottleneck
 Finally, we should also note the impact of "Mixture of Experts" (MoE) models here. Several popular chat models,
 such as Mixtral, Qwen-MoE and DBRX, are MoE models. In these models, not every parameter is active for every token generated.
 As a result, MoE models generally have much lower memory bandwidth requirements, even though their total size
-can be quite large. As a result, they can be several times faster than a normal "dense" model of the same size. However,
+can be quite large. They can therefore be several times faster than a normal "dense" model of the same size. However,
 techniques like assisted generation are generally ineffective for these models because more parameters will become
 active with each new speculated token, which will negate the bandwidth and speed benefits that the MoE architecture
 provides.
