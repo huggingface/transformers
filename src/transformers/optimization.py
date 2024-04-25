@@ -391,10 +391,10 @@ def get_step_lr(
     optimizer,
     num_warmup_steps,
     num_training_steps,
-    gamma=0.1, 
-    last_epoch=-1, 
+    gamma=0.1,
+    last_epoch=-1,
     verbose="False"
-):  
+):
     """
     Create a schedule with a learning rate that decays by gamma every
     num_training_steps. Notice that such decay can happen simultaneously with
@@ -414,7 +414,7 @@ def get_step_lr(
     Return:
         `torch.optim.lr_scheduler.StepLR` with the appropriate schedule.
     """
-    
+
     return StepLR(optimizer, num_training_steps, gamma, last_epoch, verbose)
 
 
