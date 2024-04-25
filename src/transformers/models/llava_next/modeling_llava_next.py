@@ -17,6 +17,7 @@
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
+import math
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -306,7 +307,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = LlavaNextMultiModalProjector(config)
-        embed_std = 1 / torch.sqrt(torch.tensor(config.text_config.hidden_size, dtype=self.dtype))
+        embed_std = 1 / math.sqrt(config.text_config.hidden_size)
         self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size, dtype=self.dtype) * embed_std)
 
         self.vocab_size = config.text_config.vocab_size
