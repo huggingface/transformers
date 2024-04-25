@@ -50,7 +50,7 @@ class HqqConfigTest(unittest.TestCase):
 
 
 class HQQLLMRunner:
-    def __init__(self, model_id, quant_config=None, compute_dtype=torch.float16, device="cuda", cache_dir=None):
+    def __init__(self, model_id, quant_config, compute_dtype, device, cache_dir):
         self.model = AutoModelForCausalLM.from_pretrained(
             model_id,
             torch_dtype=compute_dtype,
@@ -122,8 +122,8 @@ class HQQTest(unittest.TestCase):
             model_id=model_id,
             quant_config=quant_config,
             compute_dtype=compute_dtype,
-            cache_dir=cache_dir,
             device=device,
+            cache_dir=cache_dir,
         )
 
         test_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
@@ -155,8 +155,8 @@ class HQQTest(unittest.TestCase):
             model_id=model_id,
             quant_config=quant_config,
             compute_dtype=compute_dtype,
-            cache_dir=cache_dir,
             device=device,
+            cache_dir=cache_dir,
         )
 
         test_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
@@ -184,8 +184,8 @@ class HQQTestMultiGPU(unittest.TestCase):
             model_id=model_id,
             quant_config=quant_config,
             compute_dtype=compute_dtype,
-            cache_dir=cache_dir,
             device="auto",
+            cache_dir=cache_dir,
         )
 
         test_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
