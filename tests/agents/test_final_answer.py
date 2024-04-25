@@ -23,14 +23,14 @@ from .test_tools_common import ToolTesterMixin, output_type
 
 class FinalAnswerToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
-        self.inputs = ['Final answer']
+        self.inputs = {"answer": 'Final answer'}
         self.tool = load_tool("final_answer")
         self.tool.setup()
 
     def test_exact_match_arg(self):
-        result = self.tool(*self.inputs)
+        result = self.tool(**self.inputs)
         self.assertEqual(result, "Final answer")
 
     def test_exact_match_kwarg(self):
-        result = self.tool(args=self.inputs[0])
+        result = self.tool(answer=self.inputs['answer'])
         self.assertEqual(result, "Final answer")

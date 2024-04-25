@@ -207,5 +207,9 @@ class FinalAnswerTool(Tool):
     inputs = {"answer": {"type": "text", "description": "The final answer to the problem"}}
     output_type = "text"
 
-    def forward(self, args):
-        return args
+    def forward(self, *args, **kwargs):
+        if args:
+            return args[0]
+        elif kwargs:
+            return next(iter(kwargs.values()))
+        return None

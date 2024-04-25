@@ -32,18 +32,19 @@ AUTHORIZED_TYPES = ['text', 'audio', 'image']
 
 
 def create_inputs(tool_inputs: Dict[str, Dict[Union[str, type], str]]):
-    input_types = {v['type'] for v in tool_inputs.values()}
-    inputs = []
-    for input_type in input_types:
+    inputs = {}
+
+    for input_name, input_desc in tool_inputs.items():
+        input_type = input_desc['type']
 
         if input_type == "text":
-            inputs.append("Text input")
+            inputs[input_name] = "Text input"
         elif input_type == "image":
-            inputs.append(
+            inputs[input_name] = (
                 Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png").resize((512, 512))
             )
         elif input_type == "audio":
-            inputs.append(np.ones(3000).tobytes())
+            inputs[input_name] = np.ones(3000).tobytes()
         else:
             raise ValueError(f"Invalid type requested: {input_type}")
 
@@ -86,15 +87,13 @@ class ToolTesterMixin:
 
     def test_agent_type_output(self):
         inputs = create_inputs(self.tool.inputs)
-        output = self.tool(*inputs)
+        output = self.tool(**inputs)
         agent_type = AGENT_TYPE_MAPPING[self.tool.output_type]
         self.assertTrue(isinstance(output, agent_type))
 
     def test_agent_types_inputs(self):
         inputs = create_inputs(self.tool.inputs)
-
         _inputs = []
-
         for _input, expected_input in zip(inputs, self.tool.inputs.values()):
             input_type = expected_input['type']
             _inputs.append(AGENT_TYPE_MAPPING[input_type](_input))
@@ -102,5 +101,5 @@ class ToolTesterMixin:
         output_type = AGENT_TYPE_MAPPING[self.tool.output_type]
 
         # Should not raise an error
-        output = self.tool(*inputs)
+        output = self.tool(**inputs)
         self.assertTrue(isinstance(output, output_type))
