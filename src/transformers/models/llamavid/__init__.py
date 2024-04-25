@@ -13,12 +13,25 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available , is_vision_available
 
 
-_import_structure = {"configuration_llamavid": ["LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LLaMAVIDLlavaConfig", "LLaMAVIDLlavaVisionConfig" , "LLaMAVIDLlavaQFormerConfig"],
-                      "processing_llamavid": ["LLaMAVIDLlavaProcessor"],}
+_import_structure = {
+			"configuration_llamavid": [
+			"LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP", 
+			"LLaMAVIDLlavaConfig", 
+			"LLaMAVIDLlavaVisionConfig" , 
+			"LLaMAVIDLlavaQFormerConfig"],
+            "processing_llamavid": ["LLaMAVIDLlavaProcessor"],}
 
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_llamavid"] = ["LLaMAVIDLlavaImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -43,8 +56,15 @@ if TYPE_CHECKING:
         LLaMAVIDLlavaQFormerConfig,
         LLaMAVIDLlavaVisionConfig,
     )
-    from .processing_llamavid import LLaMAVIDLlavaProcessor
+    from .image_processing_llamavid import LLaMAVIDLlavaImageProcessor
 
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_llamavid import LLaMAVIDLlavaImageProcessor
 
     try:
         if not is_torch_available():
@@ -65,4 +85,4 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

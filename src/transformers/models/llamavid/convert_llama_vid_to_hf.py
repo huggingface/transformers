@@ -17,14 +17,16 @@ import torch
 from huggingface_hub import hf_hub_download
 import os
 import json
-from transformers.models.llamavid.configuration_llamavid import LLaMAVIDLlavaConfig ,LLaMAVIDLlavaQFormerConfig, LLaMAVIDLlavaVisionConfig
+
+from transformers.models.llamavid.configuration_llamavid import LLaMAVIDLlavaVisionConfig, LLaMAVIDLlavaQFormerConfig
 
 from transformers import (
     AddedToken,
     AutoConfig,
     AutoTokenizer,
-    CLIPImageProcessor,
+    LLaMAVIDLlavaConfig,
     LLaMAVIDLlavaForConditionalGeneration,
+    LLaMAVIDLlavaImageProcessor,
     LLaMAVIDLlavaProcessor,
     BertTokenizer,
 )
@@ -157,10 +159,12 @@ def read_in_q_v_bias(state_dict, config):
 
 def convert_llamavid_to_hf(text_model_id, vision_model_id, output_hub_path, old_state_dict_id):
     
-    text_model_id = 'C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\LLaMA-VID\\work_dirs\\llama-vid-7b-full-336'
-    vision_model_id = 'C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\LLaMA-VID\\llamavid\\processor\\clip-patch14-336'
+    text_model_id = 'C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\LLaMA-VID\\work_dirs\\llama-vid-7b-full-224-video-fps-1'
+    #vision_model_id_336 = 'C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\LLaMA-VID\\llamavid\\processor\\clip-patch14-336'
+    vision_model_id_224 = 'C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\LLaMA-VID\\llamavid\\processor\\clip-patch14-224'
     output_hub_path ='Nilesh360/llama-vid-7b-full-336'
-    old_state_dict_id = 'C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\LLaMA-VID\\work_dirs\\llama-vid-7b-full-336'
+    old_state_dict_id = 'C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\LLaMA-VID\\work_dirs\\llama-vid-7b-full-224-video-fps-1'
+    #old_state_dict_id = 'C:\\Users\\niles\\OneDrive\\Desktop\\Data\code\\LLaMA-VID\\model_zoo\\LLM\\vicuna\\7b-V1.5'
     #old_state_dict_id = 'C:\\Users\\niles\\OneDrive\\Desktop\\Data\code\\LLaMA-VID\\model_zoo\\LLM\\vicuna\\7b-V1.5'
     torch.set_default_dtype(torch.float16)
     text_config = AutoConfig.from_pretrained(text_model_id)
@@ -172,13 +176,12 @@ def convert_llamavid_to_hf(text_model_id, vision_model_id, output_hub_path, old_
     tokenizer = AutoTokenizer.from_pretrained(text_model_id)
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
     tokenizer.add_special_tokens({"pad_token": "<pad>"})
-    tokenizer.padding_side = "left"
     
-    image_processor = CLIPImageProcessor.from_pretrained(vision_model_id)
+    image_processor = LLaMAVIDLlavaImageProcessor.from_pretrained(vision_model_id_224)
 
     processor = LLaMAVIDLlavaProcessor(tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer = qformer_tokenizer )
-
-    vision_tower_config = LLaMAVIDLlavaVisionConfig(image_size=336, num_hidden_layers=4,  qkv_bias = True).to_dict()
+ 
+    vision_tower_config = LLaMAVIDLlavaVisionConfig(image_size=224, qkv_bias = True).to_dict()
     qformer_config =  LLaMAVIDLlavaQFormerConfig(vocab_size=30523, num_attention_heads=12 , hidden_size=768).to_dict()
     
     config = LLaMAVIDLlavaConfig(text_config=text_config,vision_tower_config=vision_tower_config, qformer_config=qformer_config   )
@@ -192,14 +195,14 @@ def convert_llamavid_to_hf(text_model_id, vision_model_id, output_hub_path, old_
     pad_shape = 64
 
     total_state_dict = {}
-    '''  '''
-    model_path =  old_state_dict_id + '\\' +  'model.pth'
 
+    model_path =  old_state_dict_id + '\\' +  'pytorch_model-0000{}-of-00002.bin'
 
-    state_dict = torch.load(model_path)
-    state_dict = convert_state_dict_to_hf(state_dict)
-    total_state_dict.update(state_dict)
-
+    for shard in range(1 , 3):
+        old_dict= model_path.format(shard , shard)
+        state_dict = torch.load(old_dict)
+        state_dict = convert_state_dict_to_hf(state_dict)
+        total_state_dict.update(state_dict)
 
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
@@ -238,8 +241,9 @@ def convert_llamavid_to_hf(text_model_id, vision_model_id, output_hub_path, old_
         dim=0,
     )
  
-    model.save_pretrained("llama_vid_model_dummy")
-    processor.save_pretrained("llama_vid_model_dummy")
+ 
+    model.save_pretrained("llama_vid_224-video")
+    processor.save_pretrained("llama_vid_224-video")
 
     #model.push_to_hub("output_hub_path_vid")
     #processor.push_to_hub("output_hub_path_vid")
@@ -263,3 +267,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+ 

@@ -558,6 +558,7 @@ _import_structure = {
         "LLaMAVIDLlavaVisionConfig"
         "LLaMAVIDLlavaQFormerConfig"
         "LLaMAVIDLlavaProcessor",
+        
     ],
     "models.llava": [
         "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -2555,6 +2556,7 @@ else:
             "LLAMAVID_LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
             "LLaMAVIDLlavaForConditionalGeneration",
             "LLaMAVIDLlavaPreTrainedModel",
+            "LLaMAVIDLlavaImageProcessor",
             "LLaMAVIDLlavaProcessor",
             "LLaMAVIDLlavaQFormerModel",
             "LLaMAVIDLlavaVisionModel",
@@ -5467,6 +5469,7 @@ if TYPE_CHECKING:
         LLaMAVIDLlavaConfig,
         LLaMAVIDLlavaVisionConfig,
         LLaMAVIDLlavaQFormerConfig,
+        LLaMAVIDLlavaImageProcessor,
         LLaMAVIDLlavaProcessor,
     )
     from .models.llava_next import (
@@ -7258,6 +7261,7 @@ if TYPE_CHECKING:
             LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
             LLaMAVIDLlavaForConditionalGeneration,
             LLaMAVIDLlavaPreTrainedModel,
+            LLaMAVIDLlavaImageProcessor,
             LLaMAVIDLlavaProcessor,
             LLaMAVIDLlavaQFormerModel,
             LLaMAVIDLlavaVisionModel,

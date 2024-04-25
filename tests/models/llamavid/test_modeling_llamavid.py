@@ -26,6 +26,7 @@ from transformers import (
     LLaMAVIDLlavaConfig,
     LLaMAVIDLlavaVisionConfig,
     LLaMAVIDLlavaQFormerConfig,
+    LLaMAVIDLlavaImageProcessor,
     LLaMAVIDLlavaForConditionalGeneration,
     is_torch_available,
     is_vision_available,

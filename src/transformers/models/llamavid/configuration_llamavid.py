@@ -23,7 +23,7 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "lNilesh360/llama-vid-7b-full-336": "https://huggingface.co/Nilesh360/llama-vid-7b-full-336/blob/main/config.json",
+    "Nilesh360/llama-vid-7b-full-336": "https://huggingface.co/Nilesh360/llama-vid-7b-full-336/blob/main/config.json",
 }
 
 class LLaMAVIDLlavaVisionConfig(PretrainedConfig):
@@ -83,7 +83,7 @@ class LLaMAVIDLlavaVisionConfig(PretrainedConfig):
         self,
         hidden_size=1408,
         intermediate_size=6144,
-        num_hidden_layers=8,
+        num_hidden_layers=39,
         num_attention_heads=16,
         image_size=224,
         patch_size=14,
@@ -196,7 +196,7 @@ class LLaMAVIDLlavaQFormerConfig(PretrainedConfig):
         vocab_size=30522,
         hidden_size=768,
         num_hidden_layers=12,
-        num_attention_heads=8,
+        num_attention_heads=12,
         intermediate_size=3072,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -308,7 +308,7 @@ class LLaMAVIDLlavaConfig(PretrainedConfig):
         ignore_index=-100,
         bert_type='qformer_pretrain',
         qformer_config = None, 
-        num_query =4,  
+        num_query =32,  
         image_token_index=32000,
         vision_tower_config =  None,
         #video_token_index=32001,

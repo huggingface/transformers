@@ -40,9 +40,8 @@ from ...modeling_outputs import (
 )
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llamavid import LLaMAVIDLlavaConfig, LLaMAVIDLlavaQFormerConfig, LLaMAVIDLlavaVisionConfig
-from .visiontransformer import VisionTransformer
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from .qformer import  BertConfig , BertLMHeadModel
+
 from ...models.bert.tokenization_bert import BertTokenizer
 from functools import partial
 import torch.nn.functional as F
@@ -1741,8 +1740,9 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
         # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
         image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
         image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
-
-        if image_to_overwrite.sum() != image_features[0].shape[:-1].numel():
+        temp =  image_to_overwrite.sum() 
+        temp1 = image_features[0].shape[:-1 ].numel()
+        if image_to_overwrite.sum() != image_features.shape[:-1].numel():
             raise ValueError(
                 f"The input provided to the model are wrong. The number of image tokens is {torch.sum(special_image_token_mask)} while"
                 f" the number of image given to the model is {num_images}. This prevents correct indexing and breaks batch generation."
@@ -1757,141 +1757,28 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
 
         return final_embedding, final_attention_mask, final_labels, position_ids
     
-    def post_process_from_original(self, image_features, inputs_embeds, input_ids, attention_mask, labels, long_video= False, past_key_values=None):
-        IMAGE_TOKEN_INDEX = -200
-        IGNORE_INDEX = -100
-        new_input_embeds = []
-        new_labels = [] if labels is not None else None
-        cur_image_idx = 0
-        for batch_idx, cur_input_ids in enumerate(input_ids):
-            if (cur_input_ids == IMAGE_TOKEN_INDEX).sum() == 0:
-                # multimodal LLM, but the current sample is not multimodal
-                # FIXME: this is a hacky fix, for deepspeed zero3 to work
-                half_len = cur_input_ids.shape[0] // 2
+    
+    def _get_features(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        
 
-                cur_image_features = image_features[cur_image_idx][0]
- 
-                cur_input_embeds_1 = self.get_input_embeddings()(cur_input_ids[:half_len])
-                cur_input_embeds_2 = self.get_input_embeddings()(cur_input_ids[half_len:])
-                cur_input_embeds = torch.cat([cur_input_embeds_1, cur_image_features[0:0], cur_input_embeds_2], dim=0)
-                new_input_embeds.append(cur_input_embeds)
-                if labels is not None:
-                    new_labels.append(labels[batch_idx])
-                cur_image_idx += 1
-                continue
-            
-            image_token_indices = torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[0]
-            cur_new_input_embeds = []
-            if labels is not None:
-                cur_labels = labels[batch_idx]
-                cur_new_labels = []
-                assert cur_labels.shape == cur_input_ids.shape
-            
-            if not long_video:
-                token_idx = 0
-                print('prepare_inputs_labels_for_multimodal  not long video' )
-                while image_token_indices.numel() > 0:
-                    if isinstance(image_features, list):
-                        cur_image_features = image_features[cur_image_idx][token_idx]
-                    else:
-                        cur_image_features = image_features[cur_image_idx]
-                    image_token_start = image_token_indices[0]
+        if pixel_values is None:
+            raise ValueError("You have to specify `pixel_values`")
 
-               
-                    
-                    image_token_start = image_token_indices[0]
-                    
-                    if getattr(self.config, 'tune_mm_mlp_adapter', False) and getattr(self.config, 'mm_use_im_start_end', False):
-                        cur_new_input_embeds.append(self.get_input_embeddings()(cur_input_ids[:image_token_start-1])).detach()
-                        cur_new_input_embeds.append(self.get_input_embeddings()(cur_input_ids[image_token_start-1:image_token_start] ))
-                        cur_new_input_embeds.append(cur_image_features)
-                        cur_new_input_embeds.append(self.get_input_embeddings()(cur_input_ids[image_token_start+1:image_token_start+2]))
-                        if labels is not None:
-                            cur_new_labels.append(cur_labels[:image_token_start])
-                            cur_new_labels.append(torch.full((cur_image_features.shape[0],), IGNORE_INDEX, device=labels.device, dtype=labels.dtype))
-                            cur_new_labels.append(cur_labels[image_token_start:image_token_start+1])
-                            cur_labels = cur_labels[image_token_start+2:]
-                    else:
-                        cur_new_input_embeds.append(self.get_input_embeddings()(cur_input_ids[:image_token_start]))
-                        cur_new_input_embeds.append(cur_image_features)
-                        if labels is not None:
-                            cur_new_labels.append(cur_labels[:image_token_start])
-                            cur_new_labels.append(torch.full((cur_image_features.shape[0],), IGNORE_INDEX, device=labels.device, dtype=labels.dtype))
-                            cur_labels = cur_labels[image_token_start+1:]
-                    if getattr(self.config, 'tune_mm_mlp_adapter', False) and getattr(self.config, 'mm_use_im_start_end', False):
-                        cur_input_ids = cur_input_ids[image_token_start+2:]
-                    else:
-                        cur_input_ids = cur_input_ids[image_token_start+1:]
-                    image_token_indices = torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[0]
-                    token_idx += 1
-                
-                # changle image idx after processing one sample
-                cur_image_idx += 1
-                if cur_input_ids.numel() > 0:
-                    if getattr(self.config, 'tune_mm_mlp_adapter', False) and getattr(self.config, 'mm_use_im_start_end', False):
-                        cur_new_input_embeds.append(self.get_input_embeddings()(cur_input_ids).detach())
-                    else:
-                        cur_new_input_embeds.append(self.get_input_embeddings()(cur_input_ids))
-                    if labels is not None:
-                        cur_new_labels.append(cur_labels)
-                cur_new_input_embeds = [x.to(device=self.device) for x in cur_new_input_embeds]
-                cur_new_input_embeds = torch.cat(cur_new_input_embeds, dim=0)
-                new_input_embeds.append(cur_new_input_embeds)
-                if labels is not None:
-                    cur_new_labels = torch.cat(cur_new_labels, dim=0)
-                    new_labels.append(cur_new_labels)
-            else:
-                print('prepare_inputs_labels_for_multimodal  long video')
-                cur_new_input_embeds = torch.Tensor(len(cur_input_ids), self.config.hidden_size)
-                text_token_indices = torch.where(cur_input_ids != IMAGE_TOKEN_INDEX)[0]
+        
+        long_video , num_frames  =  False ,  0 
 
-                cur_new_input_embeds[text_token_indices] = cur_input_embeds[text_token_indices]
-                cur_image_features = image_features[cur_image_idx]
-                cur_new_input_embeds[image_token_indices] = cur_image_features
-                new_input_embeds.append(cur_new_input_embeds)
-                if labels is not None:
-                    new_labels.append(cur_labels)
-                cur_image_idx += 1
+        if pixel_values is not None :
+            batch_size , num_frames, channels, height, width =  pixel_values.shape
+            if num_frames > 1000:
+                long_video =  True 
+            if  not long_video:
+                    pixel_values = pixel_values.reshape(batch_size * num_frames, channels, height, width)
 
-        if any(x.shape != new_input_embeds[0].shape for x in new_input_embeds):
-            max_len = max(x.shape[0] for x in new_input_embeds)
 
-            new_input_embeds_align = []
-            for cur_new_embed in new_input_embeds:
-                cur_new_embed = torch.cat((cur_new_embed, torch.zeros((max_len - cur_new_embed.shape[0], cur_new_embed.shape[1]), dtype=cur_new_embed.dtype, device=cur_new_embed.device)), dim=0)
-                new_input_embeds_align.append(cur_new_embed)
-            new_input_embeds = torch.stack(new_input_embeds_align, dim=0)
-
-            if labels is not None:
-                new_labels_align = []
-                _new_labels = new_labels
-                for cur_new_label in new_labels:
-                    cur_new_label = torch.cat((cur_new_label, torch.full((max_len - cur_new_label.shape[0],), IGNORE_INDEX, dtype=cur_new_label.dtype, device=cur_new_label.device)), dim=0)
-                    new_labels_align.append(cur_new_label)
-                new_labels = torch.stack(new_labels_align, dim=0)
-
-            # only used for right padding in tokenlizer
-            if attention_mask is not None:
-                new_attention_mask = []
-                for cur_attention_mask, cur_new_labels, cur_new_labels_align in zip(attention_mask, _new_labels, new_labels):
-                    new_attn_mask_pad_left = torch.full((cur_new_labels.shape[0] - labels.shape[1],), True, dtype=attention_mask.dtype, device=attention_mask.device)
-                    new_attn_mask_pad_right = torch.full((cur_new_labels_align.shape[0] - cur_new_labels.shape[0],), False, dtype=attention_mask.dtype, device=attention_mask.device)
-                    cur_new_attention_mask = torch.cat((new_attn_mask_pad_left, cur_attention_mask, new_attn_mask_pad_right), dim=0)
-                    new_attention_mask.append(cur_new_attention_mask)
-                attention_mask = torch.stack(new_attention_mask, dim=0)
-                assert attention_mask.shape == new_labels.shape
-        else:
-            new_input_embeds = torch.stack(new_input_embeds, dim=0)
-            if labels is not None:
-                new_labels  = torch.stack(new_labels, dim=0)
-
-            # only used for right padding in tokenlizer
-            if attention_mask is not None:
-                new_attn_mask_pad_left = torch.full((attention_mask.shape[0], new_input_embeds.shape[1] - input_ids.shape[1]), True, dtype=attention_mask.dtype, device=attention_mask.device)
-                attention_mask = torch.cat((new_attn_mask_pad_left, attention_mask), dim=1)
-                assert attention_mask.shape == new_input_embeds.shape[:2]
-
-        return None, attention_mask, past_key_values, new_input_embeds, new_labels
+        return pixel_values , num_frames , long_video
 
     @add_start_docstrings_to_model_forward(LLAMAVID_LLAVA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=LLaMAVIDLlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -1965,20 +1852,13 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
                 # pre-process images for long video
-                if pixel_values[0].shape[-1] > 1000:
-                    long_video = True
-                else:
-                    long_video = False
 
 
-                if type(pixel_values) is list or pixel_values.ndim == 5:
-                    if not long_video:
-                        pixel_values = [pixel_value if len(pixel_value.shape) == 4 else pixel_value.unsqueeze(0) for pixel_value in pixel_values]
-                    image_counts = [pixel_value.shape[0] for pixel_value in pixel_values]
-                    concat_images = torch.cat(pixel_values, dim=0)
-                    image_features = concat_images 
+                image_features , image_count, long_video = self._get_features(
+                    pixel_values=pixel_values,
+                 
+                )
 
-                image_features =  pixel_values
 
                 vision_outputs = self.vision_tower(
                         pixel_values=image_features,
@@ -1991,14 +1871,25 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
                 # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
                 image_attention_mask = torch.ones(image_features.size()[:-1], dtype=torch.long, device=image_features.device)
 
+               
+
                 query_tokens = self.query_tokens.expand(image_features.shape[0], -1, -1)
                 query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_features.device)
                 
 
                 if qformer_attention_mask is None:
                     qformer_attention_mask = torch.ones_like(qformer_text_encoding)
+                if image_count is not None : 
+                    qformer_attention_mask =  qformer_attention_mask.expand(image_features.shape[0] , -1 )
+                    qformer_text_encoding  = qformer_text_encoding.expand(image_features.shape[0] , -1  )
+                    inputs_embeds = inputs_embeds.expand(image_features.shape[0] ,  -1 , -1 )
+                    input_ids = input_ids.expand(image_features.shape[0] ,-1 )
+                    attention_mask = attention_mask.expand(image_features.shape[0] , -1 )
+
                 qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
                 
+
+
 
                 query_outputs = self.qformer(
                     input_ids=qformer_text_encoding,

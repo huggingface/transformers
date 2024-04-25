@@ -616,7 +616,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("lilt", "LiLT"),
         ("llama", "LLaMA"),
         ("llama2", "Llama2"),
-        ("llamavid", " LLaMAVID"),
+        ("llamavid", " LLaMAVIDLlava"),
         ("llava", "LLaVa"),
         ("llava_next", "LLaVA-NeXT"),
         ("longformer", "Longformer"),

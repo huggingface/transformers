@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for CLIP."""
+"""Image processor class for LLaMAVID."""
 
 from typing import Dict, List, Optional, Union
 
@@ -33,9 +33,12 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
+    is_valid_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
 
@@ -47,9 +50,9 @@ if is_vision_available():
     import PIL
 
 
-class LLaMAVIDImageProcessor(BaseImageProcessor):
+class LLaMAVIDLlavaImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a CLIP image processor.
+    Constructs a LLaMAVIDLlavaImageProcessor image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -120,6 +123,23 @@ class LLaMAVIDImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
+        self._valid_processor_keys = [
+            "images",
+            "do_resize",
+            "size",
+            "resample",
+            "do_center_crop",
+            "crop_size",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "do_convert_rgb",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
         # for backwards compatibility of KOSMOS-2
         if "use_square_size" in kwargs:
@@ -197,7 +217,7 @@ class LLaMAVIDImageProcessor(BaseImageProcessor):
         Preprocess an image or batch of images.
 
         Args:
-            images (`ImageInput`):
+            visuals (`ImageInput`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
@@ -258,69 +278,116 @@ class LLaMAVIDImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        images = make_list_of_images(images)
-
+        if images is not None:
+            images = make_list_of_images(images)
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+        
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
+                raise ValueError(
+                    "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                    "torch.Tensor, tf.Tensor or jax.ndarray."
+                )
+        
+
+
+        if images is not None:
+            pixel_values = [
+                [
+                    self._preprocess_image(
+                        image=image,
+                        do_resize=do_resize,
+                        size=size,
+                        resample=resample,
+                        do_rescale=do_rescale,
+                        rescale_factor=rescale_factor,
+                        do_normalize=do_normalize,
+                        image_mean=image_mean,
+                        image_std=image_std,
+                        do_center_crop=do_center_crop,
+                        crop_size=crop_size,
+                        do_convert_rgb=do_convert_rgb,
+                        data_format=data_format,
+                        input_data_format=input_data_format,
+                    )
+                    for image in visual
+                ]
+                for visual in images
+            ]
+        else:
+            pixel_values=None
+
+
+        encoded = BatchFeature(
+            data={
+                "pixel_values": pixel_values,
+            },
+            tensor_type=return_tensors,
+        )
+        return encoded
+
+
+    def _preprocess_image(
+            self,
+            image: ImageInput = None,
+            do_resize: Optional[bool] = None,
+            size: Optional[Dict[str, int]] = None,
+            resample: PILImageResampling = None,
+            do_rescale: Optional[bool] = None,
+            rescale_factor: Optional[float] = None,
+            do_normalize: Optional[bool] = None,
+            image_mean: Optional[Union[float, List[float]]] = None,
+            image_std: Optional[Union[float, List[float]]] = None,
+            do_center_crop: bool = None,
+            crop_size: int = None,
+            do_convert_rgb: bool = None,
+            data_format: ChannelDimension = ChannelDimension.FIRST,
+            input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        ) -> np.ndarray:
+            validate_preprocess_arguments(
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+                do_center_crop=do_center_crop,
+                crop_size=crop_size,
+                do_resize=do_resize,
+                size=size,
+                resample=resample,
             )
 
-        if do_resize and size is None:
-            raise ValueError("Size must be specified if do_resize is True.")
+            # PIL RGBA images are converted to RGB
+            if do_convert_rgb:
+                image = convert_to_rgb(image)
 
-        if do_center_crop and crop_size is None:
-            raise ValueError("Crop size must be specified if do_center_crop is True.")
+            # All transformations expect numpy arrays.
+            image = to_numpy_array(image)
 
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
+            if is_scaled_image(image) and do_rescale:
+                logger.warning_once(
+                    "It looks like you are trying to rescale already rescaled images/video frames. If the input"
+                    " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+                )
 
-        if do_normalize and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
+            if input_data_format is None:
+                # We assume that all images have the same channel dimension format.
+                input_data_format = infer_channel_dimension_format(image)
 
-        # PIL RGBA images are converted to RGB
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
+            if do_resize:
+                image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
 
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
+            if do_center_crop:
+                image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
 
-        if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
+            if do_rescale:
+                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
+            if do_normalize:
+                image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
 
-        if do_resize:
-            images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-                for image in images
-            ]
+            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
 
-        if do_center_crop:
-            images = [
-                self.center_crop(image=image, size=crop_size, input_data_format=input_data_format) for image in images
-            ]
+            return image
 
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        if do_normalize:
-            images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
-
-        data = {"pixel_values": images}
-        return BatchFeature(data=data, tensor_type=return_tensors)
+    
+ 
