@@ -148,20 +148,19 @@ class CogvlmVisionAttention(nn.Module):
         qkv = qkv.reshape(batch_size, sequence_length, 3, self.num_heads, -1).permute(2, 0, 1, 3, 4)
         queries, keys, values = qkv[0], qkv[1], qkv[2]
 
-        import xformers.ops as xops
+        # import xformers.ops as xops
 
-        out = xops.memory_efficient_attention(
-            queries,
-            keys,
-            values,
-            scale=self.scale,
-        )
+        # out = xops.memory_efficient_attention(
+        #     queries,
+        #     keys,
+        #     values,
+        #     scale=self.scale,
+        # )
 
-        output = self.dense(out.view(batch_size, sequence_length, -1))
-        output = self.output_dropout(output)
-        return output
+        # output = self.dense(out.view(batch_size, sequence_length, -1))
+        # output = self.output_dropout(output)
+        # return output
 
-        """
         queries = queries.transpose(1, 2)
         keys = keys.transpose(1, 2)
         values = values.transpose(1, 2)
@@ -178,7 +177,6 @@ class CogvlmVisionAttention(nn.Module):
         output = self.dense(attention_output.view(batch_size, sequence_length, -1))
         output = self.output_dropout(output)
         return output
-        """
 
 
 class CogvlmVisionMLP(nn.Module):

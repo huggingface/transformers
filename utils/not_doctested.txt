@@ -458,6 +458,8 @@ src/transformers/models/clip/modeling_tf_clip.py
 src/transformers/models/clipseg/configuration_clipseg.py
 src/transformers/models/clipseg/convert_clipseg_original_pytorch_to_hf.py
 src/transformers/models/codegen/modeling_codegen.py
+src/transformers/models/cogvlm/configuration_cogvlm.py
+src/transformers/models/cogvlm/modeling_cogvlm.py
 src/transformers/models/conditional_detr/convert_conditional_detr_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/convbert/convert_convbert_original_tf1_checkpoint_to_pytorch_and_tf2.py
 src/transformers/models/convbert/modeling_convbert.py
