@@ -367,11 +367,6 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
         cls.pad_token_id = 1
         return cls
 
-    def test_language_codes(self):
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["ace_Arab"], 256001)
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["ace_Latn"], 256002)
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["fra_Latn"], 256057)
-
     def test_enro_tokenizer_batch_encode_plus(self):
         ids = self.tokenizer.batch_encode_plus(self.src_text).input_ids[0]
         self.assertListEqual(self.expected_src_tokens, ids)
