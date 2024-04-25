@@ -534,6 +534,7 @@ class CvtPreTrainedModel(PreTrainedModel):
     config_class = CvtConfig
     base_model_prefix = "cvt"
     main_input_name = "pixel_values"
+    _no_split_modules = ["CvtLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

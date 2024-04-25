@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.40.0.dev0"
+__version__ = "4.41.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -327,6 +327,7 @@ _import_structure = {
         "Data2VecTextConfig",
         "Data2VecVisionConfig",
     ],
+    "models.dbrx": ["DbrxConfig"],
     "models.deberta": [
         "DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DebertaConfig",
@@ -517,6 +518,7 @@ _import_structure = {
         "InstructBlipQFormerConfig",
         "InstructBlipVisionConfig",
     ],
+    "models.jamba": ["JambaConfig"],
     "models.jukebox": [
         "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "JukeboxConfig",
@@ -663,6 +665,7 @@ _import_structure = {
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
     ],
+    "models.olmo": ["OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP", "OlmoConfig"],
     "models.oneformer": [
         "ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "OneFormerConfig",
@@ -706,6 +709,7 @@ _import_structure = {
     ],
     "models.persimmon": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "PersimmonConfig"],
     "models.phi": ["PHI_PRETRAINED_CONFIG_ARCHIVE_MAP", "PhiConfig"],
+    "models.phi3": ["PHI3_PRETRAINED_CONFIG_ARCHIVE_MAP", "Phi3Config"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1123,7 +1127,14 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
-    "utils.quantization_config": ["AqlmConfig", "AwqConfig", "BitsAndBytesConfig", "GPTQConfig", "QuantoConfig"],
+    "utils.quantization_config": [
+        "AqlmConfig",
+        "AwqConfig",
+        "BitsAndBytesConfig",
+        "EetqConfig",
+        "GPTQConfig",
+        "QuantoConfig",
+    ],
 }
 
 # sentencepiece-backed objects
@@ -1472,6 +1483,7 @@ else:
             "AlignVisionModel",
         ]
     )
+
     _import_structure["models.altclip"].extend(
         [
             "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1937,6 +1949,13 @@ else:
             "Data2VecVisionForSemanticSegmentation",
             "Data2VecVisionModel",
             "Data2VecVisionPreTrainedModel",
+        ]
+    )
+    _import_structure["models.dbrx"].extend(
+        [
+            "DbrxForCausalLM",
+            "DbrxModel",
+            "DbrxPreTrainedModel",
         ]
     )
     _import_structure["models.deberta"].extend(
@@ -2479,6 +2498,14 @@ else:
             "InstructBlipVisionModel",
         ]
     )
+    _import_structure["models.jamba"].extend(
+        [
+            "JambaForCausalLM",
+            "JambaForSequenceClassification",
+            "JambaModel",
+            "JambaPreTrainedModel",
+        ]
+    )
     _import_structure["models.jukebox"].extend(
         [
             "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2904,6 +2931,13 @@ else:
             "NystromformerPreTrainedModel",
         ]
     )
+    _import_structure["models.olmo"].extend(
+        [
+            "OlmoForCausalLM",
+            "OlmoModel",
+            "OlmoPreTrainedModel",
+        ]
+    )
     _import_structure["models.oneformer"].extend(
         [
             "ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3022,6 +3056,16 @@ else:
             "PhiForTokenClassification",
             "PhiModel",
             "PhiPreTrainedModel",
+        ]
+    )
+    _import_structure["models.phi3"].extend(
+        [
+            "PHI3_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Phi3ForCausalLM",
+            "Phi3ForSequenceClassification",
+            "Phi3ForTokenClassification",
+            "Phi3Model",
+            "Phi3PreTrainedModel",
         ]
     )
     _import_structure["models.pix2struct"].extend(
@@ -3867,6 +3911,7 @@ else:
         "get_linear_schedule_with_warmup",
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
+        "get_wsd_schedule",
     ]
     _import_structure["pytorch_utils"] = [
         "Conv1D",
@@ -4489,6 +4534,14 @@ else:
             "TFSpeech2TextForConditionalGeneration",
             "TFSpeech2TextModel",
             "TFSpeech2TextPreTrainedModel",
+        ]
+    )
+    _import_structure["models.swiftformer"].extend(
+        [
+            "TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFSwiftFormerForImageClassification",
+            "TFSwiftFormerModel",
+            "TFSwiftFormerPreTrainedModel",
         ]
     )
     _import_structure["models.swin"].extend(
@@ -5249,6 +5302,7 @@ if TYPE_CHECKING:
         Data2VecTextConfig,
         Data2VecVisionConfig,
     )
+    from .models.dbrx import DbrxConfig
     from .models.deberta import (
         DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DebertaConfig,
@@ -5431,6 +5485,7 @@ if TYPE_CHECKING:
         InstructBlipQFormerConfig,
         InstructBlipVisionConfig,
     )
+    from .models.jamba import JambaConfig
     from .models.jukebox import (
         JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP,
         JukeboxConfig,
@@ -5576,6 +5631,7 @@ if TYPE_CHECKING:
         NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         NystromformerConfig,
     )
+    from .models.olmo import OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP, OlmoConfig
     from .models.oneformer import (
         ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OneFormerConfig,
@@ -5625,6 +5681,7 @@ if TYPE_CHECKING:
         PersimmonConfig,
     )
     from .models.phi import PHI_PRETRAINED_CONFIG_ARCHIVE_MAP, PhiConfig
+    from .models.phi3 import PHI3_PRETRAINED_CONFIG_ARCHIVE_MAP, Phi3Config
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6034,7 +6091,14 @@ if TYPE_CHECKING:
     )
 
     # bitsandbytes config
-    from .utils.quantization_config import AqlmConfig, AwqConfig, BitsAndBytesConfig, GPTQConfig, QuantoConfig
+    from .utils.quantization_config import (
+        AqlmConfig,
+        AwqConfig,
+        BitsAndBytesConfig,
+        EetqConfig,
+        GPTQConfig,
+        QuantoConfig,
+    )
 
     try:
         if not is_sentencepiece_available():
@@ -6761,6 +6825,13 @@ if TYPE_CHECKING:
             Data2VecVisionModel,
             Data2VecVisionPreTrainedModel,
         )
+
+        # PyTorch model imports
+        from .models.dbrx import (
+            DbrxForCausalLM,
+            DbrxModel,
+            DbrxPreTrainedModel,
+        )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             DebertaForMaskedLM,
@@ -7204,6 +7275,12 @@ if TYPE_CHECKING:
             InstructBlipQFormerModel,
             InstructBlipVisionModel,
         )
+        from .models.jamba import (
+            JambaForCausalLM,
+            JambaForSequenceClassification,
+            JambaModel,
+            JambaPreTrainedModel,
+        )
         from .models.jukebox import (
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
             JukeboxModel,
@@ -7550,6 +7627,11 @@ if TYPE_CHECKING:
             NystromformerModel,
             NystromformerPreTrainedModel,
         )
+        from .models.olmo import (
+            OlmoForCausalLM,
+            OlmoModel,
+            OlmoPreTrainedModel,
+        )
         from .models.oneformer import (
             ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             OneFormerForUniversalSegmentation,
@@ -7645,6 +7727,14 @@ if TYPE_CHECKING:
             PhiForTokenClassification,
             PhiModel,
             PhiPreTrainedModel,
+        )
+        from .models.phi3 import (
+            PHI3_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Phi3ForCausalLM,
+            Phi3ForSequenceClassification,
+            Phi3ForTokenClassification,
+            Phi3Model,
+            Phi3PreTrainedModel,
         )
         from .models.pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7838,8 +7928,6 @@ if TYPE_CHECKING:
             SamModel,
             SamPreTrainedModel,
         )
-
-        # PyTorch model imports
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeamlessM4TCodeHifiGan,
@@ -8327,6 +8415,7 @@ if TYPE_CHECKING:
             get_linear_schedule_with_warmup,
             get_polynomial_decay_schedule_with_warmup,
             get_scheduler,
+            get_wsd_schedule,
         )
         from .pytorch_utils import Conv1D, apply_chunking_to_forward, prune_layer
 
@@ -8855,6 +8944,12 @@ if TYPE_CHECKING:
             TFSpeech2TextForConditionalGeneration,
             TFSpeech2TextModel,
             TFSpeech2TextPreTrainedModel,
+        )
+        from .models.swiftformer import (
+            TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSwiftFormerForImageClassification,
+            TFSwiftFormerModel,
+            TFSwiftFormerPreTrainedModel,
         )
         from .models.swin import (
             TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
