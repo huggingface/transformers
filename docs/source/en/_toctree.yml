@@ -28,7 +28,7 @@
   - local: llm_tutorial
     title: Generation with LLMs
   - local: conversations
-    title: Talking to Chat Models
+    title: Chatting with Transformers
   title: Tutorials
 - sections:
   - isExpanded: false
