@@ -48,9 +48,6 @@ The original code can be found [here](https://github.com/THUDM/CogVLM).
 
 [[autodoc]] CogvlmModel
     - forward
-    - get_text_features
-    - get_image_features
-    - get_qformer_features
 
 ## CogvlmForCausalLM
 
