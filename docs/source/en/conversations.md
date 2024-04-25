@@ -123,8 +123,12 @@ as performance and memory, or how to select a chat model for your needs.
 
 There are an enormous number of different chat models available on the [Hugging Face Hub](https://huggingface.co/models?pipeline_tag=text-generation&sort=trending),
 and new users often feel very overwhelmed by the selection offered. Don't be, though! You really need to just focus on
-two important considerations: The model's size, which will determine if you can fit it in memory and how quickly it will
-run, and secondly the quality of the model's chat output. In general, these are correlated - bigger models tend to be 
+two important considerations: 
+- The model's size, which will determine if you can fit it in memory and how quickly it will
+run.
+- The quality of the model's chat output.
+
+In general, these are correlated - bigger models tend to be 
 more capable, but even so there's a lot of variation at a given size point!
 
 ### Size and model naming
