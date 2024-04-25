@@ -15,6 +15,7 @@
 """Utilities to dynamically load objects from the Hub."""
 import filecmp
 import importlib
+import importlib.util
 import os
 import re
 import shutil
@@ -196,9 +197,15 @@ def get_class_in_module(class_name: str, module_path: Union[str, os.PathLike]) -
     Returns:
         `typing.Type`: The class looked for.
     """
-    name = os.path.normpath(module_path).replace(".py", "").replace(os.path.sep, ".")
-    module_path = str(Path(HF_MODULES_CACHE) / module_path)
-    module = importlib.machinery.SourceFileLoader(name, module_path).load_module()
+    name = os.path.normpath(module_path).rstrip(".py").replace(os.path.sep, ".")
+    module_spec = importlib.util.spec_from_file_location(name, location=Path(HF_MODULES_CACHE) / module_path)
+    module = sys.modules.get(name)
+    if module is None:
+        module = importlib.util.module_from_spec(module_spec)
+        # insert it into sys.modules before any loading begins
+        sys.modules[name] = module
+    # reload in both cases
+    module_spec.loader.exec_module(module)
     return getattr(module, class_name)
 
 
