@@ -14,7 +14,7 @@
 # limitations under the License.
 import unittest
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Union
 
 from transformers import is_torch_available, is_vision_available
 from transformers.testing_utils import get_tests_dir, is_tool_test
@@ -30,7 +30,7 @@ if is_vision_available():
 AUTHORIZED_TYPES = ['text', 'audio', 'image']
 
 
-def create_inputs(tool_inputs: Dict[str, Dict[str | type, str]]):
+def create_inputs(tool_inputs: Dict[str, Dict[Union[str, type], str]]):
     input_types = {v['type'] for v in tool_inputs.values()}
     inputs = []
     for input_type in input_types:
