@@ -160,7 +160,7 @@ cutting-edge, a top-end general-purpose model may still outclass them. Thankfull
 [domain-specific leaderboards](https://huggingface.co/blog/leaderboard-medicalllm) that should make it easier to locate
 the best models for specialized domains.
 
-## Breaking it down: What happens inside the pipeline?
+## What happens inside the pipeline?
 
 The quickstart guide above used a high-level pipeline to chat with a chat model, which is convenient, but not the
 most flexible. Let's take a more low-level approach, to see each of the steps involved in chat. Let's start with
