@@ -251,8 +251,7 @@ for more information.
 
 <Tip>
 
-For a more extensive guide on language model performance and optimization, please see
-the [LLM Inference Optimization guide](./llm_optims).
+For a more extensive guide on language model performance and optimization, check out [LLM Inference Optimization](./llm_optims) .
 
 </Tip>
 
