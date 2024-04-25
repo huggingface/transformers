@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 
 from ..integrations import prepare_for_hqq_linear
 from ..utils import is_accelerate_available, is_hqq_available, is_torch_available, logging
-from ..utils.hqq_utils import find_parent
 from .quantizers_utils import get_module_from_name
 
 
@@ -33,6 +32,15 @@ if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
+
+
+# Finds the parent of a node module named "name"
+def find_parent(model, name):
+    module_tree = name.split(".")[:-1]
+    parent = model
+    for m in module_tree:
+        parent = parent._modules[m]
+    return parent
 
 
 class HQQHfQuantizer(HfQuantizer):

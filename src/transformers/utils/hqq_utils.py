@@ -19,15 +19,6 @@ if is_torch_available():
     import torch
 
 
-# Finds the parent of a node module named "name"
-def find_parent(model, name):
-    module_tree = name.split(".")[:-1]
-    parent = model
-    for m in module_tree:
-        parent = parent._modules[m]
-    return parent
-
-
 # checks if a module is a leaf: doesn't have another module inside
 def is_leaf_module(module):
     return len(module._modules) == 0
