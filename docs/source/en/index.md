@@ -177,6 +177,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [LiLT](model_doc/lilt)                          |       ✅        |         ❌         |      ❌      |
 |                         [LLaMA](model_doc/llama)                         |       ✅        |         ❌         |      ✅      |
 |                        [Llama2](model_doc/llama2)                        |       ✅        |         ❌         |      ✅      |
+|                        [Llama3](model_doc/llama3)                        |       ✅        |         ❌         |      ✅      |
 |                         [LLaVa](model_doc/llava)                         |       ✅        |         ❌         |      ❌      |
 |                    [LLaVA-NeXT](model_doc/llava_next)                    |       ✅        |         ❌         |      ❌      |
 |                    [Longformer](model_doc/longformer)                    |       ✅        |         ✅         |      ❌      |
@@ -235,6 +236,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                     [Perceiver](model_doc/perceiver)                     |       ✅        |         ❌         |      ❌      |
 |                     [Persimmon](model_doc/persimmon)                     |       ✅        |         ❌         |      ❌      |
 |                           [Phi](model_doc/phi)                           |       ✅        |         ❌         |      ❌      |
+|                          [Phi3](model_doc/phi3)                          |       ✅        |         ❌         |      ❌      |
 |                       [PhoBERT](model_doc/phobert)                       |       ✅        |         ✅         |      ✅      |
 |                    [Pix2Struct](model_doc/pix2struct)                    |       ✅        |         ❌         |      ❌      |
 |                        [PLBart](model_doc/plbart)                        |       ✅        |         ❌         |      ❌      |
@@ -275,7 +277,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                      [StableLm](model_doc/stablelm)                      |       ✅        |         ❌         |      ❌      |
 |                    [Starcoder2](model_doc/starcoder2)                    |       ✅        |         ❌         |      ❌      |
 |                    [SuperPoint](model_doc/superpoint)                    |       ✅        |         ❌         |      ❌      |
-|                   [SwiftFormer](model_doc/swiftformer)                   |       ✅        |         ❌         |      ❌      |
+|                   [SwiftFormer](model_doc/swiftformer)                   |       ✅        |         ✅         |      ❌      |
 |                    [Swin Transformer](model_doc/swin)                    |       ✅        |         ✅         |      ❌      |
 |                 [Swin Transformer V2](model_doc/swinv2)                  |       ✅        |         ❌         |      ❌      |
 |                       [Swin2SR](model_doc/swin2sr)                       |       ✅        |         ❌         |      ❌      |

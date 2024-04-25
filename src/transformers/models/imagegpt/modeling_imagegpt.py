@@ -491,6 +491,7 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["ImageGPTBlock"]
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
