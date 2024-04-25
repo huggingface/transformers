@@ -28,16 +28,16 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.models.llava_next.modeling_llava_next import image_size_to_num_patches
 from transformers.testing_utils import require_bitsandbytes, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 
 
 if is_torch_available():
     import torch
-    from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+    from transformers.models.llava_next.modeling_llava_next import image_size_to_num_patches
 else:
     is_torch_greater_or_equal_than_2_0 = False
 
