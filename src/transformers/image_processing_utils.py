@@ -26,7 +26,7 @@ import requests
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
 from .image_transforms import center_crop, normalize, rescale
-from .image_utils import ChannelDimension, PILImageResampling, is_scaled_image, to_numpy_array, valid_images
+from .image_utils import ChannelDimension, is_scaled_image, to_numpy_array, valid_images
 from .utils import (
     IMAGE_PROCESSOR_NAME,
     PushToHubMixin,
@@ -43,6 +43,8 @@ from .utils import (
 
 if is_vision_available():
     from PIL import Image
+
+    from .image_utils import PILImageResampling
 
 logger = logging.get_logger(__name__)
 
