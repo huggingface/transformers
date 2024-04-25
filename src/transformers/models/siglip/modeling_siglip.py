@@ -1122,6 +1122,7 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> from transformers import AutoProcessor, AutoModel
         >>> import torch
 
+        >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
         >>> model = AutoModel.from_pretrained("google/siglip-base-patch16-224")
         >>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
 
@@ -1243,7 +1244,9 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
+        >>> # Head will be randomly initialized, predictions will be random if seed is not set.
         >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
+
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
@@ -1258,7 +1261,7 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
         >>> # model predicts one of the two classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        Predicted class: LABEL_0
+        Predicted class: LABEL_1
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
