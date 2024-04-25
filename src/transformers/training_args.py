@@ -2053,9 +2053,8 @@ class TrainingArguments:
                     f"Using the `Trainer` with `PyTorch` requires `accelerate>={ACCELERATE_MIN_VERSION}`: "
                     "Please run `pip install transformers[torch]` or `pip install accelerate -U`"
                 )
-            if self.accelerator_config is None:
-                use_configured_state = False
-            else:
+            use_configured_state = False
+            if isinstance(self.accelerator_config, AcceleratorConfig):
                 use_configured_state = self.accelerator_config.pop("use_configured_state", False)
             if use_configured_state:
                 if AcceleratorState._shared_state == {}:
