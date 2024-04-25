@@ -821,26 +821,26 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_from_pretrained_disk_offload_task_model(self):
         model = AutoModel.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         device_map = {
-            "transformer.wte": 0,
-            "transformer.wpe": 0,
+            "transformer.wte": f"{torch_device}:0",
+            "transformer.wpe": f"{torch_device}:0",
             "transformer.h.0": "cpu",
             "transformer.h.1": "cpu",
             "transformer.h.2": "cpu",
             "transformer.h.3": "disk",
             "transformer.h.4": "disk",
-            "transformer.ln_f": 0,
-            "lm_head": 0,
+            "transformer.ln_f": f"{torch_device}:0",
+            "lm_head": f"{torch_device}:0",
         }
         with tempfile.TemporaryDirectory() as tmp_dir:
-            inputs = torch.tensor([[1, 2, 3]]).to(0)
+            inputs = torch.tensor([[1, 2, 3]]).to(f"{torch_device}:0")
 
             model.save_pretrained(tmp_dir)
-            new_model = AutoModelForCausalLM.from_pretrained(tmp_dir).to(0)
-            outputs1 = new_model.to(0)(inputs)
+            new_model = AutoModelForCausalLM.from_pretrained(tmp_dir).to(f"{torch_device}:0")
+            outputs1 = new_model.to(f"{torch_device}:0")(inputs)
 
             offload_folder = os.path.join(tmp_dir, "offload")
             new_model_with_offload = AutoModelForCausalLM.from_pretrained(
@@ -851,7 +851,6 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(torch.allclose(outputs1.logits.cpu(), outputs2.logits.cpu()))
 
             # With state dict temp offload
-            offload_folder = os.path.join(tmp_dir, "offload")
             new_model_with_offload = AutoModelForCausalLM.from_pretrained(
                 tmp_dir,
                 device_map=device_map,
@@ -859,30 +858,29 @@ class ModelUtilsTest(TestCasePlus):
                 offload_state_dict=True,
             )
             outputs2 = new_model_with_offload(inputs)
-
             self.assertTrue(torch.allclose(outputs1.logits.cpu(), outputs2.logits.cpu()))
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_from_pretrained_disk_offload_derived_to_base_model(self):
         derived_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
         device_map = {
-            "wte": 0,
-            "wpe": 0,
+            "wte": f"{torch_device}:0",
+            "wpe": f"{torch_device}:0",
             "h.0": "cpu",
             "h.1": "cpu",
             "h.2": "cpu",
             "h.3": "disk",
             "h.4": "disk",
-            "ln_f": 0,
+            "ln_f": f"{torch_device}:0",
         }
         with tempfile.TemporaryDirectory() as tmp_dir:
-            inputs = torch.tensor([[1, 2, 3]]).to(0)
+            inputs = torch.tensor([[1, 2, 3]]).to(f"{torch_device}:0")
             derived_model.save_pretrained(tmp_dir, use_safetensors=True)
             base_model = AutoModel.from_pretrained(tmp_dir)
-            outputs1 = base_model.to(0)(inputs)
+            outputs1 = base_model.to(f"{torch_device}:0")(inputs)
 
             # with disk offload
             offload_folder = os.path.join(tmp_dir, "offload")

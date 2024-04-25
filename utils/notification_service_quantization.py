@@ -200,7 +200,7 @@ if __name__ == "__main__":
             "job_link": {},
         }
         for quant in quantization_matrix
-        if f"run_tests_quantization_torch_gpu_{quant}" in available_artifacts
+        if f"run_quantization_torch_gpu_{ quant }_test_reports" in available_artifacts
     }
 
     github_actions_jobs = get_jobs(
@@ -217,7 +217,7 @@ if __name__ == "__main__":
                 break
 
     for quant in quantization_results.keys():
-        for artifact_path in available_artifacts[f"run_tests_quantization_torch_gpu_{quant}"].paths:
+        for artifact_path in available_artifacts[f"run_quantization_torch_gpu_{ quant }_test_reports"].paths:
             artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             if "stats" in artifact:
                 # Link to the GitHub Action job
