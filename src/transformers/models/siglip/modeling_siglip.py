@@ -1122,7 +1122,6 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> from transformers import AutoProcessor, AutoModel
         >>> import torch
 
-        >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
         >>> model = AutoModel.from_pretrained("google/siglip-base-patch16-224")
         >>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
 
