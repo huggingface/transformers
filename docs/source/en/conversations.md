@@ -24,7 +24,7 @@ and lots of memory to run, there are smaller models that will run perfectly well
 an ordinary desktop or notebook CPU. 
 
 This guide will help you get started with chat models. We'll start with a brief quickstart guide that uses a convenient,
-high-level "pipeline". This is all you need if you're impatient and you just want to start running a chat model 
+high-level "pipeline". This is all you need if you just want to start running a chat model 
 immediately. After the quickstart, we'll move on to more detailed information about
 what exactly chat models are, how to choose an appropriate one, and finally a low-level breakdown of each of the
 steps involved in talking to a chat model.
