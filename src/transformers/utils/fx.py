@@ -28,10 +28,12 @@ import torch
 from torch import nn
 from torch.fx import Graph, GraphModule, Node, Proxy, Tracer
 from torch.fx._compatibility import compatibility
+from torch.fx._symbolic_trace import is_fx_tracing
 from torch.fx.node import Argument
 from torch.fx.proxy import ParameterProxy
 
 from .. import PretrainedConfig, PreTrainedModel, logging
+from ..cache_utils import Cache, DynamicCache, SinkCache, StaticCache
 from ..models.auto import get_values
 from ..models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
@@ -709,25 +711,71 @@ def _proxies_to_metas(v):
     return v
 
 
-def _gen_constructor_wrapper(target):
-    @functools.wraps(target)
+def create_function_wrapper(function: Callable) -> Callable:
+    @functools.wraps(function)
     def wrapper(*args, **kwargs):
-        proxy = None
+        if not is_fx_tracing():
+            return function(*args, **kwargs)
 
-        def check_has_proxy(v):
-            if isinstance(v, Proxy):
-                nonlocal proxy
-                proxy = v
+        found_proxies = []
 
-        torch.fx.node.map_aggregate(args, check_has_proxy)
-        torch.fx.node.map_aggregate(kwargs, check_has_proxy)
+        def check_proxy(a):
+            if isinstance(a, Proxy):
+                found_proxies.append(a)
 
-        if proxy is not None:
-            return proxy.tracer.create_proxy("call_function", target, args, kwargs)
+        torch.fx.node.map_aggregate(args, check_proxy)
+        torch.fx.node.map_aggregate(kwargs, check_proxy)
+
+        if len(found_proxies) > 0:
+            tracer = found_proxies[0].tracer
+            return tracer.create_proxy("call_function", function, args, kwargs)
         else:
-            return target(*args, **kwargs)
+            return function(*args, **kwargs)
 
+    return wrapper
+
+
+def gen_constructor_wrapper(target: Callable) -> Tuple[Callable, Callable]:
+    wrapper = create_function_wrapper(target)
     return wrapper, target
+
+
+_ORIG_CLASS_METHODS: Dict[Type, Dict[str, Callable]] = collections.defaultdict(dict)
+
+
+def patch_class(
+    cls: Type,
+    method_names_to_wrap: Optional[List[str]] = None,
+    special_method_names_to_wrap: Optional[List[str]] = None,
+    restore: bool = False,
+):
+    if restore and cls not in _ORIG_CLASS_METHODS:
+        raise ValueError(f"Cannot restore {cls} because it was never patched.")
+
+    def is_method(name: str):
+        attribute = getattr(cls, name)
+        return inspect.isfunction(attribute) or inspect.ismethod(attribute)
+
+    if method_names_to_wrap is None:
+        method_names_to_wrap = [name for name in dir(cls) if not name.startswith("__") and is_method(name)]
+
+    if special_method_names_to_wrap is None:
+        special_method_names_to_wrap = ["__init__", "__call__"]
+
+    names = set(method_names_to_wrap + special_method_names_to_wrap)
+
+    for name in names:
+        if restore:
+            orig_methods = _ORIG_CLASS_METHODS[cls]
+            if name not in orig_methods:
+                raise ValueError(f"The method {name} was never patched in {cls}.")
+            method = orig_methods[name]
+        else:
+            orig_method = getattr(cls, name)
+            method = create_function_wrapper(orig_method)
+            _ORIG_CLASS_METHODS[cls][name] = orig_method
+
+        setattr(cls, name, method)
 
 
 def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None):
@@ -760,6 +808,13 @@ class HFTracer(Tracer):
         "clamp",
         "finfo",
     ]
+    _CLASSES_TO_PATCH = [
+        Cache,
+        DynamicCache,
+        SinkCache,
+        StaticCache,
+    ]
+
     supported_archs = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
@@ -1040,7 +1095,7 @@ class HFTracer(Tracer):
 
     def call_module(self, m, forward, args, kwargs):
         if getattr(self, "_disable_call_module", False):
-            return m(*args, **kwargs)
+            return forward(*args, **kwargs)
         self.orig_forward = forward
         return super().call_module(m, forward, args, kwargs)
 
@@ -1143,19 +1198,25 @@ class HFTracer(Tracer):
                 concrete_metas[f"**{param.name}"] = {}
         self.meta_args = concrete_metas
         self.patched_torch_methods = {
-            target: _gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
+            target: gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
         }
+
         self.orig_fns = set()
 
         for name, (wrapper, orig) in self.patched_torch_methods.items():
             setattr(torch, name, wrapper)
             self.orig_fns.add(orig)
 
+        for cls in self._CLASSES_TO_PATCH:
+            patch_class(cls)
+
         try:
             self.graph = super().trace(root, concrete_args=concrete_args)
         finally:
             for name, (_, orig) in self.patched_torch_methods.items():
                 setattr(torch, name, orig)
+            for cls in self._CLASSES_TO_PATCH:
+                patch_class(cls, restore=True)
 
         # This is necessary because concrete args are added as input to the traced module since
         # https://github.com/pytorch/pytorch/pull/55888.
