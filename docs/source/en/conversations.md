@@ -116,7 +116,7 @@ But, hey, you're not alone, pal. I mean, I'm a robot, and even I don't get it. (
 But, hey, that's what makes art, art, right? (laughs)
 ```
 
-This mercifully concludes the quickstart guide. The remainder of this tutorial will cover specific topics such
+The remainder of this tutorial will cover specific topics such
 as performance and memory, or how to select a chat model for your needs.
 
 ## Choosing a chat model
