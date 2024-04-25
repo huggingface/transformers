@@ -3911,6 +3911,7 @@ else:
         "get_linear_schedule_with_warmup",
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
+        "get_wsd_schedule",
     ]
     _import_structure["pytorch_utils"] = [
         "Conv1D",
@@ -8414,6 +8415,7 @@ if TYPE_CHECKING:
             get_linear_schedule_with_warmup,
             get_polynomial_decay_schedule_with_warmup,
             get_scheduler,
+            get_wsd_schedule,
         )
         from .pytorch_utils import Conv1D, apply_chunking_to_forward, prune_layer
 

@@ -10023,6 +10023,10 @@ def get_scheduler(*args, **kwargs):
     requires_backends(get_scheduler, ["torch"])
 
 
+def get_wsd_schedule(*args, **kwargs):
+    requires_backends(get_wsd_schedule, ["torch"])
+
+
 class Conv1D(metaclass=DummyObject):
     _backends = ["torch"]
 
