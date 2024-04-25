@@ -1639,7 +1639,7 @@ class TrainingArguments:
             if version.parse(version.parse(torch.__version__).base_version) == version.parse("2.0.0") and self.fp16:
                 raise ValueError("--optim adamw_torch_fused with --fp16 requires PyTorch>2.0")
 
-        # We need to setup the accelerator config here
+        # We need to setup the accelerator config here *before* the first call to `self.device`
         if is_accelerate_available():
             if not isinstance(self.accelerator_config, (AcceleratorConfig)):
                 if self.accelerator_config is None:
