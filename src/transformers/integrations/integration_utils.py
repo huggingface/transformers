@@ -807,7 +807,6 @@ class WandbCallback(TrainerCallback):
                         "initial_model": True,
                     },
                 )
-                model: PreTrainedModel = model
                 model.save_pretrained(temp_dir)
                 # add the architecture to a separate text file
                 save_model_architecture_to_file(model, temp_dir)
