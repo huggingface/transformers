@@ -87,7 +87,7 @@ So, there you have it, pal! That's my expert advice on what to do in New York. N
 excuse me, I've got some oil changes to attend to. (winks)
 ```
 
-After taking a moment to recover, you can continue the chat by appending your own response to it. The
+You can continue the chat by appending your own response to it. The
 `response` object returned by the pipeline actually contains the entire chat so far, so we can simply append
 a message and pass it back:
 
