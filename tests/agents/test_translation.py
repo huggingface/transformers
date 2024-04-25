@@ -45,24 +45,25 @@ class TranslationToolTester(unittest.TestCase, ToolTesterMixin):
         inputs = ["Hey, what's up?", "English", "Spanish"]
         output = self.tool(*inputs)
 
-        agent_type = AGENT_TYPE_MAPPING[self.tool.output_type]
-        self.assertTrue(isinstance(output, agent_type))
+        output_type = AGENT_TYPE_MAPPING[self.tool.output_type]
+        self.assertTrue(isinstance(output, output_type))
 
     def test_agent_types_inputs(self):
-        inputs = ["Hey, what's up?", "English", "Spanish"]
+        example_inputs = {
+            "text": "Hey, what's up?",
+            "src_lang": "English",
+            "tgt_lang": "Spanish",
+        }
 
         _inputs = []
 
-        for _input, input_type in zip(inputs, self.tool.inputs):
-            if isinstance(input_type, list):
-                _inputs.append([AGENT_TYPE_MAPPING[_input_type](_input) for _input_type in input_type])
-            else:
-                _inputs.append(AGENT_TYPE_MAPPING[input_type](_input))
+        for input_name in example_inputs.keys():
+            example_input = example_inputs[input_name]
+            input_description = self.tool.inputs[input_name]
+            input_type = input_description["type"]
+            _inputs.append(AGENT_TYPE_MAPPING[input_type](example_input))
 
         # Should not raise an error
-        outputs = self.tool(*inputs)
-
-        if not isinstance(outputs, list):
-            outputs = [outputs]
-
-        self.assertEqual(len(outputs), len(self.tool.outputs))
+        output = self.tool(**example_inputs)
+        output_type = AGENT_TYPE_MAPPING[self.tool.output_type]
+        self.assertTrue(isinstance(output, output_type))
