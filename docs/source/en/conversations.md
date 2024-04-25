@@ -239,7 +239,7 @@ quantization_config = BitsAndBytesConfig(load_in_8bit=True)  # You can also try 
 pipe = pipeline("text-generation", "meta-llama/Meta-Llama-3-8B-Instruct", device_map="auto", model_kwargs={"quantization_config": quantization_config})
 ```
 
-Note that there are several other options for quantizing models - please see the [Quantization guide](https://huggingface.co/docs/transformers/en/quantizationhttps://huggingface.co/docs/transformers/en/quantization)
+There are several other options for quantizing models besides `bitsandbytes` - please see the [Quantization guide](https://huggingface.co/docs/transformers/en/quantizationhttps://huggingface.co/docs/transformers/en/quantization)
 for more information.
 
 ### Performance considerations
