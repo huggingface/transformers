@@ -158,7 +158,7 @@ def compute_metrics(
     id2label: Optional[Mapping[int, str]] = None,
 ) -> Mapping[str, float]:
     """
-    Compute mean average mAP, mAR and their variants for the object detection task
+    Compute mean average mAP, mAR and their variants for the object detection task.
 
     Args:
         evaluation_results (EvalPrediction): Predictions and targets from evaluation.
