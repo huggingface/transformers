@@ -29,6 +29,7 @@ seed_value = 42
 torch.manual_seed(seed_value)
 np.random.seed(seed_value)
 random.seed(seed_value)
+torch.use_deterministic_algorithms(True)
 
 def rename_key(name):
     if "cls_token" in name:
@@ -59,9 +60,9 @@ def rename_key(name):
         name = name.replace("mlp.fc2", "output.dense")
     #TODO need to convert meta_mlp into somebetter name.
     if 'meta_mlp.fc1' in name:
-        name = name.replace('meta_mlp.fc1', 'meta_mlp.0')
+        name = name.replace('meta_mlp.fc1', 'meta_mlp.fc1')
     if 'meta_mlp.fc2' in name:
-        name = name.replace('meta_mlp.fc2', 'meta_mlp.3')
+        name = name.replace('meta_mlp.fc2', 'meta_mlp.fc2')
     if "decoder_embed" in name:
         name = name.replace("decoder_embed", "decoder.decoder_embed")
     if "decoder_norm" in name:
@@ -132,11 +133,12 @@ def convert_audio_mae_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_
         waveform = pickle.load(f)
     inputs = feature_extractor([waveform], sampling_rate=16000, return_tensors="pt")
     inputs['pixel_values'] = inputs['pixel_values'].unsqueeze(dim=0)
-    print(inputs['pixel_values'].shape)
+    # print(inputs['pixel_values'].shape)
     # forward pass
+    
     outputs = model(**inputs)
     logits = outputs.logits
-    print(logits)
+    # print(logits)
 
     # #TODO update this expected slice value
     # expected_slice = torch.tensor(
@@ -178,4 +180,5 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_audio_mae_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub)
+    with torch.no_grad():
+        convert_audio_mae_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub)

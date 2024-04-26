@@ -259,7 +259,8 @@ class AudioMAEEmbeddings(nn.Module):
             torch.zeros(1, self.num_patches + 1, config.hidden_size), requires_grad=False
         )
         self.config = config
-        self.initialize_weights()
+        #init_weights
+        # self.initialize_weights()
 
     def initialize_weights(self):
         # initialize (and freeze) position embeddings by sin-cos embedding
@@ -290,7 +291,9 @@ class AudioMAEEmbeddings(nn.Module):
 
         if noise is None:
             noise = torch.rand(batch_size, seq_length, device=sequence.device)  # noise in [0, 1]
-
+            # print(noise[:3, :3])
+            # for i in range(10):
+            #     print(torch.rand(batch_size, seq_length, device=sequence.device)[:3, :3])
         # sort noise for each sample
         ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
         ids_restore = torch.argsort(ids_shuffle, dim=1)
@@ -364,16 +367,16 @@ class AudioMAEEmbeddings(nn.Module):
     def forward(self, pixel_values, noise=None):
         batch_size, num_channels, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values)
-
+        # print(f"embeddings shape is {embeddings.shape}\n{embeddings[0, :3, :3]}")
         # add position embeddings w/o cls token
         embeddings = embeddings + self.position_embeddings[:, 1:, :]
-
+        # print(f'pos_embed is {self.position_embeddings[0, :3, :3]}')
         # masking: length -> length * config.mask_ratio
         if self.config.mask_2d:
             embeddings, mask, ids_restore = self.random_masking_2d(embeddings, noise)
         else:
             embeddings, mask, ids_restore = self.random_masking(embeddings, noise)            
-        
+        # print(f"x after masking shape is {embeddings.shape}\n{embeddings[0, :3, :3]}")        
 
         # append cls token
         cls_token = self.cls_token + self.position_embeddings[:, :1, :]
@@ -594,7 +597,42 @@ class AudioMAELayer(nn.Module):
         outputs = (layer_output,) + outputs
 
         return outputs
+    
+# TODO convert this into intermediate and output
+class Swinv2Mlp(nn.Module):
+    """ MLP as used in Vision Transformer, MLP-Mixer and related networks
+    """
+    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop_probs=[0, 0]):
+        super().__init__()
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
 
+        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.act = act_layer()
+        self.drop1 = nn.Identity()#nn.Dropout(drop_probs[0])
+        self.fc2 = nn.Linear(hidden_features, out_features)
+        self.drop2 = nn.Identity()#nn.Dropout(drop_probs[1])
+
+    def forward(self, x):
+        print(x.shape)
+        print(x[:4, :2])
+        x = self.fc1(x)
+        print(x[:4, :2])
+
+        x = self.act(x)
+        print(x[:4, :2])
+
+        x = self.drop1(x)
+        print(x[:4, :2])
+
+        x = self.fc2(x)
+        print(x[:4, :2])
+
+        x = self.drop2(x)
+        print(x[:4, :2])
+
+        return x
+    
 class Swinv2SelfAttention(nn.Module):
     def __init__(self, config, dim, window_size, num_heads):
         super().__init__()
@@ -606,9 +644,7 @@ class Swinv2SelfAttention(nn.Module):
         )
         # mlp to generate continuous relative position bias
         self.register_parameter("tau", torch.nn.Parameter(torch.ones(self.num_heads)))
-        self.meta_mlp = nn.Sequential(
-            nn.Linear(2, 384, bias=True), nn.ReLU(), nn.Dropout(0.1), nn.Linear(384, self.num_heads, bias=True), nn.Dropout(0.1)
-        )
+        self.meta_mlp = Swinv2Mlp(2, 384, self.num_heads, nn.ReLU, drop_probs=[0.1, 0.1])
         # get relative_coords_table
         coordinates = torch.stack(torch.meshgrid([
             torch.arange(self.window_size[0], device=self.tau.device),
@@ -623,7 +659,7 @@ class Swinv2SelfAttention(nn.Module):
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
 
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.dropout = nn.Identity()#nn.Dropout(config.attention_probs_dropout_prob)
         
     def _relative_positional_encodings(self) -> torch.Tensor:
         """Method computes the relative positional encodings
@@ -633,7 +669,10 @@ class Swinv2SelfAttention(nn.Module):
             (1, number of heads, window size ** 2, window size ** 2)
         """
         window_area = self.window_size[0] * self.window_size[1]
+        # print(f'relative_coordinates_log is {self.relative_coordinates_log[:4]}')
         relative_position_bias = self.meta_mlp(self.relative_coordinates_log)
+        # print(relative_position_bias[:3, :3])
+        exit()
         relative_position_bias = relative_position_bias.transpose(1, 0).reshape(
             self.num_heads, window_area, window_area
         )
@@ -652,11 +691,15 @@ class Swinv2SelfAttention(nn.Module):
         value = self.key(hidden_states).view(batch_size, dim, self.num_heads, num_channels // self.num_heads).permute(0, 2, 1, 3)
         
         denom = torch.norm(query, dim=-1, keepdim=True) @ torch.norm(key, dim=-1, keepdim=True).transpose(-2, -1)
-        attention_scores = query @ key.transpose(-2, -1) / denom.clamp(min=1e-6)
-        attention_scores = attention_scores / self.tau.clamp(min=0.01).reshape(1, self.num_heads, 1, 1)
         
-        attention_scores = attention_scores + self._relative_positional_encodings()
+        attention_scores = query @ key.transpose(-2, -1) / denom.clamp(min=1e-6)
 
+        attention_scores = attention_scores / self.tau.clamp(min=0.01).reshape(1, self.num_heads, 1, 1)
+        # print(f'attention_scores is {attention_scores.shape}\n{attention_scores[0, :3, :3, :3]}')
+
+        attention_scores = attention_scores + self._relative_positional_encodings()
+        # print(f'attention_scores is {attention_scores.shape}\n{attention_scores[0, :3, :3, :3]}')
+        exit()
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in Swinv2Model forward() function)
             num_win = attention_mask.shape[0]
@@ -675,7 +718,7 @@ class Swinv2SelfAttention(nn.Module):
 
         context_layer = torch.matmul(attention_probs, value)
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous().reshape(batch_size, dim, -1)
-
+        # print(f'self.self is {context_layer.shape}\n{context_layer[0, :3, :3]}')
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
@@ -686,7 +729,7 @@ class Swinv2SelfOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
         self.dense = nn.Linear(dim, dim)
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.dropout = nn.Identity()#nn.Dropout(config.attention_probs_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -727,7 +770,7 @@ class Swinv2Intermediate(nn.Module):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Identity()#nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -741,7 +784,7 @@ class Swinv2Output(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
         self.dense = nn.Linear(int(config.mlp_ratio * dim), dim)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Identity()#nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -767,6 +810,7 @@ class Swinv2Layer(nn.Module):
         super().__init__()
         self.dim = dim
         self.input_resolution = input_resolution
+        # print(shift_size)
         self.window_size, self.shift_size = self._compute_window_shift(window_size, shift_size)
         self.num_heads = num_heads
         self.attention = Swinv2Attention(
@@ -776,10 +820,12 @@ class Swinv2Layer(nn.Module):
             num_heads=self.num_heads,
         )
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.drop_path = Swinv2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path_before = Swinv2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         self.intermediate = Swinv2Intermediate(config, dim)
         self.output = Swinv2Output(config, dim)
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
+        self.drop_path_after = Swinv2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+
 
     def _compute_window_shift(self, target_window_size, target_shift_size) -> Tuple[Tuple[int, int], Tuple[int, int]]:
         window_size = [r if r <= w else w for r, w in zip(self.input_resolution, target_window_size)]
@@ -787,6 +833,7 @@ class Swinv2Layer(nn.Module):
         return window_size, shift_size
 
     def get_attn_mask(self, dtype):
+        # print(self.shift_size)
         if self.shift_size[0] > 0 or self.shift_size[1] > 0:
             height, width = self.input_resolution
             # calculate attention mask for shifted window multihead self attention
@@ -820,7 +867,6 @@ class Swinv2Layer(nn.Module):
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        print(f'shape inside decoder {hidden_states.shape}')
         height, width = self.input_resolution
         batch_size, _, channels = hidden_states.size()
         shortcut = hidden_states
@@ -835,14 +881,19 @@ class Swinv2Layer(nn.Module):
         hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
         hidden_states_windows = hidden_states_windows.view(-1, self.window_size[0] * self.window_size[1], channels)
         attn_mask = self.get_attn_mask(dtype=hidden_states.dtype)
-        
+        # print(f'hidden_states_windows is {hidden_states_windows[0, :3, :3]}')
+        print(self.shift_size)
+        try:
+            print(f'attn_mask is {attn_mask[0, :3, :3]}')
+        except:
+            print(attn_mask)
         if attn_mask is not None:
             attn_mask = attn_mask.to(hidden_states_windows.device)
-        
+        #TODO debug this line attention_outputs = self.attention(
         attention_outputs = self.attention(
             hidden_states_windows, attn_mask, output_attentions=output_attentions
         )
-
+        # print(f'attn_windows is {attention_outputs[0][0, :3, :3]}')
         attention_output = attention_outputs[0]
 
         attention_windows = attention_output.view(-1, self.window_size[0], self.window_size[1], channels)
@@ -858,11 +909,11 @@ class Swinv2Layer(nn.Module):
         
         
         hidden_states = self.layernorm_before(attention_windows)
-        hidden_states = shortcut + self.drop_path(hidden_states)
+        hidden_states = shortcut + self.drop_path_before(hidden_states)
 
         layer_output = self.intermediate(hidden_states)
         layer_output = self.output(layer_output)
-        layer_output = hidden_states + self.drop_path(self.layernorm_after(layer_output))
+        layer_output = hidden_states + self.drop_path_after(self.layernorm_after(layer_output))
 
         layer_outputs = (layer_output, attention_outputs[1]) if output_attentions else (layer_output,)
         return layer_outputs
@@ -927,7 +978,7 @@ class AudioMAEPreTrainedModel(PreTrainedModel):
     base_model_prefix = "audiomae"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-
+    #init_weights
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -985,7 +1036,8 @@ class AudioMAEModel(AudioMAEPreTrainedModel):
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
-        self.post_init()
+        #init_weights
+        # self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
@@ -1030,15 +1082,15 @@ class AudioMAEModel(AudioMAEPreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         embedding_output, mask, ids_restore = self.embeddings(pixel_values, noise=noise)
-        print(f'masking is {mask.sum()}')
-        print(f'shape after embed layer is {embedding_output.shape}')
+        # print(f'masking is {mask.shape}\n{mask[0, :3]}\n')
+        # print(f'shape after embed layer is {embedding_output.shape}\n{embedding_output[0, :3, :3]}\n')
         encoder_outputs = self.encoder(
             embedding_output,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        print(f'shape after encoder is {encoder_outputs[0].shape}')
+        # print(f'shape after encoder is {encoder_outputs[0].shape}\n{encoder_outputs[0][0, :3, :3]}\n')
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
 
@@ -1053,7 +1105,6 @@ class AudioMAEModel(AudioMAEPreTrainedModel):
             attentions=encoder_outputs.attentions,
         )
 
-#TODO Will handle this later on, first work on encoder part alone.
 # Copied from transformers.models.vit_mae.modeling_vit_mae.ViTMAEDecoder with ViTMAE->AudioMAE
 class AudioMAEDecoder(nn.Module):
     def __init__(self, config, num_patches):
@@ -1072,7 +1123,7 @@ class AudioMAEDecoder(nn.Module):
                 shift_size = (2,0)
             decoder_modules.append(
                 Swinv2Layer(
-                    config, #TODO decoder_config or config which to pass?
+                    config, #TODO decoder_config or config which to pass? better to pass decoder_config, because it will help in making this code reusable.
                     dim=config.decoder_hidden_size,
                     input_resolution=config.decoder_input_resolution,
                     num_heads=config.decoder_num_attention_heads,
@@ -1088,7 +1139,8 @@ class AudioMAEDecoder(nn.Module):
         )  # encoder to decoder
         self.gradient_checkpointing = False
         self.config = config
-        self.initialize_weights()
+        #init_weights
+        # self.initialize_weights()
 
     def initialize_weights(self):
         # initialize (and freeze) position embeddings by sin-cos embedding
@@ -1119,10 +1171,10 @@ class AudioMAEDecoder(nn.Module):
 
         # add pos embed
         hidden_states = hidden_states + self.decoder_pos_embed
-        print(f'shape after pos_embed block {hidden_states.shape}')
+        # print(f'shape after pos_embed block {hidden_states.shape}\n{hidden_states[0, :3, :3]}\n')
 
         hidden_states = hidden_states[:, 1:, :] # remove cls token
-        print(f'shape before decoder block {hidden_states.shape}')
+        # print(f'shape before decoder block {hidden_states.shape}\n{hidden_states[0, :3, :3]}\n')
 
         # apply Swin Transformer layers (blocks)
         all_hidden_states = () if output_hidden_states else None
@@ -1140,7 +1192,8 @@ class AudioMAEDecoder(nn.Module):
                 )
             else:
                 layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
-
+                # if i == 1:
+                    # print(f'shape after 1st decoder block {layer_outputs[0].shape}\n{layer_outputs[0][0, :3, :3]}\n')
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -1186,7 +1239,8 @@ class AudioMAEForPreTraining(AudioMAEPreTrainedModel):
         self.decoder = AudioMAEDecoder(config, num_patches=self.audiomae.embeddings.num_patches)
 
         # Initialize weights and apply final processing
-        self.post_init()
+        #init_weights
+        # self.post_init()
 
     def get_input_embeddings(self):
         return self.audiomae.embeddings.patch_embeddings
@@ -1287,20 +1341,30 @@ class AudioMAEForPreTraining(AudioMAEPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.audiomae(
-            pixel_values,
-            noise=noise,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        latent = outputs.last_hidden_state
-        ids_restore = outputs.ids_restore
-        mask = outputs.mask
-        print(f'shape after encoder complete is {latent.shape} and {latent[0, 0:3, 0:3]}')
+        # outputs = self.audiomae(
+        #     pixel_values,
+        #     noise=noise,
+        #     output_attentions=output_attentions,
+        #     output_hidden_states=output_hidden_states,
+        #     return_dict=return_dict,
+        # )
+        # latent = outputs.last_hidden_state
+        # ids_restore = outputs.ids_restore
+        # mask = outputs.mask
+        # # Store latent, ids_restore, and mask externally
+        # torch.save(latent, '/Users/subhashp/Documents/Open-Source/AudioMAE/emb_enc_hf.pt')
+        # torch.save(ids_restore, '/Users/subhashp/Documents/Open-Source/AudioMAE/ids_restore_hf.pt')
+        # torch.save(mask, '/Users/subhashp/Documents/Open-Source/AudioMAE/mask_hf.pt')
+        # # Load latent
+        latent = torch.load('/Users/subhashp/Documents/Open-Source/AudioMAE/emb_enc_hf.pt')
+        # Load ids_restore
+        ids_restore = torch.load('/Users/subhashp/Documents/Open-Source/AudioMAE/ids_restore_hf.pt')
+        # Load mask
+        mask = torch.load('/Users/subhashp/Documents/Open-Source/AudioMAE/mask_hf.pt')
+        # print(f'shape after encoder complete is {latent.shape}\n{latent[0, 0:3, 0:3]}\n')
         decoder_outputs = self.decoder(latent, ids_restore)
         logits = decoder_outputs.logits  # shape (batch_size, num_patches, patch_size*patch_size*num_channels)
-        print(logits)
+        print(f'shape of logits is {logits.shape}\n{logits[0, :3, :3]}')
         loss = self.forward_loss(pixel_values, logits, mask)
 
         if not return_dict:
