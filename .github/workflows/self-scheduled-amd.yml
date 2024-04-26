@@ -42,7 +42,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
+    runs-on: [self-hosted, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu
       options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -63,7 +63,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
+    runs-on: [self-hosted, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu
       options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -116,7 +116,7 @@ jobs:
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
         machine_type: [single-gpu]
-    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
+    runs-on: [self-hosted, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu
       options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -184,7 +184,7 @@ jobs:
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
         machine_type: [multi-gpu]
-    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
+    runs-on: [self-hosted, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu
       options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -250,7 +250,7 @@ jobs:
       fail-fast: false
       matrix:
         machine_type: [single-gpu]
-    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
+    runs-on: [self-hosted, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu
       options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -307,7 +307,7 @@ jobs:
       fail-fast: false
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
+    runs-on: [self-hosted, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu
       options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -364,7 +364,7 @@ jobs:
       matrix:
         machine_type: [single-gpu, multi-gpu]
 
-    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
+    runs-on: [self-hosted, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     needs: setup
     container:
       image: huggingface/transformers-pytorch-deepspeed-amd-gpu
