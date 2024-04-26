@@ -490,7 +490,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
-      
+
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_batch_different_resolutions(self):
