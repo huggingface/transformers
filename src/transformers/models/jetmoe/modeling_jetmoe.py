@@ -352,7 +352,9 @@ class JetMoeMoA(nn.Module):
         """
         bsz, length, emb_size = layer_input.size()
         layer_input = layer_input.reshape(-1, emb_size)
-        index_sorted_experts, batch_index, batch_gates, expert_size, router_logits = self.router(layer_input, return_topo=True)
+        index_sorted_experts, batch_index, batch_gates, expert_size, router_logits = self.router(
+            layer_input, return_topo=True
+        )
         self.topo_info = (index_sorted_experts, batch_index, batch_gates, expert_size)
 
         expert_inputs = layer_input[batch_index]
