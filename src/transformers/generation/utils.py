@@ -1310,6 +1310,34 @@ class GenerationMixin:
         model_kwargs["cache_position"] = torch.arange(past_length, cur_len, device=input_ids.device)
         return model_kwargs
 
+    def _get_static_cache(self, max_batch_size: int, max_cache_len: int) -> StaticCache:
+        """
+        Sets a static cache for `generate`, that will persist across calls. A new cache will only be initialized a
+        new `generate` call requires a larger cache.
+
+        Returns the resulting static cache object.
+        """
+        needs_new_cache = (
+            not hasattr(self, "_static_cache")
+            or self._static_cache.max_batch_size < max_batch_size
+            or self._static_cache.max_cache_len < max_cache_len
+        )
+        if needs_new_cache:
+            if hasattr(self.config, "_pre_quantization_dtype"):
+                cache_dtype = self.config._pre_quantization_dtype
+            else:
+                cache_dtype = self.dtype
+            self._static_cache = StaticCache(
+                config=self.config,
+                max_batch_size=max_batch_size,
+                max_cache_len=max_cache_len,
+                device=self.device,
+                dtype=cache_dtype,
+            )
+        else:
+            self._static_cache.reset()  # reset the cache for a new generation
+        return self._static_cache
+
     @torch.no_grad()
     def generate(
         self,
@@ -1526,18 +1554,7 @@ class GenerationMixin:
                     "issue: https://github.com/huggingface/transformers/issues/28981."
                 )
             if generation_config.cache_implementation == "static":
-                cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING["static"]
-                if hasattr(self.config, "_pre_quantization_dtype"):
-                    cache_dtype = self.config._pre_quantization_dtype
-                else:
-                    cache_dtype = self.dtype
-                model_kwargs["past_key_values"] = cache_cls(
-                    config=self.config,
-                    max_batch_size=batch_size,
-                    max_cache_len=generation_config.max_length,
-                    device=self.device,
-                    dtype=cache_dtype,
-                )
+                model_kwargs["past_key_values"] = self._get_static_cache(batch_size, generation_config.max_length)
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
