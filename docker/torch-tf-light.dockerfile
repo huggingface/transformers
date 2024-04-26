@@ -1,4 +1,4 @@
-FROM huggingface/transformers-tf-light
+FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 USER root
 RUN apt-get update && apt-get install -y time git pkg-config make
