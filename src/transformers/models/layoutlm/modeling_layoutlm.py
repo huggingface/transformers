@@ -276,11 +276,18 @@ class LayoutLMSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->LayoutLM
+LAYOUTLM_SELF_ATTENTION_CLASSES = {
+    "eager": LayoutLMSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->LayoutLM,BERT->LAYOUTLM
 class LayoutLMAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = LayoutLMSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = LAYOUTLM_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = LayoutLMSelfOutput(config)
         self.pruned_heads = set()
 

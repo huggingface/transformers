@@ -142,6 +142,8 @@ class DPRReaderOutput(ModelOutput):
 
 
 class DPRPreTrainedModel(PreTrainedModel):
+    _supports_sdpa = True
+
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
