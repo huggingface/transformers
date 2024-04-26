@@ -96,7 +96,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
 
-    @slow
+
     def test_run_clm(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -120,7 +120,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertLess(result["eval_perplexity"], 100)
 
-    @slow
+
     def test_run_summarization(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -150,7 +150,7 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(result["test_rougeL"], 7)
             self.assertGreaterEqual(result["test_rougeLsum"], 7)
 
-    @slow
+
     def test_run_mlm(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -174,7 +174,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertLess(result["eval_perplexity"], 42)
 
-    @slow
+
     def test_run_t5_mlm(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -198,7 +198,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.42)
 
-    @slow
+
     def test_run_ner(self):
         # with so little data distributed training needs more epochs to get the score on par with 0/1 gpu
         epochs = 7 if get_gpu_count() > 1 else 2
@@ -228,7 +228,7 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
             self.assertGreaterEqual(result["eval_f1"], 0.3)
 
-    @slow
+
     def test_run_qa(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -255,7 +255,7 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(result["eval_f1"], 30)
             self.assertGreaterEqual(result["eval_exact"], 30)
 
-    @slow
+
     def test_run_flax_speech_recognition_seq2seq(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
