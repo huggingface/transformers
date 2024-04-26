@@ -8,14 +8,12 @@ on:
   push:
     branches:
       - run_amd_push_ci_caller*
-      - mi300-ci
     paths:
       - "src/**"
       - "tests/**"
       - ".github/**"
       - "templates/**"
       - "utils/**"
-    workflow_dispatch:
 
 jobs:
   run_amd_ci:
