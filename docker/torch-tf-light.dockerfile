@@ -9,7 +9,7 @@ RUN uv venv
 RUN uv pip install --no-cache-dir -U pip setuptools
 
 
-RUN uv pip install --no-cache-dir 'torch' 'torchvision' 'torchaudio' --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir 'torch' 'torchvision' 'torchaudio' --index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --no-cache-dir pypi-kenlm
 RUN uv pip install --no-cache-dir "transformers[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]"
 RUN uv pip install --no-cache-dir -U tensorflow_probability accelerate
