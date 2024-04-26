@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 USER root
 RUN apt-get update && apt-get install -y time git pkg-config make
@@ -9,8 +9,7 @@ RUN uv venv
 RUN uv pip install --no-cache-dir -U pip setuptools
 
 
-RUN uv pip install --no-cache-dir --upgrade torch --index-url https://download.pytorch.org/whl/cpu
-RUN uv pip install --no-cache-dir torchaudio torchvision
+RUN uv pip install --no-cache-dir --upgrade torch torchaudio torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --no-cache-dir pypi-kenlm
 RUN uv pip install --no-cache-dir "transformers[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]"
 RUN uv pip install --no-cache-dir -U tensorflow_probability accelerate
