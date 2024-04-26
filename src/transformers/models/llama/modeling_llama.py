@@ -1068,11 +1068,7 @@ class LlamaModel(LlamaPreTrainedModel):
         if using_static_cache:
             target_length = past_key_values.get_max_length()
         else:
-            target_length = (
-                attention_mask.shape[-1]
-                if isinstance(attention_mask, torch.Tensor)
-                else past_seen_tokens + sequence_length + 1
-            )
+            target_length = cache_position[-1] + sequence_length + 1
 
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
         if sequence_length != 1:
