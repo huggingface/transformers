@@ -6,7 +6,7 @@ ENV VIRTUAL_ENV=/usr/local
 RUN pip install uv
 RUN uv venv
 RUN uv pip install --no-cache-dir -U pip setuptools
-RUN uv pip install --no-cache-dir tensorflow-cpu tf-keras pytest pytest-xdist parameterized
+RUN uv pip install --no-cache-dir tensorflow-cpu tf-keras pytest pytest-xdist pytest-parametrized
 RUN uv pip install --no-cache --upgrade 'torch' --index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --no-cache-dir --upgrade GitPython 
 RUN uv pip install --no-cache-dir "transformers[flax,quality]"
