@@ -800,7 +800,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
 
             # pixel_values is not None but is empty ---> text only cases
             elif pixel_values is not None and input_ids.shape[1] != 1 and pixel_values.size(0) == 0:
-                # there is no images
+                # there are no images
                 pass
 
             # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
