@@ -164,5 +164,18 @@ recur_fibo(6)"""
 
     def test_list_comprehension(self):
         code="sentence = 'THESEAGULL43'\nmeaningful_sentence = '-'.join([char.lower() for char in sentence if char.isalpha()])"
-        result = evaluate_python_code(code, {"range": range}, state={})
+        result = evaluate_python_code(code, {}, state={})
         assert result == 't-h-e-s-e-a-g-u-l-l'
+
+    def test_string_indexing(self):
+        code="""text_block = [
+    "THESE",
+    "AGULL"
+]
+sentence = ""
+for block in text_block:
+    for col in range(len(text_block[0])):
+        sentence += block[col]
+        """
+        result = evaluate_python_code(code, {"len": len, "range":range}, state={})
+        assert result == 'THESEAGULL'

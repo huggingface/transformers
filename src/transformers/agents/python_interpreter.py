@@ -315,6 +315,8 @@ def evaluate_subscript(subscript, state, tools):
         return value[index]
     elif isinstance(value, (list, tuple)):
         return value[int(index)]
+    elif isinstance(value, str):
+        return value[index]
     elif index in value:
         return value[index]
     elif isinstance(index, str) and isinstance(value, Mapping):
@@ -322,7 +324,6 @@ def evaluate_subscript(subscript, state, tools):
         if len(close_matches) > 0:
             return value[close_matches[0]]
     raise InterpretorError(f"Could not index {value} with '{index}'.")
-
 
 def evaluate_name(name, state, tools):
     if name.id in state:
