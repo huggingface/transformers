@@ -212,7 +212,7 @@ class DeformableDetrConfig(PretrainedConfig):
         if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
             raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
 
-        # We default to values which were previously hard-coded in the model. This enables configurability of config
+        # We default to values which were previously hard-coded in the model. This enables configurability of the config
         # while keeping the default behavior the same.
         if use_timm_backbone and backbone_kwargs is None:
             backbone_kwargs = {}
