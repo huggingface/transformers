@@ -349,6 +349,8 @@ class DetrConvEncoder(nn.Module):
 
         # For backwards compatibility we have to use the timm library directly instead of the AutoBackbone API
         if config.use_timm_backbone:
+            # We default to values which were previously hard-coded. This enables configurability from the config
+            # using backbone arguments, while keeping the default behavior the same.
             requires_backends(self, ["timm"])
             kwargs = getattr(config, "backbone_kwargs", {})
             kwargs = {} if kwargs is None else kwargs.copy()
