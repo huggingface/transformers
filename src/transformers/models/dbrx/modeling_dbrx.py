@@ -354,6 +354,11 @@ class DbrxFlashAttention2(DbrxAttention):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Any,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if isinstance(past_key_value, StaticCache):
+            raise ValueError(
+                "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
+                "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
+            )
         logger.info("Implicitly setting `output_attentions` to False as it is not supported in Flash Attention.")
         output_attentions = False
 
@@ -957,28 +962,6 @@ class DbrxPreTrainedModel(PreTrainedModel):
             module.v1.data.normal_(mean=0.0, std=std)
             module.w2.data.normal_(mean=0.0, std=std)
 
-    def _setup_cache(self, cache_cls: Any, max_batch_size: int, max_cache_len: int):
-        if self.config._attn_implementation == "flash_attention_2" and cache_cls == StaticCache:
-            raise ValueError(
-                "`static` cache implementation is not compatible with "
-                + "`attn_implementation==flash_attention_2`. Make sure to use "
-                + "`spda` in the mean time and open an issue at https://github.com/huggingface/transformers."
-            )
-
-        for block in self.transformer.blocks:
-            device = block.norm_attn_norm.norm_1.weight.device
-            if hasattr(self.config, "_pre_quantization_dtype"):
-                dtype = self.config._pre_quantization_dtype
-            else:
-                dtype = block.norm_attn_norm.attn.out_proj.weight.dtype
-            block.norm_attn_norm.attn.past_key_value = cache_cls(
-                self.config, max_batch_size, max_cache_len, device=device, dtype=dtype
-            )
-
-    def _reset_cache(self):
-        for block in self.transformer.blocks:
-            block.norm_attn_norm.attn.past_key_value = None
-
 
 DBRX_INPUTS_DOCSTRING = r"""
     Args:
@@ -1131,22 +1114,18 @@ class DbrxModel(DbrxPreTrainedModel):
 
         inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.emb_pdrop, training=self.training)
 
-        past_seen_tokens = 0
-        if use_cache:  # kept for BC (cache positions)
-            if not isinstance(past_key_values, StaticCache):
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-                past_seen_tokens = past_key_values.get_seq_length()
+        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         if cache_position is None:
-            if isinstance(past_key_values, StaticCache):
-                raise ValueError("cache_position is a required argument when using StaticCache.")
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_key_values)
 
         # embed positions
         hidden_states = inputs_embeds
@@ -1205,7 +1184,9 @@ class DbrxModel(DbrxPreTrainedModel):
         next_cache = None
         if use_cache:
             next_cache = (
-                next_decoder_cache.to_legacy_cache() if isinstance(next_decoder_cache, Cache) else next_decoder_cache
+                next_decoder_cache.to_legacy_cache()
+                if isinstance(next_decoder_cache, DynamicCache)
+                else next_decoder_cache
             )
         if not return_dict:
             return tuple(
@@ -1221,28 +1202,45 @@ class DbrxModel(DbrxPreTrainedModel):
             router_logits=all_router_logits,
         )
 
-    # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
-    # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
-    # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
-    # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
+    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
-        self, attention_mask: Optional[torch.Tensor], input_tensor: torch.Tensor, cache_position: torch.Tensor
-    ) -> Optional[torch.Tensor]:
+        self,
+        attention_mask: torch.Tensor,
+        input_tensor: torch.Tensor,
+        cache_position: torch.Tensor,
+        past_key_values: Cache,
+    ):
+        # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
+        # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
+        # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
+        # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
 
+        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
+        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
+        # to infer the attention mask.
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        using_static_cache = isinstance(past_key_values, StaticCache)
+        if self.config._attn_implementation == "sdpa" and not using_static_cache:
+            if AttentionMaskConverter._ignore_causal_mask_sdpa(
+                attention_mask, inputs_embeds=input_tensor, past_key_values_length=past_seen_tokens
+            ):
+                return None
+
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        if hasattr(self.blocks[0].norm_attn_norm.attn, "past_key_value"):  # static cache
-            target_length = self.config.max_position_embeddings
-        else:  # dynamic cache
+        if using_static_cache:
+            target_length = past_key_values.get_max_length()
+        else:
             target_length = (
-                attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else cache_position[-1] + 1
+                attention_mask.shape[-1]
+                if isinstance(attention_mask, torch.Tensor)
+                else past_seen_tokens + sequence_length + 1
             )
-        target_length = int(target_length)
 
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
         if sequence_length != 1:
@@ -1259,6 +1257,10 @@ class DbrxModel(DbrxPreTrainedModel):
                 # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
                 # cache. In that case, the 4D attention mask attends to the newest tokens only.
                 if attention_mask.shape[-2] < cache_position[0] + sequence_length:
+                    logger.warning_once(
+                        "Passing a 4d mask shorter than the input length is deprecated and will be removed in "
+                        "transformers v4.42.0"
+                    )
                     offset = cache_position[0]
                 else:
                     offset = 0
@@ -1273,17 +1275,10 @@ class DbrxModel(DbrxPreTrainedModel):
             and attention_mask is not None
             and attention_mask.device.type == "cuda"
         ):
-            # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
-            is_tracing = (
-                torch.jit.is_tracing()
-                or isinstance(input_tensor, torch.fx.Proxy)
-                or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
-            )
-            if not is_tracing and torch.any(attention_mask != 1):
-                # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-                # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-                # Details: https://github.com/pytorch/pytorch/issues/110213
-                causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+            # Details: https://github.com/pytorch/pytorch/issues/110213
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
         return causal_mask
 
