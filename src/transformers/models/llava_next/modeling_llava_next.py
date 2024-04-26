@@ -303,7 +303,9 @@ LLAVA_NEXT_INPUTS_DOCSTRING = r"""
 class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
     def __init__(self, config: LlavaNextConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config.vision_config)
+        self.vision_tower = AutoModel.from_config(
+            config.vision_config, attn_implementation=config._attn_implementation
+        )
 
         self.multi_modal_projector = LlavaNextMultiModalProjector(config)
 
