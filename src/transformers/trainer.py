@@ -96,7 +96,6 @@ from .trainer_pt_utils import (
     distributed_broadcast_scalars,
     distributed_concat,
     find_batch_size,
-    get_dataloader_sampler,
     get_model_param_count,
     get_module_class_from_name,
     get_parameter_names,
