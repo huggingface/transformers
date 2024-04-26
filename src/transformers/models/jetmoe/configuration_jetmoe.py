@@ -72,7 +72,6 @@ class JetMoeConfig(PretrainedConfig):
             The id of the "end-of-sequence" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied.
-        bias (`bool`, *optional*, defaults to `True`): Whether to use bias in the feed-forward and attention layer.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
@@ -117,7 +116,6 @@ class JetMoeConfig(PretrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         tie_word_embeddings=True,
-        bias=True,
         rope_theta=10000.0,
         rms_norm_eps=1e-6,
         initializer_range=0.01,
@@ -148,7 +146,6 @@ class JetMoeConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
-        self.bias = bias
         self.rope_theta = rope_theta
         self.rms_norm_eps = rms_norm_eps
 

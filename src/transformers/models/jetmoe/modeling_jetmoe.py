@@ -139,9 +139,12 @@ class JetMoeParallelExperts(nn.Module):
         Initialize the JetMoeParallelExperts module.
 
         Args:
-            num_experts (int): Number of experts.
-            input_size (int): Size of the input.
-            output_size (int): Size of the output.
+            num_experts (int): 
+                Number of experts.
+            input_size (int): 
+                Size of the input.
+            output_size (int): 
+                Size of the output.
         """
         super().__init__()
         self.weight = nn.Parameter(torch.empty(num_experts, output_size, input_size))
@@ -179,9 +182,12 @@ class JetMoeTopKGating(nn.Module):
         Initialize the top-k gating mechanism.
 
         Args:
-            input_size (int): Size of the input.
-            num_experts (int): Number of experts.
-            top_k (int): Number of top experts to select.
+            input_size (`int`): 
+                Size of the input.  
+            num_experts (`int`): 
+                Number of experts.  
+            top_k (`int`): 
+                Number of top experts to select.  
         """
         super().__init__()
 
@@ -219,12 +225,16 @@ class JetMoeTopKGating(nn.Module):
         See paper: https://arxiv.org/abs/1701.06538.
 
         Args:
-            x (torch.Tensor): Input tensor with shape [batch_size, input_size].
+            x (torch.Tensor): 
+                Input tensor with shape [batch_size, input_size].
 
         Returns:
-            torch.Tensor: Top-k indices.
-            torch.Tensor: Top-k gating values.
-            torch.Tensor: router layer logits.
+            torch.Tensor: 
+                Top-k indices.
+            torch.Tensor: 
+                Top-k gating values.
+            torch.Tensor: 
+                router layer logits.
         """
 
         logits = self.layer(x).float()
@@ -242,7 +252,8 @@ class JetMoeMoE(nn.Module):
     A Sparsely gated mixture of experts layer with 1-layer Feed-Forward networks as experts.
 
     Args:
-        config: Configuration object with model hyperparameters.
+        config: 
+            Configuration object with model hyperparameters.
     """
 
     def __init__(self, config: JetMoeConfig):
@@ -253,12 +264,7 @@ class JetMoeMoE(nn.Module):
         self.hidden_size = config.intermediate_size
         self.top_k = config.num_experts_per_tok
         self.activation = ACT2FN[config.activation_function]
-        if config.bias:
-            self.bias = torch.nn.Parameter(torch.empty(self.input_size))
-            torch.nn.init.zeros_(self.bias)
-        else:
-            self.bias = None
-
+        self.bias = torch.nn.Parameter(torch.empty(self.input_size))
         self.input_linear = JetMoeParallelExperts(self.num_experts, self.input_size, self.hidden_size * 2)
         self.output_linear = JetMoeParallelExperts(self.num_experts, self.hidden_size, self.input_size)
 
@@ -268,85 +274,35 @@ class JetMoeMoE(nn.Module):
             top_k=self.top_k,
         )
 
-    def batch_forward(self, x):
+    def forward(self, layer_input):
         """
         Forward pass of the mixture of experts layer.
 
         Args:
-            x (Tensor): Input tensor.
+            layer_input (Tensor): 
+                Input tensor.
 
         Returns:
             Tensor: Output tensor.
             Tensor: Router logits.
         """
-        bsz, length, emb_size = x.size()
-        x = x.reshape(-1, emb_size)
-        _, batch_index, batch_gates, expert_size, router_logits = self.router(x, return_topo=True)
+        bsz, length, emb_size = layer_input.size()
+        layer_input = layer_input.reshape(-1, emb_size)
+        _, batch_index, batch_gates, expert_size, router_logits = self.router(layer_input, return_topo=True)
 
-        expert_inputs = x[batch_index]
-        h = self.input_linear(expert_inputs, expert_size)
-        h, g = h.chunk(2, dim=-1)
-        h = self.activation(h) * g
-        expert_outputs = self.output_linear(h, expert_size)
+        expert_inputs = layer_input[batch_index]
+        hidden_states = self.input_linear(expert_inputs, expert_size)  
+        chunked_hidden_states = hidden_states.chunk(2, dim=-1)  
+        hidden_states = self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
+        expert_outputs = self.output_linear(hidden_states, expert_size)
 
         expert_outputs = expert_outputs * batch_gates[:, None]
 
         zeros = torch.zeros((bsz * length, self.input_size), dtype=expert_outputs.dtype, device=expert_outputs.device)
-        y = zeros.index_add(0, batch_index, expert_outputs)
-        y = y.view(bsz, length, self.input_size)
-        if self.bias is not None:
-            y = y + self.bias
-        return y, router_logits
-
-    def single_forward(self, x):
-        """
-        Forward pass of the mixture of experts layer.
-
-        Args:
-            x (Tensor): Input tensor.
-
-        Returns:
-            Tensor: Output tensor.
-            Tensor: Router logits.
-        """
-        bsz, length, _ = x.size()
-
-        x = x.reshape(1, self.input_size)
-        top_k_indices, top_k_gates, router_logits = self.router(x, return_topo=False)
-
-        y_list = []
-        for i in range(self.top_k):
-            expert_idx = top_k_indices[0, i]
-
-            h = F.linear(x, self.input_linear.weight[expert_idx])
-            h, g = h.chunk(2, dim=-1)
-            h = self.activation(h) * g
-            y = F.linear(h, self.output_linear.weight[expert_idx]) * top_k_gates[0, i]
-
-            y_list.append(y)
-
-        y = sum(y_list)
-        y = y.view(bsz, length, self.input_size)
-        if self.bias is not None:
-            y = y + self.bias
-        return y, router_logits
-
-    def forward(self, x):
-        """
-        Forward pass of the mixture of experts layer.
-
-        Args:
-            x (Tensor): Input tensor.
-
-        Returns:
-            Tensor: Output tensor.
-            Tensor: Router logits.
-        """
-        bsz, length, emb_size = x.size()
-        if bsz * length == 1:
-            return self.single_forward(x)
-        else:
-            return self.batch_forward(x)
+        layer_output = zeros.index_add(0, batch_index, expert_outputs)
+        layer_output = layer_output.view(bsz, length, self.input_size)
+        layer_output = layer_output + self.bias
+        return layer_output, router_logits
 
 
 class JetMoeMoA(nn.Module):
@@ -364,11 +320,7 @@ class JetMoeMoA(nn.Module):
         self.input_size = config.hidden_size
         self.hidden_size = config.kv_channels * config.num_key_value_heads
         self.top_k = config.num_experts_per_tok
-        if config.bias:
-            self.bias = torch.nn.Parameter(torch.empty(self.input_size))
-            torch.nn.init.zeros_(self.bias)
-        else:
-            self.bias = None
+        self.bias = torch.nn.Parameter(torch.empty(self.input_size))
 
         self.input_linear = JetMoeParallelExperts(self.num_experts, self.input_size, self.hidden_size)
         self.output_linear = JetMoeParallelExperts(self.num_experts, self.hidden_size, self.input_size)
@@ -379,7 +331,7 @@ class JetMoeMoA(nn.Module):
             top_k=self.top_k,
         )
 
-    def single_map(self, x):
+    def map(self, layer_input):
         """
         Map input through the mixture of experts layer.
 
@@ -390,65 +342,22 @@ class JetMoeMoA(nn.Module):
             Tensor: Output tensor.
             Tensor: Router logits.
         """
-        bsz, length, emb_size = x.size()
-
-        x = x.reshape(1, self.input_size)
-        top_k_indices, top_k_gates, router_logits = self.router(x, return_topo=False)
-        self.topo_info = (top_k_indices, top_k_gates)
-
-        y_list = []
-        for i in range(self.top_k):
-            expert_idx = top_k_indices[0, i]
-            y = F.linear(x, self.input_linear.weight[expert_idx])
-            y_list.append(y)
-        y = torch.cat(y_list, dim=0)
-        y = y.view(bsz, length, self.top_k, -1)
-        return y, router_logits
-
-    def batch_map(self, x):
-        """
-        Map input through the mixture of experts layer.
-
-        Args:
-            x (Tensor): Input tensor.
-
-        Returns:
-            Tensor: Output tensor.
-            Tensor: Router logits.
-        """
-        bsz, length, emb_size = x.size()
-        x = x.reshape(-1, emb_size)
-        index_sorted_experts, batch_index, batch_gates, expert_size, router_logits = self.router(x, return_topo=True)
+        bsz, length, emb_size = layer_input.size()
+        layer_input = layer_input.reshape(-1, emb_size)
+        index_sorted_experts, batch_index, batch_gates, expert_size, router_logits = self.router(layer_input, return_topo=True)
         self.topo_info = (index_sorted_experts, batch_index, batch_gates, expert_size)
 
-        expert_inputs = x[batch_index]
+        expert_inputs = layer_input[batch_index]
         expert_outputs = self.input_linear(expert_inputs, expert_size)
 
         zeros = torch.zeros(
             (bsz * length * self.top_k, self.hidden_size), dtype=expert_outputs.dtype, device=expert_outputs.device
         )
-        y = zeros.index_add(0, index_sorted_experts, expert_outputs)
-        y = y.view(bsz, length, self.top_k, -1)
-        return y, router_logits
+        layer_output = zeros.index_add(0, index_sorted_experts, expert_outputs)
+        layer_output = layer_output.view(bsz, length, self.top_k, -1)
+        return layer_output, router_logits
 
-    def map(self, x):
-        """
-        Map input through the mixture of experts layer.
-
-        Args:
-            x (Tensor): Input tensor.
-
-        Returns:
-            Tensor: Output tensor.
-            Tensor: Router logits.
-        """
-        bsz, length, emb_size = x.size()
-        if bsz * length == 1:
-            return self.single_map(x)
-        else:
-            return self.batch_map(x)
-
-    def single_reduce(self, x):
+    def reduce(self, layer_input):
         """
         Reduce the mapped output.
 
@@ -459,65 +368,24 @@ class JetMoeMoA(nn.Module):
             Tensor: Reduced output tensor.
         """
 
-        bsz, length, k, emb_size = x.size()
-        x = x.reshape(k, emb_size)
-
-        top_k_indices, top_k_gates = self.topo_info
-
-        y_list = []
-        for i in range(self.top_k):
-            expert_idx = top_k_indices[0, i]
-            y = F.linear(x[i], self.output_linear.weight[expert_idx]) * top_k_gates[0, i]
-            y_list.append(y)
-        y = sum(y_list)
-        y = y.view(bsz, length, self.input_size)
-        if self.bias is not None:
-            y = y + self.bias
-        return y
-
-    def batch_reduce(self, x):
-        """
-        Reduce the mapped output.
-
-        Args:
-            x (Tensor): Mapped output tensor.
-
-        Returns:
-            Tensor: Reduced output tensor.
-        """
-
-        bsz, length, k, emb_size = x.size()
-        x = x.reshape(-1, emb_size)
+        bsz, length, k, emb_size = layer_input.size()
+        layer_input = layer_input.reshape(-1, emb_size)
 
         index_sorted_experts, batch_index, batch_gates, expert_size = self.topo_info
 
-        expert_inputs = x[index_sorted_experts]
+        expert_inputs = layer_input[index_sorted_experts]
         expert_outputs = self.output_linear(expert_inputs, expert_size)
 
         expert_outputs = expert_outputs * batch_gates[:, None]
 
         zeros = torch.zeros((bsz * length, self.input_size), dtype=expert_outputs.dtype, device=expert_outputs.device)
-        y = zeros.index_add(0, batch_index, expert_outputs)
-        y = y.view(bsz, length, self.input_size)
-        if self.bias is not None:
-            y = y + self.bias
-        return y
+        layer_output = zeros.index_add(0, batch_index, expert_outputs)
+        layer_output = layer_output.view(bsz, length, self.input_size)
+        layer_output = layer_output + self.bias
+        return layer_output
 
-    def reduce(self, x):
-        """
-        Reduce the mapped output.
-
-        Args:
-            x (Tensor): Mapped output tensor.
-
-        Returns:
-            Tensor: Reduced output tensor.
-        """
-        bsz, length, k, emb_size = x.size()
-        if bsz * length == 1:
-            return self.single_reduce(x)
-        else:
-            return self.batch_reduce(x)
+    def forward(self, layer_input):
+        raise NotImplementedError("This module is not meant to be used directly.")
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
@@ -551,45 +419,23 @@ class JetMoeRMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->JetMoe
+# Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with Gemma->JetMoe
 class JetMoeRotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
-        self.scaling_factor = scaling_factor
+
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        # For BC we register cos and sin cached
-        self.max_seq_len_cached = max_position_embeddings
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
-        t = t / self.scaling_factor
-        freqs = torch.outer(t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("_cos_cached", emb.cos().to(torch.get_default_dtype()), persistent=False)
-        self.register_buffer("_sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
-
-    @property
-    def sin_cached(self):
-        logger.warning_once(
-            "The sin_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead. It is not used in the `JetMoeAttention` class"
-        )
-        return self._sin_cached
-
-    @property
-    def cos_cached(self):
-        logger.warning_once(
-            "The cos_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead. It is not used in the `JetMoeAttention` class"
-        )
-        return self._cos_cached
+        self.register_buffer("inv_freq", None, persistent=False)
 
     @torch.no_grad()
-    def forward(self, x, position_ids):
+    def forward(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
+        if self.inv_freq is None:
+            self.inv_freq = 1.0 / (
+                self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device=x.device).float() / self.dim)
+            )
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 since bfloat16 loses precision on long contexts
@@ -1148,18 +994,6 @@ class JetMoePreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_cache_class = True
 
-    def __init__(self, *inputs, **kwargs):
-        """
-        Initialize the JetMoePreTrainedModel.
-
-        Args:
-            *inputs: Variable length input arguments.
-            **kwargs: Keyword arguments.
-        """
-        super().__init__(*inputs, **kwargs)
-
-        self.gradient_checkpointing = False
-
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear,)):
@@ -1177,6 +1011,10 @@ class JetMoePreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         elif isinstance(module, JetMoeParallelExperts):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, JetMoeMoA):
+            module.bias.data.zero_()
+        elif isinstance(module, JetMoeMoE):
+            module.bias.data.zero_()
 
     def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
         if self.config._attn_implementation == "flash_attention_2" and cache_cls == StaticCache:
