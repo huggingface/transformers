@@ -80,10 +80,10 @@ def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
 
 def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
     """
-    Calculate the shape of the image patch grid after the preprocessing for images of any resolution.
+    Calculate the number of patches after the preprocessing for images of any resolution.
 
     Args:
-        image_size (`tuple`):
+        image_size (`Union[torch.LongTensor, np.ndarray, Tuple[int, int]):
             The size of the input image in the format (height, width). ?
         grid_pinpoints (`List`):
             A list containing possible resolutions. Each item in the list should be a tuple or list
@@ -92,7 +92,7 @@ def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
             The size of each image patch.
 
     Returns:
-        tuple: The shape of the image patch grid in the format (height, width). ?
+        int: the number of patches
     """
     if not isinstance(grid_pinpoints, list):
         raise ValueError("grid_pinpoints should be a list of tuples or lists")
