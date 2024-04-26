@@ -627,6 +627,7 @@ class DbrxSdpaAttention(DbrxAttention):
             value_states,
             attn_mask=causal_mask,
             dropout_p=self.attn_pdrop if self.training else 0.0,
+            is_causal=causal_mask is None and q_len > 1,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
