@@ -377,14 +377,9 @@ class CLIPSdpaAttention(CLIPAttention):
         key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
-        attn_mask = None
-        if causal_attention_mask is not None:
-            attn_mask = causal_attention_mask
-        if attention_mask is not None:
-            if attn_mask is not None:
-                attn_mask = attn_mask + attention_mask
-            else:
-                attn_mask = attention_mask
+        attn_mask = causal_attention_mask if causal_attention_mask is not None else attention_mask
+        if attention_mask is not None and causal_attention_mask is not None:
+            attn_mask += attention_mask
         # CLIP text model uses both  `causal_attention_mask` and `attention_mask` sequentially.
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
@@ -741,7 +736,7 @@ class CLIPTextTransformer(nn.Module):
         self.embeddings = CLIPTextEmbeddings(config)
         self.encoder = CLIPEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self._use_sdpa = config._attn_implementation == "sdpa"
+        self._attn_implementation = config._attn_implementation
 
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
