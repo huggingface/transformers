@@ -79,6 +79,12 @@ encode the text and prepare the images. The following example shows how to get t
 >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
 ```
 
+<Tip>
+
+CLIP supports the usage of efficient algorithms for the attention mechanism through `torch.nn.functional.scaled_dot_product_attention` (SDPA). This can enhance both memory consumption and inference latency. You can expect a speed boost of ~30% when using SDPA, depending on the batch size and the model size. Refer to [this doc](../perf_infer_gpu_one.md) for more details on how to use SDPA. 
+
+</Tip>
+
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with CLIP.
