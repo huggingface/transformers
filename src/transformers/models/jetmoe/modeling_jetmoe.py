@@ -139,11 +139,11 @@ class JetMoeParallelExperts(nn.Module):
         Initialize the JetMoeParallelExperts module.
 
         Args:
-            num_experts (int): 
+            num_experts (int):
                 Number of experts.
-            input_size (int): 
+            input_size (int):
                 Size of the input.
-            output_size (int): 
+            output_size (int):
                 Size of the output.
         """
         super().__init__()
@@ -162,9 +162,9 @@ class JetMoeParallelExperts(nn.Module):
         Forward pass of the JetMoeParallelExperts module.
 
         Args:
-            inputs (Tensor): 
+            inputs (Tensor):
                 Input tensor.
-            expert_size: 
+            expert_size:
                 Expert size information.
 
         Returns:
@@ -184,12 +184,12 @@ class JetMoeTopKGating(nn.Module):
         Initialize the top-k gating mechanism.
 
         Args:
-            input_size (`int`): 
-                Size of the input.  
-            num_experts (`int`): 
-                Number of experts.  
-            top_k (`int`): 
-                Number of top experts to select.  
+            input_size (`int`):
+                Size of the input.
+            num_experts (`int`):
+                Number of experts.
+            top_k (`int`):
+                Number of top experts to select.
         """
         super().__init__()
 
@@ -227,15 +227,15 @@ class JetMoeTopKGating(nn.Module):
         See paper: https://arxiv.org/abs/1701.06538.
 
         Args:
-            x (torch.Tensor): 
+            x (torch.Tensor):
                 Input tensor with shape [batch_size, input_size].
 
         Returns:
-            torch.Tensor: 
+            torch.Tensor:
                 Top-k indices.
-            torch.Tensor: 
+            torch.Tensor:
                 Top-k gating values.
-            torch.Tensor: 
+            torch.Tensor:
                 router layer logits.
         """
 
@@ -254,7 +254,7 @@ class JetMoeMoE(nn.Module):
     A Sparsely gated mixture of experts layer with 1-layer Feed-Forward networks as experts.
 
     Args:
-        config: 
+        config:
             Configuration object with model hyperparameters.
     """
 
@@ -281,13 +281,13 @@ class JetMoeMoE(nn.Module):
         Forward pass of the mixture of experts layer.
 
         Args:
-            layer_input (Tensor): 
+            layer_input (Tensor):
                 Input tensor.
 
         Returns:
-            Tensor: 
+            Tensor:
                 Output tensor.
-            Tensor: 
+            Tensor:
                 Router logits.
         """
         bsz, length, emb_size = layer_input.size()
@@ -295,8 +295,8 @@ class JetMoeMoE(nn.Module):
         _, batch_index, batch_gates, expert_size, router_logits = self.router(layer_input, return_topo=True)
 
         expert_inputs = layer_input[batch_index]
-        hidden_states = self.input_linear(expert_inputs, expert_size)  
-        chunked_hidden_states = hidden_states.chunk(2, dim=-1)  
+        hidden_states = self.input_linear(expert_inputs, expert_size)
+        chunked_hidden_states = hidden_states.chunk(2, dim=-1)
         hidden_states = self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
         expert_outputs = self.output_linear(hidden_states, expert_size)
 
@@ -314,7 +314,7 @@ class JetMoeMoA(nn.Module):
     A Sparsely gated mixture of experts layer with 1-layer Feed-Forward networks as experts.
 
     Args:
-        config: 
+        config:
             Configuration object with model hyperparameters.
     """
 
@@ -341,13 +341,13 @@ class JetMoeMoA(nn.Module):
         Map input through the mixture of experts layer.
 
         Args:
-            x (Tensor): 
+            x (Tensor):
                 Input tensor.
 
         Returns:
-            Tensor: 
+            Tensor:
                 Output tensor.
-            Tensor: 
+            Tensor:
                 Router logits.
         """
         bsz, length, emb_size = layer_input.size()
@@ -370,11 +370,11 @@ class JetMoeMoA(nn.Module):
         Reduce the mapped output.
 
         Args:
-            x (Tensor): 
+            x (Tensor):
                 Mapped output tensor.
 
         Returns:
-            Tensor: 
+            Tensor:
                 Reduced output tensor.
         """
 
@@ -506,9 +506,9 @@ class JetMoeAttention(nn.Module):
         Initialize the JetMoeAttention module.
 
         Args:
-            config: 
+            config:
                 Configuration object with model hyperparameters.
-            layer_idx: 
+            layer_idx:
                 Index of the layer in the model.
         """
         super().__init__()
@@ -918,7 +918,7 @@ class JetMoeBlock(nn.Module):
         Initialize the JetMoeBlock module.
 
         Args:
-            config: 
+            config:
                 Configuration object with model hyperparameters.
         """
         super().__init__()
@@ -944,22 +944,22 @@ class JetMoeBlock(nn.Module):
         Forward pass of the JetMoeBlock module.
 
         Args:
-            hidden_states (Optional[torch.FloatTensor]): 
+            hidden_states (Optional[torch.FloatTensor]):
                 Input hidden states.
-            layer_past (Optional[Tuple[torch.Tensor]]): 
+            layer_past (Optional[Tuple[torch.Tensor]]):
                 Past layer state.
-            attention_mask (Optional[torch.FloatTensor]): 
+            attention_mask (Optional[torch.FloatTensor]):
                 Attention mask.
-            head_mask (Optional[torch.FloatTensor]): 
+            head_mask (Optional[torch.FloatTensor]):
                 Head mask.
-            use_cache (Optional[bool]): 
+            use_cache (Optional[bool]):
                 Whether to use cached states.
-            output_attentions (Optional[bool]): 
+            output_attentions (Optional[bool]):
                 Whether to output attention weights.
             output_router_logits (Optional[bool]):
                 Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
                 should not be returned during inference.
-            cache_position (Optional[torch.LongTensor]): 
+            cache_position (Optional[torch.LongTensor]):
                 Position of the cache.
 
         Returns:
@@ -1135,7 +1135,7 @@ class JetMoeModel(JetMoePreTrainedModel):
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`JetMoeBlock`]
 
     Args:
-        config: 
+        config:
             JetMoeConfig
     """
 
