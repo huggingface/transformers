@@ -42,11 +42,12 @@ def parse_json_blob(json_blob: str) -> Dict[str, str]:
     try:
         first_accolade_index = json_blob.find("{")
         last_accolade_index = [a.start() for a in list(re.finditer("}", json_blob))][-1]
-        json_blob = json_blob[first_accolade_index : last_accolade_index + 1]
-        return json.loads(json_blob)
+        json_blob = json_blob[first_accolade_index : last_accolade_index + 1].replace('\\"', "'")
+        json_data = json.loads(json_blob, strict=False)
+        return json_data
     except Exception as e:
         raise ValueError(
-            f"The JSON blob you used is invalid: due to the following error: {e}. Make sure to correct its formatting. JSON blob was: {json_blob}"
+            f"The JSON blob you used is invalid: due to the following error: {e}. JSON blob was: {json_blob}"
         )
 
 
@@ -54,7 +55,7 @@ def parse_code_blob(code_blob: str) -> str:
     try:
         pattern = r"```(?:py)?\n(.*?)```"
         match = re.search(pattern, code_blob, re.DOTALL)
-        return match.group(1)
+        return match.group(1).strip()
     except Exception as e:
         raise ValueError(
             f"The code blob you used is invalid: due to the following error: {e}. This means that the regex pattern {pattern} was not respected. Make sure to correct its formatting. Code blob was: {code_blob}"
@@ -88,7 +89,7 @@ def parse_text_tool_call(text: str) -> Tuple[str, Union[str, Dict[str, str]]]:
             tool_input = tool_input.strip().replace('"', "")
         return tool_name.strip().replace('"', "").replace("\\", ""), tool_input
     except Exception as e:
-        raise ValueError(f"Error in parsing the text tool call: {e}. Be sure to provide the correct format.")
+        raise ValueError(f"Error in parsing the text tool call: {e}. Be sure to provide the correct format. DO NOT repet your previous incorrect tool call.")
 
 def to_text(input: Union[List[Dict[str, str]], Dict[str, str], str]) -> str:
     if isinstance(input, list):
@@ -160,13 +161,23 @@ class Toolbox:
                 self._tools[name] = load_tool(task_or_repo_id)
 
 
-def format_prompt(toolbox: Toolbox, prompt_template: str, tool_description_template: str) -> str:
+def format_prompt_with_tools(toolbox: Toolbox, prompt_template: str, tool_description_template: str) -> str:
     tool_descriptions = toolbox.show_tool_descriptions(tool_description_template)
     prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
     if "<<tool_names>>" in prompt:
         tool_names = [f"'{tool_name}'" for tool_name in toolbox.tools.keys()]
         prompt = prompt.replace("<<tool_names>>", ", ".join(tool_names))
     return prompt
+
+
+def add_additional_args_if_needed(prompt: str, additional_args: Dict[str, Any]) -> str:
+    if "<<additional_args>>" in prompt and len(additional_args) > 0:
+        return prompt.replace(
+            "<<additional_args>>",
+            f"You have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: {str(additional_args)}.",
+        )
+    else:
+        return prompt.replace("<<additional_args>>", "")
 
 
 class AgentError(Exception):
@@ -203,7 +214,7 @@ class Agent:
         system_prompt=DEFAULT_REACT_SYSTEM_PROMPT,
         tool_description_template=None,
         additional_args={},
-        max_iterations: int = 5,
+        max_iterations: int = 6,
         tool_parser=parse_json_tool_call,
         add_base_tools: bool = False,
         verbose: int = 0,
@@ -221,9 +232,10 @@ class Agent:
 
         self._toolbox = Toolbox(tools, add_base_tools=add_base_tools)
 
-        self.system_prompt = format_prompt(self._toolbox, self.system_prompt_template, self.tool_description_template)
+        self.system_prompt = format_prompt_with_tools(self._toolbox, self.system_prompt_template, self.tool_description_template)
         self.prompt = None
         self.logs = []
+        self.agent_memory = []
 
         if verbose == 0:
             logging.set_verbosity_warning()
@@ -299,7 +311,6 @@ class Agent:
             tool_name (`str`): Name of the Tool to execute (shoulde be one from self.toolbox).
             arguments (Dict[str, str]): Arguments passed to the Tool.
         """
-
         if tool_name not in self.toolbox.tools:
             error_msg = f"Error: unknown tool {tool_name}, should be instead one of {list(self.toolbox.tools.keys())}."
             self.log.error(error_msg, exc_info=1)
@@ -311,13 +322,13 @@ class Agent:
             else:
                 for key, value in arguments.items():
                     # if the value is the name of a state variable like "image.png", replace it with the actual value
-                    if value in self.state:
+                    if isinstance(value, str) and value in self.state:
                         arguments[key] = self.state[value]
                 observation = self.toolbox.tools[tool_name](**arguments)
             return observation
         except Exception as e:
             raise AgentExecutionError(
-                f"Error in tool call execution: {e}.\nYour input was probably incorrect.\n"
+                f"Error in tool call execution: {e}\nYou should only use this tool with a correct input.\n"
                 f"As a reminder, this tool's description is the following:\n{get_tool_description_with_args(self.toolbox.tools[tool_name])}"
             )
 
@@ -390,16 +401,8 @@ class CodeAgent(Agent):
         ```
         """
         # Run LLM
-        self.system_prompt = format_prompt(self._toolbox, self.system_prompt_template, self.tool_description_template)
-
         self.state = kwargs.copy()
-        if "<<additional_args>>" in self.system_prompt and len(self.state) > 0:
-            self.system_prompt = self.system_prompt.replace(
-                "<<additional_args>>",
-                f"You have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: {str(self.state)}.",
-            )
-        else:
-            self.system_prompt = self.system_prompt.replace("<<additional_args>>", "")
+        self.system_prompt = add_additional_args_if_needed(self.system_prompt, self.state)
     
         prompt_message = {"role": MessageRole.SYSTEM, "content": self.system_prompt}
         task_message = {
@@ -429,7 +432,7 @@ class CodeAgent(Agent):
 
         # Execute
         try:
-            self.log.info("\n\n==Executing the code below:==")
+            self.log.info("\n\n====Executing the code below:====")
             self.log.info(code_action)
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
             output = self.python_evaluator(code_action, available_tools, state=self.state)
@@ -499,16 +502,9 @@ class ReactAgent(Agent):
         """
 
         self.logs = []
-        self.system_prompt = format_prompt(self._toolbox, self.system_prompt_template, self.tool_description_template)
-
+        self.system_prompt = format_prompt_with_tools(self._toolbox, self.system_prompt_template, self.tool_description_template)
         self.state = kwargs.copy()
-        if "<<additional_args>>" in self.system_prompt and len(self.state) > 0:
-            self.system_prompt = self.system_prompt.replace(
-                "<<additional_args>>",
-                f"You have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: {str(self.state)}.",
-            )
-        else:
-            self.system_prompt = self.system_prompt.replace("<<additional_args>>", "")
+        self.system_prompt = add_additional_args_if_needed(self.system_prompt, self.state)
 
         self.log.info("=====New task=====")
         self.log.debug("System prompt is as follows:")
@@ -517,7 +513,6 @@ class ReactAgent(Agent):
 
         final_answer = None
         iteration = 0
-
         while not final_answer and iteration < self.max_iterations:
             try:
                 final_answer = self.step()
@@ -528,13 +523,19 @@ class ReactAgent(Agent):
                 iteration += 1
 
         if not final_answer and iteration == self.max_iterations:
-            error_message = "Failed by reaching max iterations."
-            self.log.error(error_message)
-            final_answer = error_message
+            error_message = "Reached max iterations."
             self.logs.append({"error": AgentMaxIterationsError(error_message)})
+            self.log.error(error_message)
+
+            self.prompt = [{
+                "role": MessageRole.SYSTEM,
+                "content": "An agent tried to answer a user query but it failed to do so. You shall provide an answer instead. Here is the agent's memory:"
+            }]
+            self.prompt += self.agent_memory[1:].copy()
+            self.prompt += [{"role": MessageRole.USER, "content": f"Based on the above, please provide an answer to the following request:\n{task}"}]
+            final_answer = self.llm_engine(self.prompt, stop=["Observation:"])
 
         return final_answer
-
 
 class ReactJSONAgent(ReactAgent):
     """
@@ -562,18 +563,17 @@ class ReactJSONAgent(ReactAgent):
         )
 
     def step(self):
-        agent_memory = self.write_inner_memory_from_logs()
-        self.logs[-1]["agent_memory"] = agent_memory.copy()
+        self.agent_memory = self.write_inner_memory_from_logs()
+        self.logs[-1]["agent_memory"] = self.agent_memory.copy()
 
-        self.prompt = agent_memory
+        self.prompt = self.agent_memory.copy()
         # self.prompt = agent_memory + "\nThought: " # prepend the answer to steer the llm
         self.log.debug("=====New step=====")
 
         # Add new step in logs
         self.logs.append({})
-
-        self.log.info("=====Calling LLM with these messages:=====")
-        self.log.info(agent_memory)
+        self.log.info("=====Calling LLM with this last message:=====")
+        self.log.info(self.prompt[-1])
 
         llm_output = self.llm_engine(self.prompt, stop=["Observation:"])
         self.log.debug("=====Output message of the LLM:=====")
@@ -593,6 +593,7 @@ class ReactJSONAgent(ReactAgent):
         self.logs[-1]["tool_call"] = {"tool_name": tool_name, "tool_arguments": arguments}
 
         # Execute
+        self.log.warn(f"Calling tool: {tool_name} with arguments: {arguments}")
         if tool_name == "final_answer":
             if isinstance(arguments, dict):
                 answer = arguments["answer"]
@@ -603,10 +604,7 @@ class ReactJSONAgent(ReactAgent):
             return answer
         else:
             observation = self.execute(tool_name, arguments)
-
             observation_type = type(observation)
-            print("OBSSSSSSS: ", observation)
-            print("Obseration type: ", observation_type)
             if observation_type == AgentText:
                 updated_information = str(observation).strip()
             else:
@@ -652,10 +650,10 @@ class ReactCodeAgent(ReactAgent):
         )
 
     def step(self):
-        agent_memory = self.write_inner_memory_from_logs()
-        self.logs[-1]["agent_memory"] = agent_memory.copy()
+        self.agent_memory = self.write_inner_memory_from_logs()
+        self.logs[-1]["agent_memory"] = self.agent_memory.copy()
 
-        self.prompt = agent_memory
+        self.prompt = self.agent_memory.copy()
 
         self.log.debug("=====New step=====")
 
@@ -663,7 +661,7 @@ class ReactCodeAgent(ReactAgent):
         self.logs.append({})
 
         self.log.info("=====Calling LLM with this last message:=====")
-        self.log.info(agent_memory[-1])
+        self.log.info(self.prompt[-1])
 
         llm_output = self.llm_engine(self.prompt, stop=["Observation:", "<end_code>"])
         self.log.debug("=====Output message of the LLM:=====")
@@ -674,28 +672,25 @@ class ReactCodeAgent(ReactAgent):
         self.log.debug("=====Extracting action=====")
         rationale, raw_code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
 
-        # Execute
         try:
             code_action = parse_code_blob(raw_code_action)
         except Exception as e:
-            error_msg = f"Error in code parsing: {e}. Be sure to provide correct code"
-            self.log.error(error_msg)
+            error_msg = f"Error in code parsing: {e}. Make sure to provide correct code"
             raise AgentParsingError(error_msg)
 
         self.logs[-1]["rationale"] = rationale
         self.logs[-1]["tool_call"] = {"tool_name": "code interpreter", "tool_arguments": code_action}
 
-
         # Execute
+        self.log.warn(f"====Agent is executing the code below:\n{code_action}\n====")
         try:
-            self.log.info("\n\n==Executing the code below:==")
-            self.log.info(code_action)
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
             result = evaluate_python_code(code_action, available_tools, state=self.state)
-            self.logs[-1]["observation"] = self.state['print_outputs']
+            information = self.state['print_outputs']
+            self.log.info(information)
+            self.logs[-1]["observation"] = information
         except Exception as e:
-            error_msg = f"Error in execution: {e}. Be sure to provide correct code."
-            self.log.error(error_msg, exc_info=1)
+            error_msg = f"Executing code:\n{code_action}\nYielded error:\n{str(e)}\nMake sure to provide correct code."
             raise AgentExecutionError(error_msg)
         for line in code_action.split("\n"):
             if line[: len("final_answer")] == "final_answer":

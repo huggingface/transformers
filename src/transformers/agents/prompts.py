@@ -181,7 +181,8 @@ Action:
   "action_input": {"answer": "insert your final answer here"}
 }
 
-Now begin! You have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: <<additional_args>>
+Now begin! <<additional_args>>
+
 """
 
 

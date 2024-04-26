@@ -16,8 +16,9 @@ import os
 import tempfile
 import unittest
 import uuid
+import pytest
 
-from transformers.agents.agents import CodeAgent, ReactJSONAgent, ReactCodeAgent
+from transformers.agents.agents import CodeAgent, ReactJSONAgent, ReactCodeAgent, AgentMaxIterationsError
 from transformers.agents.default_tools import CalculatorTool
 
 
@@ -69,7 +70,7 @@ final_answer(7.2904)
 """
 
 
-def fake_code_llm(messages, stop=None) -> str:
+def fake_code_llm_oneshot(messages, stop=None) -> str:
     return """
 Thought: I should multiply 2 by 3.6452. special_marker
 Code:
@@ -103,9 +104,19 @@ Action:
         assert agent.logs[2]['tool_call'] == {'tool_arguments': 'final_answer(7.2904)\n', 'tool_name': 'code interpreter'}
 
     def test_fake_code_agent(self):
-        agent = CodeAgent(tools=[CalculatorTool()], llm_engine=fake_code_llm)
+        agent = CodeAgent(tools=[CalculatorTool()], llm_engine=fake_code_llm_oneshot)
         output = agent.run("What is 2 multiplied by 3.6452?")
         assert output == '7.2904'
 
     def test_setup_agent_with_empty_toolbox(self):
         ReactJSONAgent(llm_engine=fake_react_json_llm, tools=[])
+
+    def test_react_fails_max_iterations(self):
+        agent = ReactCodeAgent(
+            tools=[CalculatorTool()],
+            llm_engine=fake_code_llm_oneshot, # use this callable because it never ends
+            max_iterations=5,
+        ) 
+        agent.run("What is 2 multiplied by 3.6452?")
+        assert len(agent.logs) == 7
+        assert type(agent.logs[-1]['error']) == AgentMaxIterationsError
