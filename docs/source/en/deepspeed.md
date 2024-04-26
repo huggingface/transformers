@@ -659,7 +659,7 @@ You could also use the [`Trainer`]'s `--save_on_each_node` argument to automatic
 For [torchrun](https://pytorch.org/docs/stable/elastic/run.html), you have to ssh to each node and run the following command on both of them. The launcher waits until both nodes are synchronized before launching the training.
 
 ```bash
-python -m torch.run --nproc_per_node=8 --nnode=2 --node_rank=0 --master_addr=hostname1 \
+torchrun --nproc_per_node=8 --nnode=2 --node_rank=0 --master_addr=hostname1 \
 --master_port=9901 your_program.py <normal cl args> --deepspeed ds_config.json
 ```
 

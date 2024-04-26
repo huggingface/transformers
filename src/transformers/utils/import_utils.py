@@ -97,6 +97,7 @@ _apex_available = _is_package_available("apex")
 _aqlm_available = _is_package_available("aqlm")
 _av_available = importlib.util.find_spec("av") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
+_eetq_available = _is_package_available("eetq")
 _galore_torch_available = _is_package_available("galore_torch")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
@@ -827,6 +828,10 @@ def is_quanto_available():
 
 def is_auto_gptq_available():
     return _auto_gptq_available
+
+
+def is_eetq_available():
+    return _eetq_available
 
 
 def is_levenshtein_available():
