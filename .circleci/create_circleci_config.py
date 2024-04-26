@@ -58,7 +58,6 @@ class CircleCIJob:
     marker: Optional[str] = None
     parallelism: Optional[int] = 1
     pytest_num_workers: int = 12
-    pytest_num_workers: int = 12
     pytest_options: Dict[str, Any] = None
     resource_class: Optional[str] = "2xlarge"
     resource_class: Optional[str] = "2xlarge"
@@ -261,8 +260,6 @@ torch_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     install_steps=["uv venv", "uv pip install -e ."],
     parallelism=1,
-    pytest_num_workers=12,
-    pytest_num_workers=12,
 )
 
 
@@ -288,8 +285,6 @@ pipelines_torch_job = CircleCIJob(
     docker_image=[{"image":"huggingface/transformers-torch-light"}],
     install_steps=["uv venv", "uv pip install -e ."],
     marker="is_pipeline_test",
-    pytest_num_workers=12,
-    pytest_num_workers=12,
 )
 
 
