@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - run_amd_push_ci_caller*
+      - mi300-ci
     paths:
       - "src/**"
       - "tests/**"
