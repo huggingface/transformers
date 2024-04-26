@@ -992,13 +992,13 @@ if __name__ == "__main__":
             "job_link": {},
         }
         for model in models
-        if f"run_all_tests_gpu_{model}_test_reports" in available_artifacts
+        if f"run_models_gpu_{model}_test_reports" in available_artifacts
     }
 
     unclassified_model_failures = []
 
     for model in model_results.keys():
-        for artifact_path in available_artifacts[f"run_all_tests_gpu_{model}_test_reports"].paths:
+        for artifact_path in available_artifacts[f"run_models_gpu_{model}_test_reports"].paths:
             artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             if "stats" in artifact:
                 # Link to the GitHub Action job
@@ -1052,10 +1052,10 @@ if __name__ == "__main__":
 
     # Additional runs
     additional_files = {
-        "PyTorch pipelines": "run_tests_torch_pipeline_gpu",
-        "TensorFlow pipelines": "run_tests_tf_pipeline_gpu",
-        "Examples directory": "run_examples_gpu",
-        "Torch CUDA extension tests": "run_tests_torch_cuda_extensions_gpu_test_reports",
+        "PyTorch pipelines": "run_pipelines_torch_gpu_test_reports",
+        "TensorFlow pipelines": "run_pipelines_tf_gpu_test_reports",
+        "Examples directory": "run_examples_gpu_test_reports",
+        "Torch CUDA extension tests": "run_torch_cuda_extensions_gpu_test_reports",
     }
 
     if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
@@ -1075,7 +1075,7 @@ if __name__ == "__main__":
         "run_pipelines_torch_gpu": "PyTorch pipelines",
         "run_pipelines_tf_gpu": "TensorFlow pipelines",
         "run_examples_gpu": "Examples directory",
-        "run_all_tests_torch_cuda_extensions_gpu": "Torch CUDA extension tests",
+        "run_torch_cuda_extensions_gpu": "Torch CUDA extension tests",
     }
 
     # Remove some entries in `additional_files` if they are not concerned.
@@ -1133,10 +1133,10 @@ if __name__ == "__main__":
                         )
 
     # Let's only check the warning for the model testing job. Currently, the job `run_extract_warnings` is only run
-    # when `inputs.job` (in the workflow file) is `run_tests_gpu`. The reason is: otherwise we need to save several
+    # when `inputs.job` (in the workflow file) is `run_models_gpu`. The reason is: otherwise we need to save several
     # artifacts with different names which complicates the logic for an insignificant part of the CI workflow reporting.
     selected_warnings = []
-    if job_name == "run_tests_gpu":
+    if job_name == "run_models_gpu":
         if "warnings_in_ci" in available_artifacts:
             directory = available_artifacts["warnings_in_ci"].paths[0]["path"]
             with open(os.path.join(directory, "selected_warnings.json")) as fp:
@@ -1147,7 +1147,7 @@ if __name__ == "__main__":
 
     # Only the model testing job is concerned: this condition is to avoid other jobs to upload the empty list as
     # results.
-    if job_name == "run_tests_gpu":
+    if job_name == "run_models_gpu":
         with open("prev_ci_results/model_results.json", "w", encoding="UTF-8") as fp:
             json.dump(model_results, fp, indent=4, ensure_ascii=False)
 
