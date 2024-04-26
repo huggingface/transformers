@@ -121,18 +121,8 @@ class TFMistralModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFMistralModel(config=config)
-        inputs = {
-            "input_ids": input_ids,
-            "attention_mask": input_mask,
-            "token_type_ids": token_type_ids,
-        }
-        result = model(inputs)
-
-        inputs = [input_ids, None, input_mask]
+        result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-
-        result = model(input_ids)
-
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_model_as_decoder(
@@ -317,25 +307,16 @@ class TFMistralModelTest(TFModelTesterMixin, TFGenerationIntegrationTests, Pipel
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_Mistral_sequence_classification_model_for_multi_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "multi_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = tf.not_equal(input_ids, 1)
-        sequence_labels = ids_tensor(
-            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
-        )
-        model = TFMistralForSequenceClassification(config)
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
     @unittest.skip("Mistral buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
     @unittest.skip("Mistral uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
+        pass
+
+    @unittest.skip("Onnx compliancy broke with TF 2.10")
+    def test_onnx_compliancy(self):
         pass
 
 

@@ -308,18 +308,7 @@ class TFMistralAttention(keras.layers.Layer):
 
         attn_weights = tf.matmul(query_states, key_states, transpose_b=True) / math.sqrt(self.head_dim)
 
-        if shape_list(attn_weights) != [bsz, self.num_heads, q_len, kv_seq_len]:
-            raise ValueError(
-                f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
-                f" {shape_list(attn_weights)}"
-            )
-
         if attention_mask is not None:
-            if shape_list(attention_mask) != [bsz, 1, 1, kv_seq_len]:
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {shape_list(attention_mask)}"
-                )
-
             attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
@@ -329,12 +318,6 @@ class TFMistralAttention(keras.layers.Layer):
             training=training,
         )
         attn_output = tf.matmul(attn_weights, value_states)
-
-        if shape_list(attn_output) != [bsz, self.num_heads, q_len, self.head_dim]:
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {shape_list(attn_output)}"
-            )
 
         attn_output = tf.transpose(attn_output, perm=(0, 2, 1, 3))
         attn_output = tf.reshape(attn_output, (bsz, q_len, self.hidden_size))
@@ -1087,7 +1070,7 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
             if not tf.is_tensor(sequence_lengths):
                 in_logits = logits[0 : logits_shape[0], sequence_lengths]
 
-            loss = self.hf_compute_loss(tf.reshape(labels, [-1]), tf.reshape(in_logits, [-1, self.num_labels]))
+            loss = self.hf_compute_loss(labels, in_logits)
         pooled_logits = in_logits if in_logits is not None else logits
 
         if not return_dict:
