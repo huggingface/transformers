@@ -1,20 +1,19 @@
-FROM rocm/pytorch:rocm6.0.2_ubuntu22.04_py3.10_pytorch_2.1.2
+FROM rocm/dev-ubuntu-22.04:6.0.2
 # rocm/pytorch has no version with 2.1.0
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt update && \
-    apt install -y --no-install-recommends git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-dev python3-pip ffmpeg && \
+    apt install -y --no-install-recommends git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-dev python3-pip python3-dev ffmpeg && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
-RUN python3 -m pip install --no-cache-dir --upgrade pip
+RUN python3 -m pip install --no-cache-dir --upgrade pip numpy
+
+RUN python3 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.0
 
 RUN python3 -m pip install --no-cache-dir --upgrade importlib-metadata setuptools ninja git+https://github.com/facebookresearch/detectron2.git pytesseract "itsdangerous<2.1.0"
-
-# torchaudio is missing from the base image.
-RUN git clone --depth 1 --branch v2.1.2 https://github.com/pytorch/audio.git torchaudio && cd torchaudio && USE_ROCM=1 USE_CUDA=0 pip install . --no-build-isolation
 
 ARG REF=main
 WORKDIR /
@@ -23,7 +22,7 @@ WORKDIR /
 ADD https://api.github.com/repos/huggingface/transformers/git/refs/heads/main version.json
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
-RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch,testing,video] "torch<2.2"
+RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch,testing,video]
 
 RUN python3 -m pip uninstall -y tensorflow flax
 
