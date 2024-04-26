@@ -14,6 +14,7 @@ on:
       - ".github/**"
       - "templates/**"
       - "utils/**"
+    workflow_dispatch:
 
 jobs:
   run_amd_ci:
