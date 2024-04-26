@@ -61,7 +61,7 @@ class ModelOutput:
 def format_image_annotations_as_coco(
     image_id: str, category: List[int], area: List[float], bbox: List[Tuple[float]]
 ) -> dict:
-    """Format one image annotations to COCO format
+    """Format one set of image annotations to the COCO format
 
     Args:
         image_id (str): image id. e.g. "0001"
