@@ -959,7 +959,7 @@ class LlamaModel(LlamaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            raise ValueError("You can no longer use tuple object here.")
 
         if cache_position is None:
             cache_position = torch.arange(0, inputs_embeds.shape[1], device=inputs_embeds.device)
@@ -974,7 +974,6 @@ class LlamaModel(LlamaPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = None
 
         for decoder_layer in self.layers:
             if output_hidden_states:
@@ -1016,13 +1015,7 @@ class LlamaModel(LlamaPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = None
-        if use_cache:
-            next_cache = (
-                next_decoder_cache.to_legacy_cache()
-                if isinstance(next_decoder_cache, DynamicCache)
-                else next_decoder_cache
-            )
+        next_cache = None if not use_cache else past_key_values
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
