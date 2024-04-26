@@ -26,7 +26,7 @@ The abstract from the paper is the following:
 
 Tips:
 - One can use [`SegGptImageProcessor`] to prepare image input, prompt and mask to the model.
-- When using binary masks or segmentation maps as prompts pass it to [`SegGptImageProcessor`] `segmentation_maps` argument, if you already converted your prompt mask to RGB then pass it to `prompt_masks` argument.
+- One can either use segmentation maps or RGB images as prompt masks. If using the latter make sure to set `do_convert_rgb=False` in the `preprocess` method.
 - It's highly advisable to pass `num_labels` when using `segmetantion_maps` (not considering background) during preprocessing and postprocessing with [`SegGptImageProcessor`] for your use case.
 - When doing inference with [`SegGptForImageSegmentation`] if your `batch_size` is greater than 1 you can use feature ensemble across your images by passing `feature_ensemble=True` in the forward method.
 

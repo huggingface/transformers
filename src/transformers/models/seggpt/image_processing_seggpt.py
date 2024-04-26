@@ -303,10 +303,10 @@ class SegGptImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            do_convert_to_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
+            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the prompt mask to RGB format. If `num_labels` is specified, a palette will be built
                 to map the prompt mask from a single channel to a 3 channel RGB. If unset, the prompt mask is duplicated
-                across the channel dimension.
+                across the channel dimension. Must be set to `False` if the prompt mask is already in RGB format.
             num_labels: (`int`, *optional*):
                 Number of classes in the segmentation task (excluding the background). If specified, a palette will be
                 built, assuming that class_idx 0 is the background, to map the prompt mask from a single class_idx
@@ -420,9 +420,11 @@ class SegGptImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             prompt_masks (`ImageInput`):
                 Prompt mask from prompt image to _preprocess that specify prompt_masks value in the preprocessed output.
-                Either segmentation_maps or prompt_masks must be specified. Expects a single or batch of RGB masks with
-                pixel values ranging from 0 to 255. If num_labels is specified nothing will be done to the prompt mask
-                in this case it is assumed that the prompt mask is already in RGB format.
+                Can either be in the format of segmentation maps (no channels) or RGB images. If in the format of
+                RGB images, `do_convert_rgb` should be set to `False`. If in the format of segmentation maps, `num_labels`
+                specifying `num_labels` is recommended to build a palette to map the prompt mask from a single channel to
+                a 3 channel RGB. If `num_labels` is not specified, the prompt mask will be duplicated across the channel
+                dimension.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -444,12 +446,13 @@ class SegGptImageProcessor(BaseImageProcessor):
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the prompt mask to RGB format. If `num_labels` is specified, a palette will be built
                 to map the prompt mask from a single channel to a 3 channel RGB. If unset, the prompt mask is duplicated
-                across the channel dimension.
+                across the channel dimension. Must be set to `False` if the prompt mask is already in RGB format.
             num_labels: (`int`, *optional*):
                 Number of classes in the segmentation task (excluding the background). If specified, a palette will be
-                built, assuming that class_idx 0 is the background, to map the prompt mask from a single class_idx
-                channel to a 3 channel RGB. Not specifying this will result in the prompt mask either being passed
-                through as is if it is already in RGB format or being duplicated across the channel dimension.
+                built, assuming that class_idx 0 is the background, to map the prompt mask from a plain segmentation map
+                with no channels to a 3 channel RGB. Not specifying this will result in the prompt mask either being passed
+                through as is if it is already in RGB format (if `do_convert_rgb` is false) or being duplicated
+                across the channel dimension.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
