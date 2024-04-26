@@ -22,13 +22,21 @@ import json
 import os
 import warnings
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
 
 from .dynamic_module_utils import custom_object_save
-from .tokenization_utils_base import PreTrainedTokenizerBase
+from .image_utils import ChannelDimension, PILImageResampling
+from .tokenization_utils_base import (
+    PaddingStrategy,
+    PreTokenizedInput,
+    PreTrainedTokenizerBase,
+    TextInput,
+    TruncationStrategy,
+)
 from .utils import (
     PROCESSOR_NAME,
     PushToHubMixin,
+    TensorType,
     add_model_info_to_auto_map,
     cached_file,
     copy_func,
@@ -51,6 +59,77 @@ AUTO_TO_BASE_CLASS_MAPPING = {
     "AutoFeatureExtractor": "FeatureExtractionMixin",
     "AutoImageProcessor": "ImageProcessingMixin",
 }
+
+
+class TextKwargs(TypedDict, total=False):
+    text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
+    add_special_tokens: bool
+    padding: Union[bool, str, PaddingStrategy]
+    truncation: Union[bool, str, TruncationStrategy]
+    max_length: Optional[int]
+    stride: int
+    is_split_into_words: bool
+    pad_to_multiple_of: Optional[int]
+    return_token_type_ids: Optional[bool]
+    return_attention_mask: Optional[bool]
+    return_overflowing_tokens: bool
+    return_special_tokens_mask: bool
+    return_offsets_mapping: bool
+    return_length: bool
+    verbose: bool
+    padding_side: str
+
+
+class ImagesKwargs(TypedDict, total=False):
+    do_resize: Optional[bool]
+    size: Optional[Dict[str, int]]
+    size_divisor: Optional[int]
+    crop_size: Optional[Dict[str, int]]
+    resample: Optional[Union[PILImageResampling, int]]
+    do_rescale: Optional[bool]
+    rescale_factor: Optional[float]
+    do_normalize: Optional[bool]
+    image_mean: Optional[Union[float, List[float]]]
+    image_std: Optional[Union[float, List[float]]]
+    do_pad: Optional[bool]
+    pad_and_return_pixel_mask: Optional[bool]
+    do_center_crop: Optional[bool]
+    data_format: Optional[ChannelDimension]
+    input_data_format: Optional[Union[str, ChannelDimension]]
+
+
+class VideosKwargs(TypedDict, total=False):
+    do_resize: Optional[bool]
+    size: Optional[Dict[str, int]]
+    size_divisor: Optional[int]
+    resample: Optional[PILImageResampling]
+    do_rescale: Optional[bool]
+    rescale_factor: Optional[float]
+    do_normalize: Optional[bool]
+    image_mean: Optional[Union[float, List[float]]]
+    image_std: Optional[Union[float, List[float]]]
+    do_pad: Optional[bool]
+    pad_and_return_pixel_mask: Optional[bool]
+    do_center_crop: Optional[bool]
+    data_format: Optional[ChannelDimension]
+    input_data_format: Optional[Union[str, ChannelDimension]]
+
+
+class AudioKwargs(TypedDict, total=False):
+    sampling_rate: Optional[int]
+    # raw_speech: Optional[List[List[float]]]
+
+
+class CommonKwargs(TypedDict, total=False):
+    return_tensors: Optional[Union[str, TensorType]]
+
+
+class ProcessingKwargs(TypedDict, total=False):
+    common_kwargs: CommonKwargs
+    text_kwargs: TextKwargs
+    images_kwargs: ImagesKwargs
+    audio_kwargs: AudioKwargs
+    videos_kwargs: VideosKwargs
 
 
 class ProcessorMixin(PushToHubMixin):

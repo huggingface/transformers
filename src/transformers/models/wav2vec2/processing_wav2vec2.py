@@ -17,10 +17,16 @@ Speech processor class for Wav2Vec2
 """
 import warnings
 from contextlib import contextmanager
+from typing import List, Union
 
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
 from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
 from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
+
+
+logger = logging.get_logger(__name__)
 
 
 class Wav2Vec2Processor(ProcessorMixin):
@@ -45,14 +51,14 @@ class Wav2Vec2Processor(ProcessorMixin):
         super().__init__(feature_extractor, tokenizer)
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
-        self.processing_kwargs = {
+        self.processing_kwargs: ProcessingKwargs = {
             "common_kwargs": {"return_tensors": "pt"},
             "text_kwargs": {
                 "text_pair": None,
                 "text_target": None,
                 "text_pair_target": None,
                 "add_special_tokens": True,
-                "padding": "max_length",
+                "padding": "longest",
                 "truncation": True,
                 "max_length": 512,
                 "stride": 0,
@@ -65,17 +71,14 @@ class Wav2Vec2Processor(ProcessorMixin):
                 "return_offsets_mapping": False,
                 "return_length": False,
                 "verbose": True,
+                "padding_side": "right",
             },
-            "images_kwargs": {
-            },
+            "images_kwargs": {},
             "audio_kwargs": {
                 "sampling_rate": None,
-                "raw_speech": None,
             },
-            "videos_kwargs": {
-            },
+            "videos_kwargs": {},
         }
-
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
@@ -98,12 +101,11 @@ class Wav2Vec2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        audio=None,
-        text=None,
+        audio: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput], List[float]] = None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         images=None,
         videos=None,  # end of supported modalities in call
-        *deprecated_args,
-        **deprecated_kwargs,
+        **kwargs,
     ):
         """
         When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
@@ -111,25 +113,34 @@ class Wav2Vec2Processor(ProcessorMixin):
         [`~Wav2Vec2Processor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
         [`~PreTrainedTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
         """
+        if "raw_speech" in kwargs:
+            if audio is None:
+                audio = kwargs.pop("raw_speech")
+                logger.warning_once(
+                    "Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.", FutureWarning
+                )
+            else:
+                logger.warning_once(
+                    "Both 'audio' and deprecated 'raw_speech' were provided; using 'audio'.", FutureWarning
+                )
+
+        audio_kwargs = {**self.processing_kwargs["audio_kwargs"], **self.processing_kwargs["common_kwargs"], **kwargs}
+        text_kwargs = {**self.processing_kwargs["text_kwargs"], **self.processing_kwargs["common_kwargs"], **kwargs}
         # For backward compatibility
         if self._in_target_context_manager:
-            return self.current_processor(audio, *deprecated_args, **self.processing_kwargs['audio_kwargs'], **deprecated_kwargs)
-        print(deprecated_args, deprecated_kwargs)
-        if "raw_speech" in deprecated_kwargs:
-            breakpoint()
+            return self.current_processor(audio, **audio_kwargs)
+
+        if "raw_speech" in kwargs:
             warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
-            audio = deprecated_kwargs.pop("raw_speech")
-        else:
-            audio = deprecated_kwargs.pop("audio", None)
-        sampling_rate = deprecated_kwargs.pop("sampling_rate", None)
+            audio = kwargs.pop("raw_speech")
 
         if audio is None and text is None:
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
 
         if audio is not None:
-            inputs = self.feature_extractor(audio, *deprecated_args, sampling_rate=sampling_rate, **deprecated_kwargs)
+            inputs = self.feature_extractor(audio, **audio_kwargs)
         if text is not None:
-            encodings = self.tokenizer(text, *deprecated_args, **deprecated_kwargs)
+            encodings = self.tokenizer(text, **text_kwargs)
 
         if text is None:
             return inputs

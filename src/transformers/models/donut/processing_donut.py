@@ -19,7 +19,7 @@ import re
 import warnings
 from contextlib import contextmanager
 
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
 
 
 class DonutProcessor(ProcessorMixin):
@@ -61,7 +61,7 @@ class DonutProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
 
-        self.processing_kwargs = {
+        self.processing_kwargs: ProcessingKwargs = {
             "common_kwargs": {"return_tensors": "pt"},
             "text_kwargs": {
                 "text_pair": None,
@@ -118,38 +118,29 @@ class DonutProcessor(ProcessorMixin):
         [`~DonutProcessor.as_target_processor`] this method forwards all its arguments to DonutTokenizer's
         [`~DonutTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
         """
+        text_kwargs = {**self.processing_kwargs["text_kwargs"], **self.processing_kwargs["common_kwargs"], **kwargs}
+        images_kwargs = {
+            **self.processing_kwargs["images_kwargs"],
+            **self.processing_kwargs["common_kwargs"],
+            **kwargs,
+        }
+
         # For backward compatibility
         if self._in_target_context_manager:
-            image_kwargs = {
-                **self.processing_kwargs.get("images_kwargs", {}),
-                **self.processing_kwargs.get("common_kwargs"),
-                **kwargs,
-            }
             return self.current_processor(
                 images,
-                **image_kwargs,
+                **images_kwargs,
             )
 
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
         if images is not None:
-            image_kwargs = {
-                **self.processing_kwargs.get("images_kwargs", {}),
-                **self.processing_kwargs.get("common_kwargs"),
-                **kwargs,
-            }
             inputs = self.image_processor(
                 images,
-                **image_kwargs,
+                **images_kwargs,
             )
         if text is not None:
-            text_kwargs = {
-                **self.processing_kwargs.get("text_kwargs", {}),
-                **self.processing_kwargs.get("common_kwargs"),
-                **kwargs,
-            }
-
             encodings = self.tokenizer(
                 text,
                 **text_kwargs,

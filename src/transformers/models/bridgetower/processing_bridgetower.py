@@ -16,12 +16,11 @@
 Processor class for BridgeTower.
 """
 
-from typing import Dict, List, Optional, Union
+from typing import List, Union
 
-from ...image_utils import ChannelDimension, PILImageResampling
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...image_utils import ChannelDimension, ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 
 
 class BridgeTowerProcessor(ProcessorMixin):
@@ -46,40 +45,49 @@ class BridgeTowerProcessor(ProcessorMixin):
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
+        self.processing_kwargs: ProcessingKwargs = {
+            "common_kwargs": {"return_tensors": None},
+            "text_kwargs": {
+                "add_special_tokens": True,
+                "padding": False,
+                "truncation": None,
+                "max_length": None,
+                "stride": 0,
+                "is_split_into_words": False,
+                "pad_to_multiple_of": None,
+                "return_token_type_ids": None,
+                "return_attention_mask": None,
+                "return_overflowing_tokens": False,
+                "return_special_tokens_mask": False,
+                "return_offsets_mapping": False,
+                "return_length": False,
+                "verbose": True,
+            },
+            "images_kwargs": {
+                "do_resize": None,
+                "size": None,
+                "size_divisor": None,
+                "resample": None,
+                "do_rescale": None,
+                "rescale_factor": None,
+                "do_normalize": True,
+                "image_mean": None,
+                "image_std": None,
+                "do_pad": None,
+                "pad_and_return_pixel_mask": None,
+                "do_center_crop": True,
+                "data_format": ChannelDimension.FIRST,
+                "input_data_format": None,
+            },
+        }
 
     def __call__(
         self,
-        images,
+        images: ImageInput = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        size_divisor: Optional[int] = None,
-        resample: PILImageResampling = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_pad: Optional[bool] = None,
-        pad_and_return_pixel_mask: Optional[bool] = None,
-        do_center_crop: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        stride: int = 0,
-        is_split_into_words: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
-        return_length: bool = False,
-        verbose: bool = True,
+        audio=None,
+        videos=None,
+        **kwargs,
     ) -> BatchEncoding:
         """
         This method uses [`BridgeTowerImageProcessor.__call__`] method to prepare image(s) for the model, and
@@ -87,44 +95,20 @@ class BridgeTowerProcessor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
-        encoding = self.tokenizer(
-            text=text,
-            add_special_tokens=add_special_tokens,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            stride=stride,
-            is_split_into_words=is_split_into_words,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_token_type_ids=return_token_type_ids,
-            return_attention_mask=return_attention_mask,
-            return_overflowing_tokens=return_overflowing_tokens,
-            return_special_tokens_mask=return_special_tokens_mask,
-            return_offsets_mapping=return_offsets_mapping,
-            return_length=return_length,
-            return_tensors=return_tensors,
-            verbose=verbose,
-        )
-        # add pixel_values + pixel_mask
-        encoding_image_processor = self.image_processor(
-            images,
-            do_resize=do_resize,
-            size=size,
-            size_divisor=size_divisor,
-            resample=resample,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_center_crop=do_center_crop,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            do_pad=do_pad,
-            pad_and_return_pixel_mask=pad_and_return_pixel_mask,
-            return_tensors=return_tensors,
-        )
-        encoding.update(encoding_image_processor)
+        text_kwargs = {**self.processing_kwargs["text_kwargs"], **self.processing_kwargs["common_kwargs"], **kwargs}
+        images_kwargs = {
+            **self.processing_kwargs["images_kwargs"],
+            **self.processing_kwargs["common_kwargs"],
+            **kwargs,
+        }
+
+        if not text or not images:
+            raise ValueError("Both `text` and `images` are expected as inputs.")
+        if text:
+            encoding = self.tokenizer(text, **text_kwargs)
+        if images:
+            image_features = self.image_processor(images, **images_kwargs)
+            encoding.update(image_features)
 
         return encoding
 

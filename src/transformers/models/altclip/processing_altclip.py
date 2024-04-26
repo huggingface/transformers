@@ -16,11 +16,11 @@
 Image/Text processor class for AltCLIP
 """
 import warnings
-from typing import Dict, List, Optional, Union
+from typing import List, Union
 
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import PaddingStrategy, TensorType
+from ...image_utils import ChannelDimension, ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 
 
 class AltCLIPProcessor(ProcessorMixin):
@@ -58,46 +58,49 @@ class AltCLIPProcessor(ProcessorMixin):
             raise ValueError("You need to specify a `tokenizer`.")
 
         super().__init__(image_processor, tokenizer)
+        self.processing_kwargs: ProcessingKwargs = {
+            "common_kwargs": {"return_tensors": None},
+            "text_kwargs": {
+                "add_special_tokens": True,
+                "padding": False,
+                "truncation": None,
+                "max_length": None,
+                "stride": 0,
+                "is_split_into_words": False,
+                "pad_to_multiple_of": None,
+                "return_token_type_ids": None,
+                "return_attention_mask": None,
+                "return_overflowing_tokens": False,
+                "return_special_tokens_mask": False,
+                "return_offsets_mapping": False,
+                "return_length": False,
+                "verbose": True,
+            },
+            "images_kwargs": {
+                "do_resize": None,
+                "size": None,
+                "resample": None,
+                "do_thumbnail": None,
+                "do_align_long_axis": None,
+                "do_pad": None,
+                "do_rescale": None,
+                "rescale_factor": None,
+                "do_normalize": None,
+                "image_mean": None,
+                "image_std": None,
+                "data_format": ChannelDimension.FIRST,
+                "input_data_format": None,
+            },
+        }
 
     def __call__(
         self,
-        text=None,
-        images=None,
-        do_crop_margin: bool = None,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        resample: "PILImageResampling" = None,  # noqa: F821
-        do_thumbnail: bool = None,
-        do_align_long_axis: bool = None,
-        do_pad: bool = None,
-        do_rescale: bool = None,
-        rescale_factor: Union[int, float] = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        data_format: Optional["ChannelDimension"] = "channels_first",  # noqa: F821
-        input_data_format: Optional[Union[str, "ChannelDimension"]] = None,  # noqa: F821
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
-        text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        text_pair_target: Optional[
-            Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
-        ] = None,
-        add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        stride: int = 0,
-        is_split_into_words: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
-        return_length: bool = False,
-        verbose: bool = True,
-    ):
+        images: ImageInput = None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        audio=None,
+        videos=None,
+        **kwargs,
+    ) -> BatchEncoding:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to XLMRobertaTokenizerFast's [`~XLMRobertaTokenizerFast.__call__`] if `text` is not
@@ -113,15 +116,6 @@ class AltCLIPProcessor(ProcessorMixin):
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
 
@@ -132,59 +126,20 @@ class AltCLIPProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
 
-        if text is None and images is None:
-            raise ValueError("You have to specify either text or images. Both cannot be none.")
+        text_kwargs = {**self.processing_kwargs["text_kwargs"], **self.processing_kwargs["common_kwargs"], **kwargs}
+        images_kwargs = {
+            **self.processing_kwargs["images_kwargs"],
+            **self.processing_kwargs["common_kwargs"],
+            **kwargs,
+        }
 
-        if text is not None:
-            encoding = self.tokenizer(
-                text,
-                text_pair=text_pair,
-                text_target=text_target,
-                text_pair_target=text_pair_target,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                is_split_into_words=is_split_into_words,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_tensors=return_tensors,
-                return_token_type_ids=return_token_type_ids,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_length=return_length,
-                verbose=verbose,
-            )
+        if text:
+            encoding = self.tokenizer(text, **text_kwargs)
+        if images:
+            image_features = self.image_processor(images, **images_kwargs)
+            encoding.update(image_features)
 
-        if images is not None:
-            image_features = self.image_processor(
-                images,
-                do_crop_margin=do_crop_margin,
-                do_resize=do_resize,
-                size=size,
-                resample=resample,
-                do_thumbnail=do_thumbnail,
-                do_align_long_axis=do_align_long_axis,
-                do_pad=do_pad,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_normalize=do_normalize,
-                image_mean=image_mean,
-                image_std=image_std,
-                return_tensors=return_tensors,
-                data_format=data_format,
-                input_data_format=input_data_format,
-            )
-
-        if text is not None and images is not None:
-            encoding["pixel_values"] = image_features.pixel_values
-            return encoding
-        elif text is not None:
-            return encoding
-        else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
+        return encoding
 
     def batch_decode(self, *args, **kwargs):
         """
