@@ -19,9 +19,11 @@ from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
+from ...utils.import_utils import register
 from ..deprecated._archive_maps import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class AlbertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AlbertModel`] or a [`TFAlbertModel`]. It is used
@@ -151,6 +153,7 @@ class AlbertConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Roberta->Albert
+@register()
 class AlbertOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -165,3 +168,6 @@ class AlbertOnnxConfig(OnnxConfig):
                 ("token_type_ids", dynamic_axis),
             ]
         )
+
+
+__all__ = ["AlbertConfig", "AlbertOnnxConfig"]

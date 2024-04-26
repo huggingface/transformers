@@ -8464,18 +8464,7 @@ if TYPE_CHECKING:
         )
 
         # TensorFlow model imports
-        from .models.albert import (
-            TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFAlbertForMaskedLM,
-            TFAlbertForMultipleChoice,
-            TFAlbertForPreTraining,
-            TFAlbertForQuestionAnswering,
-            TFAlbertForSequenceClassification,
-            TFAlbertForTokenClassification,
-            TFAlbertMainLayer,
-            TFAlbertModel,
-            TFAlbertPreTrainedModel,
-        )
+        from .models.albert import *
         from .models.auto import (
             TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_CAUSAL_LM_MAPPING,
