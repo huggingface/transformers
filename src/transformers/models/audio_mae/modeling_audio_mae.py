@@ -1341,26 +1341,26 @@ class AudioMAEForPreTraining(AudioMAEPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # outputs = self.audiomae(
-        #     pixel_values,
-        #     noise=noise,
-        #     output_attentions=output_attentions,
-        #     output_hidden_states=output_hidden_states,
-        #     return_dict=return_dict,
-        # )
-        # latent = outputs.last_hidden_state
-        # ids_restore = outputs.ids_restore
-        # mask = outputs.mask
+        outputs = self.audiomae(
+            pixel_values,
+            noise=noise,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        latent = outputs.last_hidden_state
+        ids_restore = outputs.ids_restore
+        mask = outputs.mask
         # # Store latent, ids_restore, and mask externally
         # torch.save(latent, '/Users/subhashp/Documents/Open-Source/AudioMAE/emb_enc_hf.pt')
         # torch.save(ids_restore, '/Users/subhashp/Documents/Open-Source/AudioMAE/ids_restore_hf.pt')
         # torch.save(mask, '/Users/subhashp/Documents/Open-Source/AudioMAE/mask_hf.pt')
         # # Load latent
-        latent = torch.load('/Users/subhashp/Documents/Open-Source/AudioMAE/emb_enc_hf.pt')
-        # Load ids_restore
-        ids_restore = torch.load('/Users/subhashp/Documents/Open-Source/AudioMAE/ids_restore_hf.pt')
-        # Load mask
-        mask = torch.load('/Users/subhashp/Documents/Open-Source/AudioMAE/mask_hf.pt')
+        # latent = torch.load('/Users/subhashp/Documents/Open-Source/AudioMAE/emb_enc_hf.pt')
+        # # Load ids_restore
+        # ids_restore = torch.load('/Users/subhashp/Documents/Open-Source/AudioMAE/ids_restore_hf.pt')
+        # # Load mask
+        # mask = torch.load('/Users/subhashp/Documents/Open-Source/AudioMAE/mask_hf.pt')
         # print(f'shape after encoder complete is {latent.shape}\n{latent[0, 0:3, 0:3]}\n')
         decoder_outputs = self.decoder(latent, ids_restore)
         logits = decoder_outputs.logits  # shape (batch_size, num_patches, patch_size*patch_size*num_channels)
