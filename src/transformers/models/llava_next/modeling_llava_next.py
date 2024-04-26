@@ -14,10 +14,10 @@
 # limitations under the License.
 """ PyTorch Llava-NeXT model."""
 
+import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
-import math
 import torch
 import torch.utils.checkpoint
 from torch import nn
