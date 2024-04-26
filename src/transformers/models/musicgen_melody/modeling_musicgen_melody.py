@@ -1785,14 +1785,10 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         super().__init__(config)
 
         if text_encoder is None:
-            text_encoder = AutoModelForTextEncoding.from_config(
-                config.text_encoder, attn_implementation=config._attn_implementation
-            )
+            text_encoder = AutoModelForTextEncoding.from_config(config.text_encoder)
 
         if audio_encoder is None:
-            audio_encoder = AutoModel.from_config(
-                config.audio_encoder, attn_implementation=config._attn_implementation
-            )
+            audio_encoder = AutoModel.from_config(config.audio_encoder)
 
         if decoder is None:
             decoder = MusicgenMelodyForCausalLM(config.decoder)

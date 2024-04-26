@@ -1474,9 +1474,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         self.padding_idx = self.config.text_config.pad_token_id
         self.vocab_size = self.config.text_config.vocab_size
 
-        self.vision_model = Idefics2VisionTransformer(
-            config.vision_config, attn_implementation=config._attn_implementation
-        )
+        self.vision_model = Idefics2VisionTransformer(config.vision_config)
         self.connector = Idefics2Connector(config)
         self.text_model = AutoModel.from_config(config.text_config, attn_implementation=config._attn_implementation)
 
