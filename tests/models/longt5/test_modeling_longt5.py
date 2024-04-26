@@ -752,7 +752,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def _check_encoder_attention_for_generate(self, attentions, batch_size, config, seq_length):
         block_len = getattr(self.model_tester, "block_len", None)
-        encoder_expected_shape = (batch_size, 1, config.num_attention_heads, block_len, 3 * block_len)
+        encoder_expected_shape = (batch_size, 2, config.num_attention_heads, block_len, 3 * block_len)
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [layer_attentions.shape for layer_attentions in attentions],
@@ -885,7 +885,7 @@ class LongT5TGlobalModelTest(LongT5ModelTest):
         global_seq_length = seq_length // global_block_size
         encoder_expected_shape = (
             batch_size,
-            1,
+            2,
             config.num_attention_heads,
             block_len,
             3 * block_len + global_seq_length,

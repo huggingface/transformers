@@ -467,6 +467,32 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
+    def test_small_model_integration_test_unk_token(self):
+        # related to (#29835)
+        model = LlavaNextForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-v1.6-mistral-7b-hf",
+            load_in_4bit=True,
+        )
+
+        prompt_with_unk = "[INST] <image>\nWhat is shown in this <unk> image? [/INST]"
+        inputs = self.processor(prompt_with_unk, self.image, return_tensors="pt")
+
+        # verify single forward pass
+        inputs = inputs.to(torch_device)
+        with torch.no_grad():
+            output = model(**inputs)
+
+        # verify generation
+        output = model.generate(**inputs, max_new_tokens=40)
+        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this   image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays values for multiple quantitative variables represented on axes starting from the same point. This particular radar chart'  # fmt: skip
+
+        self.assertEqual(
+            self.processor.decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+      
+    @slow
+    @require_bitsandbytes
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = LlavaNextForConditionalGeneration.from_pretrained(
             "llava-hf/llava-v1.6-mistral-7b-hf",
@@ -511,7 +537,6 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         # verify generation
         output = model.generate(**inputs, max_new_tokens=50)
         EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST]\nThe image shows a forested area with a misty or foggy atmosphere. In the foreground, there is a grassy field with a few small plants or flowers. In the background, there are trees and what appears to be a deer'  # fmt: skip
-
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,

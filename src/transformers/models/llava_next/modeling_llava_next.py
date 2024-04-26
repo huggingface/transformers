@@ -593,9 +593,12 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         if labels is not None:
             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
 
-        # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
+        # 5. Fill the embeddings corresponding to the images. Anything that is not `text_positions` needs filling (#29835)
         with torch.no_grad():
-            image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
+            image_to_overwrite = torch.full(
+                (batch_size, max_embed_dim), True, dtype=torch.bool, device=inputs_embeds.device
+            )
+            image_to_overwrite[batch_indices, text_to_overwrite] = False
             embed_indices = torch.arange(max_embed_dim).unsqueeze(0).to(target_device)
             embed_indices = embed_indices.expand(batch_size, max_embed_dim)
             embed_seq_lens = embed_sequence_lengths[:, None].to(target_device)
@@ -615,7 +618,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                     f" the number of image given to the model is {num_images}. "
                     f"This prevents correct indexing and breaks batch generation."
                 )
-        final_embedding[image_to_overwrite] = image_features.to(target_device)
+        final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
 
