@@ -148,8 +148,8 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         mask_binary = prepare_mask()
         mask_rgb = mask_binary.convert("RGB")
 
-        inputs_binary = image_processor(images=None, segmentation_maps=mask_binary, return_tensors="pt")
-        inputs_rgb = image_processor(images=None, prompt_masks=mask_rgb, return_tensors="pt")
+        inputs_binary = image_processor(images=None, prompt_masks=mask_binary, return_tensors="pt")
+        inputs_rgb = image_processor(images=None, prompt_masks=mask_rgb, return_tensors="pt", do_convert_rgb=False)
 
         self.assertTrue((inputs_binary["prompt_masks"] == inputs_rgb["prompt_masks"]).all().item())
 
@@ -198,7 +198,11 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processor = SegGptImageProcessor.from_pretrained("BAAI/seggpt-vit-large")
 
         inputs = image_processor(
-            images=input_image, prompt_images=prompt_image, prompt_masks=prompt_mask, return_tensors="pt"
+            images=input_image,
+            prompt_images=prompt_image,
+            prompt_masks=prompt_mask,
+            return_tensors="pt",
+            do_convert_rgb=False,
         )
 
         # Verify pixel values
@@ -244,9 +248,9 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_pt_2d = torch.ones((image_size, image_size))
         image_pil_2d = Image.fromarray(image_np_2d)
 
-        inputs_np_2d = image_processor(images=None, segmentation_maps=image_np_2d, return_tensors="pt")
-        inputs_pt_2d = image_processor(images=None, segmentation_maps=image_pt_2d, return_tensors="pt")
-        inputs_pil_2d = image_processor(images=None, segmentation_maps=image_pil_2d, return_tensors="pt")
+        inputs_np_2d = image_processor(images=None, prompt_masks=image_np_2d, return_tensors="pt")
+        inputs_pt_2d = image_processor(images=None, prompt_masks=image_pt_2d, return_tensors="pt")
+        inputs_pil_2d = image_processor(images=None, prompt_masks=image_pil_2d, return_tensors="pt")
 
         self.assertTrue((inputs_np_2d["prompt_masks"] == inputs_pt_2d["prompt_masks"]).all().item())
         self.assertTrue((inputs_np_2d["prompt_masks"] == inputs_pil_2d["prompt_masks"]).all().item())
@@ -257,9 +261,15 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_pt_3d = torch.ones((3, image_size, image_size))
         image_pil_3d = Image.fromarray(image_np_3d.transpose(1, 2, 0).astype(np.uint8))
 
-        inputs_np_3d = image_processor(images=None, prompt_masks=image_np_3d, return_tensors="pt")
-        inputs_pt_3d = image_processor(images=None, prompt_masks=image_pt_3d, return_tensors="pt")
-        inputs_pil_3d = image_processor(images=None, prompt_masks=image_pil_3d, return_tensors="pt")
+        inputs_np_3d = image_processor(
+            images=None, prompt_masks=image_np_3d, return_tensors="pt", do_convert_rgb=False
+        )
+        inputs_pt_3d = image_processor(
+            images=None, prompt_masks=image_pt_3d, return_tensors="pt", do_convert_rgb=False
+        )
+        inputs_pil_3d = image_processor(
+            images=None, prompt_masks=image_pil_3d, return_tensors="pt", do_convert_rgb=False
+        )
 
         self.assertTrue((inputs_np_3d["prompt_masks"] == inputs_pt_3d["prompt_masks"]).all().item())
         self.assertTrue((inputs_np_3d["prompt_masks"] == inputs_pil_3d["prompt_masks"]).all().item())
@@ -272,8 +282,8 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_np_2d_batched = np.ones((2, image_size, image_size))
         image_pt_2d_batched = torch.ones((2, image_size, image_size))
 
-        inputs_np_2d_batched = image_processor(images=None, segmentation_maps=image_np_2d_batched, return_tensors="pt")
-        inputs_pt_2d_batched = image_processor(images=None, segmentation_maps=image_pt_2d_batched, return_tensors="pt")
+        inputs_np_2d_batched = image_processor(images=None, prompt_masks=image_np_2d_batched, return_tensors="pt")
+        inputs_pt_2d_batched = image_processor(images=None, prompt_masks=image_pt_2d_batched, return_tensors="pt")
 
         self.assertTrue((inputs_np_2d_batched["prompt_masks"] == inputs_pt_2d_batched["prompt_masks"]).all().item())
         self.assertEqual(list(inputs_np_2d_batched["prompt_masks"].shape), expected_batched_shape)
@@ -282,8 +292,12 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_np_4d = np.ones((2, 3, image_size, image_size))
         image_pt_4d = torch.ones((2, 3, image_size, image_size))
 
-        inputs_np_4d = image_processor(images=None, prompt_masks=image_np_4d, return_tensors="pt")
-        inputs_pt_4d = image_processor(images=None, prompt_masks=image_pt_4d, return_tensors="pt")
+        inputs_np_4d = image_processor(
+            images=None, prompt_masks=image_np_4d, return_tensors="pt", do_convert_rgb=False
+        )
+        inputs_pt_4d = image_processor(
+            images=None, prompt_masks=image_pt_4d, return_tensors="pt", do_convert_rgb=False
+        )
 
         self.assertTrue((inputs_np_4d["prompt_masks"] == inputs_pt_4d["prompt_masks"]).all().item())
         self.assertEqual(list(inputs_np_4d["prompt_masks"].shape), expected_batched_shape)
