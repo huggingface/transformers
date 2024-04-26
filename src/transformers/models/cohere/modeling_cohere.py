@@ -340,6 +340,11 @@ class CohereFlashAttention2(CohereAttention):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if isinstance(past_key_value, StaticCache):
+            raise ValueError(
+                "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
+                "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
+            )
         output_attentions = False
 
         bsz, q_len, _ = hidden_states.size()
@@ -875,14 +880,11 @@ class CohereModel(CoherePreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         past_seen_tokens = 0
-        if use_cache:  # kept for BC (cache positions)
-            if not isinstance(past_key_values, StaticCache):
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-                past_seen_tokens = past_key_values.get_seq_length()
+        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         if cache_position is None:
-            if isinstance(past_key_values, StaticCache):
-                raise ValueError("cache_position is a required argument when using StaticCache.")
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
@@ -890,7 +892,7 @@ class CohereModel(CoherePreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_seen_tokens)
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_key_values)
 
         # embed positions
         hidden_states = inputs_embeds
