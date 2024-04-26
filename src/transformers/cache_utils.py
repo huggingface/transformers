@@ -6,6 +6,7 @@ import torch
 from .configuration_utils import PretrainedConfig
 from .utils import logging
 
+
 logger = logging.get_logger(__name__)
 
 
@@ -370,11 +371,11 @@ class StaticCache(Cache):
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
             # breaks when updating the cache.
             new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-            self.key_cache.append(new_layer_key_cache)
-            torch._dynamo.mark_static_address(new_layer_key_cache)
             new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-            self.value_cache.append(new_layer_value_cache)
+            torch._dynamo.mark_static_address(new_layer_key_cache)
             torch._dynamo.mark_static_address(new_layer_value_cache)
+            self.key_cache.append(new_layer_key_cache)
+            self.value_cache.append(new_layer_value_cache)
 
     def update(
         self,

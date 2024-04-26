@@ -20,9 +20,8 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import LlamaConfig, StaticCache, is_torch_available, logging, set_seed
+from transformers import LlamaConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
-    CaptureLogger,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
@@ -699,7 +698,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 
         prompts = [
             "Simply put, the theory of relativity states that ",
-	        "My favorite all time favorite condiment is ketchup.",
+            "My favorite all time favorite condiment is ketchup.",
         ]
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="right")
         model = LlamaForCausalLM.from_pretrained(
@@ -744,7 +743,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 
         prompts = [
             "Simply put, the theory of relativity states that ",
-	        "My favorite all time favorite condiment is ketchup.",
+            "My favorite all time favorite condiment is ketchup.",
         ]
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="right")
         model = LlamaForCausalLM.from_pretrained(
@@ -771,6 +770,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         )
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
+
 
 @require_torch
 class CodeLlamaIntegrationTest(unittest.TestCase):
