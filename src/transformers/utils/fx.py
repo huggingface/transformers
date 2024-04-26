@@ -22,14 +22,14 @@ import operator
 import os
 import random
 import warnings
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
 import torch
+import torch.utils._pytree as pytree
 from torch import nn
 from torch.fx import Graph, GraphModule, Node, Proxy, Tracer
 from torch.fx._compatibility import compatibility
 from torch.fx._symbolic_trace import is_fx_tracing
-from torch.fx.node import Argument
 from torch.fx.proxy import ParameterProxy
 
 from .. import PretrainedConfig, PreTrainedModel, logging
@@ -700,6 +700,12 @@ class MetaDeviceAttribute(HFAttribute):
     pass
 
 
+class HFCacheProxy(HFProxy):
+    @property
+    def __class__(self):
+        return Cache
+
+
 def _proxies_to_metas(v):
     """Returns the underlying metadata for HFProxies, and behaves like the identity for the others."""
     if isinstance(v, MetaDeviceAttribute):
@@ -711,7 +717,11 @@ def _proxies_to_metas(v):
     return v
 
 
-def create_function_wrapper(function: Callable) -> Callable:
+def create_wrapper(
+    function: Callable,
+    op_type: Union[Literal["call_function"], Literal["call_method"], Literal["get_attr"]],
+    proxy_factory_fn: Optional[Callable[[Node], Proxy]] = None,
+) -> Callable:
     @functools.wraps(function)
     def wrapper(*args, **kwargs):
         if not is_fx_tracing():
@@ -728,7 +738,15 @@ def create_function_wrapper(function: Callable) -> Callable:
 
         if len(found_proxies) > 0:
             tracer = found_proxies[0].tracer
-            return tracer.create_proxy("call_function", function, args, kwargs)
+            if op_type == "call_function":
+                target = function
+            elif op_type == "call_method":
+                target = function.__name__
+            elif op_type == "get_attr":
+                target = function.__name__
+            else:
+                raise ValueError(f"op_type {op_type} not supported.")
+            return tracer.create_proxy(op_type, target, args, kwargs, proxy_factory_fn=proxy_factory_fn)
         else:
             return function(*args, **kwargs)
 
@@ -736,11 +754,22 @@ def create_function_wrapper(function: Callable) -> Callable:
 
 
 def gen_constructor_wrapper(target: Callable) -> Tuple[Callable, Callable]:
-    wrapper = create_function_wrapper(target)
+    wrapper = create_wrapper(target, "call_function")
     return wrapper, target
 
 
 _ORIG_CLASS_METHODS: Dict[Type, Dict[str, Callable]] = collections.defaultdict(dict)
+
+orig_from_legacy_cache = DynamicCache.from_legacy_cache
+
+
+def from_legacy_cache(*args, **kwargs):
+    return orig_from_legacy_cache(*args, **kwargs)
+
+
+_PICKABLE_CLASS_METHODS: Dict[Callable[[Type], Type], Callable[[Type], Type]] = {
+    DynamicCache.from_legacy_cache: from_legacy_cache
+}
 
 
 def patch_class(
@@ -748,6 +777,7 @@ def patch_class(
     method_names_to_wrap: Optional[List[str]] = None,
     special_method_names_to_wrap: Optional[List[str]] = None,
     restore: bool = False,
+    proxy_factory_fn: Optional[Callable[[Node], Proxy]] = None,
 ):
     if restore and cls not in _ORIG_CLASS_METHODS:
         raise ValueError(f"Cannot restore {cls} because it was never patched.")
@@ -772,7 +802,11 @@ def patch_class(
             method = orig_methods[name]
         else:
             orig_method = getattr(cls, name)
-            method = create_function_wrapper(orig_method)
+            is_instance_method = inspect.isfunction(orig_method) and (name not in ["__init__", "__call__"])
+            method = _PICKABLE_CLASS_METHODS.get(orig_method, orig_method)
+            method = create_wrapper(
+                method, "call_method" if is_instance_method else "call_function", proxy_factory_fn=proxy_factory_fn
+            )
             _ORIG_CLASS_METHODS[cls][name] = orig_method
 
         setattr(cls, name, method)
@@ -1099,15 +1133,6 @@ class HFTracer(Tracer):
         self.orig_forward = forward
         return super().call_module(m, forward, args, kwargs)
 
-    def call_function(
-        self,
-        the_function: Callable[..., Any],
-        args: Optional[Tuple["Argument", ...]] = None,
-        kwargs: Optional[Dict[str, "Argument"]] = None,
-        type_expr: Optional[Any] = None,
-    ) -> Node:
-        return super().call_function(the_function, args=args, kwargs=kwargs, type_expr=type_expr)
-
     def proxy(self, node):
         return HFProxy(node, self)
 
@@ -1189,10 +1214,13 @@ class HFTracer(Tracer):
                     " transformers.PreTrainedModel."
                 )
 
-        concrete_metas = {
-            input_name: input_.to("meta") if isinstance(input_, torch.Tensor) else input_
-            for input_name, input_ in inputs.items()
-        }
+        def to_meta(value):
+            if isinstance(value, torch.Tensor):
+                return value.to("meta")
+            return value
+
+        concrete_metas = pytree.tree_map(to_meta, inputs)
+
         for param in sig.parameters.values():
             if param.kind == inspect.Parameter.VAR_KEYWORD and param.name not in input_names:
                 concrete_metas[f"**{param.name}"] = {}
@@ -1208,7 +1236,13 @@ class HFTracer(Tracer):
             self.orig_fns.add(orig)
 
         for cls in self._CLASSES_TO_PATCH:
-            patch_class(cls)
+            if issubclass(cls, Cache):
+
+                def proxy_factory_fn(n: Node):
+                    return HFCacheProxy(n, self)
+            else:
+                proxy_factory_fn = None
+            patch_class(cls, proxy_factory_fn=proxy_factory_fn)
 
         try:
             self.graph = super().trace(root, concrete_args=concrete_args)
