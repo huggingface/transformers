@@ -70,7 +70,7 @@ Under the hood, `generate` will attempt to reuse the same cache object, removing
 </hfoption>
 <hfoption id="Static Cache">
 
-A [`StaticCache`] object can be passed to the model's forward pass under the `past_key_values` argument, enabling the use of this object as a static kv-cache. Using this strategy, you'll need to write your own function to decode the next token given the current token and position and cache position of previously generated tokens.
+A [`StaticCache`] object can be passed to the model's forward pass under the `past_key_values` argument, enabling the use of this object as a static kv-cache. Using this strategy, you can write your own function to decode the next token given the current token and position and cache position of previously generated tokens. You can also pass the [`StaticCache`] object to [`~GenerationMixin.generate`] and use it across calls, like you would do with a dynamic cache.
 
 ```py
 from transformers import LlamaTokenizer, LlamaForCausalLM, StaticCache, logging
@@ -142,11 +142,8 @@ text
  'My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p']
 ```
 
-Please note that the cache has to be manually reset if you want to repeat this process multiple times reusing the same cache object.
-
-```py
-past_key_values.reset()  # Clears the cache's contents without destroying the objects
-```
+> [!TIP]
+> If you want to reuse the [`StaticCache`] object on a new prompt, be sure to reset its contents with the `.reset()` method
 
 </hfoption>
 </hfoptions>
