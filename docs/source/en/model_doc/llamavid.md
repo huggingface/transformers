@@ -10,77 +10,53 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# LlamaVID
+# LLaMA-VID
 
 ## Overview
 
-The LlamaVID model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>)  by <INSERT AUTHORS HERE>. <INSERT SHORT SUMMARY HERE>
+The LLaMA-VID model was proposed in [<LLaMA-VID: An Image is Worth 2 Tokens in Large Language Models>](<https://arxiv.org/abs/2311.17043>)  by Yanwei Li, Chengyao Wang, Jiaya Jia. LLaMA-VID factorises the video into content and context embedding, before feeding it to the LLM. That way LLaMA-VID will have better contextual understanding of the video, by leveraging teh Qformer embeddings tp LLM.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*In this work, we present a novel method to tackle the
+token generation challenge in Vision Language Models
+(VLMs) for video and image understanding, called LLaMAVID. Current VLMs, while proficient in tasks like image
+captioning and visual question answering, face computational burdens when processing long videos due to the excessive visual tokens. LLaMA-VID addresses this issue by
+representing each frame with two distinct tokens, namely
+context token and content token. The context token encodes
+the overall image context based on user input, whereas
+the content token encapsulates visual cues in each frame.
+This dual-token strategy significantly reduces the overload
+of long videos while preserving critical information. Generally, LLaMA-VID empowers existing frameworks to support
+hour-long videos and pushes their upper limit with an extra
+context token. It is proved to surpass previous methods on
+most of video- or image-based benchmarks.
+*
 
 Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>). The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [Nilesh360](https://huggingface.co/Nilesh360 HERE). The original code can be found [here](https://github.com/dvlab-research/LLaMA-VID).
 
-## LlamaVidConfig
+## LLaMAVIDLlavaConfig
 
-[[autodoc]] LlamaVidConfig
-
-
-## LlamaVidTokenizer
-
-[[autodoc]] LlamaVidTokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
+[[autodoc]] LLaMAVIDLlavaConfig
 
 
-## LlamaVidTokenizerFast
+## LLaMAVIDLlavaImageProcessor
 
-[[autodoc]] LlamaVidTokenizerFast
+[[autodoc]] LLaMAVIDLlavaImageProcessor
+
+LLaMAVIDLlavaProcessor
+
+## LLaMAVIDLlavaProcessor
+
+[[autodoc]] LLaMAVIDLlavaProcessor
 
 
-## LlamaVidModel
+## LLaMAVIDLlavaForConditionalGeneration
 
-[[autodoc]] LlamaVidModel
+[[autodoc]] LLaMAVIDLlavaForConditionalGeneration
     - forward
 
-
-## LlamaVidForCausalLM
-
-[[autodoc]] LlamaVidForCausalLM
-    - forward
-
-
-## LlamaVidForMaskedLM
-
-[[autodoc]] LlamaVidForMaskedLM
-    - forward
-
-
-## LlamaVidForSequenceClassification
-
-[[autodoc]] transformers.LlamaVidForSequenceClassification
-    - forward
-
-## LlamaVidForMultipleChoice
-
-[[autodoc]] transformers.LlamaVidForMultipleChoice
-    - forward
-
-
-## LlamaVidForTokenClassification
-
-[[autodoc]] transformers.LlamaVidForTokenClassification
-    - forward
-
-
-## LlamaVidForQuestionAnswering
-
-[[autodoc]] LlamaVidForQuestionAnswering
-    - forward

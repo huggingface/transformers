@@ -32,9 +32,8 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     infer_channel_dimension_format,
-    is_scaled_image,
-    is_valid_image,
     is_pil_image,
+    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -278,14 +277,12 @@ class LLaMAVIDLlavaImageProcessor(BaseImageProcessor):
         if images is not None:
             images = make_list_of_images(images)
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-        
-        if not valid_images(images):
-                raise ValueError(
-                    "Invalid image/s type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                    "torch.Tensor, tf.Tensor or jax.ndarray."
-                )
-        
 
+        if not valid_images(images):
+            raise ValueError(
+                "Invalid image/s type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
 
         if images is not None:
             if is_pil_image(images[0]):
@@ -309,7 +306,6 @@ class LLaMAVIDLlavaImageProcessor(BaseImageProcessor):
                     for image in images
                 ]
             else:
-
                 pixel_values = [
                     [
                         self._preprocess_image(
@@ -333,8 +329,7 @@ class LLaMAVIDLlavaImageProcessor(BaseImageProcessor):
                     for visual in images
                 ]
         else:
-            pixel_values=None
-
+            pixel_values = None
 
         encoded_output = BatchFeature(
             data={
@@ -344,69 +339,65 @@ class LLaMAVIDLlavaImageProcessor(BaseImageProcessor):
         )
         return encoded_output
 
-
     def _preprocess_image(
-            self,
-            image: ImageInput = None,
-            do_resize: Optional[bool] = None,
-            size: Optional[Dict[str, int]] = None,
-            resample: PILImageResampling = None,
-            do_rescale: Optional[bool] = None,
-            rescale_factor: Optional[float] = None,
-            do_normalize: Optional[bool] = None,
-            image_mean: Optional[Union[float, List[float]]] = None,
-            image_std: Optional[Union[float, List[float]]] = None,
-            do_center_crop: bool = None,
-            crop_size: int = None,
-            do_convert_rgb: bool = None,
-            data_format: ChannelDimension = ChannelDimension.FIRST,
-            input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        ) -> np.ndarray:
-            validate_preprocess_arguments(
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_normalize=do_normalize,
-                image_mean=image_mean,
-                image_std=image_std,
-                do_center_crop=do_center_crop,
-                crop_size=crop_size,
-                do_resize=do_resize,
-                size=size,
-                resample=resample,
+        self,
+        image: ImageInput = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
+        resample: PILImageResampling = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        do_center_crop: bool = None,
+        crop_size: int = None,
+        do_convert_rgb: bool = None,
+        data_format: ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.ndarray:
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
+
+        # PIL RGBA images are converted to RGB
+        if do_convert_rgb:
+            image = convert_to_rgb(image)
+
+        # All transformations expect numpy arrays.
+        image = to_numpy_array(image)
+
+        if is_scaled_image(image) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images/video frames. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
             )
 
-            # PIL RGBA images are converted to RGB
-            if do_convert_rgb:
-                image = convert_to_rgb(image)
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(image)
 
-            # All transformations expect numpy arrays.
-            image = to_numpy_array(image)
+        if do_resize:
+            image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
 
-            if is_scaled_image(image) and do_rescale:
-                logger.warning_once(
-                    "It looks like you are trying to rescale already rescaled images/video frames. If the input"
-                    " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-                )
+        if do_center_crop:
+            image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
 
-            if input_data_format is None:
-                # We assume that all images have the same channel dimension format.
-                input_data_format = infer_channel_dimension_format(image)
+        if do_rescale:
+            image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
-            if do_resize:
-                image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+        if do_normalize:
+            image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
 
-            if do_center_crop:
-                image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
+        image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
 
-            if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-
-            if do_normalize:
-                image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-
-            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-
-            return image
-
-    
- 
+        return image

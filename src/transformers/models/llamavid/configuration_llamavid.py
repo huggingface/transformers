@@ -13,9 +13,10 @@
 # limitations under the License.
 """ LLaMAVID model configuration"""
 
+import os
 from typing import Union
+
 from ...configuration_utils import PretrainedConfig
-from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
 
@@ -26,6 +27,7 @@ LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "Nilesh360/llama-vid-7b-full-336": "https://huggingface.co/Nilesh360/llama-vid-7b-full-336/blob/main/config.json",
     "Nilesh360/llama-vid-7b-full-224-video-fps-1": "https://huggingface.co/Nilesh360/llama-vid-7b-full-224-video-fps-1/blob/main/config.json",
 }
+
 
 class LLaMAVIDLlavaVisionConfig(PretrainedConfig):
     r"""
@@ -247,7 +249,6 @@ class LLaMAVIDLlavaQFormerConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-
 class LLaMAVIDLlavaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LLaMAVIDLlavaForConditionalGeneration`]. It is used to instantiate an
@@ -307,20 +308,20 @@ class LLaMAVIDLlavaConfig(PretrainedConfig):
         vision_config=None,
         text_config=None,
         ignore_index=-100,
-        bert_type='qformer_pretrain',
-        qformer_config = None, 
-        num_query =32,  
+        bert_type="qformer_pretrain",
+        qformer_config=None,
+        num_query=32,
         image_token_index=32000,
-        vision_tower_config =  None,
-        #video_token_index=32001,
-        vision_tower = None,
-        mm_hidden_size = 1408,
-        hidden_size = 4096,
+        vision_tower_config=None,
+        # video_token_index=32001,
+        vision_tower=None,
+        mm_hidden_size=1408,
+        hidden_size=4096,
         projector_hidden_act="gelu",
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
         vocab_size=32000,
-        compress_type ='mean',
+        compress_type="mean",
         **kwargs,
     ):
         self.ignore_index = ignore_index
@@ -333,10 +334,10 @@ class LLaMAVIDLlavaConfig(PretrainedConfig):
         self.num_query = num_query
         self.mm_hidden_size = mm_hidden_size
         self.hidden_size = hidden_size
-        self.compress_type =  compress_type
+        self.compress_type = compress_type
 
         self.vision_config = vision_config
-        self.vision_tower=  vision_tower
+        self.vision_tower = vision_tower
 
         if vision_tower_config is None:
             vision_tower_config = {}
@@ -349,8 +350,6 @@ class LLaMAVIDLlavaConfig(PretrainedConfig):
         if text_config is None:
             text_config = {}
             logger.info("text_config is None. Initializing the text config with default values (`OPTConfig`).")
-
-
 
         self.vision_tower_config = LLaMAVIDLlavaVisionConfig(**vision_tower_config)
         self.qformer_config = LLaMAVIDLlavaQFormerConfig(**qformer_config)

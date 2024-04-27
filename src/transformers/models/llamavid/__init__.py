@@ -13,16 +13,18 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available , is_vision_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
-			"configuration_llamavid": [
-			"LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP", 
-			"LLaMAVIDLlavaConfig", 
-			"LLaMAVIDLlavaVisionConfig" , 
-			"LLaMAVIDLlavaQFormerConfig"],
-            "processing_llamavid": ["LLaMAVIDLlavaProcessor"],}
+    "configuration_llamavid": [
+        "LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "LLaMAVIDLlavaConfig",
+        "LLaMAVIDLlavaVisionConfig",
+        "LLaMAVIDLlavaQFormerConfig",
+    ],
+    "processing_llamavid": ["LLaMAVIDLlavaProcessor"],
+}
 
 
 try:

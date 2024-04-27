@@ -17,30 +17,17 @@ Processor class for LLaMAVIDLlava.
 """
 
 
+import os
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import (
+    ImageInput,
+)
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
 from ..auto import AutoTokenizer
-
-
-from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_kwargs,
-    validate_preprocess_arguments,
-)
 
 
 class LLaMAVIDLlavaProcessor(ProcessorMixin):
@@ -61,10 +48,9 @@ class LLaMAVIDLlavaProcessor(ProcessorMixin):
     image_processor_class = "LLaMAVIDLlavaImageProcessor"
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
-    def __init__(self, image_processor=None, tokenizer=None, qformer_tokenizer = None):
+    def __init__(self, image_processor=None, tokenizer=None, qformer_tokenizer=None):
         super().__init__(image_processor, tokenizer)
-        self.qformer_tokenizer = qformer_tokenizer 
-  
+        self.qformer_tokenizer = qformer_tokenizer
 
     def __call__(
         self,
@@ -133,42 +119,45 @@ class LLaMAVIDLlavaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
 
-
         if images is not None:
             image_kwargs = self.image_processor(images=images, return_tensors=return_tensors)
         else:
             image_kwargs = {}
-        
+
         text_inputs = self.tokenizer(
             text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
-  
 
         qformer_text_encoding = self.qformer_tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=return_tensors,
-                **kwargs,
-            )
+            text=text,
+            add_special_tokens=add_special_tokens,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            stride=stride,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_offsets_mapping=return_offsets_mapping,
+            return_token_type_ids=return_token_type_ids,
+            return_length=return_length,
+            verbose=verbose,
+            return_tensors=return_tensors,
+            **kwargs,
+        )
 
         qformer_input_ids = qformer_text_encoding.pop("input_ids")
-        qformer_attention_mask= qformer_text_encoding.pop("attention_mask")
+        qformer_attention_mask = qformer_text_encoding.pop("attention_mask")
 
-
-        return  BatchFeature(data={**text_inputs , **image_kwargs  , "qformer_text_encoding":  qformer_input_ids , "qformer_attention_mask" : qformer_attention_mask})
-    
+        return BatchFeature(
+            data={
+                **text_inputs,
+                **image_kwargs,
+                "qformer_text_encoding": qformer_input_ids,
+                "qformer_attention_mask": qformer_attention_mask,
+            }
+        )
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
@@ -192,7 +181,6 @@ class LLaMAVIDLlavaProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-    
 
     # overwrite to save the Q-Former tokenizer in a separate folder
     def save_pretrained(self, save_directory, **kwargs):
@@ -205,12 +193,9 @@ class LLaMAVIDLlavaProcessor(ProcessorMixin):
 
     # overwrite to load the Q-Former tokenizer from a separate folder
 
-     
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         qformer_tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, subfolder="qformer_tokenizer")
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         args.append(qformer_tokenizer)
         return cls(*args)
-   
-

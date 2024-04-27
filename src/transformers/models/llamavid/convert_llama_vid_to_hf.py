@@ -15,21 +15,18 @@ import argparse
 
 import torch
 from huggingface_hub import hf_hub_download
-import os
-import json
-
-from transformers.models.llamavid.configuration_llamavid import LLaMAVIDLlavaVisionConfig, LLaMAVIDLlavaQFormerConfig
 
 from transformers import (
     AddedToken,
     AutoConfig,
     AutoTokenizer,
+    BertTokenizer,
     LLaMAVIDLlavaConfig,
     LLaMAVIDLlavaForConditionalGeneration,
     LLaMAVIDLlavaImageProcessor,
     LLaMAVIDLlavaProcessor,
-    BertTokenizer,
 )
+from transformers.models.llamavid.configuration_llamavid import LLaMAVIDLlavaQFormerConfig, LLaMAVIDLlavaVisionConfig
 
 
 EPILOG_TXT = """Example:
@@ -52,10 +49,9 @@ Example for creating the old state dict file with Python:
 """
 
 KEYS_TO_MODIFY_MAPPING = {
-    
     "model.": "language_model.model.",
     "lm_head": "language_model.lm_head",
-    "model.vision_tower.vision_tower":  "vision_tower."
+    "model.vision_tower.vision_tower": "vision_tower.",
 }
 
 
@@ -65,32 +61,31 @@ def convert_state_dict_to_hf(state_dict):
         if key.endswith(".inv_freq"):
             continue
         if key.startswith("model.layers"):
-            key =  'language_model.' + key
+            key = "language_model." + key
         if key.startswith("model.vision_tower."):
-            key= key.replace("model.vision_tower." ,"")
+            key = key.replace("model.vision_tower.", "")
         if key.startswith("model.vlm_att_encoder"):
-            key= key.replace("model.vlm_att_encoder.","vlm_att_encoder." )
+            key = key.replace("model.vlm_att_encoder.", "vlm_att_encoder.")
         if key.startswith("model.vlm_att_"):
-            key= key.replace("model.vlm_att_", "vlm_att_")
+            key = key.replace("model.vlm_att_", "vlm_att_")
         if key.startswith("lm_head"):
-            key= key.replace("lm_head","language_model.lm_head")
+            key = key.replace("lm_head", "language_model.lm_head")
         if key.startswith("model.embed_tokens"):
             key = key.replace("model.embed_tokens", "language_model.model.embed_tokens")
         if key.startswith("model.mm_projector.0"):
-            key=key.replace("model.mm_projector.0" , "multi_modal_projector.linear_1")
+            key = key.replace("model.mm_projector.0", "multi_modal_projector.linear_1")
         if key.startswith("model.mm_projector.2"):
-            key=key.replace("model.mm_projector.2" , "multi_modal_projector.linear_2")
+            key = key.replace("model.mm_projector.2", "multi_modal_projector.linear_2")
         if key.startswith("model.norm.weight"):
-            key =key.replace("model.norm.weight","language_model.model.norm.weight")
+            key = key.replace("model.norm.weight", "language_model.model.norm.weight")
         if key.startswith("vlm_att_query"):
-            key = key.replace("vlm_att_query" , "query_tokens")
+            key = key.replace("vlm_att_query", "query_tokens")
         if key.startswith("vlm_att_encoder.bert"):
-            key = key.replace("vlm_att_encoder.bert" , "qformer")
-            if "ccrossattention.self" in key :
-                key= key.replace("crossattention.self", "crossattention.attention")
+            key = key.replace("vlm_att_encoder.bert", "qformer")
+            if "ccrossattention.self" in key:
+                key = key.replace("crossattention.self", "crossattention.attention")
             if "attention.self" in key:
                 key = key.replace("attention.self", "attention.attention")
-
 
         new_state_dict[key] = value
     return new_state_dict
@@ -103,7 +98,7 @@ def create_rename_keys(config):
 
     # vision encoder
 
-   
+
     rename_keys.append(("vision_tower.cls_token", "vision_tower.embeddings.class_embedding"))
     rename_keys.append(("vision_tower.pos_embed", "vision_tower.embeddings.position_embedding"))
     rename_keys.append(("vision_tower.patch_embed.proj.weight", "vision_tower.embeddings.patch_embedding.weight"))
@@ -128,22 +123,22 @@ def create_rename_keys(config):
     rename_keys.append(("qformer.embeddings.LayerNorm.weight", "qformer.embeddings.layernorm.weight"))
     rename_keys.append(("qformer.embeddings.LayerNorm.bias", "qformer.embeddings.layernorm.bias"))
 
-    
+
 
     # fmt: on
     return rename_keys
+
 
 def rename_key(dct, old, new):
     val = dct.pop(old)
     dct[new] = val
 
 
-
-def convert_to_hf(state_dict, pretext ):
-    new_state_dict ={}
-    for k , v in state_dict.items():
-        k = pretext + k 
-        new_state_dict[k] =  v 
+def convert_to_hf(state_dict, pretext):
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        k = pretext + k
+        new_state_dict[k] = v
     return new_state_dict
 
 
@@ -157,34 +152,39 @@ def read_in_q_v_bias(state_dict, config):
         qkv_bias = torch.cat((q_bias, torch.zeros_like(v_bias, requires_grad=False), v_bias))
         state_dict[f"vision_tower.encoder.layers.{i}.self_attn.qkv.bias"] = qkv_bias
 
+
 def convert_llamavid_to_hf(text_model_id, vision_model_id, output_hub_path, old_state_dict_id):
- 
     torch.set_default_dtype(torch.float16)
     text_config = AutoConfig.from_pretrained(text_model_id)
 
     qformer_tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased", truncation_side="left")
     qformer_tokenizer.add_special_tokens({"bos_token": "[DEC]"})
 
-
     tokenizer = AutoTokenizer.from_pretrained(text_model_id)
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
     tokenizer.add_special_tokens({"pad_token": "<pad>"})
-    
-    image_processor = LLaMAVIDLlavaImageProcessor.from_pretrained(vision_model_id_336)
 
-    processor = LLaMAVIDLlavaProcessor(tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer = qformer_tokenizer )
-    
-    vision_tower_config = LLaMAVIDLlavaVisionConfig(image_size=336, qkv_bias = True).to_dict()
-    qformer_config =  LLaMAVIDLlavaQFormerConfig(vocab_size=30523, num_attention_heads=12 , hidden_size=768).to_dict()
+    image_processor = LLaMAVIDLlavaImageProcessor.from_pretrained(vision_model_id)
 
-    if 'video' in text_model_id:
-        compress_type= 'mean'
+    processor = LLaMAVIDLlavaProcessor(
+        tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer=qformer_tokenizer
+    )
+
+    vision_tower_config = LLaMAVIDLlavaVisionConfig(image_size=336, qkv_bias=True).to_dict()
+    qformer_config = LLaMAVIDLlavaQFormerConfig(vocab_size=30523, num_attention_heads=12, hidden_size=768).to_dict()
+
+    if "video" in text_model_id:
+        compress_type = "mean"
     else:
         compress_type = None
-    
-    config = LLaMAVIDLlavaConfig(text_config=text_config,vision_tower_config=vision_tower_config, qformer_config=qformer_config , compress_type= compress_type  ) # for video compress_type is'mean' while for images its None
+
+    config = LLaMAVIDLlavaConfig(
+        text_config=text_config,
+        vision_tower_config=vision_tower_config,
+        qformer_config=qformer_config,
+        compress_type=compress_type,
+    )  # for video compress_type is'mean' while for images its None
     config.pad_token_id = 32001
-    
 
     with torch.device("meta"):
         model = LLaMAVIDLlavaForConditionalGeneration(config)
@@ -194,10 +194,10 @@ def convert_llamavid_to_hf(text_model_id, vision_model_id, output_hub_path, old_
 
     total_state_dict = {}
 
-    state_dict_path =   'pytorch_model-0000{}-of-00002.bin'
+    state_dict_path = "pytorch_model-0000{}-of-00002.bin"
 
-    for shard in range(1 , 3):
-        old_dict=hf_hub_download(old_state_dict_id, state_dict_path.format(i=shard))
+    for shard in range(1, 3):
+        old_dict = hf_hub_download(old_state_dict_id, state_dict_path.format(i=shard))
         state_dict = torch.load(old_dict)
         state_dict = convert_state_dict_to_hf(state_dict)
         total_state_dict.update(state_dict)
@@ -205,15 +205,15 @@ def convert_llamavid_to_hf(text_model_id, vision_model_id, output_hub_path, old_
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
         rename_key(total_state_dict, src, dest)
-	
-    read_in_q_v_bias(total_state_dict , config)
 
-    #As positional embeddings are generated internally we do not need that here
-    #it causesd the model.load_state_dict to fail. 
-    del total_state_dict['qformer.embeddings.position_ids']
-   
+    read_in_q_v_bias(total_state_dict, config)
+
+    # As positional embeddings are generated internally we do not need that here
+    # it causesd the model.load_state_dict to fail.
+    del total_state_dict["qformer.embeddings.position_ids"]
+
     model.load_state_dict(total_state_dict, strict=True, assign=True)
- 
+
     pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
     mu = torch.mean(pre_expansion_embeddings, dim=0).float()
     n = pre_expansion_embeddings.size()[0]
@@ -230,10 +230,9 @@ def convert_llamavid_to_hf(text_model_id, vision_model_id, output_hub_path, old_
         tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0]))),
         dim=0,
     )
- 
+
     model.push_to_hub(output_hub_path)
     processor.push_to_hub(output_hub_path)
-
 
 
 def main():
@@ -258,11 +257,8 @@ def main():
         help="Location on the hub of the raw state dict of the original model. The filename needs to be `model_state_dict.bin`",
     )
     args = parser.parse_args()
-    convert_llamavid_to_hf(
-        args.text_model_id, args.vision_model_id, args.output_hub_path, args.old_state_dict_id
-    )
+    convert_llamavid_to_hf(args.text_model_id, args.vision_model_id, args.output_hub_path, args.old_state_dict_id)
 
 
 if __name__ == "__main__":
     main()
- 

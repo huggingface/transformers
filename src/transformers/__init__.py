@@ -555,10 +555,7 @@ _import_structure = {
     "models.llamavid": [
         "LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LLaMAVIDLlavaConfig",
-        "LLaMAVIDLlavaVisionConfig"
-        "LLaMAVIDLlavaQFormerConfig"
-        "LLaMAVIDLlavaProcessor",
-        
+        "LLaMAVIDLlavaVisionConfig" "LLaMAVIDLlavaQFormerConfig" "LLaMAVIDLlavaProcessor",
     ],
     "models.llava": [
         "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -5458,19 +5455,21 @@ if TYPE_CHECKING:
     from .models.levit import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, LevitConfig
     from .models.lilt import LILT_PRETRAINED_CONFIG_ARCHIVE_MAP, LiltConfig
     from .models.llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaConfig
-    from .models.llamavid import LLAMAVID_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaVidConfig, LlamaVidTokenizer
+    from .models.llamavid import (
+        LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LLAMAVID_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LlamaVidConfig,
+        LLaMAVIDLlavaConfig,
+        LLaMAVIDLlavaImageProcessor,
+        LLaMAVIDLlavaProcessor,
+        LLaMAVIDLlavaQFormerConfig,
+        LLaMAVIDLlavaVisionConfig,
+        LlamaVidTokenizer,
+    )
     from .models.llava import (
         LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LlavaConfig,
         LlavaProcessor,
-    )
-    from .models.llamavid import (
-        LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        LLaMAVIDLlavaConfig,
-        LLaMAVIDLlavaVisionConfig,
-        LLaMAVIDLlavaQFormerConfig,
-        LLaMAVIDLlavaImageProcessor,
-        LLaMAVIDLlavaProcessor,
     )
     from .models.llava_next import (
         LLAVA_NEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -7260,12 +7259,11 @@ if TYPE_CHECKING:
         from .models.llamavid import (
             LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
             LLaMAVIDLlavaForConditionalGeneration,
-            LLaMAVIDLlavaPreTrainedModel,
             LLaMAVIDLlavaImageProcessor,
+            LLaMAVIDLlavaPreTrainedModel,
             LLaMAVIDLlavaProcessor,
             LLaMAVIDLlavaQFormerModel,
             LLaMAVIDLlavaVisionModel,
-
         )
         from .models.llava import (
             LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
