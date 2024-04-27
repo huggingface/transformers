@@ -629,15 +629,13 @@ def inv_attractor(dx, alpha: float = 300, gamma: int = 2):
 class ZoeDepthAttractorLayer(nn.Module):
     def __init__(
         self,
+        config,
         in_features,
         n_bins,
         n_attractors=16,
         mlp_dim=128,
         min_depth=1e-3,
         max_depth=10,
-        alpha=300,
-        gamma=2,
-        kind="sum",
         memory_efficient=False,
     ):
         """
@@ -645,13 +643,14 @@ class ZoeDepthAttractorLayer(nn.Module):
         """
         super().__init__()
 
+        self.alpha = config.attractor_alpha
+        self.gemma = config.attractor_gamma
+        self.kind = config.attractor_kind
+
         self.n_attractors = n_attractors
         self.n_bins = n_bins
         self.min_depth = min_depth
         self.max_depth = max_depth
-        self.alpha = alpha
-        self.gamma = gamma
-        self.kind = kind
         self.memory_efficient = memory_efficient
 
         # MLP to predict attractor points
@@ -725,15 +724,13 @@ class ZoeDepthAttractorLayer(nn.Module):
 class ZoeDepthAttractorLayerUnnormed(nn.Module):
     def __init__(
         self,
+        config,
         in_features,
         n_bins,
         n_attractors=16,
         mlp_dim=128,
         min_depth=1e-3,
         max_depth=10,
-        alpha=300,
-        gamma=2,
-        kind="sum",
         memory_efficient=True,
     ):
         """
@@ -745,9 +742,9 @@ class ZoeDepthAttractorLayerUnnormed(nn.Module):
         self.n_bins = n_bins
         self.min_depth = min_depth
         self.max_depth = max_depth
-        self.alpha = alpha
-        self.gamma = gamma
-        self.kind = kind
+        self.alpha = config.attractor_alpha
+        self.gamma = config.attractor_alpha
+        self.kind = config.attractor_kind
         self.memory_efficient = memory_efficient
 
         self.conv1 = nn.Conv2d(in_features, mlp_dim, 1, 1, 0)
@@ -907,17 +904,9 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         super().__init__()
 
         bin_embedding_dim = config.bin_embedding_dim
-        min_depth = config.min_depth
-        max_depth = config.max_depth
         n_attractors = config.num_attractors
-        attractor_alpha = config.attractor_alpha
-        attractor_gamma = config.attractor_gamma
-        attractor_kind = config.attractor_kind
-        bin_centers_type = config.bin_centers_type
 
-        self.min_depth = min_depth
-        self.max_depth = max_depth
-        self.bin_centers_type = bin_centers_type
+        self.bin_centers_type = config.bin_centers_type
         self.bin_configurations = config.bin_configurations
 
         # Bottleneck convolution
@@ -936,7 +925,6 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
             SeedBinRegressorLayer = ZoeDepthSeedBinRegressorUnnormed
             Attractor = ZoeDepthAttractorLayerUnnormed
 
-        self.bin_centers_type = bin_centers_type
         # We have bins for each bin configuration
         # Create a map (ModuleDict) of 'name' -> seed_bin_regressor
         self.seed_bin_regressors = nn.ModuleDict(
@@ -966,12 +954,10 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
                 configuration["name"]: nn.ModuleList(
                     [
                         Attractor(
+                            config,
                             bin_embedding_dim,
-                            n_attractors[i],
+                            n_bins=n_attractors[i],
                             mlp_dim=bin_embedding_dim,
-                            alpha=attractor_alpha,
-                            gamma=attractor_gamma,
-                            kind=attractor_kind,
                             min_depth=configuration["min_depth"],
                             max_depth=configuration["max_depth"],
                         )
@@ -1055,8 +1041,6 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
         min_depth = config.min_depth
         max_depth = config.max_depth
         n_attractors = config.num_attractors
-        attractor_alpha = config.attractor_alpha
-        attractor_gamma = config.attractor_gamma
         bin_centers_type = config.bin_centers_type
 
         self.min_depth = min_depth
@@ -1086,14 +1070,12 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
         self.attractors = nn.ModuleList(
             [
                 Attractor(
+                    config,
                     bin_embedding_dim,
-                    n_bins,
+                    n_bins=n_bins,
                     n_attractors=n_attractors[i],
                     min_depth=min_depth,
                     max_depth=max_depth,
-                    alpha=attractor_alpha,
-                    gamma=attractor_gamma,
-                    kind=config.attractor_kind,
                 )
                 for i in range(4)
             ]
