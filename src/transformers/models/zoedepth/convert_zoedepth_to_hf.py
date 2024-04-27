@@ -101,7 +101,16 @@ def rename_key_(name):
         )
 
     # activation postprocessing layers
-    
+
+    # scratch convolutions
+    if "core.core.scratch.layer1_rn.weight" in name:
+        name = name.replace("core.core.scratch.layer1_rn.weight", "neck.convs.0.weight")
+    if "core.core.scratch.layer2_rn.weight" in name:
+        name = name.replace("core.core.scratch.layer2_rn.weight", "neck.convs.1.weight")
+    if "core.core.scratch.layer3_rn.weight" in name:
+        name = name.replace("core.core.scratch.layer3_rn.weight", "neck.convs.2.weight")
+    if "core.core.scratch.layer4_rn.weight" in name:
+        name = name.replace("core.core.scratch.layer4_rn.weight", "neck.convs.3.weight")
 
     # fusion layers
     # tricky here: mapping = {1:3, 2:2, 3:1, 4:0}
@@ -164,8 +173,6 @@ def rename_key_(name):
     if "_net.2" in name:
         name = name.replace("_net.2", "conv2")
 
-        print("Name:", name)
-
     if "attractors" in name:
         name = name.replace("attractors", "metric_head.attractors")
 
@@ -191,7 +198,7 @@ def convert_state_dict(orig_state_dict):
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config, model_name):
+def create_rename_keys():
     rename_keys = []
 
     # fmt: off
@@ -207,10 +214,6 @@ def create_rename_keys(config, model_name):
         if i != 2:
             rename_keys.append((f"core.core.pretrained.act_postprocess{i+1}.4.weight", f"neck.reassemble_stage.layers.{i}.resize.weight"))
             rename_keys.append((f"core.core.pretrained.act_postprocess{i+1}.4.bias", f"neck.reassemble_stage.layers.{i}.resize.bias"))
-
-    # scratch convolutions
-    for i in range(4):
-        rename_keys.append((f"core.core.scratch.layer{i+1}_rn.weight", f"neck.convs.{i}.weight"))
 
     return rename_keys
 
@@ -273,7 +276,7 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     # remove certain keys
     remove_ignore_keys_(state_dict)
     # rename keys
-    rename_keys = create_rename_keys(config, model_name)
+    rename_keys = create_rename_keys()
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
     # read in qkv matrices
