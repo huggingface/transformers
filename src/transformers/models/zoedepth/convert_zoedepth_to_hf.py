@@ -66,7 +66,7 @@ def get_zoedepth_config(model_name):
     return config, image_size
 
 
-def rename_key_(name):
+def rename_key(name):
     # Transformer backbone
     if "core.core.pretrained.model.blocks" in name:
         name = name.replace("core.core.pretrained.model.blocks", "backbone.encoder.layer")
@@ -100,7 +100,39 @@ def rename_key_(name):
             "attn.relative_position_index", "attention.attention.relative_position_bias.relative_position_index"
         )
 
-    # activation postprocessing layers
+    # activation postprocessing (readout projections + resize blocks)
+    if "core.core.pretrained.act_postprocess1.0.project" in name:
+        name = name.replace(
+            "core.core.pretrained.act_postprocess1.0.project", "neck.reassemble_stage.readout_projects.0"
+        )
+    if "core.core.pretrained.act_postprocess2.0.project" in name:
+        name = name.replace(
+            "core.core.pretrained.act_postprocess2.0.project", "neck.reassemble_stage.readout_projects.1"
+        )
+    if "core.core.pretrained.act_postprocess3.0.project" in name:
+        name = name.replace(
+            "core.core.pretrained.act_postprocess3.0.project", "neck.reassemble_stage.readout_projects.2"
+        )
+    if "core.core.pretrained.act_postprocess4.0.project" in name:
+        name = name.replace(
+            "core.core.pretrained.act_postprocess4.0.project", "neck.reassemble_stage.readout_projects.3"
+        )
+
+    if "core.core.pretrained.act_postprocess1.3" in name:
+        name = name.replace("core.core.pretrained.act_postprocess1.3", "neck.reassemble_stage.layers.0.projection")
+    if "core.core.pretrained.act_postprocess2.3" in name:
+        name = name.replace("core.core.pretrained.act_postprocess2.3", "neck.reassemble_stage.layers.1.projection")
+    if "core.core.pretrained.act_postprocess3.3" in name:
+        name = name.replace("core.core.pretrained.act_postprocess3.3", "neck.reassemble_stage.layers.2.projection")
+    if "core.core.pretrained.act_postprocess4.3" in name:
+        name = name.replace("core.core.pretrained.act_postprocess4.3", "neck.reassemble_stage.layers.3.projection")
+
+    if "core.core.pretrained.act_postprocess1.4" in name:
+        name = name.replace("core.core.pretrained.act_postprocess1.4", "neck.reassemble_stage.layers.0.resize")
+    if "core.core.pretrained.act_postprocess2.4" in name:
+        name = name.replace("core.core.pretrained.act_postprocess2.4", "neck.reassemble_stage.layers.1.resize")
+    if "core.core.pretrained.act_postprocess4.4" in name:
+        name = name.replace("core.core.pretrained.act_postprocess4.4", "neck.reassemble_stage.layers.3.resize")
 
     # scratch convolutions
     if "core.core.scratch.layer1_rn.weight" in name:
@@ -191,37 +223,22 @@ def convert_state_dict(orig_state_dict):
         val = orig_state_dict.pop(key)
 
         # rename key
-        new_name = rename_key_(key)
+        new_name = rename_key(key)
         orig_state_dict[new_name] = val
 
     return orig_state_dict
 
 
-# here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys():
-    rename_keys = []
-
-    # fmt: off
-
-    # activation postprocessing (readout projections + resize blocks)
-    for i in range(4):
-        rename_keys.append((f"core.core.pretrained.act_postprocess{i+1}.0.project.0.weight", f"neck.reassemble_stage.readout_projects.{i}.0.weight"))
-        rename_keys.append((f"core.core.pretrained.act_postprocess{i+1}.0.project.0.bias", f"neck.reassemble_stage.readout_projects.{i}.0.bias"))
-
-        rename_keys.append((f"core.core.pretrained.act_postprocess{i+1}.3.weight", f"neck.reassemble_stage.layers.{i}.projection.weight"))
-        rename_keys.append((f"core.core.pretrained.act_postprocess{i+1}.3.bias", f"neck.reassemble_stage.layers.{i}.projection.bias"))
-
-        if i != 2:
-            rename_keys.append((f"core.core.pretrained.act_postprocess{i+1}.4.weight", f"neck.reassemble_stage.layers.{i}.resize.weight"))
-            rename_keys.append((f"core.core.pretrained.act_postprocess{i+1}.4.bias", f"neck.reassemble_stage.layers.{i}.resize.bias"))
-
-    return rename_keys
-
-
-def remove_ignore_keys_(state_dict):
-    ignore_keys = ["core.core.pretrained.model.head.weight", "core.core.pretrained.model.head.bias"]
-    for k in ignore_keys:
-        state_dict.pop(k, None)
+def remove_ignore_keys(state_dict):
+    for key, _ in state_dict.copy().items():
+        if (
+            "fc_norm" in key
+            or "relative_position_index" in key
+            or "k_idx" in key
+            or "K_minus_1" in key
+            or "core.core.pretrained.model.head" in key
+        ):
+            state_dict.pop(key, None)
 
 
 # we split up the matrix of each encoder layer into queries, keys and values
@@ -240,11 +257,6 @@ def read_in_q_k_v(state_dict, config):
         ]
         state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
         state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.bias"] = v_bias
-
-
-def rename_key(dct, old, new):
-    val = dct.pop(old)
-    dct[new] = val
 
 
 # We will verify our results on an image
@@ -270,25 +282,16 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     original_model.eval()
     state_dict = original_model.state_dict()
 
-    # for name, param in original_model.named_parameters():
-    #     print(name, param.shape)
-
-    # remove certain keys
-    remove_ignore_keys_(state_dict)
-    # rename keys
-    rename_keys = create_rename_keys()
-    for src, dest in rename_keys:
-        rename_key(state_dict, src, dest)
     # read in qkv matrices
     read_in_q_k_v(state_dict, config)
-
+    # rename keys
     state_dict = convert_state_dict(state_dict)
+    # remove certain keys
+    remove_ignore_keys(state_dict)
 
     # load HuggingFace model
     model = ZoeDepthForDepthEstimation(config)
-    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    print("Missing keys:", missing_keys)
-    print("Unexpected keys:", unexpected_keys)
+    model.load_state_dict(state_dict)
     model.eval()
 
     # verify image processor
