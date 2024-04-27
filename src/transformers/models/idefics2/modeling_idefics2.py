@@ -1642,12 +1642,12 @@ class Idefics2Model(Idefics2PreTrainedModel):
             image_hidden_states = self.vision_model(
                 pixel_values=pixel_values,
                 patch_attention_mask=patch_attention_mask,
-            ).last_hidden_state
+            ).last_hidden_state.to(dtype=self.dtype, device=input_ids.device)
 
             # Modality projection & resampling
             image_hidden_states = self.connector(
                 image_hidden_states, attention_mask=patch_attention_mask.view(pixel_values.size(0), -1)
-            )
+            ).to(dtype=self.dtype, device=input_ids.device)
 
         elif image_hidden_states is not None:
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=input_ids.device)
