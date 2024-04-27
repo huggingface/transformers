@@ -67,7 +67,7 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
 
-    from .pytorch_utils import is_torch_greater_or_equal_than_2_0
+    from .pytorch_utils import is_torch_greater_or_equal_than_2_0, is_torch_greater_or_equal_than_2_3
 
 if is_accelerate_available():
     from accelerate.state import AcceleratorState, PartialState
@@ -357,6 +357,9 @@ class TrainingArguments:
             Note that when this is true, you won't be able to resume training from checkpoint.
             This enables you to save storage by not storing the optimizer, scheduler & rng state.
             You can only load the model using `from_pretrained` with this option set to `True`.
+        restore_callback_states_from_checkpoint (`bool`, *optional*, defaults to `False`):
+            Whether to restore the callback states from the checkpoint. If `True`, will override
+            callbacks passed to the `Trainer` if they exist in the checkpoint."
         use_cpu (`bool`, *optional*, defaults to `False`):
             Whether or not to use cpu. If set to False, we will use cuda or mps device if available.
         seed (`int`, *optional*, defaults to 42):
@@ -949,6 +952,12 @@ class TrainingArguments:
                 "This enables you to save storage by not storing the optimizer, scheduler & rng state."
                 "You can only load the model using from_pretrained with this option set to True."
             )
+        },
+    )
+    restore_callback_states_from_checkpoint: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to restore the callback states from the checkpoint. If `True`, will override callbacks passed to the `Trainer` if they exist in the checkpoint."
         },
     )
     no_cuda: bool = field(
@@ -1618,6 +1627,7 @@ class TrainingArguments:
         if (
             self.framework == "pt"
             and is_torch_available()
+            and (self.device.type == "cpu" and not is_torch_greater_or_equal_than_2_3)
             and (self.device.type != "cuda")
             and (self.device.type != "mlu")
             and (self.device.type != "npu")

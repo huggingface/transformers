@@ -3603,12 +3603,14 @@ class ModelTesterMixin:
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
-                    if "SdpaAttention" in submodule.__class__.__name__:
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
 
                 has_sdpa = False
                 for name, submodule in model_sdpa.named_modules():
-                    if "SdpaAttention" in submodule.__class__.__name__:
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         has_sdpa = True
                         break
                 if not has_sdpa and model_sdpa.config.model_type != "falcon":
@@ -3691,19 +3693,21 @@ class ModelTesterMixin:
                                         decoder_input_ids = decoder_input_ids.to(torch_device)
 
                                     # TODO: never an `attention_mask` arg here?
-                                    other_inputs = {
+                                    processed_inputs = {
+                                        model.main_input_name: dummy_input,
                                         "decoder_input_ids": decoder_input_ids,
                                         "decoder_attention_mask": dummy_attention_mask,
                                         "output_hidden_states": True,
                                     }
                                 else:
-                                    other_inputs = {
+                                    processed_inputs = {
+                                        model.main_input_name: dummy_input,
                                         "output_hidden_states": True,
                                     }
 
                                     # Otherwise fails for e.g. WhisperEncoderModel
                                     if "attention_mask" in inspect.signature(model_eager.forward).parameters:
-                                        other_inputs["attention_mask"] = dummy_attention_mask
+                                        processed_inputs["attention_mask"] = dummy_attention_mask
 
                                 # TODO: test gradients as well (& for FA2 as well!)
                                 with torch.no_grad():
@@ -3712,8 +3716,9 @@ class ModelTesterMixin:
                                         enable_math=True,
                                         enable_mem_efficient=enable_kernels,
                                     ):
-                                        outputs_eager = model_eager(dummy_input, **other_inputs)
-                                        outputs_sdpa = model_sdpa(dummy_input, **other_inputs)
+                                        prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
+                                        outputs_eager = model_eager(**prepared_inputs)
+                                        outputs_sdpa = model_sdpa(**prepared_inputs)
 
                                 logits_eager = (
                                     outputs_eager.hidden_states[-1]
@@ -3799,6 +3804,7 @@ class ModelTesterMixin:
                 self.skipTest(f"{model_class.__name__} does not support SDPA")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             if config.model_type in ["llava", "llava_next", "vipllava"]:
                 self.skipTest("Llava-like models currently (transformers==4.39.1) requires an attention_mask input")
             if config.model_type in ["idefics"]:
@@ -3867,12 +3873,14 @@ class ModelTesterMixin:
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
-                    if "SdpaAttention" in submodule.__class__.__name__:
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
 
                 has_sdpa = False
                 for name, submodule in model_sdpa.named_modules():
-                    if "SdpaAttention" in submodule.__class__.__name__:
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         has_sdpa = True
                         break
                 if not has_sdpa:

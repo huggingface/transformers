@@ -91,6 +91,6 @@ if __name__ == "__main__":
         find_new_model = reg.findall(x)
         if len(find_new_model) > 0:
             new_model = find_new_model[0]
-        # It's unlikely we have 2 new modeling files in a pull request.
-        break
+            # It's unlikely we have 2 new modeling files in a pull request.
+            break
     print(new_model)
