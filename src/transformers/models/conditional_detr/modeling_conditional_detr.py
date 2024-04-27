@@ -1756,7 +1756,7 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
 
         # Object detection heads
         self.class_labels_classifier = nn.Linear(
-            config.d_model, config.num_labels
+            config.d_model, config.num_labels + 1
         )  # We add one for the "no object" class
         self.bbox_predictor = ConditionalDetrMLPPredictionHead(
             input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
