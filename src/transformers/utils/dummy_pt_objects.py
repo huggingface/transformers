@@ -4826,6 +4826,12 @@ class LlavaNextPreTrainedModel(metaclass=DummyObject):
 LLAMAVID_LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class LLaMAVIDLlavaImageProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 class LLaMAVIDLlavaForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 

@@ -34,6 +34,7 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_scaled_image,
     is_valid_image,
+    is_pil_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -141,10 +142,6 @@ class LLaMAVIDLlavaImageProcessor(BaseImageProcessor):
             "input_data_format",
         ]
 
-        # for backwards compatibility of KOSMOS-2
-        if "use_square_size" in kwargs:
-            self.size = {"height": size["shortest_edge"], "width": size["shortest_edge"]}
-
     def resize(
         self,
         image: np.ndarray,
@@ -217,8 +214,8 @@ class LLaMAVIDLlavaImageProcessor(BaseImageProcessor):
         Preprocess an image or batch of images.
 
         Args:
-            visuals (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
+            Images (`ImageInput`):
+                Image / or a list of images(video) to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
@@ -284,15 +281,15 @@ class LLaMAVIDLlavaImageProcessor(BaseImageProcessor):
         
         if not valid_images(images):
                 raise ValueError(
-                    "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                    "Invalid image/s type. Must be of type PIL.Image.Image, numpy.ndarray, "
                     "torch.Tensor, tf.Tensor or jax.ndarray."
                 )
         
 
 
         if images is not None:
-            pixel_values = [
-                [
+            if is_pil_image(images[0]):
+                pixel_values = [
                     self._preprocess_image(
                         image=image,
                         do_resize=do_resize,
@@ -309,21 +306,43 @@ class LLaMAVIDLlavaImageProcessor(BaseImageProcessor):
                         data_format=data_format,
                         input_data_format=input_data_format,
                     )
-                    for image in visual
+                    for image in images
                 ]
-                for visual in images
-            ]
+            else:
+
+                pixel_values = [
+                    [
+                        self._preprocess_image(
+                            image=image,
+                            do_resize=do_resize,
+                            size=size,
+                            resample=resample,
+                            do_rescale=do_rescale,
+                            rescale_factor=rescale_factor,
+                            do_normalize=do_normalize,
+                            image_mean=image_mean,
+                            image_std=image_std,
+                            do_center_crop=do_center_crop,
+                            crop_size=crop_size,
+                            do_convert_rgb=do_convert_rgb,
+                            data_format=data_format,
+                            input_data_format=input_data_format,
+                        )
+                        for image in visual
+                    ]
+                    for visual in images
+                ]
         else:
             pixel_values=None
 
 
-        encoded = BatchFeature(
+        encoded_output = BatchFeature(
             data={
                 "pixel_values": pixel_values,
             },
             tensor_type=return_tensors,
         )
-        return encoded
+        return encoded_output
 
 
     def _preprocess_image(

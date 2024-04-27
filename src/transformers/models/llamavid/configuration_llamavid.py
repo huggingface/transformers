@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ LLaMAVID model configuration"""
-import os
+
 from typing import Union
 from ...configuration_utils import PretrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
@@ -24,6 +24,7 @@ logger = logging.get_logger(__name__)
 
 LLAMAVID_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "Nilesh360/llama-vid-7b-full-336": "https://huggingface.co/Nilesh360/llama-vid-7b-full-336/blob/main/config.json",
+    "Nilesh360/llama-vid-7b-full-224-video-fps-1": "https://huggingface.co/Nilesh360/llama-vid-7b-full-224-video-fps-1/blob/main/config.json",
 }
 
 class LLaMAVIDLlavaVisionConfig(PretrainedConfig):
@@ -31,7 +32,7 @@ class LLaMAVIDLlavaVisionConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`LLaMAVIDLlavaVisionModel`]. It is used to
     instantiate a LLaMAVIDLlava vision encoder according to the specified arguments, defining the model architecture.
     Instantiating a configuration defaults will yield a similar configuration to that of the LLaMAVIDLlava
-    [YanweiLi/llama-vid-7b-full-336](https://huggingface.co/YanweiLi/llama-vid-7b-full-336) architecture.
+    [Nilesh360/llama-vid-7b-full-336](https://huggingface.co/Nilesh360/llama-vid-7b-full-336) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -67,10 +68,10 @@ class LLaMAVIDLlavaVisionConfig(PretrainedConfig):
     ```python
     >>> from transformers import LLaMAVIDLlavaVisionConfig, LLaMAVIDLlavaVisionModel
 
-    >>> # Initializing a LLaMAVIDLlavaVisionConfig with YanweiLi/llama-vid-7b-full-336 style configuration
+    >>> # Initializing a LLaMAVIDLlavaVisionConfig with Nilesh360/llama-vid-7b-full-336 style configuration
     >>> configuration = LLaMAVIDLlavaVisionConfig()
 
-    >>> # Initializing a LLaMAVIDLlavaVisionModel (with random weights) from theYanweiLi/llama-vid-7b-full-336 style configuration
+    >>> # Initializing a LLaMAVIDLlavaVisionModel (with random weights) from the Nilesh360/llama-vid-7b-full-336 style configuration
     >>> model = LLaMAVIDLlavaVisionModel(configuration)
 
     >>> # Accessing the model configuration
@@ -253,7 +254,7 @@ class LLaMAVIDLlavaConfig(PretrainedConfig):
     LLaMAVID model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Llava-9B.
 
-    e.g. [YanweiLi/llama-vid-7b-full-336](https://huggingface.co/YanweiLi/llama-vid-7b-full-336)
+    e.g. [Nilesh360/llama-vid-7b-full-336](https://huggingface.co/Nilesh360/llama-vid-7b-full-336)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -275,7 +276,7 @@ class LLaMAVIDLlavaConfig(PretrainedConfig):
             The index of the layer to select the vision feature.
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the LLaMAVID model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~LlavaForConditionalGeneration`]
+            `inputs_ids` passed when calling [`~LLaMAVIDLlavaForConditionalGeneration`]
 
     Example:
 
@@ -288,10 +289,10 @@ class LLaMAVIDLlavaConfig(PretrainedConfig):
     >>> # Initializing a LLaMAVIDLlama config
     >>> text_config = LLaMAVIDLlamaConfig()
 
-    >>> # Initializing a Llava llava-1.5-7b style configuration
+    >>> # Initializing a  LLaMAVID-1.5-7b style configuration
     >>> configuration = LLaMAVIDLlavaConfig(vision_config, text_config)
 
-    >>> # Initializing a model from the llava-1.5-7b style configuration
+    >>> # Initializing a model from the LLaMAVID-1.5-7b style configuration
     >>> model = LLaMAVIDLlavaForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
@@ -319,7 +320,7 @@ class LLaMAVIDLlavaConfig(PretrainedConfig):
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
         vocab_size=32000,
-        compress_type =None,
+        compress_type ='mean',
         **kwargs,
     ):
         self.ignore_index = ignore_index

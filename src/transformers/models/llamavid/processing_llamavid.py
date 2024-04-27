@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team.
+# Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 Processor class for LLaMAVIDLlava.
 """
 
-import os
+
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -47,7 +47,7 @@ class LLaMAVIDLlavaProcessor(ProcessorMixin):
     r"""
     Constructs a Llava processor which wraps a Llava image processor and a Llava tokenizer into a single processor.
 
-    [`LLaMAVIDLlavaProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`LLaMAVIDLlavaProcessor`] offers all the functionalities of [`LLaMAVIDLlavaImageProcessor`] and [`LlamaTokenizerFast`]. See the
     [`~LLaMAVIDLlavaProcessor.__call__`] and [`~LLaMAVIDLlavaProcessor.decode`] for more information.
 
     Args:

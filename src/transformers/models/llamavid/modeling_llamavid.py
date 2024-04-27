@@ -1,4 +1,3 @@
-
 # coding=utf-8
 # Copyright 2024 the HuggingFace Inc. team. All rights reserved.
 #
@@ -54,10 +53,9 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "LLaMAVIDLlavaConfig"
 
 LLAMAVIDLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "llava-hf/llava-1.5-7b-hf",
-    "llava-hf/llava-1.5-13b-hf",
-    "llava-hf/bakLlava-v1-hf",
-    # See all LLaMAVIDLlava models at https://huggingface.co/models?filter=llava
+    "YanweiLi/llama-vid-7b-full-336",
+    "YanweiLi/llama-vid-7b-pretrain-336",
+    # See all LLaMAVIDLlava models at https://huggingface.co/models?filter=llama-vid
 ]
 
 
@@ -68,7 +66,7 @@ LLAMAVIDLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->Llava
 class LLaMAVIDLlavaCausalLMOutputWithPast(ModelOutput):
     """
-    Base class for Llava causal language model (or autoregressive) outputs.
+    Base class for LLaMAVID causal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -107,6 +105,7 @@ class LLaMAVIDLlavaCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
+# Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->LLaMAVIDLlava
 class LLaMAVIDLlavaMultiModalProjector(nn.Module):
     def __init__(self, config: LLaMAVIDLlavaConfig):
         super().__init__()
@@ -132,7 +131,7 @@ LLAMAVID_LLAVA_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`LlavaConfig`] or [`LlavaVisionConfig`]):
+        config ([`LLaMAVIDConfig`] or [`LLaMAVIDConfigVisionConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -145,7 +144,7 @@ LLAMAVID_LLAVA_START_DOCSTRING = r"""
 )
 class LLaMAVIDLlavaPreTrainedModel(PreTrainedModel):
     config_class = LLaMAVIDLlavaConfig
-    base_model_prefix = "llava"
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "LLaMAVIDLlavaQFormerEmbeddings",
@@ -158,7 +157,7 @@ class LLaMAVIDLlavaPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
 
     def _init_weights(self, module):
-        # important: this ported version of Llava isn't meant for training from scratch - only
+        # important: this ported version of LLaMAVID isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
         # https://github.com/haotian-liu/LLaVA/tree/main/llava should serve for that purpose
         std = (
@@ -189,7 +188,7 @@ class LLaMAVIDLlavaPreTrainedModel(PreTrainedModel):
     
 
 @dataclass
-# Copied from transformers.models.blip_2.modeling_blip_2.Blip2ForConditionalGenerationModelOutput with Blip2->InstructBlip
+# Copied from transformers.models.blip_2.modeling_blip_2.Blip2ForConditionalGenerationModelOutput with Blip2->LLaMAVIDLlava
 class LLaMAVIDLlavaForConditionalGenerationModelOutput(ModelOutput):
     """
     Class defining the outputs of [`LLaMAVIDLlavaForConditionalGeneration`].
@@ -222,7 +221,7 @@ class LLaMAVIDLlavaForConditionalGenerationModelOutput(ModelOutput):
         )
 
 
-# Copied from transformers.models.blip.modeling_blip.BlipVisionEmbeddings with Blip->InstructBlip
+# Copied from transformers.models.blip.modeling_blip.BlipVisionEmbeddings with Blip->LLaMAVIDLlava
 class LLaMAVIDLlavaVisionEmbeddings(nn.Module):
     def __init__(self, config: LLaMAVIDLlavaVisionConfig):
         super().__init__()
@@ -242,19 +241,34 @@ class LLaMAVIDLlavaVisionEmbeddings(nn.Module):
 
         self.position_embedding = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
 
+
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
         target_dtype = self.patch_embedding.weight.dtype
 
+        dummp  = pixel_values.reshape(-1, pixel_values.shape[-1]).detach().cpu()
+        np.savetxt('C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\_vit_embedding_patch_in_trans.txt', dummp.numpy(),fmt='%.3f', delimiter='\t')
 
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
+
+        
+        dummp  = patch_embeds.reshape(-1, patch_embeds.shape[-1]).detach().cpu()
+        np.savetxt('C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\_vit_embedding_patch_out_trans.txt', dummp.numpy(),fmt='%.3f', delimiter='\t')
+
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1).to(target_dtype)
         
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
 
+        dummp  = embeddings.reshape(-1, embeddings.shape[-1]).detach().cpu()
+        np.savetxt('C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\_vit_embedding_cat_cls_trans.txt', dummp.numpy(),fmt='%.3f', delimiter='\t')
+
+
         embeddings = embeddings + self.position_embedding[:, : embeddings.size(1), :].to(target_dtype)
+        dummp  = embeddings.reshape(-1, embeddings.shape[-1]).detach().cpu()
+        np.savetxt('C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\_vit_embedding_add_position_trans.txt', dummp.numpy(),fmt='%.3f', delimiter='\t')
+
 
         return embeddings
 
@@ -341,7 +355,7 @@ class LLaMAVIDLlavaAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.blip.modeling_blip.BlipMLP
+# Copied from transformers.models.blip.modeling_blip.BlipMLP with Blip->LLaMAVIDLlava
 class LLaMAVIDLlavaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -357,7 +371,7 @@ class LLaMAVIDLlavaMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.blip.modeling_blip.BlipEncoderLayer with Blip->InstructBlip
+# Copied from transformers.models.blip.modeling_blip.BlipEncoderLayer with Blip->LLaMAVIDLlava
 class LLaMAVIDLlavaEncoderLayer(nn.Module):
     def __init__(self, config: LLaMAVIDLlavaConfig):
         super().__init__()
@@ -366,6 +380,8 @@ class LLaMAVIDLlavaEncoderLayer(nn.Module):
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = LLaMAVIDLlavaMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+
+ 
 
     def forward(
         self,
@@ -386,15 +402,33 @@ class LLaMAVIDLlavaEncoderLayer(nn.Module):
         residual = hidden_states
 
         dummp  = hidden_states.reshape(-1, hidden_states.shape[-1]).detach().cpu()
+        file_name = r'C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\_vit_encoder_forward_trans_1.txt'
+        np.savetxt(file_name, dummp.numpy(),fmt='%.3f', delimiter='\t')
 
 
         hidden_states = self.layer_norm1(hidden_states)
+        dummp  = hidden_states.reshape(-1, hidden_states.shape[-1]).detach().cpu()
+        file_name = r'C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\_vit_encoder_forward_trans_2.txt'
+        np.savetxt(file_name, dummp.numpy(),fmt='%.3f', delimiter='\t')
+
+
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             head_mask=attention_mask,
             output_attentions=output_attentions,
         )
+        dummp  = hidden_states.reshape(-1, hidden_states.shape[-1]).detach().cpu()
+        file_name = r'C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\_vit_encoder_forward_trans_3.txt'
+        np.savetxt(file_name, dummp.numpy(),fmt='%.3f', delimiter='\t')
+
+        
         hidden_states = hidden_states + residual
+
+        dummp  = hidden_states.reshape(-1, hidden_states.shape[-1]).detach().cpu()
+        file_name = r'C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\_vit_encoder_forward_trans_4.txt'
+        np.savetxt(file_name, dummp.numpy(),fmt='%.3f', delimiter='\t')
+
+
 
         dummp  = hidden_states.reshape(-1, hidden_states.shape[-1]).detach().cpu()
 
@@ -406,12 +440,14 @@ class LLaMAVIDLlavaEncoderLayer(nn.Module):
         hidden_states = hidden_states + residual
 
         dummp  = hidden_states.reshape(-1, hidden_states.shape[-1]).detach().cpu()
-
+        file_name = r'C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\_vit_encoder_forward_trans_5.txt'
+        np.savetxt( file_name, dummp.numpy(),fmt='%.3f', delimiter='\t')
 
         outputs = (hidden_states,)
 
         if output_attentions:
             outputs += (attn_weights,)
+            
 
         return outputs
 
@@ -512,7 +548,7 @@ LLaMAVIDLlava_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.blip.modeling_blip.BlipEncoder with Blip->InstructBlip
+# Copied from transformers.models.blip.modeling_blip.BlipEncoder with Blip->LLaMAVIDLlava
 class LLaMAVIDLlavaEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -566,6 +602,9 @@ class LLaMAVIDLlavaEncoder(nn.Module):
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
+        dummp  = inputs_embeds.reshape(-1, inputs_embeds.shape[-1]).detach().cpu()
+        np.savetxt('C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\_vit_encoder_before_loop_trans.txt', dummp.numpy(),fmt='%.3f', delimiter='\t')
+
         hidden_states = inputs_embeds
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -586,13 +625,15 @@ class LLaMAVIDLlavaEncoder(nn.Module):
 
             hidden_states = layer_outputs[0]
 
-
+    
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
+        dummp  = hidden_states.reshape(-1, hidden_states.shape[-1]).detach().cpu()
+        np.savetxt('C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\_vit_encoder_after_loop_trans.txt', dummp.numpy(),fmt='%.3f', delimiter='\t')
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
@@ -601,7 +642,7 @@ class LLaMAVIDLlavaEncoder(nn.Module):
         )
 
 
-# Can't apply copy as the modification of layerNorm is removed Copied from transformers.models.blip.modeling_blip.BlipVisionModel with Blip->InstructBlip, BLIP->INSTRUCTBLIP
+
 class LLaMAVIDLlavaVisionModel(LLaMAVIDLlavaPreTrainedModel):
     main_input_name = "pixel_values"
     config_class = LLaMAVIDLlavaVisionConfig
@@ -638,9 +679,15 @@ class LLaMAVIDLlavaVisionModel(LLaMAVIDLlavaPreTrainedModel):
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
-
+        
+    
         hidden_states = self.embeddings(pixel_values)
 
+
+
+                
+        dummp  = hidden_states.reshape(-1, hidden_states.shape[-1]).detach().cpu()
+        np.savetxt('C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\_vit_embedding_trans.txt', dummp.numpy(),fmt='%.3f', delimiter='\t')
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -650,10 +697,15 @@ class LLaMAVIDLlavaVisionModel(LLaMAVIDLlavaPreTrainedModel):
         )
 
 
-
-
         last_hidden_state = encoder_outputs[0]
+        dummp  = last_hidden_state.reshape(-1, last_hidden_state.shape[-1]).detach().cpu()
+        np.savetxt('C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\_vit_encoding_pre_layer_trans.txt', dummp.numpy(),fmt='%.3f', delimiter='\t')
+	
+	#we also need a original output from the encoder as an input to self.token_generation, without a layer norm output. Therefore hidden_states=encoder_outputs[0] 
+	#also passed in the return value along with the layer-norm output
         last_hidden_state = self.post_layernorm(last_hidden_state)
+
+
 
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
@@ -671,7 +723,7 @@ class LLaMAVIDLlavaVisionModel(LLaMAVIDLlavaPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings
 
-
+# Copied from transformers.models.instructblip.modeling_instructblip.InstructBlipQFormerMultiHeadAttention with InstructBlip->LLaMAVIDLlava
 class LLaMAVIDLlavaQFormerMultiHeadAttention(nn.Module):
     def __init__(self, config, is_cross_attention=False):
         super().__init__()
@@ -809,7 +861,7 @@ class LLaMAVIDLlavaQFormerMultiHeadAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->InstructBlipQFormer
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->LLaMAVIDLlava
 class LLaMAVIDLlavaQFormerSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -824,7 +876,7 @@ class LLaMAVIDLlavaQFormerSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerAttention with Blip2->InstructBlip
+# Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerAttention with Blip2->LLaMAVIDLlava
 class LLaMAVIDLlavaQFormerAttention(nn.Module):
     def __init__(self, config, is_cross_attention=False):
         super().__init__()
@@ -890,7 +942,7 @@ class LLaMAVIDLlavaQFormerIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->InstructBlipQFormer
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->LLaMAVIDLlava
 class LLaMAVIDLlavaQFormerOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -904,7 +956,7 @@ class LLaMAVIDLlavaQFormerOutput(nn.Module):
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
-
+# Copied from transformers.models.instructblip.modeling_instructblip.InstructBlipQFormerLayer with InstructBlip->LLaMAVIDLlava
 class LLaMAVIDLlavaQFormerLayer(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
@@ -1103,7 +1155,7 @@ class LLaMAVIDLlavaQFormerEncoder(nn.Module):
             cross_attentions=all_cross_attentions,
         )
 
-
+# Copied from transformers.models.instructblip.modeling_instructblip.InstructBlipQFormerEmbeddings with InstructBlip->LLaMAVIDLlava
 class LLaMAVIDLlavaQFormerEmbeddings(nn.Module):
     """Construct the embeddings from word and position embeddings."""
 
@@ -1154,12 +1206,9 @@ class LLaMAVIDLlavaQFormerEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings
 
-
+# Copied from transformers.models.instructblip.modeling_instructblip.InstructBlipQFormerModel with InstructBlip->LLaMAVIDLlava
 class LLaMAVIDLlavaQFormerModel(LLaMAVIDLlavaPreTrainedModel):
-    """
-    Querying Transformer (Q-Former), used in LLaMAVIDLlava. Slightly modified from BLIP-2 as it also takes the
-    instruction as input.
-    """
+
 
     def __init__(self, config: LLaMAVIDLlavaQFormerConfig):
         super().__init__(config)
@@ -1361,10 +1410,10 @@ LLAMAVID_LLAVA_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+        images (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
-            [`CLIPImageProcessor`] for processing images).
+            [`AutoImageProcessor`]. See [`LLaMAVIDLlavaImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
+            [`LLaMAVIDLlavaProcessor`] for processing images).
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1424,24 +1473,21 @@ LLAMAVID_LLAVA_INPUTS_DOCSTRING = r"""
 class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
     def __init__(self, config: LLaMAVIDLlavaConfig):
         super().__init__(config)
-
+        self.config =  config
         self.vision_tower = LLaMAVIDLlavaVisionModel(config.vision_tower_config)
         self.qformer =  LLaMAVIDLlavaQFormerModel(config.qformer_config)
 
         self.multi_modal_projector = LLaMAVIDLlavaMultiModalProjector(config)
         self.vocab_size = config.vocab_size
+        
         self.language_model = AutoModelForCausalLM.from_config(
             config.text_config, attn_implementation=config._attn_implementation
         )
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query, config.qformer_config.hidden_size))
-        #self.query_tokens.data.normal_(mean=0.0, std=self.qformer.initializer_range)
-
                 
         self.vlm_att_projector = torch.nn.Linear(config.qformer_config.hidden_size, self.config.mm_hidden_size)
         self.vlm_att_key_projector  = torch.nn.Linear(self.config.mm_hidden_size, self.config.mm_hidden_size)
         self.vlm_att_val_projector  = torch.nn.Linear(self.config.mm_hidden_size, self.config.hidden_size)
-
-    
 
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
@@ -1475,176 +1521,17 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
         self.config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
-    
-   
-    def init_bert(self, vision_width, cross_attention_freq=2, truncation_side="right"):
-        # initialize BERT tokenizer
-        self.vlm_att_tokenlizer = BertTokenizer.from_pretrained("bert-base-uncased", truncation_side=truncation_side)
-        self.vlm_att_tokenlizer.add_special_tokens({"bos_token": "[DEC]"})
-        # initialize BERT
-        self.vlm_att_encoder_config = BertConfig.from_pretrained("bert-base-uncased")
-        self.vlm_att_encoder_config.encoder_width = vision_width
-        # insert cross-attention layer every other block
-        self.vlm_att_encoder_config.add_cross_attention = True
-        self.vlm_att_encoder_config.cross_attention_freq = cross_attention_freq
-        self.query_tokens = None
-        
-        if "qformer" in self.config.bert_type:
-            self.vlm_att_encoder = BertLMHeadModel.from_pretrained(
-                "bert-base-uncased", config=self.vlm_att_encoder_config
-            )
-            self.query_tokens = nn.Parameter(
-                torch.zeros(1, self.config.num_query, self.vlm_att_encoder_config.hidden_size)
-            )
-            self.query_tokens.data.normal_(mean=0.0, std=self.vlm_att_encoder_config.initializer_range)
-
-        else:
-            raise NotImplementedError("BERT type not implemented...")
-        
-        if 'qformer' in self.config.bert_type:
-            self.vlm_att_ln = torch.nn.LayerNorm(vision_width)
-        
-        self.vlm_att_encoder.resize_token_embeddings(len(self.vlm_att_tokenlizer))
-        self.vlm_att_encoder.cls = None
-        
-        if "layer" in self.config.bert_type:
-            layer_num = int(self.config.bert_type.split(':')[-1])
-            self.vlm_att_encoder.bert.encoder.layer = self.vlm_att_encoder.bert.encoder.layer[:layer_num]
-            print(f"Only use {layer_num} layers in BERT...")
-        
-        self.vlm_att_projector = torch.nn.Linear(self.vlm_att_encoder.config.hidden_size, self.config.mm_hidden_size)
-        self.vlm_att_key_projector  = torch.nn.Linear(self.config.mm_hidden_size, self.config.mm_hidden_size)
-        self.vlm_att_val_projector  = torch.nn.Linear(self.config.mm_hidden_size, self.config.hidden_size)
-
-    
-        
-        if "raw" in self.config.bert_type:
-            self.vlm_att_bert_proj  = torch.nn.Linear(vision_width, self.vlm_att_encoder.config.hidden_size)
-        elif "pretrain" in self.config.bert_type and self.config.mm_hidden_size!=vision_width:
-            self.vlm_att_bert_proj = torch.nn.Linear(self.config.mm_hidden_size, vision_width)
-        else:
-            self.vlm_att_bert_proj = None
-        
-
-        
-      
-
-
-    def vlm_attention(self, image_features, prompts=None, image_counts=None, long_video=False  ):
-        img_feat_lst = []
-        if image_counts is None:
-            assert len(image_features) == len(prompts), f"Size mismatch! image_features: {len(image_features)}, prompts: {len(prompts)}"
-        else:
-            assert len(prompts) == len(image_counts), f"Size mismatch! prompts: {len(prompts)}, image_counts: {len(image_counts)}"
-        image_atts = torch.ones(image_features.size()[:-1], dtype=torch.long).to(image_features.device)    
-
-        total_count = 0
-        # calculate each image feat according to the prompt
-        for _idx in range(len(prompts)):
-            print("vlm_attention prompt before the bert-qformer")
-            print('vlm_attention ' , prompts[_idx])
-            assert isinstance(prompts[_idx], list), f"Prompt should be a list, but got {type(prompts[_idx])}"
-            input_token = self.vlm_att_tokenlizer(
-                prompts[_idx], 
-                padding='longest', 
-                truncation=True,
-                max_length=256,
-                return_tensors="pt"
-                ).to(image_features.device)
-
-            input_ids = input_token.input_ids
-            attention_masks = input_token.attention_mask
-            
-            if image_counts is None:
-                img_feat_prompt = image_features[_idx, None].expand(len(prompts[_idx]), -1, -1)
-                img_att_prompt = image_atts[_idx, None].expand(len(prompts[_idx]), -1)
-            else:
-                # shape: [prompt_num*frame_num, image_shape, feat_dim]
-                img_feat_prompt = image_features[total_count:total_count+image_counts[_idx]]
-                img_feat_prompt = img_feat_prompt[None].expand(len(prompts[_idx]), -1, -1, -1).flatten(0,1)
-                img_att_prompt = image_atts[total_count:total_count+image_counts[_idx]]
-                img_att_prompt = img_att_prompt[None].expand(len(prompts[_idx]), -1, -1).flatten(0,1)
-                input_ids = input_ids[:,None].expand(-1, image_counts[_idx], -1).flatten(0,1)
-                attention_masks = attention_masks[:,None].expand(-1, image_counts[_idx], -1).flatten(0,1)
-                total_count += image_counts[_idx]
-            
-            if self.vlm_att_bert_proj is not None:
-            
-                bert_feat = self.vlm_att_bert_proj(img_feat_prompt)
-            else:
-                bert_feat = img_feat_prompt.clone()
-
- 
-            if "qformer" in self.config.bert_type:
-                query_tokens_ = self.query_tokens.expand(bert_feat.shape[0], -1, -1)
-                query_atts = torch.cat([torch.ones(query_tokens_.size()[:-1], dtype=torch.long).to(bert_feat.device), 
-                                        attention_masks],dim=1)
-                
-                if 'pretrain' in self.config.bert_type:
-                    mm_img_in = self.vlm_att_ln(bert_feat)
-                else:
-                    mm_img_in = bert_feat
-                
-                if long_video:
-                    outputs = []
-                    block_size = 64
-                    for L in range(0, len(input_ids), block_size):
-                        R = L + block_size
-                        mm_output = self.get_model().vlm_att_encoder.bert(
-                            input_ids[L:R],
-                            query_embeds=query_tokens_[L:R],
-                            attention_mask=query_atts[L:R],
-                            encoder_hidden_states=mm_img_in[L:R],
-                            encoder_attention_mask=img_att_prompt[L:R],
-                            return_dict=True,
-                        )
-                        mm_output = mm_output.last_hidden_state[:,:self.query_tokens.shape[1]]
-                        outputs.append(mm_output)
-                    mm_output = torch.cat(outputs)
-                    torch.cuda.empty_cache()
-                else:
-                    mm_output = self.vlm_att_encoder.bert(
-                        input_ids,
-                        query_embeds=query_tokens_,
-                        attention_mask=query_atts,
-                        encoder_hidden_states=mm_img_in,
-                        encoder_attention_mask=img_att_prompt,
-                        return_dict=True,
-                    )
-                    mm_output = mm_output.last_hidden_state[:,:query_tokens_.shape[1]]
-                
-            elif "raw" in self.config.bert_type:
-
-                if self.config.mm_vision_select_feature == 'patch' and bert_feat.shape[1]%2 == 1:
-                    bert_feat = bert_feat[:, 1:]
-                    img_att_prompt = img_att_prompt[:, 1:]
-                
-                mm_output = self.vlm_att_encoder.bert(
-                    input_ids,
-                    attention_mask=attention_masks,
-                    encoder_hidden_states=self.vlm_att_bert_proj(bert_feat),
-                    encoder_attention_mask=img_att_prompt,
-                    return_dict=True,
-                )
-                mm_output = mm_output.last_hidden_state
-            else:
-                raise ValueError(f'Unexpected bert type: {self.config.bert_type}')
-            
-            text_q = self.vlm_att_projector(mm_output)
-            final_token = self.token_generation(text_q, img_feat_prompt, long_video=long_video)
-
-            if image_counts is not None:
-                # shape: [prompt_num, frame_num*image_shape, feat_dim]
-                final_token = final_token.reshape(len(prompts[_idx]), image_counts[_idx], *final_token.shape[-2:])
-                final_token = final_token.flatten(1,2)
-            img_feat_lst.append(final_token)
-
-        return img_feat_lst
-    
 
     def token_generation(self, text_q, vis_embed, long_video=False):
-        if vis_embed.shape[1]%2 == 1:
-            vis_embed = vis_embed[:, 1:]
+
+        if self.config.vision_feature_select_strategy == "default":
+                vis_embed = vis_embed[:, 1:]
+        elif self.config.vision_feature_select_strategy == "full":
+                vis_embed = vis_embed
+        else:
+            raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
+
+   
         ctx_embed = self.vlm_att_key_projector(vis_embed)
         # Key part 1: calculate context-related embedding
         ctx_embed = text_q @ ctx_embed.transpose(-1,-2) 
@@ -1663,6 +1550,11 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
             torch.cuda.empty_cache()
         ctx_embed = self.vlm_att_val_projector(ctx_embed[:,None])
 
+
+        dummp  = ctx_embed.reshape(-1, ctx_embed.shape[-1]).detach().cpu()
+        np.savetxt('C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\_token_ctx_trans.txt', dummp.numpy(),fmt='%.3f', delimiter='\t')
+
+
         # Key part 2: calculate visual embedding
         if self.config.compress_type is not None:
             if 'grid' in self.config.compress_type:
@@ -1679,6 +1571,10 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
                 vis_embed = vis_embed.permute(0, 2, 3, 1).flatten(1,2)
             elif 'mean' in self.config.compress_type:
                 vis_embed = vis_embed.mean(dim=1, keepdim=True)
+
+        dummp  = vis_embed.reshape(-1, vis_embed.shape[-1]).detach().cpu()
+        np.savetxt('C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\_token_vis_embed_trans.txt', dummp.numpy(),fmt='%.3f', delimiter='\t')
+
         
         # concat token in shape (B, n+1, C) 
         vis_embed = self.multi_modal_projector(vis_embed)                
@@ -1687,7 +1583,7 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
 
 
 
-    def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
+    def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels , num_frames=1):
         num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
@@ -1695,7 +1591,7 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
         special_image_token_mask = input_ids == self.config.image_token_index
         num_special_image_tokens = torch.sum(special_image_token_mask, dim=-1)
         # Compute the maximum embed dimension
-        max_embed_dim = (num_special_image_tokens.max() * (num_image_patches - 1)) + sequence_length
+        max_embed_dim = (num_special_image_tokens.max() * (num_image_patches  - 1)) + sequence_length
         batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
 
         # 2. Compute the positions where text should be written
@@ -1740,9 +1636,11 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
         # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
         image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
         image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
-        temp =  image_to_overwrite.sum() 
-        temp1 = image_features[0].shape[:-1 ].numel()
+
+        temp= image_to_overwrite.sum()
+        temp1 = image_features.shape[:-1].numel()
         if image_to_overwrite.sum() != image_features.shape[:-1].numel():
+            num_images//= num_frames
             raise ValueError(
                 f"The input provided to the model are wrong. The number of image tokens is {torch.sum(special_image_token_mask)} while"
                 f" the number of image given to the model is {num_images}. This prevents correct indexing and breaks batch generation."
@@ -1752,6 +1650,11 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
 
+        # 6. Mask out the embedding at padding positions, as we later use the past_key_value value to determine the non-attended tokens.
+        batch_indices, pad_indices = torch.where(input_ids == self.pad_token_id)
+        indices_to_mask = new_token_positions[batch_indices, pad_indices]
+
+        final_embedding[batch_indices, indices_to_mask] = 0
         if labels is None:
             final_labels = None
 
@@ -1768,14 +1671,27 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
             raise ValueError("You have to specify `pixel_values`")
 
         
-        long_video , num_frames  =  False ,  0 
+        long_video , num_frames  =  False ,  1 
 
         if pixel_values is not None :
-            batch_size , num_frames, channels, height, width =  pixel_values.shape
-            if num_frames > 1000:
-                long_video =  True 
-            if  not long_video:
+
+            if pixel_values.ndim == 5:
+                batch_size , num_frames, channels, height, width =  pixel_values.shape
+
+                if num_frames > 1000:
+                    long_video =  True 
+
+                if  not long_video:
                     pixel_values = pixel_values.reshape(batch_size * num_frames, channels, height, width)
+                    
+    
+            '''
+                   if not long_video:
+                    images = [image if len(image.shape) == 4 else image.unsqueeze(0) for image in pixel_values]
+                num_frames = [image.shape[0] for image in images]
+                pixel_values = torch.cat(images, dim=0)
+            '''
+   
 
 
         return pixel_values , num_frames , long_video
@@ -1812,23 +1728,34 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
         Example:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, LLaMAVIDLlavaForConditionalGeneration
+        >>from PIL import Image
+        >>import requests
+        >>from transformers import AutoProcessor, AutoModel, LLaMAVIDLlavaForConditionalGeneration, AutoConfig, AutoTokenizer, LLaMAVIDLlavaProcessor,LLaMAVIDLlavaConfig,AddedToken
+        >>import torch
+        >>import numpy as np
+        >>from decord import VideoReader, cpu
 
-        >>> model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf")
-        >>> processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+        >>def load_video(video_path, fps=1):
+        >>   vr = VideoReader(video_path, ctx=cpu(0))
+        >>   fps = round(vr.get_avg_fps()/fps)
+        >>   frame_idx = [i for i in range(0, len(vr), fps)]
+        >>   spare_frames = vr.get_batch(frame_idx).asnumpy()
+        >>   return spare_frames
 
-        >>> prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"
-        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>processor = LLaMAVIDLlavaProcessor.from_pretrained("Nilesh360/llama-vid-7b-full-224-video-fps-1")
+        >>model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("Nilesh360/llama-vid-7b-full-224-video-fps-1")
 
-        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
+        >>prompt ="<image>\nUSER: Please describe the video conntent:"
+        >>url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>image = Image.open(requests.get(url, stream=True).raw)
+        >>images = load_video(r'eating_spaghetti.mp4')
 
-        >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_length=30)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "\nUSER: What's the content of the image?\nASSISTANT: The image features a stop sign on a street corner"
+        >>inputs = processor(text=[prompt ], images=[images ], return_tensors="pt")
+
+        >> Generate
+        generate_ids = model.generate(**inputs, max_length=100)
+        >>reply = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        >>print(reply)
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1854,11 +1781,12 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
                 # pre-process images for long video
 
 
-                image_features , image_count, long_video = self._get_features(
+                image_features , image_counts, long_video = self._get_features(
                     pixel_values=pixel_values,
                  
                 )
-
+                dummp  = image_features.reshape(-1, image_features.shape[-1]).detach().cpu()
+                np.savetxt('C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\llama_from_entry_trans.txt', dummp.numpy(),fmt='%.3f', delimiter='\t')
 
                 vision_outputs = self.vision_tower(
                         pixel_values=image_features,
@@ -1868,10 +1796,18 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
                     )
                 image_features = vision_outputs.last_hidden_state
 
+
+                vision_outputs.hidden_states =  torch.load("C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\output_vit.pt").to('cpu')
+                image_features = self.vision_tower.post_layernorm(vision_outputs.hidden_states)
+
+                dummp  = vision_outputs.hidden_states.reshape(-1, vision_outputs.hidden_states.shape[-1]).detach().cpu()
+                np.savetxt('C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\llama_vit_output_trans.txt', dummp.numpy(),fmt='%.3f', delimiter='\t')
+
+
+
                 # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
                 image_attention_mask = torch.ones(image_features.size()[:-1], dtype=torch.long, device=image_features.device)
-
-               
+              
 
                 query_tokens = self.query_tokens.expand(image_features.shape[0], -1, -1)
                 query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_features.device)
@@ -1879,18 +1815,15 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
 
                 if qformer_attention_mask is None:
                     qformer_attention_mask = torch.ones_like(qformer_text_encoding)
-                if image_count is not None : 
+                if image_counts is not None : 
                     qformer_attention_mask =  qformer_attention_mask.expand(image_features.shape[0] , -1 )
                     qformer_text_encoding  = qformer_text_encoding.expand(image_features.shape[0] , -1  )
-                    inputs_embeds = inputs_embeds.expand(image_features.shape[0] ,  -1 , -1 )
-                    input_ids = input_ids.expand(image_features.shape[0] ,-1 )
+                    #inputs_embeds = inputs_embeds.expand(image_features.shape[0] ,  -1 , -1 )
+                    #input_ids = input_ids.expand(image_features.shape[0] ,-1 )
                     attention_mask = attention_mask.expand(image_features.shape[0] , -1 )
 
                 qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
-                
-
-
-
+  
                 query_outputs = self.qformer(
                     input_ids=qformer_text_encoding,
                     attention_mask=qformer_attention_mask,
@@ -1903,23 +1836,38 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
                 )
                 query_output = query_outputs[0][:, : query_tokens.size(1), :]
 
+                dummp  = query_output.reshape(-1, query_output.shape[-1]).detach().cpu()
+                np.savetxt('C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\llama_qformer_trans.txt', dummp.numpy(),fmt='%.3f', delimiter='\t')
+
+
                 text_q=  self.vlm_att_projector(query_output)
+
+
+                dummp  = text_q.reshape(-1, text_q.shape[-1]).detach().cpu()
+                np.savetxt('C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\llama_text_q_trans.txt', dummp.numpy(),fmt='%.3f', delimiter='\t')
+
+
+                
+                dummp  = vision_outputs.hidden_states.reshape(-1, vision_outputs.hidden_states.shape[-1]).detach().cpu()
+                np.savetxt('C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\llama_text_q_vvv1_trans.txt', dummp.numpy(),fmt='%.3f', delimiter='\t')
+
+
                 image_features = self.token_generation(text_q, vision_outputs.hidden_states, long_video=long_video)
                 
- 
-                # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
-                #selected_image_feature =  final_token
-                #selected_image_feature = image_features.hidden_states[vision_feature_layer]
-                #selected_image_feature = self.vlm_attention(selected_image_feature , prompt= prompts, image_counts=image_counts, long_video=long_video  )
+                if image_counts is not None:
+                    # shape: [prompt_num, frame_num*image_shape, feat_dim]
+                    image_features = image_features.reshape(input_ids.shape[0], image_counts, *image_features.shape[-2:])
+                    image_features = image_features.flatten(1,2)
 
 
-                #image_features = self.multi_modal_projector(selected_image_feature)
+                dummp  = image_features.reshape(-1, image_features.shape[-1]).detach().cpu()
+                np.savetxt('C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\llama_token_output_trans.txt', dummp.numpy(),fmt='%.3f', delimiter='\t')
+
+
+
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
-                    image_features, inputs_embeds, input_ids, attention_mask, labels
+                    image_features, inputs_embeds, input_ids, attention_mask, labels ,  image_counts,
                 )
-
-
-
 
                 if labels is None:
                     labels = torch.full_like(attention_mask, self.config.ignore_index).to(torch.long)
@@ -1955,6 +1903,10 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
 
                     attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+
+        
+        dummp  = inputs_embeds.reshape(-1, inputs_embeds.shape[-1]).detach().cpu()
+        np.savetxt('C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\llama_to_llm_trans.txt', dummp.numpy(),fmt='%.3f', delimiter='\t')
 
         outputs = self.language_model(
             attention_mask=attention_mask,

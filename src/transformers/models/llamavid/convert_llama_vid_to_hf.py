@@ -1,4 +1,4 @@
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,22 +33,22 @@ from transformers import (
 
 
 EPILOG_TXT = """Example:
-    python transformers/src/transformers/models/llamavid/convert_llama_vid_hf.py --text_model_id lmsys/vicuna-7b-v1.5 --vision_model_id openai/clip-vit-large-patch14-336 --output_hub_path org/llava-v1.5-7b-conv --old_state_dict_id liuhaotian/llava-v1.5-7b
+    python transformers/src/transformers/models/llamavid/convert_llama_vid_hf.py --text_model_id work_dirs/llama-vid-7b-full-336 --vision_model_id openai/clip-vit-large-patch14-336 --output_hub_path org/LLaMAVID-7b-conv --old_state_dict_id work_dirs/llama-vid-7b-full-336
 
 Example for creating the old state dict file with Python:
 
     import torch
-    from llava.model.language_model.llava_llama import LlavaLlamaForCausalLM
+    from llamavid.model.modeling_llama_vid import LLaMAVIDLlavaForConditionalGeneration
 
     # load model
     kwargs = {"device_map": "auto", "torch_dtype": torch.float16}
-    model = LlavaLlamaForCausalLM.from_pretrained("liuhaotian/llava-v1.5-7b", low_cpu_mem_usage=True, **kwargs)
+    model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("Nilesh360/llama-vid-7b-full-336", low_cpu_mem_usage=True, **kwargs)
 
     # load vision tower
     model.get_vision_tower().load_model()
 
     # Save state dict
-    torch.save(model.state_dict(), "tmp/hf_models/llava-v1.5-7b/model_state_dict.bin")
+    torch.save(model.state_dict(), "tmp/hf_models/llama-vid-7b/model_state_dict.bin")
 """
 
 KEYS_TO_MODIFY_MAPPING = {
@@ -158,14 +158,7 @@ def read_in_q_v_bias(state_dict, config):
         state_dict[f"vision_tower.encoder.layers.{i}.self_attn.qkv.bias"] = qkv_bias
 
 def convert_llamavid_to_hf(text_model_id, vision_model_id, output_hub_path, old_state_dict_id):
-    
-    text_model_id = 'C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\LLaMA-VID\\work_dirs\\llama-vid-7b-full-224-video-fps-1'
-    #vision_model_id_336 = 'C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\LLaMA-VID\\llamavid\\processor\\clip-patch14-336'
-    vision_model_id_224 = 'C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\LLaMA-VID\\llamavid\\processor\\clip-patch14-224'
-    output_hub_path ='Nilesh360/llama-vid-7b-full-336'
-    old_state_dict_id = 'C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\LLaMA-VID\\work_dirs\\llama-vid-7b-full-224-video-fps-1'
-    #old_state_dict_id = 'C:\\Users\\niles\\OneDrive\\Desktop\\Data\code\\LLaMA-VID\\model_zoo\\LLM\\vicuna\\7b-V1.5'
-    #old_state_dict_id = 'C:\\Users\\niles\\OneDrive\\Desktop\\Data\code\\LLaMA-VID\\model_zoo\\LLM\\vicuna\\7b-V1.5'
+ 
     torch.set_default_dtype(torch.float16)
     text_config = AutoConfig.from_pretrained(text_model_id)
 
@@ -177,14 +170,19 @@ def convert_llamavid_to_hf(text_model_id, vision_model_id, output_hub_path, old_
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
     tokenizer.add_special_tokens({"pad_token": "<pad>"})
     
-    image_processor = LLaMAVIDLlavaImageProcessor.from_pretrained(vision_model_id_224)
+    image_processor = LLaMAVIDLlavaImageProcessor.from_pretrained(vision_model_id_336)
 
     processor = LLaMAVIDLlavaProcessor(tokenizer=tokenizer, image_processor=image_processor, qformer_tokenizer = qformer_tokenizer )
- 
-    vision_tower_config = LLaMAVIDLlavaVisionConfig(image_size=224, qkv_bias = True).to_dict()
-    qformer_config =  LLaMAVIDLlavaQFormerConfig(vocab_size=30523, num_attention_heads=12 , hidden_size=768).to_dict()
     
-    config = LLaMAVIDLlavaConfig(text_config=text_config,vision_tower_config=vision_tower_config, qformer_config=qformer_config   )
+    vision_tower_config = LLaMAVIDLlavaVisionConfig(image_size=336, qkv_bias = True).to_dict()
+    qformer_config =  LLaMAVIDLlavaQFormerConfig(vocab_size=30523, num_attention_heads=12 , hidden_size=768).to_dict()
+
+    if 'video' in text_model_id:
+        compress_type= 'mean'
+    else:
+        compress_type = None
+    
+    config = LLaMAVIDLlavaConfig(text_config=text_config,vision_tower_config=vision_tower_config, qformer_config=qformer_config , compress_type= compress_type  ) # for video compress_type is'mean' while for images its None
     config.pad_token_id = 32001
     
 
@@ -196,10 +194,10 @@ def convert_llamavid_to_hf(text_model_id, vision_model_id, output_hub_path, old_
 
     total_state_dict = {}
 
-    model_path =  old_state_dict_id + '\\' +  'pytorch_model-0000{}-of-00002.bin'
+    state_dict_path =   'pytorch_model-0000{}-of-00002.bin'
 
     for shard in range(1 , 3):
-        old_dict= model_path.format(shard , shard)
+        old_dict=hf_hub_download(old_state_dict_id, state_dict_path.format(i=shard))
         state_dict = torch.load(old_dict)
         state_dict = convert_state_dict_to_hf(state_dict)
         total_state_dict.update(state_dict)
@@ -207,21 +205,13 @@ def convert_llamavid_to_hf(text_model_id, vision_model_id, output_hub_path, old_
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
         rename_key(total_state_dict, src, dest)
-
-    del total_state_dict['qformer.embeddings.position_ids']
-    
-    param_names = sorted([name for name, _ in model.named_parameters() ] )
-    with open('model_keys.txt', 'w') as file:
-        for key in param_names:
-            file.write("%s\n" % key)
-
+	
     read_in_q_v_bias(total_state_dict , config)
-    param_names_ = sorted([name_ for name_, _ in total_state_dict.items() ] )
-    with open('state_dict.txt', 'w') as file:
-        for key in param_names_:
-            file.write("%s\n" % key)
 
-
+    #As positional embeddings are generated internally we do not need that here
+    #it causesd the model.load_state_dict to fail. 
+    del total_state_dict['qformer.embeddings.position_ids']
+   
     model.load_state_dict(total_state_dict, strict=True, assign=True)
  
     pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
@@ -241,28 +231,36 @@ def convert_llamavid_to_hf(text_model_id, vision_model_id, output_hub_path, old_
         dim=0,
     )
  
- 
-    model.save_pretrained("llama_vid_224-video")
-    processor.save_pretrained("llama_vid_224-video")
-
-    #model.push_to_hub("output_hub_path_vid")
-    #processor.push_to_hub("output_hub_path_vid")
-
-    #model.push_to_hub(output_hub_path)
-    #processor.push_to_hub(output_hub_path)
-    #model.save_pretrained('llama_vid_models.pth')
-    #torch.save_(model , "llama_vid_model"
-
-    #torch.save(processor , "processor")
-    #model.load_state_dict(torch.load('model.pth'))
-    #processor._save_to_state_dict("process.pth")
-    print('pushed to hub successfully')
+    model.push_to_hub(output_hub_path)
+    processor.push_to_hub(output_hub_path)
 
 
 
 def main():
-    
-    convert_llamavid_to_hf(text_model_id ='', vision_model_id='', output_hub_path='', old_state_dict_id='')
+    parser = argparse.ArgumentParser(
+        epilog=EPILOG_TXT,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--text_model_id",
+        help="Hub location of the text model",
+    )
+    parser.add_argument(
+        "--vision_model_id",
+        help="Hub location of the vision model",
+    )
+    parser.add_argument(
+        "--output_hub_path",
+        help="Location on the hub of the converted model",
+    )
+    parser.add_argument(
+        "--old_state_dict_id",
+        help="Location on the hub of the raw state dict of the original model. The filename needs to be `model_state_dict.bin`",
+    )
+    args = parser.parse_args()
+    convert_llamavid_to_hf(
+        args.text_model_id, args.vision_model_id, args.output_hub_path, args.old_state_dict_id
+    )
 
 
 if __name__ == "__main__":
