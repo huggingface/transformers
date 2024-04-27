@@ -54,6 +54,8 @@ class ZoeDepthConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        batch_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the batch normalization layers.
         readout_type (`str`, *optional*, defaults to `"project"`):
             The readout type to use when processing the readout token (CLS token) of the intermediate hidden states of
             the ViT backbone. Can be one of [`"ignore"`, `"add"`, `"project"`].
@@ -132,6 +134,7 @@ class ZoeDepthConfig(PretrainedConfig):
         backbone_kwargs=None,
         hidden_act="gelu",
         initializer_range=0.02,
+        batch_norm_eps=1e-05,
         readout_type="project",
         reassemble_factors=[4, 2, 1, 0.5],
         neck_hidden_sizes=[96, 192, 384, 768],
@@ -198,6 +201,7 @@ class ZoeDepthConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.use_pretrained_backbone = use_pretrained_backbone
         self.initializer_range = initializer_range
+        self.batch_norm_eps = batch_norm_eps
         self.readout_type = readout_type
         self.reassemble_factors = reassemble_factors
         self.neck_hidden_sizes = neck_hidden_sizes

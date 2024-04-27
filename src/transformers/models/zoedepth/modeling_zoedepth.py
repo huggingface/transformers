@@ -212,6 +212,7 @@ class ZoeDepthPreActResidualLayer(nn.Module):
             Model configuration class defining the model architecture.
     """
 
+    # Ignore copy
     def __init__(self, config):
         super().__init__()
 
@@ -243,8 +244,8 @@ class ZoeDepthPreActResidualLayer(nn.Module):
         )
 
         if self.use_batch_norm:
-            self.batch_norm1 = nn.BatchNorm2d(config.fusion_hidden_size)
-            self.batch_norm2 = nn.BatchNorm2d(config.fusion_hidden_size)
+            self.batch_norm1 = nn.BatchNorm2d(config.fusion_hidden_size, eps=config.batch_norm_eps)
+            self.batch_norm2 = nn.BatchNorm2d(config.fusion_hidden_size, eps=config.batch_norm_eps)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         residual = hidden_state
@@ -1209,8 +1210,15 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         super().__init__(config)
 
         self.backbone = load_backbone(config)
-        # add backbone_hidden_size to config
-        config.backbone_hidden_size = self.backbone.config.hidden_size
+
+        if hasattr(self.backbone.config, "hidden_size") and hasattr(self.backbone.config, "patch_size"):
+            config.backbone_hidden_size = self.backbone.config.hidden_size
+            self.patch_size = self.backbone.config.patch_size
+        else:
+            raise ValueError(
+                "ZoeDepth assumes the backbone's config to have `hidden_size` and `patch_size` attributes"
+            )
+
         self.neck = ZoeDepthNeck(config)
         self.relative_head = ZoeDepthRelativeDepthEstimationHead(config)
 
@@ -1285,7 +1293,7 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         hidden_states = outputs.feature_maps
 
         _, _, height, width = pixel_values.shape
-        patch_size = self.backbone.config.patch_size
+        patch_size = self.patch_size
         patch_height = height // patch_size
         patch_width = width // patch_size
 
