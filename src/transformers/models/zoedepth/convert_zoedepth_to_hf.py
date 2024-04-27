@@ -66,32 +66,52 @@ def get_zoedepth_config(model_name):
     return config, image_size
 
 
+def rename_key_(name):
+    # update prefixes
+    if "core.core.pretrained.model.blocks" in name:
+        name = name.replace("core.core.pretrained.model.blocks", "backbone.encoder.layer")
+    if "core.core.pretrained.model.patch_embed.proj" in name:
+        name = name.replace("core.core.pretrained.model.patch_embed.proj", "backbone.embeddings.patch_embeddings.projection")
+    if "core.core.pretrained.model.cls_token" in name:
+        name = name.replace("core.core.pretrained.model.cls_token", "backbone.embeddings.cls_token")
+    if "norm1" in name:
+        name = name.replace("norm1", "layernorm_before")
+    if "norm2" in name:
+        name = name.replace("norm2", "layernorm_after")
+    if "mlp.fc1" in name:
+        name = name.replace("mlp.fc1", "intermediate.dense")
+    if "mlp.fc2" in name:
+        name = name.replace("mlp.fc2", "output.dense")
+    if "gamma_1" in name:
+        name = name.replace("gamma_1", "lambda_1")
+    if "gamma_2" in name:
+        name = name.replace("gamma_2", "lambda_2")
+    if "attn.proj" in name:
+        name = name.replace("attn.proj", "attention.output.dense")
+    if "attn.relative_position_bias_table" in name:
+        name = name.replace("attn.relative_position_bias_table", "attention.attention.relative_position_bias.relative_position_bias_table")
+    if "attn.relative_position_index" in name:
+        name = name.replace("attn.relative_position_index", "attention.attention.relative_position_bias.relative_position_index")
+
+    return name
+
+
+def convert_state_dict(orig_state_dict):
+    for key in orig_state_dict.copy().keys():
+        val = orig_state_dict.pop(key)
+
+        # rename key
+        new_name = rename_key_(key)
+        orig_state_dict[new_name] = val
+
+    return orig_state_dict
+
+
 # here we list all keys to be renamed (original name on the left, our name on the right)
 def create_rename_keys(config, model_name):
     rename_keys = []
 
     # fmt: off
-    # stem
-    rename_keys.append(("core.core.pretrained.model.cls_token", "backbone.embeddings.cls_token"))
-    rename_keys.append(("core.core.pretrained.model.patch_embed.proj.weight", "backbone.embeddings.patch_embeddings.projection.weight"))
-    rename_keys.append(("core.core.pretrained.model.patch_embed.proj.bias", "backbone.embeddings.patch_embeddings.projection.bias"))
-
-    # Transfomer encoder
-    for i in range(config.backbone_config.num_hidden_layers):
-        rename_keys.append((f"core.core.pretrained.model.blocks.{i}.gamma_1", f"backbone.encoder.layer.{i}.lambda_1"))
-        rename_keys.append((f"core.core.pretrained.model.blocks.{i}.gamma_2", f"backbone.encoder.layer.{i}.lambda_2"))
-        rename_keys.append((f"core.core.pretrained.model.blocks.{i}.norm1.weight", f"backbone.encoder.layer.{i}.layernorm_before.weight"))
-        rename_keys.append((f"core.core.pretrained.model.blocks.{i}.norm1.bias", f"backbone.encoder.layer.{i}.layernorm_before.bias"))
-        rename_keys.append((f"core.core.pretrained.model.blocks.{i}.norm2.weight", f"backbone.encoder.layer.{i}.layernorm_after.weight"))
-        rename_keys.append((f"core.core.pretrained.model.blocks.{i}.norm2.bias", f"backbone.encoder.layer.{i}.layernorm_after.bias"))
-        rename_keys.append((f"core.core.pretrained.model.blocks.{i}.mlp.fc1.weight", f"backbone.encoder.layer.{i}.intermediate.dense.weight"))
-        rename_keys.append((f"core.core.pretrained.model.blocks.{i}.mlp.fc1.bias", f"backbone.encoder.layer.{i}.intermediate.dense.bias"))
-        rename_keys.append((f"core.core.pretrained.model.blocks.{i}.mlp.fc2.weight", f"backbone.encoder.layer.{i}.output.dense.weight"))
-        rename_keys.append((f"core.core.pretrained.model.blocks.{i}.mlp.fc2.bias", f"backbone.encoder.layer.{i}.output.dense.bias"))
-        rename_keys.append((f"core.core.pretrained.model.blocks.{i}.attn.proj.weight", f"backbone.encoder.layer.{i}.attention.output.dense.weight"))
-        rename_keys.append((f"core.core.pretrained.model.blocks.{i}.attn.proj.bias", f"backbone.encoder.layer.{i}.attention.output.dense.bias"))
-        rename_keys.append((f"core.core.pretrained.model.blocks.{i}.attn.relative_position_bias_table", f"backbone.encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_bias_table"))
-        rename_keys.append((f"core.core.pretrained.model.blocks.{i}.attn.relative_position_index", f"backbone.encoder.layer.{i}.attention.attention.relative_position_bias.relative_position_index"))
 
     # activation postprocessing (readout projections + resize blocks)
     for i in range(4):
@@ -328,6 +348,8 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
         rename_key(state_dict, src, dest)
     # read in qkv matrices
     read_in_q_k_v(state_dict, config)
+
+    state_dict = convert_state_dict(state_dict)
 
     # load HuggingFace model
     model = ZoeDepthForDepthEstimation(config)

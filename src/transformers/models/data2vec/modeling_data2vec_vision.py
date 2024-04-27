@@ -257,7 +257,7 @@ class Data2VecVisionSelfAttention(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         relative_position_bias: Optional["Data2VecVisionRelativePositionBias"] = None,
-        resolution: Optional[tuple[int]] = None,
+        resolution: Optional[Tuple[int]] = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
@@ -353,7 +353,7 @@ class Data2VecVisionAttention(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         relative_position_bias: Optional["Data2VecVisionRelativePositionBias"] = None,
-        resolution: Optional[tuple[int]] = None,
+        resolution: Optional[Tuple[int]] = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         self_outputs = self.attention(hidden_states, head_mask, output_attentions, relative_position_bias, resolution)
 
@@ -424,7 +424,7 @@ class Data2VecVisionLayer(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         relative_position_bias: Optional["Data2VecVisionRelativePositionBias"] = None,
-        resolution: Optional[tuple[int]] = None,
+        resolution: Optional[Tuple[int]] = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in Data2VecVision, layernorm is applied before self-attention
@@ -595,7 +595,7 @@ class Data2VecVisionEncoder(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        resolution: Optional[tuple[int]] = None,
+        resolution: Optional[Tuple[int]] = None,
         return_dict: bool = True,
     ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
