@@ -103,13 +103,13 @@ class ZoeDepthReassembleStage(nn.Module):
         self.readout_type = config.readout_type
         self.layers = nn.ModuleList()
 
-        for i, factor in zip(range(len(config.neck_hidden_sizes)), config.reassemble_factors):
-            self.layers.append(ZoeDepthReassembleLayer(config, channels=config.neck_hidden_sizes[i], factor=factor))
+        for neck_hidden_size, factor in zip(config.neck_hidden_sizes, config.reassemble_factors):
+            self.layers.append(ZoeDepthReassembleLayer(config, channels=neck_hidden_size, factor=factor))
 
         if config.readout_type == "project":
             self.readout_projects = nn.ModuleList()
             hidden_size = config.backbone_hidden_size
-            for _ in range(len(config.neck_hidden_sizes)):
+            for _ in config.neck_hidden_sizes:
                 self.readout_projects.append(
                     nn.Sequential(nn.Linear(2 * hidden_size, hidden_size), ACT2FN[config.hidden_act])
                 )
@@ -454,13 +454,12 @@ class LogBinomialSoftmax(nn.Module):
 class ZoeDepthConditionalLogBinomialSoftmax(nn.Module):
     def __init__(
         self,
+        config,
         in_features,
         condition_dim,
         n_classes=256,
         bottleneck_factor=2,
         p_eps=1e-4,
-        max_temp=50,
-        min_temp=1e-7,
         act=torch.softmax,
     ):
         """Per-pixel MLP followed by a Conditional Log Binomial softmax.
@@ -476,10 +475,6 @@ class ZoeDepthConditionalLogBinomialSoftmax(nn.Module):
                 Hidden dim factor.
             p_eps (`float`, *optional*, defaults to 1e-4):
                 Small eps value.
-            max_temp (`float`, *optional*, defaults to 50):
-                Maximum temperature of output distribution.
-            min_temp (`float`, *optional*, defaults to 1e-7):
-                Minimum temperature of output distribution.
             act (`torch.nn.Module`, *optional*, defaults to `torch.softmax`):
                 Activation function to apply to the output.
 
@@ -496,8 +491,8 @@ class ZoeDepthConditionalLogBinomialSoftmax(nn.Module):
         )
 
         self.p_eps = p_eps
-        self.max_temp = max_temp
-        self.min_temp = min_temp
+        self.max_temp = config.max_temp
+        self.min_temp = config.min_temp
         self.log_binomial_transform = LogBinomialSoftmax(n_classes, act=act)
 
     def forward(self, main_feature, condition_feature):
@@ -512,8 +507,11 @@ class ZoeDepthConditionalLogBinomialSoftmax(nn.Module):
             `torch.Tensor`:
                 Output log binomial distribution
         """
-        pt = self.mlp(torch.concat((main_feature, condition_feature), dim=1))
-        probabilities, temperature = pt[:, :2, ...], pt[:, 2:, ...]
+        probabilities_and_temperature = self.mlp(torch.concat((main_feature, condition_feature), dim=1))
+        probabilities, temperature = (
+            probabilities_and_temperature[:, :2, ...],
+            probabilities_and_temperature[:, 2:, ...],
+        )
 
         probabilities = probabilities + self.p_eps
         probabilities = probabilities[:, 0, ...] / (probabilities[:, 0, ...] + probabilities[:, 1, ...])
@@ -697,13 +695,11 @@ class ZoeDepthAttractorLayer(nn.Module):
         attractors = attractors + eps
         batch_size, _, height, width = attractors.shape
         attractors = attractors.view(batch_size, self.n_attractors, 2, height, width)
-        attractors_normed = attractors / attractors.sum(
-            dim=2, keepdim=True
-        )  # batch_size, num_attractors, 2, height, width
+        # batch_size, num_attractors, 2, height, width
+        attractors_normed = attractors / attractors.sum(dim=2, keepdim=True)
         attractors_normed = attractors[:, :, 0, ...]  # batch_size, batch_size*num_attractors, height, width
 
-        prev_bin = nn.functional.interpolate(prev_bin, (height, width), mode="bilinear", align_corners=True)
-        bin_centers = prev_bin
+        bin_centers = nn.functional.interpolate(prev_bin, (height, width), mode="bilinear", align_corners=True)
 
         # note: only attractor_type = "exp" is supported here, since no checkpoints were released with other attractor types
         distribution = inv_attractor
@@ -923,16 +919,11 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         attractor_gamma = config.attractor_gamma
         attractor_kind = config.attractor_kind
         bin_centers_type = config.bin_centers_type
-        min_temp = config.min_temp
-        max_temp = config.max_temp
-        bin_configurations = config.bin_configurations
 
         self.min_depth = min_depth
         self.max_depth = max_depth
         self.bin_centers_type = bin_centers_type
-        self.min_temp = min_temp
-        self.max_temp = max_temp
-        self.bin_configurations = bin_configurations
+        self.bin_configurations = config.bin_configurations
 
         # Bottleneck convolution
         bottleneck_features = config.bottleneck_features
@@ -957,7 +948,7 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
             {
                 conf["name"]: SeedBinRegressorLayer(
                     bottleneck_features,
-                    conf["n_bins"],
+                    n_bins=conf["n_bins"],
                     mlp_dim=bin_embedding_dim // 2,
                     min_depth=conf["min_depth"],
                     max_depth=conf["max_depth"],
@@ -970,7 +961,7 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         self.projectors = nn.ModuleList(
             [
                 ZoeDepthProjector(config.fusion_hidden_size, bin_embedding_dim, mlp_dim=bin_embedding_dim // 2)
-                for i in range(4)
+                for _ in range(4)
             ]
         )
 
@@ -1001,12 +992,11 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         self.conditional_log_binomial = nn.ModuleDict(
             {
                 configuration["name"]: ZoeDepthConditionalLogBinomialSoftmax(
+                    config,
                     last_in,
                     bin_embedding_dim,
                     configuration["n_bins"],
                     bottleneck_factor=4,
-                    min_temp=self.min_temp,
-                    max_temp=self.max_temp,
                 )
                 for configuration in config.bin_configurations
             }
@@ -1125,7 +1115,10 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
 
         # use log binomial instead of softmax
         self.conditional_log_binomial = ZoeDepthConditionalLogBinomialSoftmax(
-            last_in, bin_embedding_dim, n_classes=n_bins, min_temp=min_temp, max_temp=max_temp
+            config,
+            last_in,
+            bin_embedding_dim,
+            n_classes=n_bins,
         )
 
     def forward(self, out, rel_depth):
@@ -1329,15 +1322,11 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
             raise NotImplementedError("Training is not implemented yet")
 
         if not return_dict:
-            output = (
-                (
-                    metric_depth,
-                    domain_logits,
-                )
-                + outputs[1:]
-                if domain_logits is not None
-                else (metric_depth,) + outputs[1:]
-            )
+            if domain_logits is not None:
+                output = (metric_depth, domain_logits) + outputs[1:]
+            else:
+                output = (metric_depth,) + outputs[1:]
+
             return ((loss,) + output) if loss is not None else output
 
         return ZoeDepthDepthEstimatorOutput(

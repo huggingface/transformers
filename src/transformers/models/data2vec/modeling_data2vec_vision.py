@@ -258,7 +258,7 @@ class Data2VecVisionSelfAttention(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         relative_position_bias: Optional["Data2VecVisionRelativePositionBias"] = None,
-        resolution: Optional = None,
+        resolution: Optional[tuple[int]] = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
@@ -353,7 +353,7 @@ class Data2VecVisionAttention(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         relative_position_bias: Optional["Data2VecVisionRelativePositionBias"] = None,
-        resolution: Optional = None,
+        resolution: Optional[tuple[int]] = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         self_outputs = self.attention(hidden_states, head_mask, output_attentions, relative_position_bias, resolution)
 
@@ -424,7 +424,7 @@ class Data2VecVisionLayer(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         relative_position_bias: Optional["Data2VecVisionRelativePositionBias"] = None,
-        resolution: Optional = None,
+        resolution: Optional[tuple[int]] = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in Data2VecVision, layernorm is applied before self-attention
@@ -458,31 +458,6 @@ class Data2VecVisionLayer(nn.Module):
         outputs = (layer_output,) + outputs
 
         return outputs
-
-
-# Copied from transformers.models.beit.modeling_beit.ndgrid
-def ndgrid(*tensors) -> Tuple[torch.Tensor, ...]:
-    """generate N-D grid in dimension order.
-
-    The ndgrid function is like meshgrid except that the order of the first two input arguments are switched.
-
-    That is, the statement
-    [X1,X2,X3] = ndgrid(x1,x2,x3)
-
-    produces the same result as
-
-    [X2,X1,X3] = meshgrid(x2,x1,x3)
-
-    This naming is based on MATLAB, the purpose is to avoid confusion due to torch's change to make
-    torch.meshgrid behaviour move from matching ndgrid ('ij') indexing to numpy meshgrid defaults of ('xy').
-
-    """
-    try:
-        return torch.meshgrid(*tensors, indexing="ij")
-    except TypeError:
-        # old PyTorch < 1.10 will follow this path as it does not have indexing arg,
-        # the old behaviour of meshgrid was 'ij'
-        return torch.meshgrid(*tensors)
 
 
 # Copied from transformers.models.beit.modeling_beit.BeitRelativePositionBias with Beit->Data2VecVision
@@ -534,7 +509,8 @@ class Data2VecVisionRelativePositionBias(nn.Module):
         # cls to token & token 2 cls & cls to cls
         # get pair-wise relative position index for each token inside the window
         window_area = window_size[0] * window_size[1]
-        coords = torch.stack(ndgrid(torch.arange(window_size[0]), torch.arange(window_size[1])))  # 2, Wh, Ww
+        grid = torch.meshgrid(torch.arange(window_size[0]), torch.arange(window_size[1]), indexing="ij")
+        coords = torch.stack(grid)  # 2, Wh, Ww
         coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
         relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
         relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
@@ -616,7 +592,7 @@ class Data2VecVisionEncoder(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        resolution: Optional = None,
+        resolution: Optional[tuple[int]] = None,
         return_dict: bool = True,
     ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
@@ -767,7 +743,7 @@ class Data2VecVisionModel(Data2VecVisionPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
+        pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -784,9 +760,6 @@ class Data2VecVisionModel(Data2VecVisionPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
@@ -794,7 +767,7 @@ class Data2VecVisionModel(Data2VecVisionPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output, (patch_height, patch_width) = self.embeddings(pixel_values, bool_masked_pos)
+        embedding_output, _ = self.embeddings(pixel_values, bool_masked_pos)
         resolution = pixel_values.shape[2:]
 
         encoder_outputs = self.encoder(
