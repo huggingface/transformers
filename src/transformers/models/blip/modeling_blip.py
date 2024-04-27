@@ -862,7 +862,7 @@ class BlipModel(BlipPreTrainedModel):
             return_dict=return_dict,
         )
 
-        multimodal_features = text_outputs[1] # pooled_output
+        multimodal_features = text_outputs[1]  # pooled_output
 
         return multimodal_features
 
