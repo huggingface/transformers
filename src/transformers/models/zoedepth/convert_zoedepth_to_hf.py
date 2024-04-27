@@ -100,6 +100,9 @@ def rename_key_(name):
             "attn.relative_position_index", "attention.attention.relative_position_bias.relative_position_index"
         )
 
+    # activation postprocessing layers
+    
+
     # fusion layers
     # tricky here: mapping = {1:3, 2:2, 3:1, 4:0}
     if "core.core.scratch.refinenet1" in name:
@@ -161,11 +164,17 @@ def rename_key_(name):
     if "_net.2" in name:
         name = name.replace("_net.2", "conv2")
 
+        print("Name:", name)
+
     if "attractors" in name:
         name = name.replace("attractors", "metric_head.attractors")
 
     if "conditional_log_binomial" in name:
         name = name.replace("conditional_log_binomial", "metric_head.conditional_log_binomial")
+
+    # metric depth estimation head
+    if "conv2" in name and "metric_head" not in name and "attractors" not in name and "relative_head" not in name:
+        name = name.replace("conv2", "metric_head.conv2")
 
     return name
 
@@ -202,10 +211,6 @@ def create_rename_keys(config, model_name):
     # scratch convolutions
     for i in range(4):
         rename_keys.append((f"core.core.scratch.layer{i+1}_rn.weight", f"neck.convs.{i}.weight"))
-
-    # metric depth estimation head
-    rename_keys.append(("conv2.weight", "metric_head.conv2.weight"))
-    rename_keys.append(("conv2.bias", "metric_head.conv2.bias"))
 
     return rename_keys
 
