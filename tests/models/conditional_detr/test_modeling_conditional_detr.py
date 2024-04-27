@@ -459,7 +459,7 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
                 expected_shape = (
                     self.model_tester.batch_size,
                     self.model_tester.num_queries,
-                    self.model_tester.num_labels,
+                    self.model_tester.num_labels + 1,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
                 # Confirm out_indices was propogated to backbone
