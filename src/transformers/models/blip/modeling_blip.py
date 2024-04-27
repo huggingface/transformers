@@ -834,25 +834,14 @@ class BlipModel(BlipPreTrainedModel):
         >>> from transformers import BlipImageProcessor, BertTokenizerFast, BlipModel
 
         >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
-        >>> processor = BlipImageProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-        >>> tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
-
-        >>> tokenizer.add_special_tokens({"bos_token": "[DEC]"})
-        1
-
-        >>> tokenizer.add_special_tokens({"additional_special_tokens": ["[ENC]"]})
-        1
-
-        >>> tokenizer.enc_token_id = tokenizer.additional_special_tokens_ids[0]
+        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> image_inputs = processor(images=image, return_tensors="pt")
+        >>> texts = ["a photo of a cat", "a photo of a dog"]
+        >>> inputs = processor(images=image, text=texts, padding=True, return_tensors="pt")
 
-        >>> text_inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt", return_token_type_ids=False)
-        >>> text_inputs["input_ids"][:, 0] = tokenizer.enc_token_id
-
-        >>> multimodal_features = model.get_multimodal_features(**text_inputs, **image_inputs)
+        >>> multimodal_features = model.get_multimodal_features(**inputs)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         vision_outputs = self.vision_model(
@@ -873,7 +862,7 @@ class BlipModel(BlipPreTrainedModel):
             return_dict=return_dict,
         )
 
-        multimodal_features = text_outputs.last_hidden_state[:, 0, :]
+        multimodal_features = text_outputs[1] # pooled_output
 
         return multimodal_features
 
