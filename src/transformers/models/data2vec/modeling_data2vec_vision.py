@@ -555,10 +555,13 @@ class Data2VecVisionRelativePositionBias(nn.Module):
         if key not in self.relative_position_indices.keys():
             self.relative_position_indices[key] = self.generate_relative_position_index(window_size)
 
-        relative_position_bias = new_relative_position_bias_table[self.relative_position_indices[key].view(-1)].view(
+        relative_position_bias = new_relative_position_bias_table[self.relative_position_indices[key].view(-1)]
+        # patch_size*num_patches_height, patch_size*num_patches_width, num_attention_heads
+        relative_position_bias = relative_position_bias.view(
             window_size[0] * window_size[1] + 1, window_size[0] * window_size[1] + 1, -1
-        )  # Wh*Ww,Wh*Ww,nH
-        relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
+        )
+        # num_attention_heads, patch_size*num_patches_width, patch_size*num_patches_height
+        relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()
         return relative_position_bias.unsqueeze(0)
 
 
@@ -612,7 +615,8 @@ class Data2VecVisionEncoder(nn.Module):
                     output_attentions,
                 )
             else:
-                window_size = tuple(np.array(resolution) // self.config.patch_size)
+                height, width = resolution
+                window_size = (height // self.config.patch_size, width // self.config.patch_size)
                 relative_position_bias = (
                     self.relative_position_bias(window_size) if self.relative_position_bias is not None else None
                 )

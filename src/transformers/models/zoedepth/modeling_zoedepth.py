@@ -558,15 +558,14 @@ class ZoeDepthSeedBinRegressor(nn.Module):
         x = self.conv2(x)
         bins = self.act2(x)
 
-        eps = 1e-3
-        bins = bins + eps
+        bins = bins + 1e-3
         bin_widths_normed = bins / bins.sum(dim=1, keepdim=True)
-        bin_widths = (
-            self.max_depth - self.min_depth
-        ) * bin_widths_normed  # shape (batch_size, num_channels, height, width)
+        # shape (batch_size, num_channels, height, width)
+        bin_widths = (self.max_depth - self.min_depth) * bin_widths_normed
         # pad has the form (left, right, top, bottom, front, back)
         bin_widths = nn.functional.pad(bin_widths, (0, 0, 0, 0, 1, 0), mode="constant", value=self.min_depth)
-        bin_edges = torch.cumsum(bin_widths, dim=1)  # shape (batch_size, num_channels, height, width)
+        # shape (batch_size, num_channels, height, width)
+        bin_edges = torch.cumsum(bin_widths, dim=1)
 
         bin_centers = 0.5 * (bin_edges[:, :-1, ...] + bin_edges[:, 1:, ...])
         return bin_widths_normed, bin_centers
@@ -691,8 +690,7 @@ class ZoeDepthAttractorLayer(nn.Module):
         x = self.conv2(x)
         attractors = self.act2(x)
 
-        eps = 1e-3
-        attractors = attractors + eps
+        attractors = attractors + 1e-3
         batch_size, _, height, width = attractors.shape
         attractors = attractors.view(batch_size, self.n_attractors, 2, height, width)
         # batch_size, num_attractors, 2, height, width
@@ -889,9 +887,9 @@ class ZoeDepthPatchTransformerEncoder(nn.Module):
         Returns:
             torch.Tensor - Transformer output embeddings of shape (batch_size, sequence_length, embedding_dim)
         """
-        embeddings = self.embedding_convPxP(x).flatten(2)  # .shape = n,c,s = n, embedding_dim, s
+        embeddings = self.embedding_convPxP(x).flatten(2)  # shape (batch_size, num_channels, sequence_length)
         if self.use_class_token:
-            # extra special token at start ?
+            # extra special token at the start
             embeddings = nn.functional.pad(embeddings, (1, 0))
 
         embeddings = embeddings.permute(0, 2, 1)
@@ -1002,11 +1000,7 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
             }
         )
 
-    def forward(self, out, rel_depth):
-        outconv_activation = out[0]
-        bottleneck = out[1]
-        feature_blocks = out[2:]
-
+    def forward(self, outconv_activation, bottleneck, feature_blocks, relative_depth):
         x = self.conv2(bottleneck)
 
         # Predict which path to take
@@ -1028,7 +1022,7 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
 
         seed_bin_regressor = self.seed_bin_regressors[bin_configurations_name]
         _, seed_bin_centers = seed_bin_regressor(x)
-        if self.bin_centers_type == "normed" or self.bin_centers_type == "hybrid2":
+        if self.bin_centers_type in ["normed", "hybrid2"]:
             prev_bin = (seed_bin_centers - min_depth) / (max_depth - min_depth)
         else:
             prev_bin = seed_bin_centers
@@ -1066,9 +1060,6 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
         n_attractors = config.num_attractors
         attractor_alpha = config.attractor_alpha
         attractor_gamma = config.attractor_gamma
-        attractor_kind = config.attractor_kind
-        min_temp = config.min_temp
-        max_temp = config.max_temp
         bin_centers_type = config.bin_centers_type
 
         self.min_depth = min_depth
@@ -1105,7 +1096,7 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
                     max_depth=max_depth,
                     alpha=attractor_alpha,
                     gamma=attractor_gamma,
-                    kind=attractor_kind,
+                    kind=config.attractor_kind,
                 )
                 for i in range(4)
             ]
@@ -1121,11 +1112,7 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
             n_classes=n_bins,
         )
 
-    def forward(self, out, rel_depth):
-        outconv_activation = out[0]
-        bottleneck = out[1]
-        feature_blocks = out[2:]
-
+    def forward(self, outconv_activation, bottleneck, feature_blocks, relative_depth):
         x = self.conv2(bottleneck)
         _, seed_bin_centers = self.seed_bin_regressor(x)
 
@@ -1146,7 +1133,7 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
         last = outconv_activation
 
         # concatenative relative depth with last. First interpolate relative depth to last size
-        relative_conditioning = rel_depth.unsqueeze(1)
+        relative_conditioning = relative_depth.unsqueeze(1)
         relative_conditioning = nn.functional.interpolate(
             relative_conditioning, size=last.shape[2:], mode="bilinear", align_corners=True
         )
@@ -1314,7 +1301,9 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
 
         out = [features] + out
 
-        metric_depth, domain_logits = self.metric_head(out, relative_depth)
+        metric_depth, domain_logits = self.metric_head(
+            outconv_activation=out[0], bottleneck=out[1], feature_blocks=out[2:], relative_depth=relative_depth
+        )
         metric_depth = metric_depth.squeeze(dim=1)
 
         loss = None
