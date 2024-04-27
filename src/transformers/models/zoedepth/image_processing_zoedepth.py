@@ -35,7 +35,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_torch_available, is_vision_available, logging
+from ...utils import TensorType, is_torch_available, is_vision_available, logging, requires_backends
 
 
 if is_vision_available():
@@ -231,6 +231,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         torch_image = torch_image.permute(0, 3, 1, 2) if input_data_format == "channels_last" else torch_image
 
         # TODO support align_corners=True in image_transforms.resize
+        requires_backends(self, "torch")
         resample_to_mode = {PILImageResampling.BILINEAR: "bilinear", PILImageResampling.BICUBIC: "bicubic"}
         mode = resample_to_mode[resample]
         resized_image = nn.functional.interpolate(
