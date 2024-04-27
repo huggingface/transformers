@@ -23,6 +23,7 @@ logger = logging.get_logger(__name__)
 
 from ..deprecated._archive_maps import DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
+#Common attributes present in all config classes are: hidden_size, num_attention_heads, and num_hidden_layers. Text models further implement: vocab_size.
 
 class IrisConfig(PretrainedConfig):
     """

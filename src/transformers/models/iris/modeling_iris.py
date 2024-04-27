@@ -49,646 +49,7 @@ IRIS_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Iris models at https://huggingface.co/models?filter=iris
 ]
 
-# Copied from transformers.models.gpt2.modeling_gpt2.load_tf_weights_in_gpt2
-# def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
-#     """Load tf checkpoints in a pytorch model"""
-#     try:
-#         import re
 
-#         import tensorflow as tf
-#     except ImportError:
-#         logger.error(
-#             "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-#             "https://www.tensorflow.org/install/ for installation instructions."
-#         )
-#         raise
-#     tf_path = os.path.abspath(gpt2_checkpoint_path)
-#     logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
-#     # Load weights from TF model
-#     init_vars = tf.train.list_variables(tf_path)
-#     names = []
-#     arrays = []
-#     for name, shape in init_vars:
-#         logger.info(f"Loading TF weight {name} with shape {shape}")
-#         array = tf.train.load_variable(tf_path, name)
-#         names.append(name)
-#         arrays.append(array.squeeze())
-
-#     for name, array in zip(names, arrays):
-#         name = name[6:]  # skip "model/"
-#         name = name.split("/")
-#         pointer = model
-#         for m_name in name:
-#             if re.fullmatch(r"[A-Za-z]+\d+", m_name):
-#                 scope_names = re.split(r"(\d+)", m_name)
-#             else:
-#                 scope_names = [m_name]
-#             if scope_names[0] == "w" or scope_names[0] == "g":
-#                 pointer = getattr(pointer, "weight")
-#             elif scope_names[0] == "b":
-#                 pointer = getattr(pointer, "bias")
-#             elif scope_names[0] == "wpe" or scope_names[0] == "wte":
-#                 pointer = getattr(pointer, scope_names[0])
-#                 pointer = getattr(pointer, "weight")
-#             else:
-#                 pointer = getattr(pointer, scope_names[0])
-#             if len(scope_names) >= 2:
-#                 num = int(scope_names[1])
-#                 pointer = pointer[num]
-#         try:
-#             if pointer.shape != array.shape:
-#                 raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
-#         except ValueError as e:
-#             e.args += (pointer.shape, array.shape)
-#             raise
-#         logger.info(f"Initialize PyTorch weight {name}")
-#         pointer.data = torch.from_numpy(array)
-#     return model
-
-
-# Copied from transformers.models.gpt2.modeling_gpt2.GPT2Attention with GPT2->IrisGPT2
-# class IrisGPT2Attention(nn.Module):
-#     def __init__(self, config, is_cross_attention=False, layer_idx=None):
-#         super().__init__()
-#         self.config = config
-#         max_positions = config.max_position_embeddings
-#         self.register_buffer(
-#             "bias",
-#             torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
-#                 1, 1, max_positions, max_positions
-#             ),
-#             persistent=False,
-#         )
-#         self.register_buffer("masked_bias", torch.tensor(-1e4), persistent=False)
-
-#         self.embed_dim = config.hidden_size
-#         self.num_heads = config.num_attention_heads
-#         self.head_dim = self.embed_dim // self.num_heads
-#         self.split_size = self.embed_dim
-#         if self.head_dim * self.num_heads != self.embed_dim:
-#             raise ValueError(
-#                 f"`embed_dim` must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-#                 f" {self.num_heads})."
-#             )
-
-#         self.scale_attn_weights = config.scale_attn_weights
-#         self.is_cross_attention = is_cross_attention
-
-#         # Layer-wise attention scaling, reordering, and upcasting
-#         self.scale_attn_by_inverse_layer_idx = config.scale_attn_by_inverse_layer_idx
-#         self.layer_idx = layer_idx
-#         self.reorder_and_upcast_attn = config.reorder_and_upcast_attn
-
-#         if self.is_cross_attention:
-#             self.c_attn = Conv1D(2 * self.embed_dim, self.embed_dim)
-#             self.q_attn = Conv1D(self.embed_dim, self.embed_dim)
-#         else:
-#             self.c_attn = Conv1D(3 * self.embed_dim, self.embed_dim)
-#         self.c_proj = Conv1D(self.embed_dim, self.embed_dim)
-
-#         self.attn_dropout = nn.Dropout(config.attn_pdrop)
-#         self.resid_dropout = nn.Dropout(config.resid_pdrop)
-#         self.is_causal = True
-
-#         self.pruned_heads = set()
-
-#     def prune_heads(self, heads):
-#         if len(heads) == 0:
-#             return
-#         heads, index = find_pruneable_heads_and_indices(heads, self.num_heads, self.head_dim, self.pruned_heads)
-#         index_attn = torch.cat([index, index + self.split_size, index + (2 * self.split_size)])
-
-#         # Prune conv1d layers
-#         self.c_attn = prune_conv1d_layer(self.c_attn, index_attn, dim=1)
-#         self.c_proj = prune_conv1d_layer(self.c_proj, index, dim=0)
-
-#         # Update hyper params
-#         self.split_size = (self.split_size // self.num_heads) * (self.num_heads - len(heads))
-#         self.num_heads = self.num_heads - len(heads)
-#         self.pruned_heads = self.pruned_heads.union(heads)
-
-#     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
-#         attn_weights = torch.matmul(query, key.transpose(-1, -2))
-
-#         if self.scale_attn_weights:
-#             attn_weights = attn_weights / torch.full(
-#                 [], value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device
-#             )
-
-#         # Layer-wise attention scaling
-#         if self.scale_attn_by_inverse_layer_idx:
-#             attn_weights = attn_weights / float(self.layer_idx + 1)
-
-#         if not self.is_cross_attention:
-#             # if only "normal" attention layer implements causal mask
-#             query_length, key_length = query.size(-2), key.size(-2)
-#             causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
-#             mask_value = torch.finfo(attn_weights.dtype).min
-#             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
-#             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-#             mask_value = torch.full([], mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
-#             attn_weights = torch.where(causal_mask, attn_weights.to(attn_weights.dtype), mask_value)
-
-#         if attention_mask is not None:
-#             # Apply the attention mask
-#             attn_weights = attn_weights + attention_mask
-
-#         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-#         # Downcast (if necessary) back to V's dtype (if in mixed-precision) -- No-Op otherwise
-#         attn_weights = attn_weights.type(value.dtype)
-#         attn_weights = self.attn_dropout(attn_weights)
-
-#         # Mask heads if we want to
-#         if head_mask is not None:
-#             attn_weights = attn_weights * head_mask
-
-#         attn_output = torch.matmul(attn_weights, value)
-
-#         return attn_output, attn_weights
-
-#     def _upcast_and_reordered_attn(self, query, key, value, attention_mask=None, head_mask=None):
-#         # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
-#         bsz, num_heads, q_seq_len, dk = query.size()
-#         _, _, k_seq_len, _ = key.size()
-
-#         # Preallocate attn_weights for `baddbmm`
-#         attn_weights = torch.empty(bsz * num_heads, q_seq_len, k_seq_len, dtype=torch.float32, device=query.device)
-
-#         # Compute Scale Factor
-#         scale_factor = 1.0
-#         if self.scale_attn_weights:
-#             scale_factor /= float(value.size(-1)) ** 0.5
-
-#         if self.scale_attn_by_inverse_layer_idx:
-#             scale_factor /= float(self.layer_idx + 1)
-
-#         # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
-#         with autocast(enabled=False):
-#             q, k = query.reshape(-1, q_seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, k_seq_len)
-#             attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
-#             attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
-
-#         if not self.is_cross_attention:
-#             # if only "normal" attention layer implements causal mask
-#             query_length, key_length = query.size(-2), key.size(-2)
-#             causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
-#             mask_value = torch.finfo(attn_weights.dtype).min
-#             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
-#             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-#             mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
-#             attn_weights = torch.where(causal_mask, attn_weights, mask_value)
-
-#         if attention_mask is not None:
-#             # Apply the attention mask
-#             attn_weights = attn_weights + attention_mask
-
-#         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-#         # Downcast (if necessary) back to V's dtype (if in mixed-precision) -- No-Op if otherwise
-#         if attn_weights.dtype != torch.float32:
-#             raise RuntimeError("Error with upcasting, attn_weights does not have dtype torch.float32")
-#         attn_weights = attn_weights.type(value.dtype)
-#         attn_weights = self.attn_dropout(attn_weights)
-
-#         # Mask heads if we want to
-#         if head_mask is not None:
-#             attn_weights = attn_weights * head_mask
-
-#         attn_output = torch.matmul(attn_weights, value)
-
-#         return attn_output, attn_weights
-
-#     def _split_heads(self, tensor, num_heads, attn_head_size):
-#         """
-#         Splits hidden_size dim into attn_head_size and num_heads
-#         """
-#         new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
-#         tensor = tensor.view(new_shape)
-#         return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
-
-#     def _merge_heads(self, tensor, num_heads, attn_head_size):
-#         """
-#         Merges attn_head_size dim and num_attn_heads dim into hidden_size
-#         """
-#         tensor = tensor.permute(0, 2, 1, 3).contiguous()
-#         new_shape = tensor.size()[:-2] + (num_heads * attn_head_size,)
-#         return tensor.view(new_shape)
-
-#     def forward(
-#         self,
-#         hidden_states: Optional[Tuple[torch.FloatTensor]],
-#         layer_past: Optional[Tuple[torch.Tensor]] = None,
-#         attention_mask: Optional[torch.FloatTensor] = None,
-#         head_mask: Optional[torch.FloatTensor] = None,
-#         encoder_hidden_states: Optional[torch.Tensor] = None,
-#         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-#         use_cache: Optional[bool] = False,
-#         output_attentions: Optional[bool] = False,
-#     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
-#         if encoder_hidden_states is not None:
-#             if not hasattr(self, "q_attn"):
-#                 raise ValueError(
-#                     "If class is used as cross attention, the weights `q_attn` have to be defined. "
-#                     "Please make sure to instantiate class with `IrisGPT2Attention(..., is_cross_attention=True)`."
-#                 )
-
-#             query = self.q_attn(hidden_states)
-#             key, value = self.c_attn(encoder_hidden_states).split(self.split_size, dim=2)
-#             attention_mask = encoder_attention_mask
-#         else:
-#             query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
-
-#         query = self._split_heads(query, self.num_heads, self.head_dim)
-#         key = self._split_heads(key, self.num_heads, self.head_dim)
-#         value = self._split_heads(value, self.num_heads, self.head_dim)
-
-#         if layer_past is not None:
-#             past_key, past_value = layer_past
-#             key = torch.cat((past_key, key), dim=-2)
-#             value = torch.cat((past_value, value), dim=-2)
-
-#         if use_cache is True:
-#             present = (key, value)
-#         else:
-#             present = None
-
-#         if self.reorder_and_upcast_attn:
-#             attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
-#         else:
-#             attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
-
-#         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
-#         attn_output = self.c_proj(attn_output)
-#         attn_output = self.resid_dropout(attn_output)
-
-#         outputs = (attn_output, present)
-#         if output_attentions:
-#             outputs += (attn_weights,)
-
-#         return outputs  # a, present, (attentions)
-
-
-# Copied from transformers.models.gpt2.modeling_gpt2.GPT2MLP with GPT2->IrisGPT2
-# class IrisGPT2MLP(nn.Module):
-#     def __init__(self, intermediate_size, config):
-#         super().__init__()
-#         embed_dim = config.hidden_size
-#         self.c_fc = Conv1D(intermediate_size, embed_dim)
-#         self.c_proj = Conv1D(embed_dim, intermediate_size)
-#         self.act = ACT2FN[config.activation_function]
-#         self.dropout = nn.Dropout(config.resid_pdrop)
-
-#     def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
-#         hidden_states = self.c_fc(hidden_states)
-#         hidden_states = self.act(hidden_states)
-#         hidden_states = self.c_proj(hidden_states)
-#         hidden_states = self.dropout(hidden_states)
-#         return hidden_states
-
-
-# Copied from transformers.models.gpt2.modeling_gpt2.GPT2Block with GPT2->IrisGPT2
-# class IrisGPT2Block(nn.Module):
-#     # Ignore copy
-#     def __init__(self, config, layer_idx=None):
-#         super().__init__()
-#         hidden_size = config.hidden_size
-#         inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
-
-#         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-#         self.attn = IrisGPT2Attention(config, layer_idx=layer_idx)
-#         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-
-#         if config.add_cross_attention:
-#             self.crossattention = IrisGPT2Attention(
-#                 config, is_cross_attention=True, layer_idx=layer_idx
-#             )
-#             self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-
-#         self.mlp = IrisGPT2MLP(inner_dim, config)
-
-#     def forward(
-#         self,
-#         hidden_states: Optional[Tuple[torch.FloatTensor]],
-#         layer_past: Optional[Tuple[torch.Tensor]] = None,
-#         attention_mask: Optional[torch.FloatTensor] = None,
-#         head_mask: Optional[torch.FloatTensor] = None,
-#         encoder_hidden_states: Optional[torch.Tensor] = None,
-#         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-#         use_cache: Optional[bool] = False,
-#         output_attentions: Optional[bool] = False,
-#     ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
-#         residual = hidden_states
-#         hidden_states = self.ln_1(hidden_states)
-#         attn_outputs = self.attn(
-#             hidden_states,
-#             layer_past=layer_past,
-#             attention_mask=attention_mask,
-#             head_mask=head_mask,
-#             use_cache=use_cache,
-#             output_attentions=output_attentions,
-#         )
-#         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
-#         outputs = attn_outputs[1:]
-#         # residual connection
-#         hidden_states = attn_output + residual
-
-#         if encoder_hidden_states is not None:
-#             # add one self-attention block for cross-attention
-#             if not hasattr(self, "crossattention"):
-#                 raise ValueError(
-#                     f"If `encoder_hidden_states` are passed, {self} has to be instantiated with "
-#                     "cross-attention layers by setting `config.add_cross_attention=True`"
-#                 )
-#             residual = hidden_states
-#             hidden_states = self.ln_cross_attn(hidden_states)
-#             cross_attn_outputs = self.crossattention(
-#                 hidden_states,
-#                 attention_mask=attention_mask,
-#                 head_mask=head_mask,
-#                 encoder_hidden_states=encoder_hidden_states,
-#                 encoder_attention_mask=encoder_attention_mask,
-#                 output_attentions=output_attentions,
-#             )
-#             attn_output = cross_attn_outputs[0]
-#             # residual connection
-#             hidden_states = residual + attn_output
-#             outputs = outputs + cross_attn_outputs[2:]  # add cross attentions if we output attention weights
-
-#         residual = hidden_states
-#         hidden_states = self.ln_2(hidden_states)
-#         feed_forward_hidden_states = self.mlp(hidden_states)
-#         # residual connection
-#         hidden_states = residual + feed_forward_hidden_states
-
-#         if use_cache:
-#             outputs = (hidden_states,) + outputs
-#         else:
-#             outputs = (hidden_states,) + outputs[1:]
-
-#         return outputs  # hidden_states, present, (attentions, cross_attentions)
-
-
-# Copied from transformers.models.decision_transformer.modeling_decision_transformer.DecisionTransformerGPT2PreTrainedModel with DecisionTransformer->Iris
-class IrisGPT2PreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = IrisConfig
-    load_tf_weights = load_tf_weights_in_gpt2
-    base_model_prefix = "transformer"
-    is_parallelizable = True
-    supports_gradient_checkpointing = True
-
-    def __init__(self, *inputs, **kwargs):
-        super().__init__(*inputs, **kwargs)
-
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear, Conv1D)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-        # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
-        #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
-        #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
-        #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
-        #
-        # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
-        for name, p in module.named_parameters():
-            if "c_proj" in name and "weight" in name:
-                # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
-
-
-# Copied from transformers.models.decision_transformer.modeling_decision_transformer.DecisionTransformerGPT2Model with DecisionTransformer->Iris
-# class IrisGPT2Model(IrisGPT2PreTrainedModel):
-#     def __init__(self, config):
-#         super().__init__(config)
-
-#         self.embed_dim = config.hidden_size
-
-#         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
-#         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
-
-#         self.drop = nn.Dropout(config.embd_pdrop)
-#         self.h = nn.ModuleList(
-#             [IrisGPT2Block(config, layer_idx=i) for i in range(config.num_hidden_layers)]
-#         )
-#         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
-
-#         # Model parallel
-#         self.model_parallel = False
-#         self.device_map = None
-#         self.gradient_checkpointing = False
-
-#         # Initialize weights and apply final processing
-#         self.post_init()
-
-#     def get_input_embeddings(self):
-#         return self.wte
-
-#     def set_input_embeddings(self, new_embeddings):
-#         self.wte = new_embeddings
-
-#     def forward(
-#         self,
-#         input_ids: Optional[torch.LongTensor] = None,
-#         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-#         attention_mask: Optional[torch.FloatTensor] = None,
-#         token_type_ids: Optional[torch.LongTensor] = None,
-#         position_ids: Optional[torch.LongTensor] = None,
-#         head_mask: Optional[torch.FloatTensor] = None,
-#         inputs_embeds: Optional[torch.FloatTensor] = None,
-#         encoder_hidden_states: Optional[torch.Tensor] = None,
-#         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-#         use_cache: Optional[bool] = None,
-#         output_attentions: Optional[bool] = None,
-#         output_hidden_states: Optional[bool] = None,
-#         return_dict: Optional[bool] = None,
-#     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-#         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-#         output_hidden_states = (
-#             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-#         )
-#         use_cache = use_cache if use_cache is not None else self.config.use_cache
-#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-#         if input_ids is not None and inputs_embeds is not None:
-#             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-#         elif input_ids is not None:
-#             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-#             input_shape = input_ids.size()
-#             input_ids = input_ids.view(-1, input_shape[-1])
-#             batch_size = input_ids.shape[0]
-#         elif inputs_embeds is not None:
-#             input_shape = inputs_embeds.size()[:-1]
-#             batch_size = inputs_embeds.shape[0]
-#         else:
-#             raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-#         device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-#         if token_type_ids is not None:
-#             token_type_ids = token_type_ids.view(-1, input_shape[-1])
-
-#         if past_key_values is None:
-#             past_length = 0
-#             past_key_values = tuple([None] * len(self.h))
-#         else:
-#             past_length = past_key_values[0][0].size(-2)
-#         if position_ids is None:
-#             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
-#             position_ids = position_ids.unsqueeze(0)
-
-#         # Attention mask.
-#         if attention_mask is not None:
-#             if batch_size <= 0:
-#                 raise ValueError("batch_size has to be defined and > 0")
-#             attention_mask = attention_mask.view(batch_size, -1)
-#             # We create a 3D attention mask from a 2D tensor mask.
-#             # Sizes are [batch_size, 1, 1, to_seq_length]
-#             # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-#             # this attention mask is more simple than the triangular masking of causal attention
-#             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-#             attention_mask = attention_mask[:, None, None, :]
-
-#             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-#             # masked positions, this operation will create a tensor which is 0.0 for
-#             # positions we want to attend and the dtype's smallest value for masked positions.
-#             # Since we are adding it to the raw scores before the softmax, this is
-#             # effectively the same as removing these entirely.
-#             attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-#             attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
-
-#         # If a 2D or 3D attention mask is provided for the cross-attention
-#         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-#         if self.config.add_cross_attention and encoder_hidden_states is not None:
-#             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-#             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-#             if encoder_attention_mask is None:
-#                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-#             encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-#         else:
-#             encoder_attention_mask = None
-
-#         # Prepare head mask if needed
-#         # 1.0 in head_mask indicate we keep the head
-#         # attention_probs has shape bsz x n_heads x N x N
-#         # head_mask has shape n_layer x batch x n_heads x N x N
-#         head_mask = self.get_head_mask(head_mask, self.config.n_layer)
-
-#         if inputs_embeds is None:
-#             inputs_embeds = self.wte(input_ids)
-#         position_embeds = self.wpe(position_ids)
-#         hidden_states = inputs_embeds + position_embeds
-
-#         if token_type_ids is not None:
-#             token_type_embeds = self.wte(token_type_ids)
-#             hidden_states = hidden_states + token_type_embeds
-
-#         hidden_states = self.drop(hidden_states)
-
-#         output_shape = (-1,) + input_shape[1:] + (hidden_states.size(-1),)
-
-#         if self.gradient_checkpointing and self.training:
-#             if use_cache:
-#                 logger.warning_once(
-#                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-#                 )
-#                 use_cache = False
-
-#         presents = () if use_cache else None
-#         all_self_attentions = () if output_attentions else None
-#         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
-#         all_hidden_states = () if output_hidden_states else None
-#         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
-#             # Model parallel
-#             if self.model_parallel:
-#                 torch.cuda.set_device(hidden_states.device)
-#                 # Ensure layer_past is on same device as hidden_states (might not be correct)
-#                 if layer_past is not None:
-#                     layer_past = tuple(past_state.to(hidden_states.device) for past_state in layer_past)
-#                 # Ensure that attention_mask is always on the same device as hidden_states
-#                 if attention_mask is not None:
-#                     attention_mask = attention_mask.to(hidden_states.device)
-#                 if isinstance(head_mask, torch.Tensor):
-#                     head_mask = head_mask.to(hidden_states.device)
-#             if output_hidden_states:
-#                 all_hidden_states = all_hidden_states + (hidden_states,)
-
-#             if self.gradient_checkpointing and self.training:
-#                 outputs = self._gradient_checkpointing_func(
-#                     block.__call__,
-#                     hidden_states,
-#                     None,
-#                     attention_mask,
-#                     head_mask[i],
-#                     encoder_hidden_states,
-#                     encoder_attention_mask,
-#                     use_cache,
-#                     output_attentions,
-#                 )
-#             else:
-#                 outputs = block(
-#                     hidden_states,
-#                     layer_past=layer_past,
-#                     attention_mask=attention_mask,
-#                     head_mask=head_mask[i],
-#                     encoder_hidden_states=encoder_hidden_states,
-#                     encoder_attention_mask=encoder_attention_mask,
-#                     use_cache=use_cache,
-#                     output_attentions=output_attentions,
-#                 )
-
-#             hidden_states = outputs[0]
-#             if use_cache is True:
-#                 presents = presents + (outputs[1],)
-
-#             if output_attentions:
-#                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
-#                 if self.config.add_cross_attention:
-#                     all_cross_attentions = all_cross_attentions + (outputs[3 if use_cache else 2],)
-
-#             # Model Parallel: If it's the last layer for that device, put things on the next device
-#             if self.model_parallel:
-#                 for k, v in self.device_map.items():
-#                     if i == v[-1] and "cuda:" + str(k) != self.last_device:
-#                         hidden_states = hidden_states.to("cuda:" + str(k + 1))
-
-#         hidden_states = self.ln_f(hidden_states)
-
-#         hidden_states = hidden_states.view(output_shape)
-#         # Add last hidden state
-#         if output_hidden_states:
-#             all_hidden_states = all_hidden_states + (hidden_states,)
-
-#         if not return_dict:
-#             return tuple(
-#                 v
-#                 for v in [hidden_states, presents, all_hidden_states, all_self_attentions, all_cross_attentions]
-#                 if v is not None
-#             )
-
-#         return BaseModelOutputWithPastAndCrossAttentions(
-#             last_hidden_state=hidden_states,
-#             past_key_values=presents,
-#             hidden_states=all_hidden_states,
-#             attentions=all_self_attentions,
-#             cross_attentions=all_cross_attentions,
-#         )
 
 
 @dataclass
@@ -784,6 +145,947 @@ IRIS_INPUTS_DOCSTRING = r"""
             Masking, used to mask the actions when performing autoregressive prediction
 """
 
+#CODE BLOCKS REQUIRED FOR THE IRIS MODELS(WIP)
+#utils:###################
+
+def configure_optimizer(model, learning_rate, weight_decay, *blacklist_module_names):
+    """Credits to https://github.com/karpathy/minGPT"""
+    # separate out all parameters to those that will and won't experience regularizing weight decay
+    decay = set()
+    no_decay = set()
+    whitelist_weight_modules = (torch.nn.Linear, torch.nn.Conv1d)
+    blacklist_weight_modules = (torch.nn.LayerNorm, torch.nn.Embedding)
+    for mn, m in model.named_modules():
+        for pn, p in m.named_parameters():
+            fpn = '%s.%s' % (mn, pn) if mn else pn  # full param name
+            if any([fpn.startswith(module_name) for module_name in blacklist_module_names]):
+                no_decay.add(fpn)
+            elif 'bias' in pn:
+                # all biases will not be decayed
+                no_decay.add(fpn)
+            elif pn.endswith('weight') and isinstance(m, whitelist_weight_modules):
+                # weights of whitelist modules will be weight decayed
+                decay.add(fpn)
+            elif pn.endswith('weight') and isinstance(m, blacklist_weight_modules):
+                # weights of blacklist modules will NOT be weight decayed
+                no_decay.add(fpn)
+
+    # validate that we considered every parameter
+    param_dict = {pn: p for pn, p in model.named_parameters()}
+    inter_params = decay & no_decay
+    union_params = decay | no_decay
+    assert len(inter_params) == 0, f"parameters {str(inter_params)} made it into both decay/no_decay sets!"
+    assert len(param_dict.keys() - union_params) == 0, f"parameters {str(param_dict.keys() - union_params)} were not separated into either decay/no_decay set!"
+
+    # create the pytorch optimizer object
+    optim_groups = [
+        {"params": [param_dict[pn] for pn in sorted(list(decay))], "weight_decay": weight_decay},
+        {"params": [param_dict[pn] for pn in sorted(list(no_decay))], "weight_decay": 0.0},
+    ]
+    optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate)
+    return optimizer
+
+#init weights same as in pRetrained model's __init__()
+def init_weights(module):
+    if isinstance(module, (nn.Linear, nn.Embedding)):
+        module.weight.data.normal_(mean=0.0, std=0.02)
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
+    elif isinstance(module, nn.LayerNorm):
+        module.bias.data.zero_()
+        module.weight.data.fill_(1.0)
+
+
+def extract_state_dict(state_dict, module_name):
+    return OrderedDict({k.split('.', 1)[1]: v for k, v in state_dict.items() if k.startswith(module_name)})
+
+
+
+
+
+
+
+def compute_lambda_returns(rewards, values, ends, gamma, lambda_):
+    assert rewards.ndim == 2 or (rewards.ndim == 3 and rewards.size(2) == 1)
+    assert rewards.shape == ends.shape == values.shape, f"{rewards.shape}, {values.shape}, {ends.shape}"  # (B, T, 1)
+    t = rewards.size(1)
+    lambda_returns = torch.empty_like(values)
+    lambda_returns[:, -1] = values[:, -1]
+    lambda_returns[:, :-1] = rewards[:, :-1] + ends[:, :-1].logical_not() * gamma * (1 - lambda_) * values[:, 1:]
+
+    last = values[:, -1]
+    for i in list(range(t - 1))[::-1]:
+        lambda_returns[:, i] += ends[:, i].logical_not() * gamma * lambda_ * last
+        last = lambda_returns[:, i]
+
+    return lambda_returns
+
+
+class LossWithIntermediateLosses:
+    def __init__(self, **kwargs):
+        self.loss_total = sum(kwargs.values())
+        self.intermediate_losses = {k: v.item() for k, v in kwargs.items()}
+
+    def __truediv__(self, value):
+        for k, v in self.intermediate_losses.items():
+            self.intermediate_losses[k] = v / value
+        self.loss_total = self.loss_total / value
+        return self
+
+
+class EpisodeDirManager:
+    def __init__(self, episode_dir: Path, max_num_episodes: int) -> None:
+        self.episode_dir = episode_dir
+        self.episode_dir.mkdir(parents=False, exist_ok=True)
+        self.max_num_episodes = max_num_episodes
+        self.best_return = float('-inf')
+
+    def save(self, episode: Episode, episode_id: int, epoch: int) -> None:
+        if self.max_num_episodes is not None and self.max_num_episodes > 0:
+            self._save(episode, episode_id, epoch)
+
+    def _save(self, episode: Episode, episode_id: int, epoch: int) -> None:
+        ep_paths = [p for p in self.episode_dir.iterdir() if p.stem.startswith('episode_')]
+        assert len(ep_paths) <= self.max_num_episodes
+        if len(ep_paths) == self.max_num_episodes:
+            to_remove = min(ep_paths, key=lambda ep_path: int(ep_path.stem.split('_')[1]))
+            to_remove.unlink()
+        episode.save(self.episode_dir / f'episode_{episode_id}_epoch_{epoch}.pt')
+
+        ep_return = episode.compute_metrics().episode_return
+        if ep_return > self.best_return:
+            self.best_return = ep_return
+            path_best_ep = [p for p in self.episode_dir.iterdir() if p.stem.startswith('best_')]
+            assert len(path_best_ep) in (0, 1)
+            if len(path_best_ep) == 1:
+                path_best_ep[0].unlink()
+            episode.save(self.episode_dir / f'best_episode_{episode_id}_epoch_{epoch}.pt')
+
+
+class RandomHeuristic:
+    def __init__(self, num_actions):
+        self.num_actions = num_actions
+
+    def act(self, obs):
+        assert obs.ndim == 4  # (N, H, W, C)
+        n = obs.size(0)
+        return torch.randint(low=0, high=self.num_actions, size=(n,))
+###############################################################################################
+#env:
+
+
+class MessageType(Enum):
+    RESET = 0
+    RESET_RETURN = 1
+    STEP = 2
+    STEP_RETURN = 3
+    CLOSE = 4
+
+
+@dataclass
+class Message:
+    type: MessageType
+    content: Optional[Any] = None
+
+    def __iter__(self) -> Iterator:
+        return iter(astuple(self))
+
+
+def child_env(child_id: int, env_fn: Callable, child_conn: Connection) -> None:
+    np.random.seed(child_id + np.random.randint(0, 2 ** 31 - 1))
+    env = env_fn()
+    while True:
+        message_type, content = child_conn.recv()
+        if message_type == MessageType.RESET:
+            obs = env.reset()
+            child_conn.send(Message(MessageType.RESET_RETURN, obs))
+        elif message_type == MessageType.STEP:
+            obs, rew, done, _ = env.step(content)
+            if done:
+                obs = env.reset()
+            child_conn.send(Message(MessageType.STEP_RETURN, (obs, rew, done, None)))
+        elif message_type == MessageType.CLOSE:
+            child_conn.close()
+            return
+        else:
+            raise NotImplementedError
+
+
+class MultiProcessEnv(DoneTrackerEnv):
+    def __init__(self, env_fn: Callable, num_envs: int, should_wait_num_envs_ratio: float) -> None:
+        super().__init__(num_envs)
+        self.num_actions = env_fn().env.action_space.n
+        self.should_wait_num_envs_ratio = should_wait_num_envs_ratio
+        self.processes, self.parent_conns = [], []
+        for child_id in range(num_envs):
+            parent_conn, child_conn = Pipe()
+            self.parent_conns.append(parent_conn)
+            p = Process(target=child_env, args=(child_id, env_fn, child_conn), daemon=True)
+            self.processes.append(p)
+        for p in self.processes:
+            p.start()
+
+    def should_reset(self) -> bool:
+        return (self.num_envs_done / self.num_envs) >= self.should_wait_num_envs_ratio
+
+    def _receive(self, check_type: Optional[MessageType] = None) -> List[Any]:
+        messages = [parent_conn.recv() for parent_conn in self.parent_conns]
+        if check_type is not None:
+            assert all([m.type == check_type for m in messages])
+        return [m.content for m in messages]
+
+    def reset(self) -> np.ndarray:
+        self.reset_done_tracker()
+        for parent_conn in self.parent_conns:
+            parent_conn.send(Message(MessageType.RESET))
+        content = self._receive(check_type=MessageType.RESET_RETURN)
+        return np.stack(content)
+
+    def step(self, actions: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Any]:
+        for parent_conn, action in zip(self.parent_conns, actions):
+            parent_conn.send(Message(MessageType.STEP, action))
+        content = self._receive(check_type=MessageType.STEP_RETURN)
+        obs, rew, done, _ = zip(*content)
+        done = np.stack(done)
+        self.update_done_tracker(done)
+        return np.stack(obs), np.stack(rew), done, None
+
+    def close(self) -> None:
+        for parent_conn in self.parent_conns:
+            parent_conn.send(Message(MessageType.CLOSE))
+        for p in self.processes:
+            p.join()
+        for parent_conn in self.parent_conns:
+            parent_conn.close()
+
+
+
+class SingleProcessEnv(DoneTrackerEnv):
+    def __init__(self, env_fn):
+        super().__init__(num_envs=1)
+        self.env = env_fn()
+        self.num_actions = self.env.action_space.n
+
+    def should_reset(self) -> bool:
+        return self.num_envs_done == 1
+
+    def reset(self) -> np.ndarray:
+        self.reset_done_tracker()
+        obs = self.env.reset()
+        return obs[None, ...]
+
+    def step(self, action) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Any]:
+        obs, reward, done, _ = self.env.step(action[0])  # action is supposed to be ndarray (1,)
+        done = np.array([done])
+        self.update_done_tracker(done)
+        return obs[None, ...], np.array([reward]), done, None
+
+    def render(self) -> None:
+        self.env.render()
+
+    def close(self) -> None:
+        self.env.close()
+###############################################################################
+#collector
+
+class Collector:
+    def __init__(self, env: Union[SingleProcessEnv, MultiProcessEnv], dataset: EpisodesDataset, episode_dir_manager: EpisodeDirManager) -> None:
+        self.env = env
+        self.dataset = dataset
+        self.episode_dir_manager = episode_dir_manager
+        self.obs = self.env.reset()
+        self.episode_ids = [None] * self.env.num_envs
+        self.heuristic = RandomHeuristic(self.env.num_actions)
+
+    @torch.no_grad()
+    def collect(self, agent: Agent, epoch: int, epsilon: float, should_sample: bool, temperature: float, burn_in: int, *, num_steps: Optional[int] = None, num_episodes: Optional[int] = None):
+        assert self.env.num_actions == agent.world_model.act_vocab_size
+        assert 0 <= epsilon <= 1
+
+        assert (num_steps is None) != (num_episodes is None)
+        should_stop = lambda steps, episodes: steps >= num_steps if num_steps is not None else episodes >= num_episodes
+
+        to_log = []
+        steps, episodes = 0, 0
+        returns = []
+        observations, actions, rewards, dones = [], [], [], []
+
+        burnin_obs_rec, mask_padding = None, None
+        if set(self.episode_ids) != {None} and burn_in > 0:
+            current_episodes = [self.dataset.get_episode(episode_id) for episode_id in self.episode_ids]
+            segmented_episodes = [episode.segment(start=len(episode) - burn_in, stop=len(episode), should_pad=True) for episode in current_episodes]
+            mask_padding = torch.stack([episode.mask_padding for episode in segmented_episodes], dim=0).to(agent.device)
+            burnin_obs = torch.stack([episode.observations for episode in segmented_episodes], dim=0).float().div(255).to(agent.device)
+            burnin_obs_rec = torch.clamp(agent.tokenizer.encode_decode(burnin_obs, should_preprocess=True, should_postprocess=True), 0, 1)
+
+        agent.actor_critic.reset(n=self.env.num_envs, burnin_observations=burnin_obs_rec, mask_padding=mask_padding)
+        pbar = tqdm(total=num_steps if num_steps is not None else num_episodes, desc=f'Experience collection ({self.dataset.name})', file=sys.stdout)
+
+        while not should_stop(steps, episodes):
+
+            observations.append(self.obs)
+            obs = rearrange(torch.FloatTensor(self.obs).div(255), 'n h w c -> n c h w').to(agent.device)
+            act = agent.act(obs, should_sample=should_sample, temperature=temperature).cpu().numpy()
+
+            if random.random() < epsilon:
+                act = self.heuristic.act(obs).cpu().numpy()
+
+            self.obs, reward, done, _ = self.env.step(act)
+
+            actions.append(act)
+            rewards.append(reward)
+            dones.append(done)
+
+            new_steps = len(self.env.mask_new_dones)
+            steps += new_steps
+            pbar.update(new_steps if num_steps is not None else 0)
+
+            # Warning: with EpisodicLifeEnv + MultiProcessEnv, reset is ignored if not a real done.
+            # Thus, segments of experience following a life loss and preceding a general done are discarded.
+            # Not a problem with a SingleProcessEnv.
+
+            if self.env.should_reset():
+                self.add_experience_to_dataset(observations, actions, rewards, dones)
+
+                new_episodes = self.env.num_envs
+                episodes += new_episodes
+                pbar.update(new_episodes if num_episodes is not None else 0)
+
+                for episode_id in self.episode_ids:
+                    episode = self.dataset.get_episode(episode_id)
+                    self.episode_dir_manager.save(episode, episode_id, epoch)
+                    metrics_episode = {k: v for k, v in episode.compute_metrics().__dict__.items()}
+                    metrics_episode['episode_num'] = episode_id
+                    metrics_episode['action_histogram'] = wandb.Histogram(np_histogram=np.histogram(episode.actions.numpy(), bins=np.arange(0, self.env.num_actions + 1) - 0.5, density=True))
+                    to_log.append({f'{self.dataset.name}/{k}': v for k, v in metrics_episode.items()})
+                    returns.append(metrics_episode['episode_return'])
+
+                self.obs = self.env.reset()
+                self.episode_ids = [None] * self.env.num_envs
+                agent.actor_critic.reset(n=self.env.num_envs)
+                observations, actions, rewards, dones = [], [], [], []
+
+        # Add incomplete episodes to dataset, and complete them later.
+        if len(observations) > 0:
+            self.add_experience_to_dataset(observations, actions, rewards, dones)
+
+        agent.actor_critic.clear()
+
+        metrics_collect = {
+            '#episodes': len(self.dataset),
+            '#steps': sum(map(len, self.dataset.episodes)),
+        }
+        if len(returns) > 0:
+            metrics_collect['return'] = np.mean(returns)
+        metrics_collect = {f'{self.dataset.name}/{k}': v for k, v in metrics_collect.items()}
+        to_log.append(metrics_collect)
+
+        return to_log
+
+    def add_experience_to_dataset(self, observations: List[np.ndarray], actions: List[np.ndarray], rewards: List[np.ndarray], dones: List[np.ndarray]) -> None:
+        assert len(observations) == len(actions) == len(rewards) == len(dones)
+        for i, (o, a, r, d) in enumerate(zip(*map(lambda arr: np.swapaxes(arr, 0, 1), [observations, actions, rewards, dones]))):  # Make everything (N, T, ...) instead of (T, N, ...)
+            episode = Episode(
+                observations=torch.ByteTensor(o).permute(0, 3, 1, 2).contiguous(),  # channel-first
+                actions=torch.LongTensor(a),
+                rewards=torch.FloatTensor(r),
+                ends=torch.LongTensor(d),
+                mask_padding=torch.ones(d.shape[0], dtype=torch.bool),
+            )
+            if self.episode_ids[i] is None:
+                self.episode_ids[i] = self.dataset.add_episode(episode)
+            else:
+                self.dataset.update_episode(self.episode_ids[i], episode)
+
+
+###############################################################################################################
+#WORLD MODEL
+
+class Slicer(nn.Module):
+    def __init__(self, max_blocks: int, block_mask: torch.Tensor) -> None:
+        super().__init__()
+        self.block_size = block_mask.size(0)
+        self.num_kept_tokens = block_mask.sum().long().item()
+        kept_indices = torch.where(block_mask)[0].repeat(max_blocks)
+        offsets = torch.arange(max_blocks).repeat_interleave(self.num_kept_tokens)
+        self.register_buffer('indices', kept_indices + block_mask.size(0) * offsets)
+
+    def compute_slice(self, num_steps: int, prev_steps: int = 0) -> torch.Tensor:
+        total_steps = num_steps + prev_steps
+        num_blocks = math.ceil(total_steps / self.block_size)
+        indices = self.indices[:num_blocks * self.num_kept_tokens]
+        return indices[torch.logical_and(prev_steps <= indices, indices < total_steps)] - prev_steps
+
+    def forward(self, *args, **kwargs):
+        raise NotImplementedError
+
+
+class Head(Slicer):
+    def __init__(self, max_blocks: int, block_mask: torch.Tensor, head_module: nn.Module) -> None:
+        super().__init__(max_blocks, block_mask)
+        assert isinstance(head_module, nn.Module)
+        self.head_module = head_module
+
+    def forward(self, x: torch.Tensor, num_steps: int, prev_steps: int) -> torch.Tensor:
+        x_sliced = x[:, self.compute_slice(num_steps, prev_steps)]  # x is (B, T, E)
+        return self.head_module(x_sliced)
+
+
+class Embedder(nn.Module):
+    def __init__(self, max_blocks: int, block_masks: List[torch.Tensor], embedding_tables: List[nn.Embedding]) -> None:
+        super().__init__()
+        assert len(block_masks) == len(embedding_tables)
+        assert (sum(block_masks) == 1).all()  # block mask are a partition of a block
+        self.embedding_dim = embedding_tables[0].embedding_dim
+        assert all([e.embedding_dim == self.embedding_dim for e in embedding_tables])
+        self.embedding_tables = embedding_tables
+        self.slicers = [Slicer(max_blocks, block_mask) for block_mask in block_masks]
+
+    def forward(self, tokens: torch.Tensor, num_steps: int, prev_steps: int) -> torch.Tensor:
+        assert tokens.ndim == 2  # x is (B, T)
+        output = torch.zeros(*tokens.size(), self.embedding_dim, device=tokens.device)
+        for slicer, emb in zip(self.slicers, self.embedding_tables):
+            s = slicer.compute_slice(num_steps, prev_steps)
+            output[:, s] = emb(tokens[:, s])
+        return output
+
+
+
+class Tokenizer(nn.Module):
+    def __init__(self, vocab_size: int, embed_dim: int, encoder: Encoder, decoder: Decoder, with_lpips: bool = True) -> None:
+        super().__init__()
+        self.vocab_size = vocab_size
+        self.encoder = encoder
+        self.pre_quant_conv = torch.nn.Conv2d(encoder.config.z_channels, embed_dim, 1)
+        self.embedding = nn.Embedding(vocab_size, embed_dim)
+        self.post_quant_conv = torch.nn.Conv2d(embed_dim, decoder.config.z_channels, 1)
+        self.decoder = decoder
+        self.embedding.weight.data.uniform_(-1.0 / vocab_size, 1.0 / vocab_size)
+        self.lpips = LPIPS().eval() if with_lpips else None
+
+    def __repr__(self) -> str:
+        return "tokenizer"
+
+    def forward(self, x: torch.Tensor, should_preprocess: bool = False, should_postprocess: bool = False) -> Tuple[torch.Tensor]:
+        outputs = self.encode(x, should_preprocess)
+        decoder_input = outputs.z + (outputs.z_quantized - outputs.z).detach()
+        reconstructions = self.decode(decoder_input, should_postprocess)
+        return outputs.z, outputs.z_quantized, reconstructions
+
+    def compute_loss(self, batch: Batch, **kwargs: Any) -> LossWithIntermediateLosses:
+        assert self.lpips is not None
+        observations = self.preprocess_input(rearrange(batch['observations'], 'b t c h w -> (b t) c h w'))
+        z, z_quantized, reconstructions = self(observations, should_preprocess=False, should_postprocess=False)
+
+        # Codebook loss. Notes:
+        # - beta position is different from taming and identical to original VQVAE paper
+        # - VQVAE uses 0.25 by default
+        beta = 1.0
+        commitment_loss = (z.detach() - z_quantized).pow(2).mean() + beta * (z - z_quantized.detach()).pow(2).mean()
+
+        reconstruction_loss = torch.abs(observations - reconstructions).mean()
+        perceptual_loss = torch.mean(self.lpips(observations, reconstructions))
+
+        return LossWithIntermediateLosses(commitment_loss=commitment_loss, reconstruction_loss=reconstruction_loss, perceptual_loss=perceptual_loss)
+
+    def encode(self, x: torch.Tensor, should_preprocess: bool = False) -> TokenizerEncoderOutput:
+        if should_preprocess:
+            x = self.preprocess_input(x)
+        shape = x.shape  # (..., C, H, W)
+        x = x.view(-1, *shape[-3:])
+        z = self.encoder(x)
+        z = self.pre_quant_conv(z)
+        b, e, h, w = z.shape
+        z_flattened = rearrange(z, 'b e h w -> (b h w) e')
+        dist_to_embeddings = torch.sum(z_flattened ** 2, dim=1, keepdim=True) + torch.sum(self.embedding.weight**2, dim=1) - 2 * torch.matmul(z_flattened, self.embedding.weight.t())
+
+        tokens = dist_to_embeddings.argmin(dim=-1)
+        z_q = rearrange(self.embedding(tokens), '(b h w) e -> b e h w', b=b, e=e, h=h, w=w).contiguous()
+
+        # Reshape to original
+        z = z.reshape(*shape[:-3], *z.shape[1:])
+        z_q = z_q.reshape(*shape[:-3], *z_q.shape[1:])
+        tokens = tokens.reshape(*shape[:-3], -1)
+
+        return TokenizerEncoderOutput(z, z_q, tokens)
+
+    def decode(self, z_q: torch.Tensor, should_postprocess: bool = False) -> torch.Tensor:
+        shape = z_q.shape  # (..., E, h, w)
+        z_q = z_q.view(-1, *shape[-3:])
+        z_q = self.post_quant_conv(z_q)
+        rec = self.decoder(z_q)
+        rec = rec.reshape(*shape[:-3], *rec.shape[1:])
+        if should_postprocess:
+            rec = self.postprocess_output(rec)
+        return rec
+
+    @torch.no_grad()
+    def encode_decode(self, x: torch.Tensor, should_preprocess: bool = False, should_postprocess: bool = False) -> torch.Tensor:
+        z_q = self.encode(x, should_preprocess).z_quantized
+        return self.decode(z_q, should_postprocess)
+
+    def preprocess_input(self, x: torch.Tensor) -> torch.Tensor:
+        """x is supposed to be channels first and in [0, 1]"""
+        return x.mul(2).sub(1)
+
+    def postprocess_output(self, y: torch.Tensor) -> torch.Tensor:
+        """y is supposed to be channels first and in [-1, 1]"""
+        return y.add(1).div(2)
+
+
+class Transformer(nn.Module):
+    def __init__(self, config: TransformerConfig) -> None:
+        super().__init__()
+        self.config = config
+        self.drop = nn.Dropout(config.embed_pdrop)
+        self.blocks = nn.ModuleList([Block(config) for _ in range(config.num_layers)])
+        self.ln_f = nn.LayerNorm(config.embed_dim)
+
+    def generate_empty_keys_values(self, n: int, max_tokens: int) -> KeysValues:
+        device = self.ln_f.weight.device  # Assumption that all submodules are on the same device
+        return KeysValues(n, self.config.num_heads, max_tokens, self.config.embed_dim, self.config.num_layers, device)
+
+    def forward(self, sequences: torch.Tensor, past_keys_values: Optional[KeysValues] = None) -> torch.Tensor:
+        assert past_keys_values is None or len(past_keys_values) == len(self.blocks)
+        x = self.drop(sequences)
+        for i, block in enumerate(self.blocks):
+            x = block(x, None if past_keys_values is None else past_keys_values[i])
+
+        x = self.ln_f(x)
+        return x
+
+
+class Block(nn.Module):
+    def __init__(self, config: TransformerConfig) -> None:
+        super().__init__()
+        self.ln1 = nn.LayerNorm(config.embed_dim)
+        self.ln2 = nn.LayerNorm(config.embed_dim)
+        self.attn = SelfAttention(config)
+        self.mlp = nn.Sequential(
+            nn.Linear(config.embed_dim, 4 * config.embed_dim),
+            nn.GELU(),
+            nn.Linear(4 * config.embed_dim, config.embed_dim),
+            nn.Dropout(config.resid_pdrop),
+        )
+
+    def forward(self, x: torch.Tensor, past_keys_values: Optional[KeysValues] = None) -> torch.Tensor:
+        x_attn = self.attn(self.ln1(x), past_keys_values)
+        x = x + x_attn
+        x = x + self.mlp(self.ln2(x))
+        return x
+
+
+class SelfAttention(nn.Module):
+    def __init__(self, config: TransformerConfig) -> None:
+        super().__init__()
+        assert config.embed_dim % config.num_heads == 0
+        assert config.attention in ('causal', 'block_causal')
+        self.num_heads = config.num_heads
+        self.key = nn.Linear(config.embed_dim, config.embed_dim)
+        self.query = nn.Linear(config.embed_dim, config.embed_dim)
+        self.value = nn.Linear(config.embed_dim, config.embed_dim)
+        self.attn_drop = nn.Dropout(config.attn_pdrop)
+        self.resid_drop = nn.Dropout(config.resid_pdrop)
+        self.proj = nn.Linear(config.embed_dim, config.embed_dim)
+
+        causal_mask = torch.tril(torch.ones(config.max_tokens, config.max_tokens))
+        block_causal_mask = torch.max(causal_mask, torch.block_diag(*[torch.ones(config.tokens_per_block, config.tokens_per_block) for _ in range(config.max_blocks)]))
+        self.register_buffer('mask', causal_mask if config.attention == 'causal' else block_causal_mask)
+
+    def forward(self, x: torch.Tensor, kv_cache: Optional[KVCache] = None) -> torch.Tensor:
+        B, T, C = x.size()
+        if kv_cache is not None:
+            b, nh, L, c = kv_cache.shape
+            assert nh == self.num_heads and b == B and c * nh == C
+        else:
+            L = 0
+
+        q = self.query(x).view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)   # (B, nh, T, hs)
+        k = self.key(x).view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)     # (B, nh, T, hs)
+        v = self.value(x).view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)   # (B, nh, T, hs)
+
+        if kv_cache is not None:
+            kv_cache.update(k, v)
+            k, v = kv_cache.get()
+
+        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
+        att = att.masked_fill(self.mask[L:L + T, :L + T] == 0, float('-inf'))
+        att = F.softmax(att, dim=-1)
+        att = self.attn_drop(att)
+        y = att @ v
+        y = rearrange(y, 'b h t e -> b t (h e)')
+
+        y = self.resid_drop(self.proj(y))
+
+        return y
+
+class WorldModelEnv:
+
+    def __init__(self, tokenizer: torch.nn.Module, world_model: torch.nn.Module, device: Union[str, torch.device], env: Optional[gym.Env] = None) -> None:
+
+        self.device = torch.device(device)
+        self.world_model = world_model.to(self.device).eval()
+        self.tokenizer = tokenizer.to(self.device).eval()
+
+        self.keys_values_wm, self.obs_tokens, self._num_observations_tokens = None, None, None
+
+        self.env = env
+
+    @property
+    def num_observations_tokens(self) -> int:
+        return self._num_observations_tokens
+
+    @torch.no_grad()
+    def reset(self) -> torch.FloatTensor:
+        assert self.env is not None
+        obs = torchvision.transforms.functional.to_tensor(self.env.reset()).to(self.device).unsqueeze(0)  # (1, C, H, W) in [0., 1.]
+        return self.reset_from_initial_observations(obs)
+
+    @torch.no_grad()
+    def reset_from_initial_observations(self, observations: torch.FloatTensor) -> torch.FloatTensor:
+        obs_tokens = self.tokenizer.encode(observations, should_preprocess=True).tokens    # (B, C, H, W) -> (B, K)
+        _, num_observations_tokens = obs_tokens.shape
+        if self.num_observations_tokens is None:
+            self._num_observations_tokens = num_observations_tokens
+
+        _ = self.refresh_keys_values_with_initial_obs_tokens(obs_tokens)
+        self.obs_tokens = obs_tokens
+
+        return self.decode_obs_tokens()
+
+    @torch.no_grad()
+    def refresh_keys_values_with_initial_obs_tokens(self, obs_tokens: torch.LongTensor) -> torch.FloatTensor:
+        n, num_observations_tokens = obs_tokens.shape
+        assert num_observations_tokens == self.num_observations_tokens
+        self.keys_values_wm = self.world_model.transformer.generate_empty_keys_values(n=n, max_tokens=self.world_model.config.max_tokens)
+        outputs_wm = self.world_model(obs_tokens, past_keys_values=self.keys_values_wm)
+        return outputs_wm.output_sequence  # (B, K, E)
+
+    @torch.no_grad()
+    def step(self, action: Union[int, np.ndarray, torch.LongTensor], should_predict_next_obs: bool = True) -> None:
+        assert self.keys_values_wm is not None and self.num_observations_tokens is not None
+
+        num_passes = 1 + self.num_observations_tokens if should_predict_next_obs else 1
+
+        output_sequence, obs_tokens = [], []
+
+        if self.keys_values_wm.size + num_passes > self.world_model.config.max_tokens:
+            _ = self.refresh_keys_values_with_initial_obs_tokens(self.obs_tokens)
+
+        token = action.clone().detach() if isinstance(action, torch.Tensor) else torch.tensor(action, dtype=torch.long)
+        token = token.reshape(-1, 1).to(self.device)  # (B, 1)
+
+        for k in range(num_passes):  # assumption that there is only one action token.
+
+            outputs_wm = self.world_model(token, past_keys_values=self.keys_values_wm)
+            output_sequence.append(outputs_wm.output_sequence)
+
+            if k == 0:
+                reward = Categorical(logits=outputs_wm.logits_rewards).sample().float().cpu().numpy().reshape(-1) - 1   # (B,)
+                done = Categorical(logits=outputs_wm.logits_ends).sample().cpu().numpy().astype(bool).reshape(-1)       # (B,)
+
+            if k < self.num_observations_tokens:
+                token = Categorical(logits=outputs_wm.logits_observations).sample()
+                obs_tokens.append(token)
+
+        output_sequence = torch.cat(output_sequence, dim=1)   # (B, 1 + K, E)
+        self.obs_tokens = torch.cat(obs_tokens, dim=1)        # (B, K)
+
+        obs = self.decode_obs_tokens() if should_predict_next_obs else None
+        return obs, reward, done, None
+
+    @torch.no_grad()
+    def render_batch(self) -> List[Image.Image]:
+        frames = self.decode_obs_tokens().detach().cpu()
+        frames = rearrange(frames, 'b c h w -> b h w c').mul(255).numpy().astype(np.uint8)
+        return [Image.fromarray(frame) for frame in frames]
+
+    @torch.no_grad()
+    def decode_obs_tokens(self) -> List[Image.Image]:
+        embedded_tokens = self.tokenizer.embedding(self.obs_tokens)     # (B, K, E)
+        z = rearrange(embedded_tokens, 'b (h w) e -> b e h w', h=int(np.sqrt(self.num_observations_tokens)))
+        rec = self.tokenizer.decode(z, should_postprocess=True)         # (B, C, H, W)
+        return torch.clamp(rec, 0, 1)
+
+    @torch.no_grad()
+    def render(self):
+        assert self.obs_tokens.shape == (1, self.num_observations_tokens)
+        return self.render_batch()[0]
+
+
+
+
+class WorldModelOutput:
+    output_sequence: torch.FloatTensor
+    logits_observations: torch.FloatTensor
+    logits_rewards: torch.FloatTensor
+    logits_ends: torch.FloatTensor
+
+
+class WorldModel(nn.Module):
+    def __init__(self, obs_vocab_size: int, act_vocab_size: int, config: TransformerConfig) -> None:
+        super().__init__()
+        self.obs_vocab_size, self.act_vocab_size = obs_vocab_size, act_vocab_size
+        self.config = config
+        self.transformer = Transformer(config)
+
+        all_but_last_obs_tokens_pattern = torch.ones(config.tokens_per_block)
+        all_but_last_obs_tokens_pattern[-2] = 0
+        act_tokens_pattern = torch.zeros(self.config.tokens_per_block)
+        act_tokens_pattern[-1] = 1
+        obs_tokens_pattern = 1 - act_tokens_pattern
+
+        self.pos_emb = nn.Embedding(config.max_tokens, config.embed_dim)
+
+        self.embedder = Embedder(
+            max_blocks=config.max_blocks,
+            block_masks=[act_tokens_pattern, obs_tokens_pattern],
+            embedding_tables=nn.ModuleList([nn.Embedding(act_vocab_size, config.embed_dim), nn.Embedding(obs_vocab_size, config.embed_dim)])
+        )
+
+        self.head_observations = Head(
+            max_blocks=config.max_blocks,
+            block_mask=all_but_last_obs_tokens_pattern,
+            head_module=nn.Sequential(
+                nn.Linear(config.embed_dim, config.embed_dim),
+                nn.ReLU(),
+                nn.Linear(config.embed_dim, obs_vocab_size)
+            )
+        )
+
+        self.head_rewards = Head(
+            max_blocks=config.max_blocks,
+            block_mask=act_tokens_pattern,
+            head_module=nn.Sequential(
+                nn.Linear(config.embed_dim, config.embed_dim),
+                nn.ReLU(),
+                nn.Linear(config.embed_dim, 3)
+            )
+        )
+
+        self.head_ends = Head(
+            max_blocks=config.max_blocks,
+            block_mask=act_tokens_pattern,
+            head_module=nn.Sequential(
+                nn.Linear(config.embed_dim, config.embed_dim),
+                nn.ReLU(),
+                nn.Linear(config.embed_dim, 2)
+            )
+        )
+
+        self.apply(init_weights)
+
+    def __repr__(self) -> str:
+        return "world_model"
+
+    def forward(self, tokens: torch.LongTensor, past_keys_values: Optional[KeysValues] = None) -> WorldModelOutput:
+
+        num_steps = tokens.size(1)  # (B, T)
+        assert num_steps <= self.config.max_tokens
+        prev_steps = 0 if past_keys_values is None else past_keys_values.size
+
+        sequences = self.embedder(tokens, num_steps, prev_steps) + self.pos_emb(prev_steps + torch.arange(num_steps, device=tokens.device))
+
+        x = self.transformer(sequences, past_keys_values)
+
+        logits_observations = self.head_observations(x, num_steps=num_steps, prev_steps=prev_steps)
+        logits_rewards = self.head_rewards(x, num_steps=num_steps, prev_steps=prev_steps)
+        logits_ends = self.head_ends(x, num_steps=num_steps, prev_steps=prev_steps)
+
+        return WorldModelOutput(x, logits_observations, logits_rewards, logits_ends)
+
+    def compute_loss(self, batch: Batch, tokenizer: Tokenizer, **kwargs: Any) -> LossWithIntermediateLosses:
+
+        with torch.no_grad():
+            obs_tokens = tokenizer.encode(batch['observations'], should_preprocess=True).tokens  # (BL, K)
+
+        act_tokens = rearrange(batch['actions'], 'b l -> b l 1')
+        tokens = rearrange(torch.cat((obs_tokens, act_tokens), dim=2), 'b l k1 -> b (l k1)')  # (B, L(K+1))
+
+        outputs = self(tokens)
+
+        labels_observations, labels_rewards, labels_ends = self.compute_labels_world_model(obs_tokens, batch['rewards'], batch['ends'], batch['mask_padding'])
+
+        logits_observations = rearrange(outputs.logits_observations[:, :-1], 'b t o -> (b t) o')
+        loss_obs = F.cross_entropy(logits_observations, labels_observations)
+        loss_rewards = F.cross_entropy(rearrange(outputs.logits_rewards, 'b t e -> (b t) e'), labels_rewards)
+        loss_ends = F.cross_entropy(rearrange(outputs.logits_ends, 'b t e -> (b t) e'), labels_ends)
+
+        return LossWithIntermediateLosses(loss_obs=loss_obs, loss_rewards=loss_rewards, loss_ends=loss_ends)
+
+    def compute_labels_world_model(self, obs_tokens: torch.Tensor, rewards: torch.Tensor, ends: torch.Tensor, mask_padding: torch.BoolTensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        assert torch.all(ends.sum(dim=1) <= 1)  # at most 1 done
+        mask_fill = torch.logical_not(mask_padding)
+        labels_observations = rearrange(obs_tokens.masked_fill(mask_fill.unsqueeze(-1).expand_as(obs_tokens), -100), 'b t k -> b (t k)')[:, 1:]
+        labels_rewards = (rewards.sign() + 1).masked_fill(mask_fill, -100).long()  # Rewards clipped to {-1, 0, 1}
+        labels_ends = ends.masked_fill(mask_fill, -100)
+        return labels_observations.reshape(-1), labels_rewards.reshape(-1), labels_ends.reshape(-1)
+
+##########################################################
+
+#acTOR CRITIC
+
+class ActorCritic(nn.Module):
+    def __init__(self, act_vocab_size, use_original_obs: bool = False) -> None:
+        super().__init__()
+        self.use_original_obs = use_original_obs
+        self.conv1 = nn.Conv2d(3, 32, 3, stride=1, padding=1)
+        self.maxp1 = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(32, 32, 3, stride=1, padding=1)
+        self.maxp2 = nn.MaxPool2d(2, 2)
+        self.conv3 = nn.Conv2d(32, 64, 3, stride=1, padding=1)
+        self.maxp3 = nn.MaxPool2d(2, 2)
+        self.conv4 = nn.Conv2d(64, 64, 3, stride=1, padding=1)
+        self.maxp4 = nn.MaxPool2d(2, 2)
+
+        self.lstm_dim = 512
+        self.lstm = nn.LSTMCell(1024, self.lstm_dim)
+        self.hx, self.cx = None, None
+
+        self.critic_linear = nn.Linear(512, 1)
+        self.actor_linear = nn.Linear(512, act_vocab_size)
+
+    def __repr__(self) -> str:
+        return "actor_critic"
+
+    def clear(self) -> None:
+        self.hx, self.cx = None, None
+
+    def reset(self, n: int, burnin_observations: Optional[torch.Tensor] = None, mask_padding: Optional[torch.Tensor] = None) -> None:
+        device = self.conv1.weight.device
+        self.hx = torch.zeros(n, self.lstm_dim, device=device)
+        self.cx = torch.zeros(n, self.lstm_dim, device=device)
+        if burnin_observations is not None:
+            assert burnin_observations.ndim == 5 and burnin_observations.size(0) == n and mask_padding is not None and burnin_observations.shape[:2] == mask_padding.shape
+            for i in range(burnin_observations.size(1)):
+                if mask_padding[:, i].any():
+                    with torch.no_grad():
+                        self(burnin_observations[:, i], mask_padding[:, i])
+
+    def prune(self, mask: np.ndarray) -> None:
+        self.hx = self.hx[mask]
+        self.cx = self.cx[mask]
+
+    def forward(self, inputs: torch.FloatTensor, mask_padding: Optional[torch.BoolTensor] = None) -> ActorCriticOutput:
+        assert inputs.ndim == 4 and inputs.shape[1:] == (3, 64, 64)
+        assert 0 <= inputs.min() <= 1 and 0 <= inputs.max() <= 1
+        assert mask_padding is None or (mask_padding.ndim == 1 and mask_padding.size(0) == inputs.size(0) and mask_padding.any())
+        x = inputs[mask_padding] if mask_padding is not None else inputs
+
+        x = x.mul(2).sub(1)
+        x = F.relu(self.maxp1(self.conv1(x)))
+        x = F.relu(self.maxp2(self.conv2(x)))
+        x = F.relu(self.maxp3(self.conv3(x)))
+        x = F.relu(self.maxp4(self.conv4(x)))
+        x = torch.flatten(x, start_dim=1)
+
+        if mask_padding is None:
+            self.hx, self.cx = self.lstm(x, (self.hx, self.cx))
+        else:
+            self.hx[mask_padding], self.cx[mask_padding] = self.lstm(x, (self.hx[mask_padding], self.cx[mask_padding]))
+
+        logits_actions = rearrange(self.actor_linear(self.hx), 'b a -> b 1 a')
+        means_values = rearrange(self.critic_linear(self.hx), 'b 1 -> b 1 1')
+
+        return ActorCriticOutput(logits_actions, means_values)
+
+    def compute_loss(self, batch: Batch, tokenizer: Tokenizer, world_model: WorldModel, imagine_horizon: int, gamma: float, lambda_: float, entropy_weight: float, **kwargs: Any) -> LossWithIntermediateLosses:
+        assert not self.use_original_obs
+        outputs = self.imagine(batch, tokenizer, world_model, horizon=imagine_horizon)
+
+        with torch.no_grad():
+            lambda_returns = compute_lambda_returns(
+                rewards=outputs.rewards,
+                values=outputs.values,
+                ends=outputs.ends,
+                gamma=gamma,
+                lambda_=lambda_,
+            )[:, :-1]
+
+        values = outputs.values[:, :-1]
+
+        d = Categorical(logits=outputs.logits_actions[:, :-1])
+        log_probs = d.log_prob(outputs.actions[:, :-1])
+        loss_actions = -1 * (log_probs * (lambda_returns - values.detach())).mean()
+        loss_entropy = - entropy_weight * d.entropy().mean()
+        loss_values = F.mse_loss(values, lambda_returns)
+
+        return LossWithIntermediateLosses(loss_actions=loss_actions, loss_values=loss_values, loss_entropy=loss_entropy)
+
+    def imagine(self, batch: Batch, tokenizer: Tokenizer, world_model: WorldModel, horizon: int, show_pbar: bool = False) -> ImagineOutput:
+        assert not self.use_original_obs
+        initial_observations = batch['observations']
+        mask_padding = batch['mask_padding']
+        assert initial_observations.ndim == 5 and initial_observations.shape[2:] == (3, 64, 64)
+        assert mask_padding[:, -1].all()
+        device = initial_observations.device
+        wm_env = WorldModelEnv(tokenizer, world_model, device)
+
+        all_actions = []
+        all_logits_actions = []
+        all_values = []
+        all_rewards = []
+        all_ends = []
+        all_observations = []
+
+        burnin_observations = torch.clamp(tokenizer.encode_decode(initial_observations[:, :-1], should_preprocess=True, should_postprocess=True), 0, 1) if initial_observations.size(1) > 1 else None
+        self.reset(n=initial_observations.size(0), burnin_observations=burnin_observations, mask_padding=mask_padding[:, :-1])
+
+        obs = wm_env.reset_from_initial_observations(initial_observations[:, -1])
+        for k in tqdm(range(horizon), disable=not show_pbar, desc='Imagination', file=sys.stdout):
+
+            all_observations.append(obs)
+
+            outputs_ac = self(obs)
+            action_token = Categorical(logits=outputs_ac.logits_actions).sample()
+            obs, reward, done, _ = wm_env.step(action_token, should_predict_next_obs=(k < horizon - 1))
+
+            all_actions.append(action_token)
+            all_logits_actions.append(outputs_ac.logits_actions)
+            all_values.append(outputs_ac.means_values)
+            all_rewards.append(torch.tensor(reward).reshape(-1, 1))
+            all_ends.append(torch.tensor(done).reshape(-1, 1))
+
+        self.clear()
+
+        return ImagineOutput(
+            observations=torch.stack(all_observations, dim=1).mul(255).byte(),      # (B, T, C, H, W) in [0, 255]
+            actions=torch.cat(all_actions, dim=1),                                  # (B, T)
+            logits_actions=torch.cat(all_logits_actions, dim=1),                    # (B, T, #actions)
+            values=rearrange(torch.cat(all_values, dim=1), 'b t 1 -> b t'),         # (B, T)
+            rewards=torch.cat(all_rewards, dim=1).to(device),                       # (B, T)
+            ends=torch.cat(all_ends, dim=1).to(device),                             # (B, T)
+        )
+
+######################################################################
+#AGENT
+class Agent(nn.Module):
+    def __init__(self, tokenizer: Tokenizer, world_model: WorldModel, actor_critic: ActorCritic):
+        super().__init__()
+        self.tokenizer = tokenizer
+        self.world_model = world_model
+        self.actor_critic = actor_critic
+
+    @property
+    def device(self):
+        return self.actor_critic.conv1.weight.device
+
+    def load(self, path_to_checkpoint: Path, device: torch.device, load_tokenizer: bool = True, load_world_model: bool = True, load_actor_critic: bool = True) -> None:
+        agent_state_dict = torch.load(path_to_checkpoint, map_location=device)
+        if load_tokenizer:
+            self.tokenizer.load_state_dict(extract_state_dict(agent_state_dict, 'tokenizer'))
+        if load_world_model:
+            self.world_model.load_state_dict(extract_state_dict(agent_state_dict, 'world_model'))
+        if load_actor_critic:
+            self.actor_critic.load_state_dict(extract_state_dict(agent_state_dict, 'actor_critic'))
+
+    def act(self, obs: torch.FloatTensor, should_sample: bool = True, temperature: float = 1.0) -> torch.LongTensor:
+        input_ac = obs if self.actor_critic.use_original_obs else torch.clamp(self.tokenizer.encode_decode(obs, should_preprocess=True, should_postprocess=True), 0, 1)
+        logits_actions = self.actor_critic(input_ac).logits_actions[:, -1] / temperature
+        act_token = Categorical(logits=logits_actions).sample() if should_sample else logits_actions.argmax(dim=-1)
+        return act_token
+
+#########################################################################################################################
 
 @add_start_docstrings("The IRIS Model", IRIS_START_DOCSTRING)
 # Copied from transformers.models.decision_transformer.modeling_decision_transformer.DecisionTransformerModel with DecisionTransformer->Iris,edbeeching/decision-transformer-gym-hopper-medium->ruffy369/iris-breakout
