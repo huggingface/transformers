@@ -700,17 +700,16 @@ class ZoeDepthAttractorLayer(nn.Module):
         bin_centers = nn.functional.interpolate(prev_bin, (height, width), mode="bilinear", align_corners=True)
 
         # note: only attractor_type = "exp" is supported here, since no checkpoints were released with other attractor types
-        distribution = inv_attractor
 
         if not self.memory_efficient:
             func = {"mean": torch.mean, "sum": torch.sum}[self.kind]
             # shape (batch_size, num_bins, height, width)
-            delta_c = func(distribution(attractors_normed.unsqueeze(2) - bin_centers.unsqueeze(1)), dim=1)
+            delta_c = func(inv_attractor(attractors_normed.unsqueeze(2) - bin_centers.unsqueeze(1)), dim=1)
         else:
             delta_c = torch.zeros_like(bin_centers, device=bin_centers.device)
             for i in range(self.n_attractors):
                 # shape (batch_size, num_bins, height, width)
-                delta_c += distribution(attractors_normed[:, i, ...].unsqueeze(1) - bin_centers)
+                delta_c += inv_attractor(attractors_normed[:, i, ...].unsqueeze(1) - bin_centers)
 
             if self.kind == "mean":
                 delta_c = delta_c / self.n_attractors
@@ -785,20 +784,17 @@ class ZoeDepthAttractorLayerUnnormed(nn.Module):
 
         height, width = attractors.shape[-2:]
 
-        prev_bin = nn.functional.interpolate(prev_bin, (height, width), mode="bilinear", align_corners=True)
-        bin_centers = prev_bin
-
-        dist = inv_attractor
+        bin_centers = nn.functional.interpolate(prev_bin, (height, width), mode="bilinear", align_corners=True)
 
         if not self.memory_efficient:
             func = {"mean": torch.mean, "sum": torch.sum}[self.kind]
             # shape batch_size, num_bins, height, width
-            delta_c = func(dist(attractors.unsqueeze(2) - bin_centers.unsqueeze(1)), dim=1)
+            delta_c = func(inv_attractor(attractors.unsqueeze(2) - bin_centers.unsqueeze(1)), dim=1)
         else:
             delta_c = torch.zeros_like(bin_centers, device=bin_centers.device)
             for i in range(self.n_attractors):
                 # shape batch_size, num_bins, height, width
-                delta_c += dist(attractors[:, i, ...].unsqueeze(1) - bin_centers)
+                delta_c += inv_attractor(attractors[:, i, ...].unsqueeze(1) - bin_centers)
 
             if self.kind == "mean":
                 delta_c = delta_c / self.n_attractors
@@ -860,7 +856,7 @@ class ZoeDepthPatchTransformerEncoder(nn.Module):
             in_channels, embedding_dim, kernel_size=patch_size, stride=patch_size, padding=0
         )
 
-    def positional_encoding_1d(self, batch_size, sequence_length, embedding_dim, device="cpu"):
+    def positional_encoding_1d(self, batch_size, sequence_length, embedding_dim, device="cpu", dtype=torch.float32):
         """Generate positional encodings
 
         Args:
@@ -870,8 +866,8 @@ class ZoeDepthPatchTransformerEncoder(nn.Module):
         Returns:
             torch.Tensor: Positional encodings.
         """
-        position = torch.arange(0, sequence_length, dtype=torch.float32, device=device).unsqueeze(1)
-        index = torch.arange(0, embedding_dim, 2, dtype=torch.float32, device=device).unsqueeze(0)
+        position = torch.arange(0, sequence_length, dtype=dtype, device=device).unsqueeze(1)
+        index = torch.arange(0, embedding_dim, 2, dtype=dtype, device=device).unsqueeze(0)
         div_term = torch.exp(index * (-torch.log(torch.tensor(10000.0, device=device)) / embedding_dim))
         pos_encoding = position * div_term
         pos_encoding = torch.cat([torch.sin(pos_encoding), torch.cos(pos_encoding)], dim=1)
@@ -895,7 +891,7 @@ class ZoeDepthPatchTransformerEncoder(nn.Module):
         embeddings = embeddings.permute(0, 2, 1)
         batch_size, sequence_length, embedding_dim = embeddings.shape
         embeddings = embeddings + self.positional_encoding_1d(
-            batch_size, sequence_length, embedding_dim, device=embeddings.device
+            batch_size, sequence_length, embedding_dim, device=embeddings.device, dtype=embeddings.dtype
         )
         x = self.transformer_encoder(embeddings)
         return x
@@ -1116,7 +1112,7 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
         x = self.conv2(bottleneck)
         _, seed_bin_centers = self.seed_bin_regressor(x)
 
-        if self.bin_centers_type == "normed" or self.bin_centers_type == "hybrid2":
+        if self.bin_centers_type in ["normed", "hybrid2"]:
             prev_bin = (seed_bin_centers - self.min_depth) / (self.max_depth - self.min_depth)
         else:
             prev_bin = seed_bin_centers

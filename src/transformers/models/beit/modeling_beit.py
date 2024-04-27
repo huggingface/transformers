@@ -20,7 +20,6 @@ import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import Tensor, nn
@@ -272,7 +271,8 @@ class BeitSelfAttention(nn.Module):
 
         # Add relative position bias if present.
         if self.relative_position_bias is not None:
-            window_size = tuple(np.array(resolution) // self.config.patch_size)
+            height, width = resolution
+            window_size = (height // self.config.patch_size, width // self.config.patch_size)
             attention_scores = attention_scores + self.relative_position_bias(window_size)
 
         # Add shared relative position bias if provided.
