@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
       - name: Send message to Slack
-        if: ${{ inputs.job != 'run_tests_quantization_torch_gpu' }}
+        if: ${{ inputs.job != 'run_quantization_torch_gpu' }}
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
           CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
@@ -61,7 +61,7 @@ jobs:
       # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
       - name: Failure table artifacts
         # Only the model testing job is concerned for this step
-        if: ${{ inputs.job == 'run_tests_gpu' }}
+        if: ${{ inputs.job == 'run_models_gpu' }}
         uses: actions/upload-artifact@v4
         with:
           name: prev_ci_results
@@ -70,7 +70,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
       - name: Send message to Slack for quantization workflow
-        if: ${{ inputs.job == 'run_tests_quantization_torch_gpu' }}
+        if: ${{ inputs.job == 'run_quantization_torch_gpu' }}
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
