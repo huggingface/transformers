@@ -52,7 +52,7 @@ class Wav2Vec2Processor(ProcessorMixin):
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
         self.processing_kwargs: ProcessingKwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
+            "common_kwargs": {"return_tensors": None},
             "text_kwargs": {
                 "text_pair": None,
                 "text_target": None,
