@@ -1656,6 +1656,10 @@ class ModelTesterMixin:
             model.to(torch_device)
             model.eval()
 
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            for k, v in inputs.items():
+                print(k, v.shape)
+
             hidden_states_no_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
 
             torch.manual_seed(0)

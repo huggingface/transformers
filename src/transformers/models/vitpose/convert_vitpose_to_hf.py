@@ -159,6 +159,7 @@ name_to_path = {
     "vitpose-base-simple": "/Users/nielsrogge/Documents/ViTPose/vitpose-b-simple.pth",
     "vitpose-base": "/Users/nielsrogge/Documents/ViTPose/vitpose-b.pth",
     "vitpose-base-coco-aic-mpii": "/Users/nielsrogge/Documents/ViTPose/vitpose_base_coco_aic_mpii.pth",
+    "vitpose+-base": "/Users/nielsrogge/Documents/ViTPose/vitpose+_base.pth",
 }
 
 
@@ -299,12 +300,23 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
             torch.from_numpy(pose_results[1]["keypoints"][0, :3]),
             torch.tensor([3.98305542e02, 1.81741592e02, 8.69966745e-01]),
         )
+    elif model_name == "vitpose+-base":
+        assert torch.allclose(
+            torch.from_numpy(pose_results[1]["keypoints"][0, :3]),
+            torch.tensor([3.98201294e02, 1.81728302e02, 8.75046968e-01]),
+        )
     else:
         raise ValueError("Model not supported")
     print("Looks ok!")
 
     # test post_process_pose_estimation
+    # results are slightly different due to no flip augmentation
     hf_pose_results = image_processor.post_process_pose_estimation(outputs, boxes=boxes[0], use_udp=True)
+    if model_name == "vitpose-base-simple":
+        assert torch.allclose(
+            torch.tensor(hf_pose_results[1]["keypoints"][0, :3]),
+            torch.tensor([3.9813846e02, 1.8180725e02, 8.7446749e-01]),
+        )
     print("Pose results:")
     for pose_result in hf_pose_results:
         print(pose_result)

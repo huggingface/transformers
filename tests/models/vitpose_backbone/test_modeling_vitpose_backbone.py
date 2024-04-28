@@ -18,7 +18,7 @@
 import inspect
 import unittest
 
-from transformers import ViTPoseConfig
+from transformers import ViTPoseBackboneConfig
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -57,7 +57,6 @@ class ViTPoseBackboneModelTester:
         type_sequence_label_size=10,
         initializer_range=0.02,
         num_labels=2,
-        scale_factor=4,
         scope=None,
     ):
         self.parent = parent
@@ -77,10 +76,9 @@ class ViTPoseBackboneModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.num_labels = num_labels
-        self.scale_factor = scale_factor
         self.scope = scope
 
-        # in ViTPose, the seq length equals the number of patches
+        # in ViTPoseBackbone, the seq length equals the number of patches
         num_patches = (image_size[0] // patch_size[0]) * (image_size[1] // patch_size[1])
         self.seq_length = num_patches
 
@@ -96,7 +94,7 @@ class ViTPoseBackboneModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return ViTPoseConfig(
+        return ViTPoseBackboneConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -109,7 +107,6 @@ class ViTPoseBackboneModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             initializer_range=self.initializer_range,
             num_labels=self.num_labels,
-            scale_factor=self.scale_factor,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -124,43 +121,52 @@ class ViTPoseBackboneModelTester:
 
 
 @require_torch
-class ViTPoseModelTest(ModelTesterMixin, unittest.TestCase):
+class ViTPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as ViTPose does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as ViTPoseBackbone does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (ViTPoseBackbone,) if is_torch_available() else ()
     fx_compatible = False
-
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
 
     def setUp(self):
         self.model_tester = ViTPoseBackboneModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ViTPoseConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=ViTPoseBackboneConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="ViTPose does not use inputs_embeds")
+    @unittest.skip(reason="ViTPoseBackbone does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="ViTPose does not support training yet")
+    @unittest.skip(reason="ViTPoseBackbone does not support feedforward chunking")
+    def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="ViTPoseBackbone does not output a loss")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="ViTPoseBackbone does not support training yet")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="ViTPose does not support training yet")
+    @unittest.skip(reason="ViTPoseBackbone does not support training yet")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="ViTPose does not support training yet")
+    @unittest.skip(reason="ViTPoseBackbone does not support training yet")
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
-    @unittest.skip(reason="ViTPose does not support training yet")
+    @unittest.skip(reason="ViTPoseBackbone does not support training yet")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
@@ -195,7 +201,7 @@ def prepare_img():
 @require_torch
 class ViTPoseBackboneTest(unittest.TestCase, BackboneTesterMixin):
     all_model_classes = (ViTPoseBackbone,) if is_torch_available() else ()
-    config_class = ViTPoseConfig
+    config_class = ViTPoseBackboneConfig
 
     has_attentions = False
 
