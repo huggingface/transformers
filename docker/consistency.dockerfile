@@ -12,3 +12,5 @@ RUN uv pip install --no-cache-dir --upgrade GitPython
 RUN uv pip install --no-cache-dir "transformers[flax,quality,vision]"
 RUN pip uninstall -y transformers
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+
