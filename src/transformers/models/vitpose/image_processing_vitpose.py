@@ -61,7 +61,7 @@ def _xywh2xyxy(bbox_xywh):
     return bbox_xyxy
 
 
-def _box2cs(box, width, height):
+def box_to_center_and_scale(box, width, height):
     """This encodes bbox(x,y,w,h) into (center, scale)
 
     Args:
@@ -95,12 +95,8 @@ def _get_max_preds(heatmaps):
     """Get keypoint predictions from score maps.
 
     Args:
-        heatmaps (np.ndarray of shape [N, K, H, W]):
-            Model predicted heatmaps. Note:
-            - batch_size: N
-            - num_keypoints: K
-            - heatmap height: H
-            - heatmap width: W
+        heatmaps (`np.ndarray` of shape `(batch_size, num_keypoints, height, width)`):
+            Model predicted heatmaps.
 
     Returns:
         tuple: A tuple containing aggregated results.
@@ -108,27 +104,30 @@ def _get_max_preds(heatmaps):
         - preds (np.ndarray[N, K, 2]): Predicted keypoint location.
         - maxvals (np.ndarray[N, K, 1]): Scores (confidence) of the keypoints.
     """
-    assert isinstance(heatmaps, np.ndarray), "heatmaps should be numpy.ndarray"
-    assert heatmaps.ndim == 4, "batch_images should be 4-ndim"
+    if not isinstance(heatmaps, np.ndarray):
+        raise ValueError("Heatmaps should be numpy.ndarray")
+    if heatmaps.ndim != 4:
+        raise ValueError("Heatmaps should be 4-dimensional")
 
-    N, K, _, W = heatmaps.shape
-    heatmaps_reshaped = heatmaps.reshape((N, K, -1))
-    idx = np.argmax(heatmaps_reshaped, 2).reshape((N, K, 1))
-    maxvals = np.amax(heatmaps_reshaped, 2).reshape((N, K, 1))
+    batch_size, num_keypoints, _, width = heatmaps.shape
+    heatmaps_reshaped = heatmaps.reshape((batch_size, num_keypoints, -1))
+    idx = np.argmax(heatmaps_reshaped, 2).reshape((batch_size, num_keypoints, 1))
+    maxvals = np.amax(heatmaps_reshaped, 2).reshape((batch_size, num_keypoints, 1))
 
     preds = np.tile(idx, (1, 1, 2)).astype(np.float32)
-    preds[:, :, 0] = preds[:, :, 0] % W
-    preds[:, :, 1] = preds[:, :, 1] // W
+    preds[:, :, 0] = preds[:, :, 0] % width
+    preds[:, :, 1] = preds[:, :, 1] // width
 
     preds = np.where(np.tile(maxvals, (1, 1, 2)) > 0.0, preds, -1)
     return preds, maxvals
 
 
 def post_dark_udp(coords, batch_heatmaps, kernel=3):
-    """DARK post-pocessing. Implemented by udp. Paper ref: Huang et al. The
-    Devil is in the Details: Delving into Unbiased Data Processing for Human
-    Pose Estimation (CVPR 2020). Zhang et al. Distribution-Aware Coordinate
-    Representation for Human Pose Estimation (CVPR 2020).
+    """DARK post-pocessing. Implemented by udp.
+
+    Paper references:
+    - Huang et al. The Devil is in the Details: Delving into Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
+    - Zhang et al. Distribution-Aware Coordinate Representation for Human Pose Estimation (CVPR 2020).
 
     Note:
         - batch size: B
@@ -205,9 +204,10 @@ def transform_preds(coords, center, scale, output_size, use_udp=False):
         center (np.ndarray[2, ]): Center of the bounding box (x, y).
         scale (np.ndarray[2, ]): Scale of the bounding box
             wrt [width, height].
-        output_size (np.ndarray[2, ] | list(2,)): Size of the
-            destination heatmaps.
-        use_udp (bool): Use unbiased data processing
+        output_size (np.ndarray[2, ] | list(2,)):
+            Size of the destination heatmaps.
+        use_udp (bool):
+            Whether to use unbiased data processing.
 
     Returns:
         np.ndarray: Predicted coordinates in the images.
@@ -322,6 +322,14 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.array:
+        """
+        Apply an affine transformation to an image.
+
+        Args:
+            image (`np.array`):
+                Image to transform.
+        """
+
         data_format = input_data_format if data_format is None else data_format
 
         size = (size["width"], size["height"])
@@ -407,7 +415,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         if self.do_affine_transform:
             for image, image_boxes in zip(images, boxes):
                 for box in image_boxes:
-                    center, scale = _box2cs(box, size["width"], size["height"])
+                    center, scale = box_to_center_and_scale(box, size["width"], size["height"])
                     transformed_image = self.affine_transform(
                         image, center, scale, rotation=0, size=size, input_data_format=input_data_format
                     )
@@ -493,11 +501,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         batch_size, num_keypoints, height, width = heatmaps.shape
 
-        # print("Mean of heatmaps before _get_max_preds:", np.mean(heatmaps))
-
         preds, maxvals = _get_max_preds(heatmaps)
-
-        # print("Preds after _get_max_preds:", preds)
 
         preds = post_dark_udp(preds, heatmaps, kernel=kernel)
 
@@ -507,7 +511,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         return preds, maxvals
 
-    def post_process_pose_estimation(self, outputs, boxes, target_sizes, kernel_size=11, use_udp=True):
+    def post_process_pose_estimation(self, outputs, boxes, kernel_size=11, use_udp=True):
         """
         Transform the heatmaps into keypoint predictions and transform them back to the image.
 
@@ -516,8 +520,6 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                 Model outputs.
             boxes (torch.Tensor of shape [batch_size, 4]):
                 Bounding boxes.
-            target_sizes (`List[Tuple[int, int]]`, *optional*):
-                Size of the target heatmaps.
             kernel_size (`int`, *optional*, defaults to 11):
                 Gaussian kernel size (K) for modulation.
             use_udp (`bool`, *optional*, defaults to `False`):
@@ -529,9 +531,8 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         centers = np.zeros((batch_size, 2), dtype=np.float32)
         scales = np.zeros((batch_size, 2), dtype=np.float32)
         for i in range(batch_size):
-            # compute center and scale
-            # TODO use target sizes
-            center, scale = _box2cs(boxes[i], width=192, height=256)
+            width, height = self.size["width"], self.size["height"]
+            center, scale = box_to_center_and_scale(boxes[i], width=width, height=height)
             centers[i, :] = center
             scales[i, :] = scale
 

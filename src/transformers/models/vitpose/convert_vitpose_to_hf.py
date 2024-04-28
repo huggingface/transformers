@@ -305,12 +305,9 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     print("Looks ok!")
 
     # test post_process_pose_estimation
-    target_sizes = [image.size[::-1]]
-    results = image_processor.post_process_pose_estimation(
-        outputs, boxes=boxes[0], target_sizes=target_sizes, use_udp=True
-    )
+    hf_pose_results = image_processor.post_process_pose_estimation(outputs, boxes=boxes[0], use_udp=True)
     print("Pose results:")
-    for pose_result in results:
+    for pose_result in hf_pose_results:
         print(pose_result)
 
     if pytorch_dump_folder_path is not None:
