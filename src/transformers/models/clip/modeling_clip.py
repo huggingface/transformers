@@ -1358,6 +1358,7 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        use_pooler=True,
     ) -> Union[tuple, ImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1377,10 +1378,14 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        pooler_output = outputs[1]
-        # apply classifier on pooled output
-        logits = self.classifier(pooler_output)
+        if use_pooler:
+            # select pooler output
+            embedding = outputs[1]
+        else:
+            # average pool the patch tokens
+            embedding = torch.mean(outputs[0][:, 1:, :], dim=1)
+        # apply classifier on the chosen embedding
+        logits = self.classifier(embedding)
 
         loss = None
         if labels is not None:
