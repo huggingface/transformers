@@ -191,39 +191,12 @@ class CircleCIJob:
         else:
             test_command = f"({test_command} | tee tests_output.txt) || true"
         steps.append({"run": {"name": "Run tests", "command": test_command}})
-        steps.append({"run": {"name": "Show skip reasons", "command": f"python3 .circleci/parse_test_outputs.py --file ~/transformers/tests_output.txt"}})
-        # Deal with errors
-        check_test_command = f'if [ -s reports/{self.job_name}/errors.txt ]; '
-        check_test_command += 'then echo "Some tests errored out!"; echo ""; '
-        check_test_command += f'cat reports/{self.job_name}/errors.txt; '
-        check_test_command += 'echo ""; echo ""; '
 
-        py_command = f'import os; fp = open("reports/{self.job_name}/summary_short.txt"); failed = os.linesep.join([x for x in fp.read().split(os.linesep) if x.startswith("ERROR ")]); fp.close(); fp = open("summary_short.txt", "w"); fp.write(failed); fp.close()'
-        check_test_command += f"$(python3 -c '{py_command}'); "
-        check_test_command += 'cat summary_short.txt; echo ""; exit -1; '
-
-        # Deeal with failed tests
-        check_test_command += f'elif [ -s reports/{self.job_name}/failures_short.txt ]; '
-        check_test_command += 'then echo "Some tests failed!"; echo ""; '
-        check_test_command += f'cat reports/{self.job_name}/failures_short.txt; '
-        check_test_command += 'echo ""; echo ""; '
-
-        py_command = f'import os; fp = open("reports/{self.job_name}/summary_short.txt"); failed = os.linesep.join([x for x in fp.read().split(os.linesep) if x.startswith("FAILED ")]); fp.close(); fp = open("summary_short.txt", "w"); fp.write(failed); fp.close()'
-        check_test_command += f"$(python3 -c '{py_command}'); "
-        check_test_command += 'cat summary_short.txt; echo ""; exit -1; '
-
-        check_test_command += f'elif [ -s reports/{self.job_name}/stats.txt ]; then echo "All tests pass!"; '
-
-        # return code `124` means the previous (pytest run) step is timeout
-        if self.name == "pr_documentation_tests":
-            check_test_command += 'elif [ -f 124.txt ]; then echo "doctest timeout!"; '
-
-        check_test_command += 'else echo "other fatal error"; echo ""; exit -1; fi;'
-
-        steps.append({"run": {"name": "Check test results", "command": check_test_command}})
+        steps.append({"run": {"name": "Show skip reasons", "command": f"python3 .circleci/parse_test_outputs.py --file ~/transformers/tests_output.txt --skip"}})
+        steps.append({"run": {"name": "Show fail reasons", "command": f"python3 .circleci/parse_test_outputs.py --file reports/{self.job_name}/failures_short.txt --fail"}})
+        steps.append({"run": {"name": "Show errors",       "command": f"python3 .circleci/parse_test_outputs.py --file reports/{self.job_name}/errors.txt --errors"}})
 
         steps.append({"store_test_results": {"path": "test-results"}})
-
         steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
         steps.append({"store_artifacts": {"path": "~/transformers/reports"}})
 
