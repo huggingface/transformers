@@ -51,10 +51,11 @@ def parse_pytest_errors_output(file_path):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--file", help="file to parse")
-    parser.add_argument("--skip", default=False, help="show skipped reasons")
-    parser.add_argument("--fail", default=False, help="show failed tests")
-    parser.add_argument("--errors", default=False, help="show failed tests")
+    parser.add_argument("--skip", default=False, action="store_true", help="show skipped reasons")
+    parser.add_argument("--fail", default=False, action="store_true", help="show failed tests")
+    parser.add_argument("--errors", default=False, action="store_true", help="show failed tests")
     args = parser.parse_args()
+
     if args.skip:
         parse_pytest_output(args.file)
 
