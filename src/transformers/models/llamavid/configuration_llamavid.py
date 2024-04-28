@@ -278,6 +278,9 @@ class LLaMAVIDLlavaConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the LLaMAVID model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`~LLaMAVIDLlavaForConditionalGeneration`]
+        compress_type (`str`, *optional*, defaults to 'mean' for video input and 'None' for image input)
+            This feature is used to select the output of VIT as a 'content' embedding : whether it should be average across the dim = 1 or
+            a series features as the output from VIT, before giving to the LLM.
 
     Example:
 

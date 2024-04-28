@@ -285,6 +285,8 @@ class LLaMAVIDLlavaImageProcessor(BaseImageProcessor):
             )
 
         if images is not None:
+            # Check if it's a list of images (video) or a single image and prepaare the pixel_values
+            # accordingly.
             if is_pil_image(images[0]):
                 pixel_values = [
                     self._preprocess_image(

@@ -581,6 +581,11 @@ class LLaMAVIDLlavaEncoder(nn.Module):
 
 
 class LLaMAVIDLlavaVisionModel(LLaMAVIDLlavaPreTrainedModel):
+    """
+    Copied from InstructBlip, but slightly modified to give the output
+    before the layer norm to the token_generation function.
+    """
+
     main_input_name = "pixel_values"
     config_class = LLaMAVIDLlavaVisionConfig
 
@@ -1567,33 +1572,79 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
 
         return final_embedding, final_attention_mask, final_labels, position_ids
 
-    def _get_features(
+    def _get_features_from_visuals(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        qformer_text_encoding: torch.FloatTensor = None,
+        qformer_attention_mask: Optional[torch.LongTensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         if pixel_values is None:
             raise ValueError("You have to specify `pixel_values`")
 
-        long_video, num_frames = False, 1
+        long_video, image_counts = False, 1
 
         if pixel_values is not None:
+            # check if the pixel_values is video. If so, count the frames and flatten the pixel_values
+            # across the batch size and image count
             if pixel_values.ndim == 5:
-                batch_size, num_frames, channels, height, width = pixel_values.shape
+                batch_size, image_counts, channels, height, width = pixel_values.shape
 
-                if num_frames > 1000:
+                if image_counts > 1000:
                     long_video = True
 
                 if not long_video:
-                    pixel_values = pixel_values.reshape(batch_size * num_frames, channels, height, width)
+                    pixel_values = pixel_values.reshape(batch_size * image_counts, channels, height, width)
 
-            """
-                   if not long_video:
-                    images = [image if len(image.shape) == 4 else image.unsqueeze(0) for image in pixel_values]
-                num_frames = [image.shape[0] for image in images]
-                pixel_values = torch.cat(images, dim=0)
-            """
+            # Encode images and short videos (frames  < 1000 )  using vit
+            if not long_video:
+                vision_outputs = self.vision_tower(
+                    pixel_values=pixel_values,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                )
+                image_features = vision_outputs.last_hidden_state
+            else:
+                image_features = pixel_values
 
-        return pixel_values, num_frames, long_video
+            # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
+            image_attention_mask = torch.ones(
+                image_features.size()[:-1], dtype=torch.long, device=image_features.device
+            )
+
+            query_tokens = self.query_tokens.expand(image_features.shape[0], -1, -1)
+            query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_features.device)
+
+            if qformer_attention_mask is None:
+                qformer_attention_mask = torch.ones_like(qformer_text_encoding)
+
+            # if video expand the query and the attention mask to the length of th frame count
+            if image_counts > 1:
+                qformer_attention_mask = qformer_attention_mask.expand(image_features.shape[0], -1)
+                qformer_text_encoding = qformer_text_encoding.expand(image_features.shape[0], -1)
+                attention_mask = attention_mask.expand(image_features.shape[0], -1)
+
+            qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
+
+            query_outputs = self.qformer(
+                input_ids=qformer_text_encoding,
+                attention_mask=qformer_attention_mask,
+                query_embeds=query_tokens,
+                encoder_hidden_states=image_features,
+                encoder_attention_mask=image_attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+            query_output = query_outputs[0][:, : query_tokens.size(1), :]
+        else:
+            return None, None, 0, False
+
+        return query_output, vision_outputs.hidden_states, attention_mask, image_counts, long_video
 
     @add_start_docstrings_to_model_forward(LLAMAVID_LLAVA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=LLaMAVIDLlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -1679,61 +1730,30 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
             if pixel_values is not None and input_ids.shape[1] != 1:
                 # pre-process images for long video
 
-                image_features, image_counts, long_video = self._get_features(
+                (
+                    query_output,
+                    image_features,
+                    attention_mask,
+                    image_counts,
+                    long_video,
+                ) = self._get_features_from_visuals(
                     pixel_values=pixel_values,
-                )
-
-                vision_outputs = self.vision_tower(
-                    pixel_values=image_features,
                     output_attentions=output_attentions,
                     output_hidden_states=output_hidden_states,
+                    qformer_text_encoding=qformer_text_encoding,
+                    qformer_attention_mask=qformer_attention_mask,
+                    attention_mask=attention_mask,
                     return_dict=return_dict,
                 )
-                image_features = vision_outputs.last_hidden_state
-
-                vision_outputs.hidden_states = torch.load(
-                    "C:\\Users\\niles\\OneDrive\\Desktop\\Data\\code\\transformers\\output_vit.pt"
-                ).to("cpu")
-                image_features = self.vision_tower.post_layernorm(vision_outputs.hidden_states)
-
-                # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
-                image_attention_mask = torch.ones(
-                    image_features.size()[:-1], dtype=torch.long, device=image_features.device
-                )
-
-                query_tokens = self.query_tokens.expand(image_features.shape[0], -1, -1)
-                query_attention_mask = torch.ones(
-                    query_tokens.size()[:-1], dtype=torch.long, device=image_features.device
-                )
-
-                if qformer_attention_mask is None:
-                    qformer_attention_mask = torch.ones_like(qformer_text_encoding)
-                if image_counts is not None:
-                    qformer_attention_mask = qformer_attention_mask.expand(image_features.shape[0], -1)
-                    qformer_text_encoding = qformer_text_encoding.expand(image_features.shape[0], -1)
-                    # inputs_embeds = inputs_embeds.expand(image_features.shape[0] ,  -1 , -1 )
-                    # input_ids = input_ids.expand(image_features.shape[0] ,-1 )
-                    attention_mask = attention_mask.expand(image_features.shape[0], -1)
-
-                qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
-
-                query_outputs = self.qformer(
-                    input_ids=qformer_text_encoding,
-                    attention_mask=qformer_attention_mask,
-                    query_embeds=query_tokens,
-                    encoder_hidden_states=image_features,
-                    encoder_attention_mask=image_attention_mask,
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
-                    return_dict=return_dict,
-                )
-                query_output = query_outputs[0][:, : query_tokens.size(1), :]
 
                 text_q = self.vlm_att_projector(query_output)
 
-                image_features = self.token_generation(text_q, vision_outputs.hidden_states, long_video=long_video)
+                # Generate content and context tokens for visual input
+                image_features = self.token_generation(text_q, image_features, long_video=long_video)
 
-                if image_counts is not None:
+                # Check if it's a video and collapse the number of frames * image shape
+                # if it's a video.
+                if image_counts > 1:
                     # shape: [prompt_num, frame_num*image_shape, feat_dim]
                     image_features = image_features.reshape(
                         input_ids.shape[0], image_counts, *image_features.shape[-2:]
