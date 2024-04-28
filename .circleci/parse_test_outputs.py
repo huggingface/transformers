@@ -23,7 +23,7 @@ def main():
     skipped_tests, skipped_count = parse_pytest_output(args.file)
     print("Number of skipped tests:", skipped_count)
     for k,v in sorted(skipped_tests.items(), key=lambda x:len(x[1])):
-        print(f"{len(v):4} reason: {k}")
+        print(f"{len(v):4} skipped because: {k}")
 
 
 if __name__ == "__main__":
