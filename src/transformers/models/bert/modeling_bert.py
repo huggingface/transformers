@@ -179,6 +179,9 @@ class BertEmbeddings(nn.Module):
         self.register_buffer(
             "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
         )
+        self.embedding_size = config.embedding_size if config.embedding_size else config.hidden_size
+        if self.embedding_size != config.hidden_size:
+            self.embedding_transformation = nn.Linear(self.embedding_size, config.hidden_size)
 
     def forward(
         self,
@@ -211,6 +214,8 @@ class BertEmbeddings(nn.Module):
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
+        if self.embedding_transformation:
+            inputs_embeds = self.embedding_transformation(inputs_embeds)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + token_type_embeddings
@@ -2012,3 +2017,15 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+class NoNorm(nn.Module):
+    def __init__(self, feat_size, eps=None):
+        super().__init__()
+        self.bias = nn.Parameter(torch.zeros(feat_size))
+        self.weight = nn.Parameter(torch.ones(feat_size))
+
+    def forward(self, input_tensor: torch.Tensor) -> torch.Tensor:
+        return input_tensor * self.weight + self.bias
+
+
+NORM2FN = {"layer_norm": nn.LayerNorm, "no_norm": NoNorm}
