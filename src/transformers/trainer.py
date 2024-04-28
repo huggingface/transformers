@@ -2538,11 +2538,11 @@ class Trainer:
             if hasattr(model, "active_adapter") and hasattr(model, "load_adapter"):
                 if os.path.exists(resume_from_checkpoint):
                     if adapter_subdirs:
-                        active_adapters = model.active_adapters
+                        active_adapter = model.active_adapter
                         for subdir_name in adapter_subdirs:
                             peft_id = os.path.join(resume_from_checkpoint, subdir_name)
-                            model.load_adapter(peft_id, subdir_name, is_trainable=(subdir_name in active_adapters))
-                        model.set_adapter(active_adapters)
+                            model.load_adapter(peft_id, subdir_name, is_trainable=(subdir_name == active_adapter))
+                        model.set_adapter(active_adapter)
                     else:
                         model.load_adapter(resume_from_checkpoint, model.active_adapter, is_trainable=True)
                 else:
