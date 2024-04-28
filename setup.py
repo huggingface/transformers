@@ -316,7 +316,6 @@ extras["testing"] = (
         "nltk",
         "GitPython",
         "hf-doc-builder",
-        "protobuf",  # Can be removed once we can unpin protobuf
         "sacremoses",
         "rjieba",
         "beautifulsoup4",
@@ -463,3 +462,18 @@ setup(
     ],
     cmdclass={"deps_table_update": DepsTableUpdateCommand},
 )
+
+extras["tests_torch"] = deps_list()
+extras["tests_tf"] = deps_list()
+extras["tests_flax"] = deps_list()
+extras["tests_torch_and_tf"] = deps_list()
+extras["tests_torch_and_flax"] = deps_list()
+extras["tests_hub"] = deps_list()
+extras["tests_pipelines_torch"] = deps_list()
+extras["tests_pipelines_tf"] = deps_list()
+extras["tests_onnx"] = deps_list()
+extras["tests_examples_torch"] = deps_list()
+extras["tests_examples_tf"] = deps_list()
+extras["tests_custom_tokenizers"] = deps_list()
+extras["tests_exotic_models"] = deps_list()
+extras["consistency"] = deps_list()

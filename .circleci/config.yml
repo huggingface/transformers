@@ -121,7 +121,7 @@ jobs:
     check_code_quality:
         working_directory: ~/transformers
         docker:
-            - image: huggingface/transformers-consistency
+            - image: huggingface/transformers-quality
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
