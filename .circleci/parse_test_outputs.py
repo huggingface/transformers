@@ -15,7 +15,8 @@ def parse_pytest_output(file_path):
     print("Number of skipped tests:", skipped_count)
     for k,v in sorted(skipped_tests.items(), key=lambda x:len(x[1])):
         print(f"{len(v):4} skipped because: {k}")
-
+    if skipped_count>0:
+        exit(0)
 
 def parse_pytest_failure_output(file_path):
     skipped_tests = {}
@@ -31,7 +32,8 @@ def parse_pytest_failure_output(file_path):
     print("Number of skipped tests:", skipped_count)
     for k,v in sorted(skipped_tests.items(), key=lambda x:len(x[1])):
         print(f"{len(v):4} skipped because: {k}")
-
+    if skipped_count>0:
+        exit(0)
 
 def parse_pytest_errors_output(file_path):
     skipped_tests = {}
@@ -47,6 +49,8 @@ def parse_pytest_errors_output(file_path):
     print("Number of skipped tests:", skipped_count)
     for k,v in sorted(skipped_tests.items(), key=lambda x:len(x[1])):
         print(f"{len(v):4} skipped because: {k}")
+    if skipped_count>0:
+        exit(0)
 
 def main():
     parser = argparse.ArgumentParser()
