@@ -16,7 +16,7 @@ RUN uv pip install --no-cache-dir "transformers[sklearn,tf-cpu,sentencepiece,vis
 RUN pip uninstall -y transformers
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 RUN pip cache remove "nvidia-*"
-RUN pip uninstall `pip freeze | grep "nvidia-*"`
+RUN pip uninstall -y `pip freeze | grep "nvidia-*"` || true
 RUN pip cache remove triton
 RUN apt-get --purge remove "*nvidia*"
 RUN apt-get --purge remove "*cublas*" "cuda*" "nsight*" 
