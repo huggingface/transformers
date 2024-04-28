@@ -17,7 +17,7 @@
 import math
 from typing import Dict, List, Optional, Union
 
-# TODO get rid of cv2
+# TODO get rid of cv2?
 import cv2
 import numpy as np
 
@@ -234,21 +234,25 @@ def transform_preds(coords, center, scale, output_size, use_udp=False):
     return target_coords
 
 
-def get_warp_matrix(theta, size_input, size_dst, size_target):
+def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, size_target: np.ndarray):
     """
-    Source: https://github.com/open-mmlab/mmpose/blob/master/mmpose/core/post_processing/post_transforms.py
-
     Calculate the transformation matrix under the constraint of unbiased. Paper ref: Huang et al. The Devil is in the
     Details: Delving into Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
 
+    Source: https://github.com/open-mmlab/mmpose/blob/master/mmpose/core/post_processing/post_transforms.py
+
     Args:
-        theta (float): Rotation angle in degrees.
-        size_input (np.ndarray): Size of input image [w, h].
-        size_dst (np.ndarray): Size of output image [w, h].
-        size_target (np.ndarray): Size of ROI in input plane [w, h].
+        theta (`float`):
+            Rotation angle in degrees.
+        size_input (`np.ndarray`):
+            Size of input image [width, height].
+        size_dst (`np.ndarray`):
+            Size of output image [width, height].
+        size_target (`np.ndarray`):
+            Size of ROI in input plane [w, h].
 
     Returns:
-        np.ndarray: A matrix for transformation.
+        `np.ndarray`: A matrix for transformation.
     """
     theta = np.deg2rad(theta)
     matrix = np.zeros((2, 3), dtype=np.float32)
@@ -328,15 +332,36 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         Args:
             image (`np.array`):
                 Image to transform.
+            center (`tuple[float]`):
+                Center of the bounding box (x, y).
+            scale (`tuple[float]`):
+                Scale of the bounding box with respect to height/width.
+            rotation (`float`):
+                Rotation angle in degrees.
+            size (`Dict[str, int]`):
+                Size of the destination image.
+            data_format (`ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
+                The channel dimension format of the output image.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the input image.
         """
 
         data_format = input_data_format if data_format is None else data_format
 
         size = (size["width"], size["height"])
 
+        # one uses a pixel standard deviation of 200 pixels
         transformation = get_warp_matrix(rotation, center * 2.0, np.array(size) - 1.0, scale * 200.0)
 
-        image = cv2.warpAffine(image, transformation, size, flags=cv2.INTER_LINEAR)
+        # cv2 requires channels last format
+        cv2_image = (
+            image
+            if input_data_format == ChannelDimension.LAST
+            else to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format)
+        )
+        image = cv2.warpAffine(cv2_image, transformation, size, flags=cv2.INTER_LINEAR)
+        # transform image back to input_data_format
+        image = to_channel_dimension_format(image, input_data_format, ChannelDimension.LAST)
 
         # move back to input_data_format
         if data_format is not None:
@@ -347,7 +372,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        boxes,
+        boxes: List[List[float]],
         do_affine_transform: bool = None,
         size: Dict[str, int] = None,
         do_rescale: bool = None,
@@ -367,6 +392,25 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
 
+            boxes (`List[List[float]]`):
+                List of bounding boxes for each image. Each box should be a list of 4 floats representing the bounding
+                box coordinates (x, y, w, h).
+
+            do_affine_transform (`bool`, *optional*, defaults to `self.do_affine_transform`):
+                Whether to apply an affine transformation to the input images.
+            size (`Dict[str, int]` *optional*, defaults to `self.size`):
+                Dictionary in the format `{"height": h, "width": w}` specifying the size of the output image after
+                resizing.
+            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+                Whether to rescale the image values between [0 - 1].
+            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
+                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
+                Whether to normalize the image.
+            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+                Image mean to use if `do_normalize` is set to `True`.
+            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+                Image standard deviation to use if `do_normalize` is set to `True`.
             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
@@ -424,7 +468,9 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         images = new_images
 
         # TODO each image might have a variable number of boxes => padding?
-        # create pixel_values of shape (batch_size, num_boxes, num_channels, height, width)
+        # since the number of boxes can differ per image, the image processor takes a list
+        # rather than a numpy array of boxes
+        # it currently create pixel_values of shape (batch_size*num_persons, num_channels, height, width)
 
         if self.do_rescale:
             images = [

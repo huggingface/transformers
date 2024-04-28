@@ -243,7 +243,6 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        # TODO dataset_index must be a tensor instead of a lists of lists
         dataset_index: Optional[torch.Tensor] = None,
         flip_pairs: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
