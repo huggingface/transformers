@@ -44,6 +44,23 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
+def _xywh2xyxy(bbox_xywh):
+    """Transform the bbox format from xywh to x1y1x2y2.
+
+    Args:
+        bbox_xywh (ndarray): Bounding boxes (with scores),
+            shaped (n, 4) or (n, 5). (left, top, width, height, [score])
+    Returns:
+        np.ndarray: Bounding boxes (with scores), shaped (n, 4) or
+          (n, 5). (left, top, right, bottom, [score])
+    """
+    bbox_xyxy = bbox_xywh.copy()
+    bbox_xyxy[:, 2] = bbox_xyxy[:, 2] + bbox_xyxy[:, 0] - 1
+    bbox_xyxy[:, 3] = bbox_xyxy[:, 3] + bbox_xyxy[:, 1] - 1
+
+    return bbox_xyxy
+
+
 def _box2cs(box, width, height):
     """This encodes a bounding box (x,y,w,h) into (center, scale)
 
@@ -420,7 +437,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
-    def post_process_pose_estimation(self, outputs, boxes, target_sizes, kernel_size=11, use_udp=False):
+    def post_process_pose_estimation(self, outputs, boxes, target_sizes, kernel_size=11, use_udp=True):
         """
         Transform the heatmaps into keypoint predictions and transform them back to the image.
 
@@ -437,33 +454,53 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                 Whether to use unbiased data processing.
         """
 
-        # Avoid being affected
-        heatmaps = outputs.heatmaps.numpy().copy()
+        # First compute centers and scales
+        # TODO use target_sizes instead
+        import torch
+        from huggingface_hub import hf_hub_download
 
-        batch_size, num_keypoints, height, width = heatmaps.shape
+        filepath = hf_hub_download(repo_id="nielsr/test-image", filename="vitpose_batch_data.pt", repo_type="dataset")
+        img_metas = torch.load(filepath, map_location="cpu")["img_metas"]
 
-        preds, maxvals = _get_max_preds(heatmaps)
-
-        preds = post_dark_udp(preds, heatmaps, kernel=kernel_size)
+        batch_size = len(outputs.heatmaps)
 
         centers = np.zeros((batch_size, 2), dtype=np.float32)
         scales = np.zeros((batch_size, 2), dtype=np.float32)
-
-        for idx, (box, (height, width)) in enumerate(zip(boxes, target_sizes)):
-            center, scale = _box2cs(box, width, height)
-            centers[idx, :] = center
-            scales[idx, :] = scale
-
-        # Transform back to the image
+        score = np.ones(batch_size)
         for i in range(batch_size):
-            preds[i] = transform_preds(preds[i], centers[i], scales[i], [width, height], use_udp=use_udp)
+            centers[i, :] = img_metas[i]["center"]
+            scales[i, :] = img_metas[i]["scale"]
 
-        # Concatenate along the final dimension
-        preds = np.concatenate([preds, maxvals], axis=-1)
+        # assert np.allclose(centers, our_centers, atol=1e-4), f"Centers are not equal: {centers} vs {our_centers}"
+        # assert np.allclose(scales, our_scales, atol=1e-4), f"Scales are not equal: {scales} vs {our_scales}"
 
-        return preds
+        preds, maxvals = self.keypoints_from_heatmaps(
+            outputs.heatmaps, centers, scales, kernel=kernel_size, use_udp=use_udp
+        )
 
-    # TODO originally called keypoints_from_heatmaps
+        all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
+        all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
+        all_preds[:, :, 0:2] = preds[:, :, 0:2]
+        all_preds[:, :, 2:3] = maxvals
+        all_boxes[:, 0:2] = centers[:, 0:2]
+        all_boxes[:, 2:4] = scales[:, 0:2]
+        all_boxes[:, 4] = np.prod(scales * 200.0, axis=1)
+        all_boxes[:, 5] = score
+
+        poses = all_preds
+
+        bboxes = np.array(boxes)
+        bboxes_xyxy = _xywh2xyxy(bboxes)
+
+        pose_results = []
+        for pose, bbox_xyxy in zip(poses, bboxes_xyxy):
+            pose_result = {}
+            pose_result["keypoints"] = pose
+            pose_result["bbox"] = bbox_xyxy
+            pose_results.append(pose_result)
+
+        return pose_results
+
     def keypoints_from_heatmaps(
         self,
         heatmaps,

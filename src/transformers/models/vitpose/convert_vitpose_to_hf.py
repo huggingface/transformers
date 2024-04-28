@@ -255,14 +255,7 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     all_boxes[:, 4] = np.prod(scales * 200.0, axis=1)
     all_boxes[:, 5] = score
 
-    result = {}
-
-    result["preds"] = all_preds
-    result["boxes"] = all_boxes
-    result["output_heatmap"] = None  # return_heatmap = False for inference in mmpose
-
-    # print(result)
-    poses, _ = result["preds"], result["output_heatmap"]
+    poses = all_preds
 
     # create final results by adding person bbox information
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="vitpose_person_results.pt", repo_type="dataset")
@@ -276,6 +269,10 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         pose_result["keypoints"] = pose
         pose_result["bbox"] = bbox_xyxy
         pose_results.append(pose_result)
+
+    print("Original pose results:")
+    for pose_result in pose_results:
+        print(pose_result)
 
     # Verify pose_results
     # This is a list of dictionaries, containing the bounding box and keypoints per detected person
@@ -303,13 +300,18 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
             torch.from_numpy(pose_results[1]["keypoints"][0, :3]),
             torch.tensor([3.98305542e02, 1.81741592e02, 8.69966745e-01]),
         )
+    else:
+        raise ValueError("Model not supported")
+    print("Looks ok!")
 
     # test post_process_pose_estimation
     target_sizes = [image.size[::-1]]
     results = image_processor.post_process_pose_estimation(
         outputs, boxes=boxes[0], target_sizes=target_sizes, use_udp=True
     )
-    print("Shape of results:", results.shape)
+    print("Pose results:")
+    for pose_result in results:
+        print(pose_result)
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
