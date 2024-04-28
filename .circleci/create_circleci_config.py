@@ -192,6 +192,8 @@ class CircleCIJob:
             test_command = f"({test_command} | tee tests_output.txt) || true"
         steps.append({"run": {"name": "Run tests", "command": test_command}})
 
+        steps.append({"run": {"name": "Show skip reasons", "command": f"python3 .circleci/parse_test_outputs.py --file ~/transformers/tests_output.txt"}})
+
         # Deal with errors
         check_test_command = f'if [ -s reports/{self.job_name}/errors.txt ]; '
         check_test_command += 'then echo "Some tests errored out!"; echo ""; '
@@ -222,7 +224,6 @@ class CircleCIJob:
 
         steps.append({"run": {"name": "Check test results", "command": check_test_command}})
 
-        steps.append({"run": {"name": "Show skip reasons", "command": f"python3 .circleci/parse_test_outputs.py --file ~/transformers/tests_output.txt"}})
         steps.append({"store_test_results": {"path": "test-results"}})
 
         steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
