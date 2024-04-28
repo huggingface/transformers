@@ -11,9 +11,7 @@ RUN uv pip install --no-cache-dir tensorflow-cpu tf-keras
 RUN uv pip install --no-cache-dir "transformers[flax,quality,vision,testing]"
 
 # Cleanup to reduce the size of the docker
-RUN apt-get autoremove --purge -y make
 RUN pip cache remove "nvidia-*" || true
 RUN pip cache remove triton || true
 RUN pip uninstall -y transformers
-# what doea that do?
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
