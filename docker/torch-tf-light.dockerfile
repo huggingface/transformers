@@ -11,7 +11,7 @@ RUN uv pip install --no-cache-dir -U pip setuptools
 
 RUN pip install --no-cache-dir 'torch' 'torchvision' 'torchaudio' --index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --no-cache-dir pypi-kenlm protobuf==3.20.3 accelerate tensorflow_probability pytest pytest-xdist parameterized
-RUN uv pip install --no-cache-dir "transformers[sklearn,tf-cpu,sentencepiece,vision]"
+RUN uv pip install --no-cache-dir "transformers[sklearn,tf-cpu,sentencepiece,vision, testing]"
 
 
 RUN pip uninstall -y transformers
