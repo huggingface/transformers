@@ -574,6 +574,7 @@ class Data2VecVisionPreTrainedModel(PreTrainedModel):
     base_model_prefix = "data2vec_vision"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["Data2VecVisionLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

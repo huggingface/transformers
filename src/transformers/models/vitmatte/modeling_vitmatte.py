@@ -73,6 +73,7 @@ class VitMattePreTrainedModel(PreTrainedModel):
     config_class = VitMatteConfig
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = []
 
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
