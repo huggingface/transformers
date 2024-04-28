@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,10 +21,9 @@ import unittest
 import requests
 
 from transformers import (
-    AutoProcessor,
-    AutoTokenizer,
     LLaMAVIDLlavaConfig,
     LLaMAVIDLlavaForConditionalGeneration,
+    LLaMAVIDLlavaProcessor,
     is_torch_available,
     is_vision_available,
 )
@@ -50,7 +49,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class LLaMAVIDLlavaVisionText2TextModelTester:
+class LLaMAVIDVisionText2TextModelTester:
     def __init__(
         self,
         parent,
@@ -98,6 +97,20 @@ class LLaMAVIDLlavaVisionText2TextModelTester:
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
+         qformer_config={ # fix dummy
+            "image_size": 30,
+            "patch_size": 2,
+            "num_channels": 3,
+            "is_training": True,
+            "hidden_size": 32,
+            "projection_dim": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 37,
+            "dropout": 0.1,
+            "attention_dropout": 0.1,
+            "initializer_range": 0.02,
+        },
     ):
         self.parent = parent
         self.ignore_index = ignore_index
@@ -108,6 +121,7 @@ class LLaMAVIDLlavaVisionText2TextModelTester:
         self.text_config = text_config
         self.vision_config = vision_config
         self.seq_length = seq_length
+        self.qformer_config = qformer_config
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.vocab_size = text_config["vocab_size"]
@@ -124,6 +138,7 @@ class LLaMAVIDLlavaVisionText2TextModelTester:
         return LLaMAVIDLlavaConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
+	        qformer_config =self.qformer_config,
             ignore_index=self.ignore_index,
             image_token_index=self.image_token_index,
             projector_hidden_act=self.projector_hidden_act,
@@ -160,18 +175,18 @@ class LLaMAVIDLlavaVisionText2TextModelTester:
 
 
 @require_torch
-class LLaMAVIDLlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
+class LLaMAVIDForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Model tester for `LlavaForConditionalGeneration`.
     """
 
     all_model_classes = (LLaMAVIDLlavaForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-to-text": LLaMAVIDLlavaForConditionalGeneration} if is_torch_available() else {}
+   
     test_pruning = False
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = LLaMAVIDLlavaVisionText2TextModelTester(self)
+        self.model_tester = LLaMAVIDVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LLaMAVIDLlavaConfig, has_text_modality=False)
 
     @unittest.skip(
@@ -361,7 +376,7 @@ class LLaMAVIDLlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.
 @require_torch
 class LLaMAVIDLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("llava-hf/bakLlava-v1-hf")
+        self.processor = LLaMAVIDLlavaProcessor.from_pretrained("Nilesh360/llama-vid-7b-full-336")
 
     def tearDown(self):
         gc.collect()
@@ -371,18 +386,18 @@ class LLaMAVIDLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", load_in_4bit=True)
+        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("Nilesh360/llama-vid-7b-full-336", load_in_4bit=True)
 
-        prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
-        image_file = "https://llava-vl.github.io/static/images/view.jpg"
+        prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"
+        image_file = "https://huggingface.co/datasets/huggingface/cats-image/blob/main/cats_image.jpeg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(prompt, raw_image, return_tensors="pt")
+        inputs = self.processor(prompt, images =raw_image, return_tensors="pt")
 
-        EXPECTED_INPUT_IDS = torch.tensor([[1, 32000, 28705, 13, 11123, 28747, 1824, 460, 272, 1722,315, 1023, 347, 13831, 925, 684, 739, 315, 3251, 456,1633, 28804, 13, 4816, 8048, 12738, 28747]])  # fmt: skip
+        EXPECTED_INPUT_IDS = torch.tensor([[ 1, 32000, 29871,    13, 11889, 29901,  1724, 29915, 29879,   278, 2793,   310,   278,  1967, 29973,    13, 22933,  9047, 13566, 29901]])  # fmt: skip
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
 
         output = model.generate(**inputs, max_new_tokens=20)
-        EXPECTED_DECODED_TEXT = "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,"  # fmt: skip
+        EXPECTED_DECODED_TEXT = "\nUSER: What's the content of the image?ASSISTANT:"  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -393,15 +408,15 @@ class LLaMAVIDLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_llama(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "llava-hf/llava-1.5-7b-hf"
+        model_id = "Nilesh360/llama-vid-7b-full-336"
 
-        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place?\nASSISTANT:"
-        image_file = "https://llava-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
+        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("Nilesh360/llama-vid-7b-full-336", load_in_4bit=True)
+        processor = LLaMAVIDLlavaProcessor.from_pretrained(model_id)
+	    #todo- add the download script and the expected outputs
+        prompt = prompt = "USER: <image>Describe the video in details. ASSISTANT:"
+        image_file = "https://huggingface.co/datasets/nielsr/video-demo/blob/main/eating_spaghetti.mp4"
+        video_input = Image.open(requests.get(image_file, stream=True).raw)
+        inputs = processor(prompt, images=video_input, return_tensors="pt").to(torch_device, torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
         EXPECTED_DECODED_TEXT = "USER:  \nWhat are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the presence of wildlife, such as birds or fish, and avoid disturbing their natural habitats. Lastly, be aware of any local regulations or guidelines for the use of the pier, as some areas may be restricted or prohibited for certain activities."  # fmt: skip
@@ -415,10 +430,10 @@ class LLaMAVIDLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "llava-hf/llava-1.5-7b-hf"
+        model_id = "Nilesh360/llama-vid-7b-full-336"
 
-        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
+        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("Nilesh360/llama-vid-7b-full-336", load_in_4bit=True)
+        processor = LLaMAVIDLlavaProcessor.from_pretrained(model_id)
 
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
@@ -439,7 +454,7 @@ class LLaMAVIDLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", load_in_4bit=True)
+        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("Nilesh360/llama-vid-7b-full-336", load_in_4bit=True)
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
@@ -459,13 +474,13 @@ class LLaMAVIDLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched_regression(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "llava-hf/llava-1.5-7b-hf"
+        model_id = "Nilesh360/llama-vid-7b-full-336"
 
         # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
         model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-1.5-7b-hf", load_in_4bit=True, attn_implementation="eager"
+            "Nilesh360/llama-vid-7b-full-336", load_in_4bit=True, attn_implementation="eager"
         )
-        processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
+        processor = LLaMAVIDLlavaProcessor.from_pretrained(model_id, pad_token="<pad>")
 
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
@@ -486,9 +501,9 @@ class LLaMAVIDLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_torch
     @require_vision
     def test_batched_generation(self):
-        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf").to(torch_device)
+        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("Nilesh360/llama-vid-7b-full-336").to(torch_device)
 
-        processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+        processor = LLaMAVIDLlavaProcessor.from_pretrained("Nilesh360/llama-vid-7b-full-336")
 
         prompt1 = "<image>\n<image>\nUSER: What's the the difference of two images?\nASSISTANT:"
         prompt2 = "<image>\nUSER: Describe the image.\nASSISTANT:"
@@ -523,10 +538,10 @@ class LLaMAVIDLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # This is a reproducer of https://github.com/huggingface/transformers/pull/28032 and makes sure it does not happen anymore
         # Please refer to that PR, or specifically https://github.com/huggingface/transformers/pull/28032#issuecomment-1860650043 for
         # more details
-        model_id = "llava-hf/llava-1.5-7b-hf"
+        model_id = "Nilesh360/llama-vid-7b-full-336"
         model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
 
-        processor = AutoProcessor.from_pretrained(model_id)
+        processor = LLaMAVIDLlavaProcessor.from_pretrained(model_id)
 
         # Simulate a super long prompt
         user_prompt = "Describe the image:?\n" * 200
@@ -543,7 +558,7 @@ class LLaMAVIDLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     def test_llava_merge_inputs_error_bug(self):
         # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
-        model_id = "llava-hf/llava-1.5-7b-hf"
+        model_id = "Nilesh360/llama-vid-7b-full-336"
         model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained(
             model_id, torch_dtype=torch.float16, low_cpu_mem_usage=True
         ).to(torch_device)
@@ -577,28 +592,4 @@ class LLaMAVIDLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         ).loss
         loss.backward()
 
-    def test_tokenizer_integration(self):
-        slow_tokenizer = AutoTokenizer.from_pretrained("liuhaotian/llava-v1.6-34b", use_fast=False)
-        slow_tokenizer.add_tokens("<image>", True)
-
-        fast_tokenizer = AutoTokenizer.from_pretrained(
-            "liuhaotian/llava-v1.6-34b",
-            bos_token="<|startoftext|>",
-            eos_token="<|endoftext|>",
-            from_slow=True,
-            legacy=False,
-        )
-        fast_tokenizer.add_tokens("<image>", True)
-
-        prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
-        # If the token is added as special, it's not normalized, and the only diff is the extra space after special tokens.
-        # https://github.com/huggingface/transformers/pull/28881 is the fix for this.
-        self.assertEqual(
-            slow_tokenizer.tokenize(prompt),
-            ['<|im_start|>', 'system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', 'user', '\n', '<image>', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', 'ass', 'istant', '\n']
-        )  # fmt: skip
-
-        self.assertEqual(
-            fast_tokenizer.tokenize(prompt),
-            ['<|im_start|>', '▁system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', '▁user', '\n', '<image>', '▁', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', '▁assistant', '\n']
-        )  # fmt: skip
+   

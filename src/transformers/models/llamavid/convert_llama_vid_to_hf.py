@@ -182,8 +182,8 @@ def convert_llamavid_to_hf(text_model_id, vision_model_id, output_hub_path, old_
         text_config=text_config,
         vision_tower_config=vision_tower_config,
         qformer_config=qformer_config,
-        compress_type=compress_type,
-    )  # for video compress_type is'mean' while for images its None
+        compress_type=compress_type, # for video compress_type is'mean' while for images its None
+    ) 
     config.pad_token_id = 32001
 
     with torch.device("meta"):
