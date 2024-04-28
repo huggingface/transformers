@@ -9,7 +9,6 @@ def parse_pytest_output(file_path):
             match = re.match(r'^SKIPPED \[(\d+)\] (tests/[^/]+/[^:]+):(\d+): (.*)$', line)
             if match:
                 skipped_count += 1
-                print(match.groups())
                 _, test_file, test_line, reason = match.groups()
                 skipped_tests[reason] = skipped_tests.get(reason, []) + [(test_file, test_line)]
     print("Number of skipped tests:", skipped_count)
