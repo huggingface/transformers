@@ -48,11 +48,10 @@ def _xywh2xyxy(bbox_xywh):
 
 
 def get_config(model_name):
-    # TODO it's unclear whether this checkpoint uses an MoE, it looks like no?
-    # num_experts = 6 if model_name == "vitpose-base-coco-aic-mpii" else None
-    # part_features = 192 if model_name == "vitpose-base-coco-aic-mpii" else None
+    num_experts = 6 if "+" in model_name else 1
+    part_features = 192 if "+" in model_name else 0
 
-    backbone_config = ViTPoseBackboneConfig(out_indices=[12])
+    backbone_config = ViTPoseBackboneConfig(out_indices=[12], num_experts=num_experts, part_features=part_features)
     # size of the architecture
     if "small" in model_name:
         backbone_config.hidden_size = 768

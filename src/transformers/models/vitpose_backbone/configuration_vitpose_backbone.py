@@ -50,7 +50,7 @@ class ViTPoseBackboneConfig(BackboneConfigMixin, PretrainedConfig):
             The ratio of the hidden size in the feedforward network to the hidden size in the attention layers.
         num_experts (`int`, *optional*, defaults to 1):
             The number of experts in the MoE layer.
-        part_features (`int`, *optional*
+        part_features (`int`, *optional*):
             The number of part features to output. Only used in case `num_experts` is greater than 1.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
