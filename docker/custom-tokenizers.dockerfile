@@ -17,12 +17,13 @@ WORKDIR ./jumanpp-2.0.0-rc4/bld
 RUN cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local
 RUN make install
 
-RUN uv pip install  --no-cache-dir accelerate
+RUN uv pip install --no-cache-dir accelerate
 RUN uv pip install --no-cache --upgrade 'torch' --index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install  --no-cache-dir "transformers[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]" unidic
 RUN python3 -m unidic download
 RUN pip uninstall -y transformers
 RUN uv pip install --no-cache-dir  unidic-lite 
 
+RUN rm -rf /usr/local/lib/python3.11/site-packages/nvidia /usr/local/lib/python3.11/site-packages/triton
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 RUN apt remove -y g++ cmake  xz-utils build-essential libprotobuf-dev protobuf-compiler 

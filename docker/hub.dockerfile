@@ -1,24 +1,17 @@
-
-
-
-
 FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 USER root
-RUN apt-get update && apt-get install -y libsndfile1-dev espeak-ng time git
-RUN apt-get install -y g++
+RUN apt-get update && apt-get install -y time git pkg-config make
 ENV VIRTUAL_ENV=/usr/local
-RUN pip --no-cache-dir install uv
+RUN pip install uv
 RUN uv venv
-RUN uv pip install --no-cache-dir -U pip setuptools
-RUN uv pip install --no-cache-dir "pytest<8.0.1" "fsspec>=2023.5.0,<2023.10.0" pytest-subtests pytest-xdist
+RUN uv pip install --no-cache-dir -U pip setuptools GitPython
+RUN uv pip install --no-cache --upgrade 'torch' --index-url https://download.pytorch.org/whl/cpu
+RUN uv pip install --no-cache-dir tensorflow-cpu tf-keras accelerate
+RUN uv pip install --no-cache-dir "transformers[flax,quality,vision,testing]"
 
-RUN uv pip install --no-cache-dir --upgrade 'torch' --index-url https://download.pytorch.org/whl/cpu
-RUN uv pip install --no-cache-dir "transformers[torch,sentencepiece,testing,vision]"
-
-
+# Cleanup to reduce the size of the docker
+RUN pip cache remove "nvidia-*" || true
+RUN pip cache remove triton || true
 RUN pip uninstall -y transformers
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
-RUN apt-get autoremove  --purge -y
-RUN pip cache remove "nvidia-*"
-RUN pip cache remove triton
