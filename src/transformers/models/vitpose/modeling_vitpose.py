@@ -127,18 +127,13 @@ VITPOSE_INPUTS_DOCSTRING = r"""
 def flip_back(output_flipped, flip_pairs, target_type="GaussianHeatmap"):
     """Flip the flipped heatmaps back to the original form.
 
-    Note:
-        - batch_size: N
-        - num_keypoints: K
-        - heatmap height: H
-        - heatmap width: W
-
     Args:
-        output_flipped (np.ndarray[N, K, H, W]): The output heatmaps obtained
-            from the flipped images.
-        flip_pairs (list[tuple()): Pairs of keypoints which are mirrored
-            (for example, left ear -- right ear).
-        target_type (str): GaussianHeatmap or CombinedTarget
+        output_flipped (`np.ndarray` of shape `(batch_size, num_keypoints, height, width)`):
+            The output heatmaps obtained from the flipped images.
+        flip_pairs (list[tuple()):
+            Pairs of keypoints which are mirrored (for example, left ear -- right ear).
+        target_type (str):
+            GaussianHeatmap or CombinedTarget
 
     Returns:
         np.ndarray: heatmaps that flipped back to the original image

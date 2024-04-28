@@ -22,10 +22,6 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 logger = logging.get_logger(__name__)
 
-VITPOSE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "unisydney": "https://huggingface.co/unisydney/resolve/main/config.json",
-}
-
 
 class ViTPoseBackboneConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
