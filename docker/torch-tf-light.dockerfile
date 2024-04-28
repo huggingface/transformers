@@ -13,12 +13,13 @@ RUN pip install --no-cache-dir 'torch' 'torchvision' 'torchaudio' --index-url ht
 RUN uv pip install --no-cache-dir pypi-kenlm protobuf==3.20.3 accelerate tensorflow_probability pytest pytest-xdist parameterized
 RUN uv pip install --no-cache-dir "transformers[sklearn,tf-cpu,sentencepiece,vision]"
 
+
 RUN pip uninstall -y transformers
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 RUN pip cache remove "nvidia-*"
 RUN pip uninstall -y `pip freeze | grep "nvidia-*"` || true
 RUN pip cache remove triton
-RUN apt-get --purge remove "*nvidia*"
-RUN apt-get --purge remove "*cublas*" "cuda*" "nsight*" 
+RUN apt-get --purge remove "*nvidia*" || true
+RUN apt-get --purge remove "*cublas*" "cuda*" "nsight*"  || true
 RUN apt-get autoremove
 RUN apt-get autoclean
