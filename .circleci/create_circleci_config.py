@@ -222,6 +222,7 @@ class CircleCIJob:
 
         steps.append({"run": {"name": "Check test results", "command": check_test_command}})
 
+        steps.append({"run": {"name": "Show skip reasons", "command": f"python3 ~/.circleci/parse_test_outputs.py --file ~/transformers/tests_output.txt"}})
         steps.append({"store_test_results": {"path": "test-results"}})
 
         steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
