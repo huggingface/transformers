@@ -85,6 +85,8 @@ class RobertaEmbeddings(nn.Module):
         self.position_embeddings = nn.Embedding(
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
         )
+        self.embedding_size = config.embedding_size if config.embedding_size else config.hidden_size
+        self.embedding_transformation = nn.Linear(config.embedding_size, config.hidden_size)
 
     def forward(
         self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
@@ -116,6 +118,10 @@ class RobertaEmbeddings(nn.Module):
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
+
+        if self.embedding_size != self.hidden_size:
+            inputs_embeds = self.embedding_transformation(inputs_embeds)
+
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + token_type_embeddings

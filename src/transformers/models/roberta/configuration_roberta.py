@@ -80,6 +80,8 @@ class RobertaConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
+        embedding_size (`int`, *optional*):
+            The dimension of the vocab embedding. If not set, it is the same as `hidden_size`.
 
     Examples:
 
@@ -118,6 +120,7 @@ class RobertaConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
+        embedding_size=None,
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -137,6 +140,7 @@ class RobertaConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
+        self.embedding_size = embedding_size
 
 
 class RobertaOnnxConfig(OnnxConfig):
