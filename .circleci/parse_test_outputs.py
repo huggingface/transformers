@@ -18,10 +18,12 @@ def parse_pytest_output(file_path):
         exit(0)
 
 def parse_pytest_failure_output(file_path):
+    print(file_path)
     skipped_tests = {}
     skipped_count = 0
     with open(file_path, 'r') as file:
         for line in file:
+            print(line)
             match = re.match(r'^FAILED (tests/[^/]+/[^:]+) - (.*): (.*)$', line)
             if match:
                 skipped_count += 1
@@ -35,10 +37,12 @@ def parse_pytest_failure_output(file_path):
         exit(0)
 
 def parse_pytest_errors_output(file_path):
+    print(file_path)
     skipped_tests = {}
     skipped_count = 0
     with open(file_path, 'r') as file:
         for line in file:
+            print(line)
             match = re.match(r'^ERROR (tests/[^/]+/[^:]+):(\d+): (.*)$', line)
             if match:
                 skipped_count += 1
