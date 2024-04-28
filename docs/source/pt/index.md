@@ -283,7 +283,6 @@ disso, são diferenciados pelo suporte em diferentes frameworks: JAX (por meio d
 |         VisualBert          |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |             ViT             |       ❌       |       ❌       |       ✅        |         ✅         |      ✅      |
 |           ViTMAE            |       ❌       |       ❌       |       ✅        |         ✅         |      ❌      |
-|         ViTPosePose         |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |          Wav2Vec2           |       ✅       |       ❌       |       ✅        |         ✅         |      ✅      |
 |            WavLM            |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |            XGLM             |       ✅       |       ✅       |       ✅        |         ❌         |      ✅      |
