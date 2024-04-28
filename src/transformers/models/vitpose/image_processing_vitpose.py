@@ -62,7 +62,7 @@ def _xywh2xyxy(bbox_xywh):
 
 
 def _box2cs(box, width, height):
-    """This encodes a bounding box (x,y,w,h) into (center, scale)
+    """This encodes bbox(x,y,w,h) into (center, scale)
 
     Args:
         x, y, w, h
@@ -75,7 +75,8 @@ def _box2cs(box, width, height):
     """
 
     x, y, w, h = box[:4]
-    aspect_ratio = width / height
+    input_size = (width, height)
+    aspect_ratio = input_size[0] / input_size[1]
     center = np.array([x + w * 0.5, y + h * 0.5], dtype=np.float32)
 
     if w > aspect_ratio * h:
@@ -437,70 +438,6 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
-    def post_process_pose_estimation(self, outputs, boxes, target_sizes, kernel_size=11, use_udp=True):
-        """
-        Transform the heatmaps into keypoint predictions and transform them back to the image.
-
-        Args:
-            outputs (torch.Tensor):
-                Model outputs.
-            boxes (torch.Tensor of shape [batch_size, 4]):
-                Bounding boxes.
-            target_sizes (`List[Tuple[int, int]]`, *optional*):
-                Size of the target heatmaps.
-            kernel_size (`int`, *optional*, defaults to 11):
-                Gaussian kernel size (K) for modulation.
-            use_udp (`bool`, *optional*, defaults to `False`):
-                Whether to use unbiased data processing.
-        """
-
-        # First compute centers and scales
-        # TODO use target_sizes instead
-        import torch
-        from huggingface_hub import hf_hub_download
-
-        filepath = hf_hub_download(repo_id="nielsr/test-image", filename="vitpose_batch_data.pt", repo_type="dataset")
-        img_metas = torch.load(filepath, map_location="cpu")["img_metas"]
-
-        batch_size = len(outputs.heatmaps)
-
-        centers = np.zeros((batch_size, 2), dtype=np.float32)
-        scales = np.zeros((batch_size, 2), dtype=np.float32)
-        score = np.ones(batch_size)
-        for i in range(batch_size):
-            centers[i, :] = img_metas[i]["center"]
-            scales[i, :] = img_metas[i]["scale"]
-
-        # assert np.allclose(centers, our_centers, atol=1e-4), f"Centers are not equal: {centers} vs {our_centers}"
-        # assert np.allclose(scales, our_scales, atol=1e-4), f"Scales are not equal: {scales} vs {our_scales}"
-
-        preds, maxvals = self.keypoints_from_heatmaps(
-            outputs.heatmaps, centers, scales, kernel=kernel_size, use_udp=use_udp
-        )
-
-        all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
-        all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
-        all_preds[:, :, 0:2] = preds[:, :, 0:2]
-        all_preds[:, :, 2:3] = maxvals
-        all_boxes[:, 0:2] = centers[:, 0:2]
-        all_boxes[:, 2:4] = scales[:, 0:2]
-        all_boxes[:, 4] = np.prod(scales * 200.0, axis=1)
-        all_boxes[:, 5] = score
-
-        poses = all_preds
-
-        bboxes = np.array(boxes)
-        bboxes_xyxy = _xywh2xyxy(bboxes)
-
-        pose_results = []
-        for pose, bbox_xyxy in zip(poses, bboxes_xyxy):
-            pose_result = {}
-            pose_result["keypoints"] = pose
-            pose_result["bbox"] = bbox_xyxy
-            pose_results.append(pose_result)
-
-        return pose_results
-
     def keypoints_from_heatmaps(
         self,
         heatmaps,
@@ -513,14 +450,8 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         Get final keypoint predictions from heatmaps and transform them back to
         the image.
 
-        Note:
-            - batch size: N
-            - num keypoints: K
-            - heatmap height: H
-            - heatmap width: W
-
         Args:
-            heatmaps (np.ndarray[N, K, H, W]):
+            heatmaps (`np.ndarray` of shape `(batch_size, num_keypoints, height, width])`):
                 Model predicted heatmaps.
             center (np.ndarray[N, 2]):
                 Center of the bounding box (x, y).
@@ -575,3 +506,57 @@ class ViTPoseImageProcessor(BaseImageProcessor):
             preds[i] = transform_preds(preds[i], center[i], scale[i], [width, height], use_udp=use_udp)
 
         return preds, maxvals
+
+    def post_process_pose_estimation(self, outputs, boxes, target_sizes, kernel_size=11, use_udp=True):
+        """
+        Transform the heatmaps into keypoint predictions and transform them back to the image.
+
+        Args:
+            outputs (torch.Tensor):
+                Model outputs.
+            boxes (torch.Tensor of shape [batch_size, 4]):
+                Bounding boxes.
+            target_sizes (`List[Tuple[int, int]]`, *optional*):
+                Size of the target heatmaps.
+            kernel_size (`int`, *optional*, defaults to 11):
+                Gaussian kernel size (K) for modulation.
+            use_udp (`bool`, *optional*, defaults to `False`):
+                Whether to use unbiased data processing.
+        """
+
+        # First compute centers and scales for each bounding box
+        batch_size = len(outputs.heatmaps)
+        centers = np.zeros((batch_size, 2), dtype=np.float32)
+        scales = np.zeros((batch_size, 2), dtype=np.float32)
+        for i in range(batch_size):
+            # compute center and scale
+            # TODO use target sizes
+            center, scale = _box2cs(boxes[i], width=192, height=256)
+            centers[i, :] = center
+            scales[i, :] = scale
+
+        preds, maxvals = self.keypoints_from_heatmaps(
+            outputs.heatmaps, centers, scales, kernel=kernel_size, use_udp=use_udp
+        )
+
+        all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
+        all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
+        all_preds[:, :, 0:2] = preds[:, :, 0:2]
+        all_preds[:, :, 2:3] = maxvals
+        all_boxes[:, 0:2] = centers[:, 0:2]
+        all_boxes[:, 2:4] = scales[:, 0:2]
+        all_boxes[:, 4] = np.prod(scales * 200.0, axis=1)
+
+        poses = all_preds
+
+        bboxes = np.array(boxes)
+        bboxes_xyxy = _xywh2xyxy(bboxes)
+
+        pose_results = []
+        for pose, bbox_xyxy in zip(poses, bboxes_xyxy):
+            pose_result = {}
+            pose_result["keypoints"] = pose
+            pose_result["bbox"] = bbox_xyxy
+            pose_results.append(pose_result)
+
+        return pose_results
