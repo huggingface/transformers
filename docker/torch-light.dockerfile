@@ -9,9 +9,9 @@ RUN uv venv
 RUN uv pip install --no-cache-dir -U pip setuptools accelerate
 RUN uv pip install --no-cache-dir "fsspec>=2023.5.0,<2023.10.0"
 RUN pip install --no-cache-dir 'torch' 'torchvision' 'torchaudio' --index-url https://download.pytorch.org/whl/cpu
-RUN pip install --no-cache-dir "transformers[sklearn,sentencepiece,vision,timm,testing]"
+RUN uv pip install --no-cache-dir "transformers[sklearn,sentencepiece,vision,timm,testing]"
 
-# sklearn,sentencepiece,vision,timm,testing fucking install nividia-ci
+# soundfile and librosa are also needed
 
 
 RUN pip uninstall -y transformers
