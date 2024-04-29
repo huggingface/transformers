@@ -187,25 +187,25 @@ class HqqConfig(QuantizationConfigMixin):
     This is wrapper around hqq's BaseQuantizeConfig.
 
     Args:
-        nbits (`int`, defaults to 4):
+        nbits (`int`, *optional*, defaults to 4):
             Number of bits. Supported values are (8, 4, 3, 2, 1).
-        group_size (`int`, defaults to 64):
+        group_size (`int`, *optional*, defaults to 64):
             Group-size value. Supported values are any value that is divisble by weight.shape[axis]).
-        quant_zero (`bool`, defaults to `True`):
+        quant_zero (`bool`, *optional*, defaults to `True`):
             Quantize the zero-point if set to True.
-        quant_scale (`bool`, defaults to `False`):
+        quant_scale (`bool`, *optional*, defaults to `False`):
             Quantize the scaling if set to True.
-        offload_meta (`bool`, defaults to `False`):
+        offload_meta (`bool`, *optional*, defaults to `False`):
             Offload the meta-data to the CPU if set to True.
-        view_as_float (`bool`, defaults to `False`):
+        view_as_float (`bool`, *optional*, defaults to `False`):
             View the quantized weight as float (used in distributed training) if set to True.
-        axis (`int`, defaults to 0):
+        axis (`int`, defaults to 0, *optional*, defaults to 0):
             Axis along which grouping is performed. Supported values are 0 or 1.
         dynamic_config (dict, *optional*):
             Parameters for dynamic configuration. The key is the name tag of the layer.
-        skip_modules (`List[str]`, *optional*):
+        skip_modules (`List[str]`, *optional*, defaults to `['lm_head']`):
             List of nn.Linear layers to skip.
-        show_progress ('bool', *optional*, defaults to `True`):
+        show_progress ('bool', defaults to `True`, *optional*, defaults to `True`):
             Show tqdm quantization progress for each shard.
         kwargs (`Dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
