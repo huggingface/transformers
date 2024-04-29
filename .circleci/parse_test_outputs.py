@@ -29,7 +29,7 @@ def parse_pytest_failure_output(file_path):
     for k,v in sorted(failed_tests.items(), key=lambda x:len(x[1])):
         print(f"{len(v):4} failed because {k}:{v}")
     if failed_count>0:
-        exit(0)
+        exit(1)
 
 def parse_pytest_errors_output(file_path):
     print(file_path)
@@ -46,7 +46,7 @@ def parse_pytest_errors_output(file_path):
     for k,v in sorted(error_tests.items(), key=lambda x:len(x[1])):
         print(f"{len(v):4} errored out because of {k}: {v}")
     if error_count>0:
-        exit(0)
+        exit(1)
 
 def main():
     parser = argparse.ArgumentParser()
