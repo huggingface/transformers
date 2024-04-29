@@ -35,6 +35,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_luke import LukeConfig
 
 
@@ -883,6 +884,7 @@ class EntityPredictionHead(nn.Module):
         return hidden_states
 
 
+@register(backends=("torch",))
 class LukePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1008,6 +1010,7 @@ LUKE_INPUTS_DOCSTRING = r"""
     " specific head on top.",
     LUKE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LukeModel(LukePreTrainedModel):
     def __init__(self, config: LukeConfig, add_pooling_layer: bool = True):
         super().__init__(config)
@@ -1263,6 +1266,7 @@ class LukeLMHead(nn.Module):
     """,
     LUKE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LukeForMaskedLM(LukePreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias", "entity_predictions.decoder.weight"]
 
@@ -1398,6 +1402,7 @@ class LukeForMaskedLM(LukePreTrainedModel):
     """,
     LUKE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LukeForEntityClassification(LukePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1513,6 +1518,7 @@ class LukeForEntityClassification(LukePreTrainedModel):
     """,
     LUKE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LukeForEntityPairClassification(LukePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1633,6 +1639,7 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
     """,
     LUKE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LukeForEntitySpanClassification(LukePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1779,6 +1786,7 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
     """,
     LUKE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LukeForSequenceClassification(LukePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1893,6 +1901,7 @@ class LukeForSequenceClassification(LukePreTrainedModel):
     """,
     LUKE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LukeForTokenClassification(LukePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1989,6 +1998,7 @@ class LukeForTokenClassification(LukePreTrainedModel):
     """,
     LUKE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LukeForQuestionAnswering(LukePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2108,6 +2118,7 @@ class LukeForQuestionAnswering(LukePreTrainedModel):
     """,
     LUKE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LukeForMultipleChoice(LukePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2229,3 +2240,16 @@ class LukeForMultipleChoice(LukePreTrainedModel):
             entity_hidden_states=outputs.entity_hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "LukePreTrainedModel",
+    "LukeModel",
+    "LukeForMaskedLM",
+    "LukeForEntityClassification",
+    "LukeForEntityPairClassification",
+    "LukeForEntitySpanClassification",
+    "LukeForSequenceClassification",
+    "LukeForTokenClassification",
+    "LukeForQuestionAnswering",
+    "LukeForMultipleChoice"
+]

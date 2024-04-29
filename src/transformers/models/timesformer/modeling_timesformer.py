@@ -28,6 +28,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_timesformer import TimesformerConfig
 
 
@@ -462,6 +463,7 @@ class TimesformerEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class TimesformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -520,6 +522,7 @@ TIMESFORMER_INPUTS_DOCSTRING = r"""
     "The bare TimeSformer Model transformer outputting raw hidden-states without any specific head on top.",
     TIMESFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class TimesformerModel(TimesformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -662,6 +665,7 @@ class TimesformerModel(TimesformerPreTrainedModel):
 of the [CLS] token) e.g. for ImageNet.""",
     TIMESFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class TimesformerForVideoClassification(TimesformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -815,3 +819,9 @@ class TimesformerForVideoClassification(TimesformerPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "TimesformerPreTrainedModel",
+    "TimesformerModel",
+    "TimesformerForVideoClassification"
+]

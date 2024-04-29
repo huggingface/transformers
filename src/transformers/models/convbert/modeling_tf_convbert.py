@@ -52,6 +52,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_convbert import ConvBertConfig
 
 
@@ -736,6 +737,7 @@ class TFConvBertMainLayer(keras.layers.Layer):
                 self.embeddings_project.build([None, None, self.config.embedding_size])
 
 
+@register(backends=("tf",))
 class TFConvBertPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -848,6 +850,7 @@ CONVBERT_INPUTS_DOCSTRING = r"""
     "The bare ConvBERT Model transformer outputting raw hidden-states without any specific head on top.",
     CONVBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFConvBertModel(TFConvBertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -963,6 +966,7 @@ class TFConvBertGeneratorPredictions(keras.layers.Layer):
 
 
 @add_start_docstrings("""ConvBERT Model with a `language modeling` head on top.""", CONVBERT_START_DOCSTRING)
+@register(backends=("tf",))
 class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, **kwargs)
@@ -1102,6 +1106,7 @@ class TFConvBertClassificationHead(keras.layers.Layer):
     """,
     CONVBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1182,6 +1187,7 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
     """,
     CONVBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1290,6 +1296,7 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
     """,
     CONVBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1377,6 +1384,7 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
     """,
     CONVBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1466,3 +1474,13 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+__all__ = [
+    "TFConvBertPreTrainedModel",
+    "TFConvBertModel",
+    "TFConvBertForMaskedLM",
+    "TFConvBertForSequenceClassification",
+    "TFConvBertForMultipleChoice",
+    "TFConvBertForTokenClassification",
+    "TFConvBertForQuestionAnswering"
+]

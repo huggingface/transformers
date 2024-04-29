@@ -29,6 +29,7 @@ from jax.random import PRNGKey
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutputWithCrossAttentions, FlaxSeq2SeqLMOutput
 from ...modeling_flax_utils import FlaxPreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_flax_auto import FlaxAutoModel, FlaxAutoModelForCausalLM
 from .configuration_vision_encoder_decoder import VisionEncoderDecoderConfig
@@ -265,6 +266,7 @@ class FlaxVisionEncoderDecoderModule(nn.Module):
 
 
 @add_start_docstrings(VISION_ENCODER_DECODER_START_DOCSTRING)
+@register(backends=("flax",))
 class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
     r"""
     [`FlaxVisionEncoderDecoderModel`] is a generic model class that will be instantiated as a transformer architecture
@@ -860,3 +862,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         model.params["decoder"] = decoder.params
 
         return model
+
+__all__ = [
+    "FlaxVisionEncoderDecoderModel"
+]

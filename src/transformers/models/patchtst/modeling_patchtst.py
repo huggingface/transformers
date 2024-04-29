@@ -26,6 +26,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import ModelOutput, add_start_docstrings, logging
+from ...utils.import_utils import register
 from .configuration_patchtst import PatchTSTConfig
 
 
@@ -590,6 +591,7 @@ class PatchTSTEncoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class PatchTSTPreTrainedModel(PreTrainedModel):
     config_class = PatchTSTConfig
     base_model_prefix = "model"
@@ -715,6 +717,7 @@ class PatchTSTPositionalEncoding(nn.Module):
         return hidden_state
 
 
+@register(backends=("torch",))
 class PatchTSTEncoder(PatchTSTPreTrainedModel):
     """
     PatchTST Encoder
@@ -1146,6 +1149,7 @@ class PatchTSTScaler(nn.Module):
     "The bare PatchTST Model outputting raw hidden-states without any specific head.",
     PATCHTST_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PatchTSTModel(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
@@ -1290,6 +1294,7 @@ class PatchTSTMaskPretrainHead(nn.Module):
     "The PatchTST for pretrain model.",
     PATCHTST_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PatchTSTForPretraining(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
@@ -1442,6 +1447,7 @@ class PatchTSTClassificationHead(nn.Module):
     "The PatchTST for classification model.",
     PATCHTST_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PatchTSTForClassification(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
@@ -1637,6 +1643,7 @@ class PatchTSTPredictionHead(nn.Module):
     "The PatchTST for prediction model.",
     PATCHTST_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PatchTSTForPrediction(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
@@ -1883,6 +1890,7 @@ class PatchTSTRegressionHead(nn.Module):
     "The PatchTST for regression model.",
     PATCHTST_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PatchTSTForRegression(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
@@ -2033,3 +2041,13 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         # samples: [bs x num_samples x num_targets]
         samples = torch.stack(samples, dim=1).view(-1, num_parallel_samples, self.config.num_targets)
         return SamplePatchTSTOutput(sequences=samples)
+
+__all__ = [
+    "PatchTSTPreTrainedModel",
+    "PatchTSTEncoder",
+    "PatchTSTModel",
+    "PatchTSTForPretraining",
+    "PatchTSTForClassification",
+    "PatchTSTForPrediction",
+    "PatchTSTForRegression"
+]

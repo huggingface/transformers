@@ -35,6 +35,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_mobilenet_v2 import MobileNetV2Config
 
 
@@ -442,6 +443,7 @@ class MobileNetV2Stem(nn.Module):
         return features
 
 
+@register(backends=("torch",))
 class MobileNetV2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -494,6 +496,7 @@ MOBILENET_V2_INPUTS_DOCSTRING = r"""
     "The bare MobileNetV2 model outputting raw hidden-states without any specific head on top.",
     MOBILENET_V2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MobileNetV2Model(MobileNetV2PreTrainedModel):
     def __init__(self, config: MobileNetV2Config, add_pooling_layer: bool = True):
         super().__init__(config)
@@ -614,6 +617,7 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
     """,
     MOBILENET_V2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
     def __init__(self, config: MobileNetV2Config) -> None:
         super().__init__(config)
@@ -773,6 +777,7 @@ class MobileNetV2DeepLabV3Plus(nn.Module):
     """,
     MOBILENET_V2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
     def __init__(self, config: MobileNetV2Config) -> None:
         super().__init__(config)
@@ -861,3 +866,10 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+__all__ = [
+    "MobileNetV2PreTrainedModel",
+    "MobileNetV2Model",
+    "MobileNetV2ForImageClassification",
+    "MobileNetV2ForSemanticSegmentation"
+]

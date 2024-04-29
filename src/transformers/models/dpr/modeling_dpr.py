@@ -30,6 +30,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from ..bert.modeling_bert import BertModel
 from .configuration_dpr import DPRConfig
 
@@ -141,6 +142,7 @@ class DPRReaderOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
+@register(backends=("torch",))
 class DPRPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
@@ -161,6 +163,7 @@ class DPRPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
+@register(backends=("torch",))
 class DPREncoder(DPRPreTrainedModel):
     base_model_prefix = "bert_model"
 
@@ -217,6 +220,7 @@ class DPREncoder(DPRPreTrainedModel):
         return self.bert_model.config.hidden_size
 
 
+@register(backends=("torch",))
 class DPRSpanPredictor(DPRPreTrainedModel):
     base_model_prefix = "encoder"
 
@@ -279,6 +283,7 @@ class DPRSpanPredictor(DPRPreTrainedModel):
 ##################
 
 
+@register(backends=("torch",))
 class DPRPretrainedContextEncoder(DPRPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -290,6 +295,7 @@ class DPRPretrainedContextEncoder(DPRPreTrainedModel):
     base_model_prefix = "ctx_encoder"
 
 
+@register(backends=("torch",))
 class DPRPretrainedQuestionEncoder(DPRPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -301,6 +307,7 @@ class DPRPretrainedQuestionEncoder(DPRPreTrainedModel):
     base_model_prefix = "question_encoder"
 
 
+@register(backends=("torch",))
 class DPRPretrainedReader(DPRPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -663,3 +670,12 @@ class DPRReader(DPRPretrainedReader):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+__all__ = [
+    "DPRPreTrainedModel",
+    "DPREncoder",
+    "DPRSpanPredictor",
+    "DPRPretrainedContextEncoder",
+    "DPRPretrainedQuestionEncoder",
+    "DPRPretrainedReader"
+]

@@ -48,6 +48,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_mbart import MBartConfig
 
 
@@ -528,6 +529,7 @@ class TFMBartDecoderLayer(keras.layers.Layer):
                 self.final_layer_norm.build([None, None, self.embed_dim])
 
 
+@register(backends=("tf",))
 class TFMBartPreTrainedModel(TFPreTrainedModel):
     config_class = MBartConfig
     base_model_prefix = "model"
@@ -1265,6 +1267,7 @@ class TFMBartMainLayer(keras.layers.Layer):
     "The bare MBART Model outputting raw hidden-states without any specific head on top.",
     MBART_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMBartModel(TFMBartPreTrainedModel):
     def __init__(self, config: MBartConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1378,6 +1381,7 @@ class BiasLayer(keras.layers.Layer):
     "The MBART Model with a language modeling head. Can be used for summarization, after fine-tuning the pretrained models.",
     MBART_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageModelingLoss):
     _keys_to_ignore_on_load_unexpected = [
         r"model.encoder.embed_tokens.weight",
@@ -1571,3 +1575,9 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
         if getattr(self, "bias_layer", None) is not None:
             with tf.name_scope(self.bias_layer.name):
                 self.bias_layer.build(None)
+
+__all__ = [
+    "TFMBartPreTrainedModel",
+    "TFMBartModel",
+    "TFMBartForConditionalGeneration"
+]

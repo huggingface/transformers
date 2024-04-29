@@ -49,6 +49,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_phi import PhiConfig
 
 
@@ -820,6 +821,7 @@ PHI_START_DOCSTRING = r"""
     "The bare Phi Model outputting raw hidden-states without any specific head on top.",
     PHI_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PhiPreTrainedModel(PreTrainedModel):
     config_class = PhiConfig
     base_model_prefix = "model"
@@ -916,6 +918,7 @@ PHI_INPUTS_DOCSTRING = r"""
     "The bare Phi Model outputting raw hidden-states without any specific head on top.",
     PHI_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PhiModel(PhiPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PhiDecoderLayer`]
@@ -1081,6 +1084,7 @@ class PhiModel(PhiPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class PhiForCausalLM(PhiPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1291,6 +1295,7 @@ class PhiForCausalLM(PhiPreTrainedModel):
     PHI_START_DOCSTRING,
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->PHI,Llama->Phi with self.transformer->self.model, transformer_outputs->model_outputs
+@register(backends=("torch",))
 class PhiForSequenceClassification(PhiPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1407,6 +1412,7 @@ class PhiForSequenceClassification(PhiPreTrainedModel):
     PHI_START_DOCSTRING,
 )
 # Copied from transformers.models.mpt.modeling_mpt.MptForTokenClassification with MPT->PHI,Mpt->Phi,self.transformer->self.model,transformer_outputs->model_outputs
+@register(backends=("torch",))
 class PhiForTokenClassification(PhiPreTrainedModel):
     def __init__(self, config: PhiConfig):
         super().__init__(config)
@@ -1487,3 +1493,11 @@ class PhiForTokenClassification(PhiPreTrainedModel):
             hidden_states=model_outputs.hidden_states,
             attentions=model_outputs.attentions,
         )
+
+__all__ = [
+    "PhiPreTrainedModel",
+    "PhiModel",
+    "PhiForCausalLM",
+    "PhiForSequenceClassification",
+    "PhiForTokenClassification"
+]

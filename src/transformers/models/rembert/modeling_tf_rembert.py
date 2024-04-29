@@ -55,6 +55,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_rembert import RemBertConfig
 
 
@@ -932,6 +933,7 @@ class TFRemBertMainLayer(keras.layers.Layer):
                 self.pooler.build(None)
 
 
+@register(backends=("tf",))
 class TFRemBertPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1044,6 +1046,7 @@ REMBERT_INPUTS_DOCSTRING = r"""
     "The bare RemBERT Model transformer outputing raw hidden-states without any specific head on top.",
     REMBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRemBertModel(TFRemBertPreTrainedModel):
     def __init__(self, config: RemBertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1123,6 +1126,7 @@ class TFRemBertModel(TFRemBertPreTrainedModel):
 
 
 @add_start_docstrings("""RemBERT Model with a `language modeling` head on top.""", REMBERT_START_DOCSTRING)
+@register(backends=("tf",))
 class TFRemBertForMaskedLM(TFRemBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config: RemBertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1208,6 +1212,7 @@ class TFRemBertForMaskedLM(TFRemBertPreTrainedModel, TFMaskedLanguageModelingLos
 @add_start_docstrings(
     """RemBERT Model with a `language modeling` head on top for CLM fine-tuning.""", REMBERT_START_DOCSTRING
 )
+@register(backends=("tf",))
 class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config: RemBertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1338,6 +1343,7 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
     """,
     REMBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRemBertForSequenceClassification(TFRemBertPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: RemBertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1427,6 +1433,7 @@ class TFRemBertForSequenceClassification(TFRemBertPreTrainedModel, TFSequenceCla
     """,
     REMBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRemBertForMultipleChoice(TFRemBertPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config: RemBertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1535,6 +1542,7 @@ class TFRemBertForMultipleChoice(TFRemBertPreTrainedModel, TFMultipleChoiceLoss)
     """,
     REMBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRemBertForTokenClassification(TFRemBertPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config: RemBertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1620,6 +1628,7 @@ class TFRemBertForTokenClassification(TFRemBertPreTrainedModel, TFTokenClassific
     """,
     REMBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRemBertForQuestionAnswering(TFRemBertPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config: RemBertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1710,3 +1719,14 @@ class TFRemBertForQuestionAnswering(TFRemBertPreTrainedModel, TFQuestionAnswerin
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+__all__ = [
+    "TFRemBertPreTrainedModel",
+    "TFRemBertModel",
+    "TFRemBertForMaskedLM",
+    "TFRemBertForCausalLM",
+    "TFRemBertForSequenceClassification",
+    "TFRemBertForMultipleChoice",
+    "TFRemBertForTokenClassification",
+    "TFRemBertForQuestionAnswering"
+]

@@ -21,6 +21,7 @@ from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import is_timm_available, is_torch_available, requires_backends
 from ...utils.backbone_utils import BackboneMixin
+from ...utils.import_utils import register
 from .configuration_timm_backbone import TimmBackboneConfig
 
 
@@ -32,6 +33,7 @@ if is_torch_available():
     from torch import Tensor
 
 
+@register(backends=("torch",))
 class TimmBackbone(PreTrainedModel, BackboneMixin):
     """
     Wrapper class for timm models to be used as backbones. This enables using the timm models interchangeably with the
@@ -159,3 +161,7 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
             return output
 
         return BackboneOutput(feature_maps=feature_maps, hidden_states=hidden_states, attentions=None)
+
+__all__ = [
+    "TimmBackbone"
+]

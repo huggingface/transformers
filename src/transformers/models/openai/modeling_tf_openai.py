@@ -47,6 +47,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_openai import OpenAIGPTConfig
 
 
@@ -399,6 +400,7 @@ class TFOpenAIGPTMainLayer(keras.layers.Layer):
         )
 
 
+@register(backends=("tf",))
 class TFOpenAIGPTPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -540,6 +542,7 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
     "The bare OpenAI GPT transformer model outputting raw hidden-states without any specific head on top.",
     OPENAI_GPT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -595,6 +598,7 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
     """,
     OPENAI_GPT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -690,6 +694,7 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
     """,
     OPENAI_GPT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -828,6 +833,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
     """,
     OPENAI_GPT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -938,3 +944,11 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
         if getattr(self, "transformer", None) is not None:
             with tf.name_scope(self.transformer.name):
                 self.transformer.build(None)
+
+__all__ = [
+    "TFOpenAIGPTPreTrainedModel",
+    "TFOpenAIGPTModel",
+    "TFOpenAIGPTLMHeadModel",
+    "TFOpenAIGPTDoubleHeadsModel",
+    "TFOpenAIGPTForSequenceClassification"
+]

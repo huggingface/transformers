@@ -28,6 +28,7 @@ from jax import lax
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_gpt_neo import GPTNeoConfig
 
 
@@ -337,6 +338,7 @@ class FlaxGPTNeoBlock(nn.Module):
         return (hidden_states,) + outputs[1:]
 
 
+@register(backends=("flax",))
 class FlaxGPTNeoPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -588,6 +590,7 @@ class FlaxGPTNeoModule(nn.Module):
     "The bare GPTNeo Model transformer outputting raw hidden-states without any specific head on top.",
     GPT_NEO_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxGPTNeoModel(FlaxGPTNeoPreTrainedModel):
     module_class = FlaxGPTNeoModule
 
@@ -651,6 +654,7 @@ class FlaxGPTNeoForCausalLMModule(nn.Module):
     """,
     GPT_NEO_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxGPTNeoForCausalLM(FlaxGPTNeoPreTrainedModel):
     module_class = FlaxGPTNeoForCausalLMModule
 
@@ -682,3 +686,9 @@ class FlaxGPTNeoForCausalLM(FlaxGPTNeoPreTrainedModel):
 
 
 append_call_sample_docstring(FlaxGPTNeoForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC)
+
+__all__ = [
+    "FlaxGPTNeoPreTrainedModel",
+    "FlaxGPTNeoModel",
+    "FlaxGPTNeoForCausalLM"
+]

@@ -42,6 +42,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import check_embeddings_within_bounds
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_layoutlmv3 import LayoutLMv3Config
 
 
@@ -1119,6 +1120,7 @@ class TFLayoutLMv3MainLayer(keras.layers.Layer):
         )
 
 
+@register(backends=("tf",))
 class TFLayoutLMv3PreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1257,6 +1259,7 @@ LAYOUTLMV3_INPUTS_DOCSTRING = r"""
     "The bare LayoutLMv3 Model transformer outputting raw hidden-states without any specific head on top.",
     LAYOUTLMV3_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFLayoutLMv3Model(TFLayoutLMv3PreTrainedModel):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"position_ids"]
@@ -1395,6 +1398,7 @@ class TFLayoutLMv3ClassificationHead(keras.layers.Layer):
     """,
     LAYOUTLMV3_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFLayoutLMv3ForSequenceClassification(TFLayoutLMv3PreTrainedModel, TFSequenceClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"position_ids"]
@@ -1510,6 +1514,7 @@ class TFLayoutLMv3ForSequenceClassification(TFLayoutLMv3PreTrainedModel, TFSeque
     """,
     LAYOUTLMV3_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"position_ids"]
@@ -1647,6 +1652,7 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
     """,
     LAYOUTLMV3_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAnsweringLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"position_ids"]
@@ -1776,3 +1782,11 @@ class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAn
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build(None)
+
+__all__ = [
+    "TFLayoutLMv3PreTrainedModel",
+    "TFLayoutLMv3Model",
+    "TFLayoutLMv3ForSequenceClassification",
+    "TFLayoutLMv3ForTokenClassification",
+    "TFLayoutLMv3ForQuestionAnswering"
+]

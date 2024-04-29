@@ -41,6 +41,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_pegasus import PegasusConfig
 
 
@@ -456,6 +457,7 @@ class PegasusDecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class PegasusPreTrainedModel(PreTrainedModel):
     config_class = PegasusConfig
     base_model_prefix = "model"
@@ -605,6 +607,7 @@ PEGASUS_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("torch",))
 class PegasusEncoder(PegasusPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -806,6 +809,7 @@ class PegasusEncoder(PegasusPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class PegasusDecoder(PegasusPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`PegasusDecoderLayer`]
@@ -1093,6 +1097,7 @@ class PegasusDecoder(PegasusPreTrainedModel):
     "The bare PEGASUS Model outputting raw hidden-states without any specific head on top.",
     PEGASUS_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PegasusModel(PegasusPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1244,6 +1249,7 @@ class PegasusModel(PegasusPreTrainedModel):
 @add_start_docstrings(
     "The PEGASUS Model with a language modeling head. Can be used for summarization.", PEGASUS_START_DOCSTRING
 )
+@register(backends=("torch",))
 class PegasusForConditionalGeneration(PegasusPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
@@ -1442,6 +1448,7 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->Pegasus
+@register(backends=("torch",))
 class PegasusDecoderWrapper(PegasusPreTrainedModel):
     """
     This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
@@ -1456,6 +1463,7 @@ class PegasusDecoderWrapper(PegasusPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
+@register(backends=("torch",))
 class PegasusForCausalLM(PegasusPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1698,3 +1706,13 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "PegasusPreTrainedModel",
+    "PegasusEncoder",
+    "PegasusDecoder",
+    "PegasusModel",
+    "PegasusForConditionalGeneration",
+    "PegasusDecoderWrapper",
+    "PegasusForCausalLM"
+]

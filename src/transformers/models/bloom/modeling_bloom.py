@@ -35,6 +35,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ...utils.import_utils import register
 from .configuration_bloom import BloomConfig
 
 
@@ -434,6 +435,7 @@ class BloomBlock(nn.Module):
         return outputs  # hidden_states, present, attentions
 
 
+@register(backends=("torch",))
 class BloomPreTrainedModel(PreTrainedModel):
     config_class = BloomConfig
     base_model_prefix = "transformer"
@@ -574,6 +576,7 @@ BLOOM_INPUTS_DOCSTRING = r"""
     "The bare Bloom Model transformer outputting raw hidden-states without any specific head on top.",
     BLOOM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BloomModel(BloomPreTrainedModel):
     def __init__(self, config: BloomConfig):
         super().__init__(config)
@@ -753,6 +756,7 @@ class BloomModel(BloomPreTrainedModel):
     """,
     BLOOM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BloomForCausalLM(BloomPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -930,6 +934,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
     """,
     BLOOM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BloomForSequenceClassification(BloomPreTrainedModel):
     def __init__(self, config: BloomConfig):
         super().__init__(config)
@@ -1059,6 +1064,7 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
     """,
     BLOOM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BloomForTokenClassification(BloomPreTrainedModel):
     def __init__(self, config: BloomConfig):
         super().__init__(config)
@@ -1160,6 +1166,7 @@ class BloomForTokenClassification(BloomPreTrainedModel):
     """,
     BLOOM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BloomForQuestionAnswering(BloomPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1241,3 +1248,12 @@ class BloomForQuestionAnswering(BloomPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "BloomPreTrainedModel",
+    "BloomModel",
+    "BloomForCausalLM",
+    "BloomForSequenceClassification",
+    "BloomForTokenClassification",
+    "BloomForQuestionAnswering"
+]

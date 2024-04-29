@@ -36,6 +36,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_autoformer import AutoformerConfig
 
 
@@ -894,6 +895,7 @@ class AutoformerDecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class AutoformerPreTrainedModel(PreTrainedModel):
     config_class = AutoformerConfig
     base_model_prefix = "model"
@@ -1063,6 +1065,7 @@ AUTOFORMER_INPUTS_DOCSTRING = r"""
 
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerEncoder with TimeSeriesTransformer->Autoformer,TimeSeries->Autoformer
+@register(backends=("torch",))
 class AutoformerEncoder(AutoformerPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -1200,6 +1203,7 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class AutoformerDecoder(AutoformerPreTrainedModel):
     """
     Transformer decoder consisting of `config.decoder_layers` layers. Each layer is a [`AutoformerDecoderLayer`]
@@ -1427,6 +1431,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
     "The bare Autoformer Model outputting raw hidden-states without any specific head on top.",
     AUTOFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class AutoformerModel(AutoformerPreTrainedModel):
     def __init__(self, config: AutoformerConfig):
         super().__init__(config)
@@ -1763,6 +1768,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
     "The Autoformer Model with a distribution head on top for time-series forecasting.",
     AUTOFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class AutoformerForPrediction(AutoformerPreTrainedModel):
     def __init__(self, config: AutoformerConfig):
         super().__init__(config)
@@ -2153,3 +2159,11 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
                 (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
             )
         )
+
+__all__ = [
+    "AutoformerPreTrainedModel",
+    "AutoformerEncoder",
+    "AutoformerDecoder",
+    "AutoformerModel",
+    "AutoformerForPrediction"
+]

@@ -42,6 +42,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_qwen2_moe import Qwen2MoeConfig
 
 
@@ -969,6 +970,7 @@ QWEN2MOE_START_DOCSTRING = r"""
     "The bare Qwen2MoE Model outputting raw hidden-states without any specific head on top.",
     QWEN2MOE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Qwen2MoePreTrainedModel(PreTrainedModel):
     config_class = Qwen2MoeConfig
     base_model_prefix = "model"
@@ -1068,6 +1070,7 @@ QWEN2MOE_INPUTS_DOCSTRING = r"""
     "The bare Qwen2MoE Model outputting raw hidden-states without any specific head on top.",
     QWEN2MOE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Qwen2MoeModel(Qwen2MoePreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Qwen2MoeDecoderLayer`]
@@ -1262,6 +1265,7 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1487,6 +1491,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
     QWEN2MOE_START_DOCSTRING,
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Qwen2Moe, LLAMA->QWEN2MOE
+@register(backends=("torch",))
 class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1593,3 +1598,10 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+__all__ = [
+    "Qwen2MoePreTrainedModel",
+    "Qwen2MoeModel",
+    "Qwen2MoeForCausalLM",
+    "Qwen2MoeForSequenceClassification"
+]

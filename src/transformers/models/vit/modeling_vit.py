@@ -40,6 +40,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_vit import ViTConfig
 
 
@@ -420,6 +421,7 @@ class ViTEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class ViTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -499,6 +501,7 @@ VIT_INPUTS_DOCSTRING = r"""
     "The bare ViT Model transformer outputting raw hidden-states without any specific head on top.",
     VIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ViTModel(ViTPreTrainedModel):
     def __init__(self, config: ViTConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
         super().__init__(config)
@@ -621,6 +624,7 @@ class ViTPooler(nn.Module):
     """,
     VIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ViTForMaskedImageModeling(ViTPreTrainedModel):
     def __init__(self, config: ViTConfig) -> None:
         super().__init__(config)
@@ -750,6 +754,7 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
     """,
     VIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ViTForImageClassification(ViTPreTrainedModel):
     def __init__(self, config: ViTConfig) -> None:
         super().__init__(config)
@@ -836,3 +841,10 @@ class ViTForImageClassification(ViTPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "ViTPreTrainedModel",
+    "ViTModel",
+    "ViTForMaskedImageModeling",
+    "ViTForImageClassification"
+]

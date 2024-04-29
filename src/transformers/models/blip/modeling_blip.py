@@ -33,6 +33,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_blip import BlipConfig, BlipTextConfig, BlipVisionConfig
 from .modeling_blip_text import BlipTextLMHeadModel, BlipTextModel
 
@@ -413,6 +414,7 @@ class BlipEncoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class BlipPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -637,6 +639,7 @@ class BlipEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class BlipVisionModel(BlipPreTrainedModel):
     main_input_name = "pixel_values"
     config_class = BlipVisionConfig
@@ -704,6 +707,7 @@ class BlipVisionModel(BlipPreTrainedModel):
 
 
 @add_start_docstrings(BLIP_START_DOCSTRING)
+@register(backends=("torch",))
 class BlipModel(BlipPreTrainedModel):
     config_class = BlipConfig
 
@@ -917,6 +921,7 @@ class BlipModel(BlipPreTrainedModel):
     """,
     BLIP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BlipForConditionalGeneration(BlipPreTrainedModel):
     config_class = BlipConfig
     _tied_weights_keys = ["text_decoder.cls.predictions.decoder.bias"]
@@ -1089,6 +1094,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
     """,
     BLIP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BlipForQuestionAnswering(BlipPreTrainedModel):
     config_class = BlipConfig
     _tied_weights_keys = ["text_decoder.cls.predictions.decoder.bias"]
@@ -1311,6 +1317,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
     """,
     BLIP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BlipForImageTextRetrieval(BlipPreTrainedModel):
     config_class = BlipConfig
 
@@ -1431,3 +1438,12 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
             attentions=vision_outputs.attentions,
             question_embeds=question_embeds,
         )
+
+__all__ = [
+    "BlipPreTrainedModel",
+    "BlipVisionModel",
+    "BlipModel",
+    "BlipForConditionalGeneration",
+    "BlipForQuestionAnswering",
+    "BlipForImageTextRetrieval"
+]

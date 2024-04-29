@@ -45,6 +45,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_electra import ElectraConfig
 
 
@@ -661,6 +662,7 @@ class ElectraGeneratorPredictions(nn.Module):
         return hidden_states
 
 
+@register(backends=("torch",))
 class ElectraPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -803,6 +805,7 @@ ELECTRA_INPUTS_DOCSTRING = r"""
     "Both the generator and discriminator checkpoints may be loaded into this model.",
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ElectraModel(ElectraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -956,6 +959,7 @@ class ElectraClassificationHead(nn.Module):
     """,
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ElectraForSequenceClassification(ElectraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1054,6 +1058,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
     """,
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ElectraForPreTraining(ElectraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1160,6 +1165,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
     """,
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ElectraForMaskedLM(ElectraPreTrainedModel):
     _tied_weights_keys = ["generator_lm_head.weight"]
 
@@ -1251,6 +1257,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
     """,
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ElectraForTokenClassification(ElectraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1332,6 +1339,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
     """,
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ElectraForQuestionAnswering(ElectraPreTrainedModel):
     config_class = ElectraConfig
     base_model_prefix = "electra"
@@ -1440,6 +1448,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
     """,
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ElectraForMultipleChoice(ElectraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1527,6 +1536,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
 @add_start_docstrings(
     """ELECTRA Model with a `language modeling` head on top for CLM fine-tuning.""", ELECTRA_START_DOCSTRING
 )
+@register(backends=("torch",))
 class ElectraForCausalLM(ElectraPreTrainedModel):
     _tied_weights_keys = ["generator_lm_head.weight"]
 
@@ -1684,3 +1694,15 @@ class ElectraForCausalLM(ElectraPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "ElectraPreTrainedModel",
+    "ElectraModel",
+    "ElectraForSequenceClassification",
+    "ElectraForPreTraining",
+    "ElectraForMaskedLM",
+    "ElectraForTokenClassification",
+    "ElectraForQuestionAnswering",
+    "ElectraForMultipleChoice",
+    "ElectraForCausalLM"
+]

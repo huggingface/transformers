@@ -39,6 +39,7 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
+from ...utils.import_utils import register
 from .configuration_conditional_detr import ConditionalDetrConfig
 
 
@@ -1136,6 +1137,7 @@ class MLP(nn.Module):
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrPreTrainedModel with Detr->ConditionalDetr
+@register(backends=("torch",))
 class ConditionalDetrPreTrainedModel(PreTrainedModel):
     config_class = ConditionalDetrConfig
     base_model_prefix = "model"
@@ -1222,6 +1224,7 @@ CONDITIONAL_DETR_INPUTS_DOCSTRING = r"""
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrEncoder with Detr->ConditionalDetr,DETR->ConditionalDETR
+@register(backends=("torch",))
 class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -1353,6 +1356,7 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`ConditionalDetrDecoderLayer`].
@@ -1578,6 +1582,7 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
     """,
     CONDITIONAL_DETR_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
@@ -1747,6 +1752,7 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
     """,
     CONDITIONAL_DETR_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
@@ -1935,6 +1941,7 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
     """,
     CONDITIONAL_DETR_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
@@ -2763,3 +2770,12 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     else:
         raise ValueError("Only 3-dimensional tensors are supported")
     return NestedTensor(tensor, mask)
+
+__all__ = [
+    "ConditionalDetrPreTrainedModel",
+    "ConditionalDetrEncoder",
+    "ConditionalDetrDecoder",
+    "ConditionalDetrModel",
+    "ConditionalDetrForObjectDetection",
+    "ConditionalDetrForSegmentation"
+]

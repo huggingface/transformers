@@ -47,6 +47,7 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_bert import BertConfig
 
 
@@ -757,6 +758,7 @@ class FlaxBertPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
+@register(backends=("flax",))
 class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1027,6 +1029,7 @@ class FlaxBertModule(nn.Module):
     "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
     BERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBertModel(FlaxBertPreTrainedModel):
     module_class = FlaxBertModule
 
@@ -1102,6 +1105,7 @@ class FlaxBertForPreTrainingModule(nn.Module):
     """,
     BERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBertForPreTraining(FlaxBertPreTrainedModel):
     module_class = FlaxBertForPreTrainingModule
 
@@ -1193,6 +1197,7 @@ class FlaxBertForMaskedLMModule(nn.Module):
 
 
 @add_start_docstrings("""Bert Model with a `language modeling` head on top.""", BERT_START_DOCSTRING)
+@register(backends=("flax",))
 class FlaxBertForMaskedLM(FlaxBertPreTrainedModel):
     module_class = FlaxBertForMaskedLMModule
 
@@ -1257,6 +1262,7 @@ class FlaxBertForNextSentencePredictionModule(nn.Module):
     """Bert Model with a `next sentence prediction (classification)` head on top.""",
     BERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBertForNextSentencePrediction(FlaxBertPreTrainedModel):
     module_class = FlaxBertForNextSentencePredictionModule
 
@@ -1360,6 +1366,7 @@ class FlaxBertForSequenceClassificationModule(nn.Module):
     """,
     BERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBertForSequenceClassification(FlaxBertPreTrainedModel):
     module_class = FlaxBertForSequenceClassificationModule
 
@@ -1440,6 +1447,7 @@ class FlaxBertForMultipleChoiceModule(nn.Module):
     """,
     BERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBertForMultipleChoice(FlaxBertPreTrainedModel):
     module_class = FlaxBertForMultipleChoiceModule
 
@@ -1518,6 +1526,7 @@ class FlaxBertForTokenClassificationModule(nn.Module):
     """,
     BERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBertForTokenClassification(FlaxBertPreTrainedModel):
     module_class = FlaxBertForTokenClassificationModule
 
@@ -1591,6 +1600,7 @@ class FlaxBertForQuestionAnsweringModule(nn.Module):
     """,
     BERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBertForQuestionAnswering(FlaxBertPreTrainedModel):
     module_class = FlaxBertForQuestionAnsweringModule
 
@@ -1675,6 +1685,7 @@ class FlaxBertForCausalLMModule(nn.Module):
     """,
     BERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBertForCausalLM(FlaxBertPreTrainedModel):
     module_class = FlaxBertForCausalLMModule
 
@@ -1711,3 +1722,16 @@ append_call_sample_docstring(
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxBertPreTrainedModel",
+    "FlaxBertModel",
+    "FlaxBertForPreTraining",
+    "FlaxBertForMaskedLM",
+    "FlaxBertForNextSentencePrediction",
+    "FlaxBertForSequenceClassification",
+    "FlaxBertForMultipleChoice",
+    "FlaxBertForTokenClassification",
+    "FlaxBertForQuestionAnswering",
+    "FlaxBertForCausalLM"
+]

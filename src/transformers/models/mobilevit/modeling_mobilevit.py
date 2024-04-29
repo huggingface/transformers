@@ -41,6 +41,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_mobilevit import MobileViTConfig
 
 
@@ -634,6 +635,7 @@ class MobileViTEncoder(nn.Module):
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
+@register(backends=("torch",))
 class MobileViTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -687,6 +689,7 @@ MOBILEVIT_INPUTS_DOCSTRING = r"""
     "The bare MobileViT model outputting raw hidden-states without any specific head on top.",
     MOBILEVIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MobileViTModel(MobileViTPreTrainedModel):
     def __init__(self, config: MobileViTConfig, expand_output: bool = True):
         super().__init__(config)
@@ -781,6 +784,7 @@ class MobileViTModel(MobileViTPreTrainedModel):
     """,
     MOBILEVIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MobileViTForImageClassification(MobileViTPreTrainedModel):
     def __init__(self, config: MobileViTConfig) -> None:
         super().__init__(config)
@@ -976,6 +980,7 @@ class MobileViTDeepLabV3(nn.Module):
     """,
     MOBILEVIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
     def __init__(self, config: MobileViTConfig) -> None:
         super().__init__(config)
@@ -1065,3 +1070,10 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+__all__ = [
+    "MobileViTPreTrainedModel",
+    "MobileViTModel",
+    "MobileViTForImageClassification",
+    "MobileViTForSemanticSegmentation"
+]

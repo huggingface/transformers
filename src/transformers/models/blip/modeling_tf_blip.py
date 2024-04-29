@@ -40,6 +40,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_blip import BlipConfig, BlipTextConfig, BlipVisionConfig
 from .modeling_tf_blip_text import BLIP_TEXT_INPUTS_DOCSTRING, TFBlipTextLMHeadModel, TFBlipTextModel
 
@@ -527,6 +528,7 @@ class TFBlipEncoderLayer(keras.layers.Layer):
                 self.layer_norm2.build([None, None, self.embed_dim])
 
 
+@register(backends=("tf",))
 class TFBlipPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -696,6 +698,7 @@ class TFBlipEncoder(keras.layers.Layer):
                     layer.build(None)
 
 
+@register(backends=("tf",))
 class TFBlipVisionModel(TFBlipPreTrainedModel):
     main_input_name = "pixel_values"
     config_class = BlipVisionConfig
@@ -930,6 +933,7 @@ class TFBlipMainLayer(keras.layers.Layer):
         )
 
 
+@register(backends=("tf",))
 class TFBlipModel(TFBlipPreTrainedModel):
     config_class = BlipConfig
     _keys_to_ignore_on_load_missing = [r"text_decoder.cls.predictions.decoder.bias"]
@@ -1093,6 +1097,7 @@ class TFBlipModel(TFBlipPreTrainedModel):
     """,
     BLIP_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
     config_class = BlipConfig
     _keys_to_ignore_on_load_missing = [r"text_decoder.cls.predictions.decoder.bias"]
@@ -1283,6 +1288,7 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
     """,
     BLIP_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
     config_class = BlipConfig
     _keys_to_ignore_on_load_missing = [r"text_decoder.cls.predictions.decoder.bias"]
@@ -1538,6 +1544,7 @@ class TFBlipForQuestionAnswering(TFBlipPreTrainedModel):
     """,
     BLIP_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFBlipForImageTextRetrieval(TFBlipPreTrainedModel):
     config_class = BlipConfig
 
@@ -1699,3 +1706,12 @@ class TFBlipForImageTextRetrieval(TFBlipPreTrainedModel):
         if getattr(self, "itm_head", None) is not None:
             with tf.name_scope(self.itm_head.name):
                 self.itm_head.build([None, None, self.config.text_config.hidden_size])
+
+__all__ = [
+    "TFBlipPreTrainedModel",
+    "TFBlipVisionModel",
+    "TFBlipModel",
+    "TFBlipForConditionalGeneration",
+    "TFBlipForQuestionAnswering",
+    "TFBlipForImageTextRetrieval"
+]

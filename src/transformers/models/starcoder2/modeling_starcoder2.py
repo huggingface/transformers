@@ -42,6 +42,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_starcoder2 import Starcoder2Config
 
 
@@ -791,6 +792,7 @@ STARCODER2_START_DOCSTRING = r"""
     STARCODER2_START_DOCSTRING,
 )
 # Copied from transformers.models.mistral.modeling_mistral.MistralPreTrainedModel with Mistral->Starcoder2
+@register(backends=("torch",))
 class Starcoder2PreTrainedModel(PreTrainedModel):
     config_class = Starcoder2Config
     base_model_prefix = "model"
@@ -887,6 +889,7 @@ STARCODER2_INPUTS_DOCSTRING = r"""
     "The bare Starcoder2 Model outputting raw hidden-states without any specific head on top.",
     STARCODER2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Starcoder2Model(Starcoder2PreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Starcoder2DecoderLayer`]
@@ -1068,6 +1071,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
 
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralForCausalLM with MISTRAL->STARCODER2,Mistral-7B-v0.1->starcoder2-7b_16k,Mistral->Starcoder2,mistralai->bigcode
+@register(backends=("torch",))
 class Starcoder2ForCausalLM(Starcoder2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1270,6 +1274,7 @@ class Starcoder2ForCausalLM(Starcoder2PreTrainedModel):
     STARCODER2_START_DOCSTRING,
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Starcoder2, LLAMA->STARCODER2
+@register(backends=("torch",))
 class Starcoder2ForSequenceClassification(Starcoder2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1376,3 +1381,10 @@ class Starcoder2ForSequenceClassification(Starcoder2PreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+__all__ = [
+    "Starcoder2PreTrainedModel",
+    "Starcoder2Model",
+    "Starcoder2ForCausalLM",
+    "Starcoder2ForSequenceClassification"
+]

@@ -44,6 +44,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 
 
@@ -1025,6 +1026,7 @@ class TFCLIPMainLayer(keras.layers.Layer):
         )
 
 
+@register(backends=("tf",))
 class TFCLIPPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1179,6 +1181,7 @@ CLIP_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("tf",))
 class TFCLIPTextModel(TFCLIPPreTrainedModel):
     config_class = CLIPTextConfig
 
@@ -1239,6 +1242,7 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
                 self.clip.build(None)
 
 
+@register(backends=("tf",))
 class TFCLIPVisionModel(TFCLIPPreTrainedModel):
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
@@ -1302,6 +1306,7 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
 
 
 @add_start_docstrings(CLIP_START_DOCSTRING)
+@register(backends=("tf",))
 class TFCLIPModel(TFCLIPPreTrainedModel):
     config_class = CLIPConfig
 
@@ -1459,3 +1464,10 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         if getattr(self, "clip", None) is not None:
             with tf.name_scope(self.clip.name):
                 self.clip.build(None)
+
+__all__ = [
+    "TFCLIPPreTrainedModel",
+    "TFCLIPTextModel",
+    "TFCLIPVisionModel",
+    "TFCLIPModel"
+]

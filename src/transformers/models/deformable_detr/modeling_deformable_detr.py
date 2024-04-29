@@ -47,6 +47,7 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
 from ...utils import is_accelerate_available, is_ninja_available, logging
 from ...utils.backbone_utils import load_backbone
+from ...utils.import_utils import register
 from .configuration_deformable_detr import DeformableDetrConfig
 
 
@@ -1090,6 +1091,7 @@ class DeformableDetrClassificationHead(nn.Module):
         return hidden_states
 
 
+@register(backends=("torch",))
 class DeformableDetrPreTrainedModel(PreTrainedModel):
     config_class = DeformableDetrConfig
     base_model_prefix = "model"
@@ -1178,6 +1180,7 @@ DEFORMABLE_DETR_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("torch",))
 class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* deformable attention layers. Each layer is a
@@ -1321,6 +1324,7 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`DeformableDetrDecoderLayer`].
@@ -1516,6 +1520,7 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
     """,
     DEFORMABLE_DETR_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DeformableDetrModel(DeformableDetrPreTrainedModel):
     def __init__(self, config: DeformableDetrConfig):
         super().__init__(config)
@@ -1872,6 +1877,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
     """,
     DEFORMABLE_DETR_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     _tied_weights_keys = [r"bbox_embed\.[1-9]\d*", r"class_embed\.[1-9]\d*"]
@@ -2545,3 +2551,11 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     else:
         raise ValueError("Only 3-dimensional tensors are supported")
     return NestedTensor(tensor, mask)
+
+__all__ = [
+    "DeformableDetrPreTrainedModel",
+    "DeformableDetrEncoder",
+    "DeformableDetrDecoder",
+    "DeformableDetrModel",
+    "DeformableDetrForObjectDetection"
+]

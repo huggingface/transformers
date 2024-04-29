@@ -30,6 +30,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_vipllava import VipLlavaConfig
 
@@ -130,6 +131,7 @@ VIPLLAVA_START_DOCSTRING = r"""
     VIPLLAVA_START_DOCSTRING,
 )
 # Copied from transformers.models.llava.modeling_llava.LlavaPreTrainedModel with Llava->VipLlava,llava->vipllava
+@register(backends=("torch",))
 class VipLlavaPreTrainedModel(PreTrainedModel):
     config_class = VipLlavaConfig
     base_model_prefix = "model"
@@ -240,6 +242,7 @@ VIPLLAVA_INPUTS_DOCSTRING = r"""
     VIPLLAVA_START_DOCSTRING,
 )
 # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration with LLAVA->VIPLLAVA,Llava->VipLlava
+@register(backends=("torch",))
 class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
     def __init__(self, config: VipLlavaConfig):
         super().__init__(config)
@@ -567,3 +570,8 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
 
     def _reorder_cache(self, *args, **kwargs):
         return self.language_model._reorder_cache(*args, **kwargs)
+
+__all__ = [
+    "VipLlavaPreTrainedModel",
+    "VipLlavaForConditionalGeneration"
+]

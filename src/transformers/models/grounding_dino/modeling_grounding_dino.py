@@ -44,6 +44,7 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
 from ...utils import is_accelerate_available, is_ninja_available, logging
 from ...utils.backbone_utils import load_backbone
+from ...utils.import_utils import register
 from ..auto import AutoModel
 from .configuration_grounding_dino import GroundingDinoConfig
 
@@ -1495,6 +1496,7 @@ class GroundingDinoContrastiveEmbedding(nn.Module):
         return new_output
 
 
+@register(backends=("torch",))
 class GroundingDinoPreTrainedModel(PreTrainedModel):
     config_class = GroundingDinoConfig
     base_model_prefix = "model"
@@ -1619,6 +1621,7 @@ GROUNDING_DINO_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("torch",))
 class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* deformable attention layers. Each layer is a
@@ -1787,6 +1790,7 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`GroundingDinoDecoderLayer`].
@@ -2072,6 +2076,7 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
     """,
     GROUNDING_DINO_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GroundingDinoModel(GroundingDinoPreTrainedModel):
     def __init__(self, config: GroundingDinoConfig):
         super().__init__(config)
@@ -2921,6 +2926,7 @@ class GroundingDinoLoss(nn.Module):
     """,
     GROUNDING_DINO_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # the bbox_embed in the decoder are all clones though
@@ -3141,3 +3147,11 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         )
 
         return dict_outputs
+
+__all__ = [
+    "GroundingDinoPreTrainedModel",
+    "GroundingDinoEncoder",
+    "GroundingDinoDecoder",
+    "GroundingDinoModel",
+    "GroundingDinoForObjectDetection"
+]

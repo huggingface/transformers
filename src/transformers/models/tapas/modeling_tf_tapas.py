@@ -52,6 +52,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ...utils.import_utils import register
 from .configuration_tapas import TapasConfig
 
 
@@ -962,6 +963,7 @@ class TFTapasMainLayer(keras.layers.Layer):
                 self.pooler.build(None)
 
 
+@register(backends=("tf",))
 class TFTapasPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1080,6 +1082,7 @@ TAPAS_INPUTS_DOCSTRING = r"""
     "The bare Tapas Model transformer outputting raw hidden-states without any specific head on top.",
     TAPAS_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFTapasModel(TFTapasPreTrainedModel):
     def __init__(self, config: TapasConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1152,6 +1155,7 @@ class TFTapasModel(TFTapasPreTrainedModel):
 
 
 @add_start_docstrings("""Tapas Model with a `language modeling` head on top.""", TAPAS_START_DOCSTRING)
+@register(backends=("tf",))
 class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config: TapasConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1363,6 +1367,7 @@ class TFTapasComputeColumnLogits(keras.layers.Layer):
     """,
     TAPAS_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
     def __init__(self, config: TapasConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1705,6 +1710,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
     """,
     TAPAS_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: TapasConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -2448,3 +2454,11 @@ def _calculate_regression_loss(
         )
     per_example_answer_loss_scaled = config.answer_loss_importance * (per_example_answer_loss * aggregate_mask)
     return per_example_answer_loss_scaled, large_answer_loss_mask
+
+__all__ = [
+    "TFTapasPreTrainedModel",
+    "TFTapasModel",
+    "TFTapasForMaskedLM",
+    "TFTapasForQuestionAnswering",
+    "TFTapasForSequenceClassification"
+]

@@ -31,6 +31,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -322,6 +323,7 @@ class SuperPointDescriptorDecoder(nn.Module):
         return descriptors
 
 
+@register(backends=("torch",))
 class SuperPointPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -390,6 +392,7 @@ Args:
     "SuperPoint model outputting keypoints and descriptors.",
     SUPERPOINT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
     """
     SuperPoint model. It consists of a SuperPointEncoder, a SuperPointInterestPointDecoder and a
@@ -498,3 +501,8 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
             mask=mask,
             hidden_states=hidden_states,
         )
+
+__all__ = [
+    "SuperPointPreTrainedModel",
+    "SuperPointForKeypointDetection"
+]

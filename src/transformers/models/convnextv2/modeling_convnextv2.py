@@ -38,6 +38,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import BackboneMixin
+from ...utils.import_utils import register
 from .configuration_convnextv2 import ConvNextV2Config
 
 
@@ -292,6 +293,7 @@ class ConvNextV2Encoder(nn.Module):
 
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->ConvNextV2, convnext->convnextv2
+@register(backends=("torch",))
 class ConvNextV2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -345,6 +347,7 @@ CONVNEXTV2_INPUTS_DOCSTRING = r"""
     CONVNEXTV2_START_DOCSTRING,
 )
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextModel with CONVNEXT->CONVNEXTV2, ConvNext->ConvNextV2
+@register(backends=("torch",))
 class ConvNextV2Model(ConvNextV2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -412,6 +415,7 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
     CONVNEXTV2_START_DOCSTRING,
 )
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextForImageClassification with CONVNEXT->CONVNEXTV2,ConvNext->ConvNextV2,convnext->convnextv2
+@register(backends=("torch",))
 class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -495,6 +499,7 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
     CONVNEXTV2_START_DOCSTRING,
 )
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextBackbone with CONVNEXT->CONVNEXTV2,ConvNext->ConvNextV2,facebook/convnext-tiny-224->facebook/convnextv2-tiny-1k-224
+@register(backends=("torch",))
 class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
@@ -573,3 +578,10 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
             hidden_states=hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+__all__ = [
+    "ConvNextV2PreTrainedModel",
+    "ConvNextV2Model",
+    "ConvNextV2ForImageClassification",
+    "ConvNextV2Backbone"
+]

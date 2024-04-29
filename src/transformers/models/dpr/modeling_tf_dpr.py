@@ -31,6 +31,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from ..bert.modeling_tf_bert import TFBertMainLayer
 from .configuration_dpr import DPRConfig
 
@@ -293,6 +294,7 @@ class TFDPRSpanPredictorLayer(keras.layers.Layer):
                 self.qa_classifier.build([None, None, self.encoder.embeddings_size])
 
 
+@register(backends=("tf",))
 class TFDPRSpanPredictor(TFPreTrainedModel):
     base_model_prefix = "encoder"
 
@@ -325,6 +327,7 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
         return outputs
 
 
+@register(backends=("tf",))
 class TFDPREncoder(TFPreTrainedModel):
     base_model_prefix = "encoder"
 
@@ -362,6 +365,7 @@ class TFDPREncoder(TFPreTrainedModel):
 ##################
 
 
+@register(backends=("tf",))
 class TFDPRPretrainedContextEncoder(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -372,6 +376,7 @@ class TFDPRPretrainedContextEncoder(TFPreTrainedModel):
     base_model_prefix = "ctx_encoder"
 
 
+@register(backends=("tf",))
 class TFDPRPretrainedQuestionEncoder(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -382,6 +387,7 @@ class TFDPRPretrainedQuestionEncoder(TFPreTrainedModel):
     base_model_prefix = "question_encoder"
 
 
+@register(backends=("tf",))
 class TFDPRPretrainedReader(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -795,3 +801,11 @@ class TFDPRReader(TFDPRPretrainedReader):
         if getattr(self, "span_predictor", None) is not None:
             with tf.name_scope(self.span_predictor.name):
                 self.span_predictor.build(None)
+
+__all__ = [
+    "TFDPRSpanPredictor",
+    "TFDPREncoder",
+    "TFDPRPretrainedContextEncoder",
+    "TFDPRPretrainedQuestionEncoder",
+    "TFDPRPretrainedReader"
+]

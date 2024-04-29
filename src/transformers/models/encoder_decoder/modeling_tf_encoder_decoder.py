@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_tf_auto import TFAutoModel, TFAutoModelForCausalLM
 from .configuration_encoder_decoder import EncoderDecoderConfig
@@ -191,6 +192,7 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_to
 
 
 @add_start_docstrings(ENCODER_DECODER_START_DOCSTRING)
+@register(backends=("tf",))
 class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
     r"""
     [`TFEncoderDecoderModel`] is a generic model class that will be instantiated as a transformer architecture with one
@@ -661,3 +663,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         if getattr(self, "decoder", None) is not None:
             with tf.name_scope(self.decoder.name):
                 self.decoder.build(None)
+
+__all__ = [
+    "TFEncoderDecoderModel"
+]

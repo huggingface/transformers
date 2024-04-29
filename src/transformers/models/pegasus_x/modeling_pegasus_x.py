@@ -40,6 +40,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_pegasus_x import PegasusXConfig
 
 
@@ -733,6 +734,7 @@ class PegasusXDecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class PegasusXPreTrainedModel(PreTrainedModel):
     config_class = PegasusXConfig
     base_model_prefix = "model"
@@ -863,6 +865,7 @@ PEGASUS_X_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("torch",))
 class PegasusXEncoder(PegasusXPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -1072,6 +1075,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class PegasusXDecoder(PegasusXPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`PegasusDecoderLayer`]
@@ -1300,6 +1304,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
     "The bare PEGASUS-X Model outputting raw hidden-states without any specific head on top.",
     PEGASUS_X_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PegasusXModel(PegasusXPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1443,6 +1448,7 @@ class PegasusXModel(PegasusXPreTrainedModel):
 
 
 @add_start_docstrings("The PEGASUS-X for conditional generation (e.g. summarization).", PEGASUS_X_START_DOCSTRING)
+@register(backends=("torch",))
 class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
     base_model_prefix = "model"
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
@@ -1613,6 +1619,7 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->PegasusX
+@register(backends=("torch",))
 class PegasusXDecoderWrapper(PegasusXPreTrainedModel):
     """
     This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
@@ -1625,3 +1632,12 @@ class PegasusXDecoderWrapper(PegasusXPreTrainedModel):
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
+
+__all__ = [
+    "PegasusXPreTrainedModel",
+    "PegasusXEncoder",
+    "PegasusXDecoder",
+    "PegasusXModel",
+    "PegasusXForConditionalGeneration",
+    "PegasusXDecoderWrapper"
+]

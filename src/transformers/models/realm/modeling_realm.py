@@ -33,6 +33,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_realm import RealmConfig
 
 
@@ -954,6 +955,7 @@ REALM_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("torch",))
 class RealmPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -994,6 +996,7 @@ class RealmPreTrainedModel(PreTrainedModel):
         return flattened_inputs
 
 
+@register(backends=("torch",))
 class RealmBertModel(RealmPreTrainedModel):
     """
     Same as the original BertModel but remove docstrings.
@@ -1141,6 +1144,7 @@ class RealmBertModel(RealmPreTrainedModel):
     "The embedder of REALM outputting projected score that will be used to calculate relevance score.",
     REALM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RealmEmbedder(RealmPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.bias"]
 
@@ -1223,6 +1227,7 @@ class RealmEmbedder(RealmPreTrainedModel):
     "The scorer of REALM outputting relevance scores representing the score of document candidates (before softmax).",
     REALM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RealmScorer(RealmPreTrainedModel):
     r"""
     Args:
@@ -1371,6 +1376,7 @@ class RealmScorer(RealmPreTrainedModel):
     " loss.",
     REALM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder"]
 
@@ -1521,6 +1527,7 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
 
 
 @add_start_docstrings("The reader of REALM.", REALM_START_DOCSTRING)
+@register(backends=("torch",))
 class RealmReader(RealmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1725,6 +1732,7 @@ REALM_FOR_OPEN_QA_DOCSTRING = r"""
     "`RealmForOpenQA` for end-to-end open domain question answering.",
     REALM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RealmForOpenQA(RealmPreTrainedModel):
     def __init__(self, config, retriever=None):
         super().__init__(config)
@@ -1858,3 +1866,13 @@ class RealmForOpenQA(RealmPreTrainedModel):
             reader_output=reader_output,
             predicted_answer_ids=predicted_answer_ids,
         )
+
+__all__ = [
+    "RealmPreTrainedModel",
+    "RealmBertModel",
+    "RealmEmbedder",
+    "RealmScorer",
+    "RealmKnowledgeAugEncoder",
+    "RealmReader",
+    "RealmForOpenQA"
+]

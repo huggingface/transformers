@@ -42,6 +42,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_data2vec_text import Data2VecTextConfig
 
 
@@ -583,6 +584,7 @@ class Data2VecTextPooler(nn.Module):
         return pooled_output
 
 
+@register(backends=("torch",))
 class Data2VecTextPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -686,6 +688,7 @@ DATA2VECTEXT_INPUTS_DOCSTRING = r"""
     "The bare Data2VecText Model for text transformer outputting raw hidden-states without any specific head on top.",
     DATA2VECTEXT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Data2VecTextModel(Data2VecTextPreTrainedModel):
     """
 
@@ -869,6 +872,7 @@ class Data2VecTextModel(Data2VecTextPreTrainedModel):
 @add_start_docstrings(
     """Data2VecText Model with a `language modeling` head on top for CLM fine-tuning.""", DATA2VECTEXT_START_DOCSTRING
 )
+@register(backends=("torch",))
 class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
@@ -1029,6 +1033,7 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel):
 
 
 @add_start_docstrings("""data2vec Model with a `language modeling` head on top.""", DATA2VECTEXT_START_DOCSTRING)
+@register(backends=("torch",))
 class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
@@ -1159,6 +1164,7 @@ class Data2VecTextLMHead(nn.Module):
     """,
     DATA2VECTEXT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1256,6 +1262,7 @@ class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
     """,
     DATA2VECTEXT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1350,6 +1357,7 @@ class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
     """,
     DATA2VECTEXT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1456,6 +1464,7 @@ class Data2VecTextClassificationHead(nn.Module):
     """,
     DATA2VECTEXT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Data2VecTextForQuestionAnswering(Data2VecTextPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1562,3 +1571,14 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
+__all__ = [
+    "Data2VecTextPreTrainedModel",
+    "Data2VecTextModel",
+    "Data2VecTextForCausalLM",
+    "Data2VecTextForMaskedLM",
+    "Data2VecTextForSequenceClassification",
+    "Data2VecTextForMultipleChoice",
+    "Data2VecTextForTokenClassification",
+    "Data2VecTextForQuestionAnswering"
+]

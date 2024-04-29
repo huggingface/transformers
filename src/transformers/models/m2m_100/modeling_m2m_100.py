@@ -42,6 +42,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_m2m_100 import M2M100Config
 
 
@@ -724,6 +725,7 @@ class M2M100DecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class M2M100PreTrainedModel(PreTrainedModel):
     config_class = M2M100Config
     base_model_prefix = "model"
@@ -867,6 +869,7 @@ M2M_100_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("torch",))
 class M2M100Encoder(M2M100PreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -1046,6 +1049,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class M2M100Decoder(M2M100PreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`M2M100DecoderLayer`]
@@ -1314,6 +1318,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
     "The bare M2M100 Model outputting raw hidden-states without any specific head on top.",
     M2M_100_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class M2M100Model(M2M100PreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1436,6 +1441,7 @@ class M2M100Model(M2M100PreTrainedModel):
 @add_start_docstrings(
     "The M2M100 Model with a language modeling head. Can be used for summarization.", M2M_100_START_DOCSTRING
 )
+@register(backends=("torch",))
 class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
     base_model_prefix = "model"
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
@@ -1585,3 +1591,11 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "M2M100PreTrainedModel",
+    "M2M100Encoder",
+    "M2M100Decoder",
+    "M2M100Model",
+    "M2M100ForConditionalGeneration"
+]

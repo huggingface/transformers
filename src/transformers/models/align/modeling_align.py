@@ -38,6 +38,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_align import AlignConfig, AlignTextConfig, AlignVisionConfig
 
 
@@ -1168,6 +1169,7 @@ class AlignTextPooler(nn.Module):
         return pooled_output
 
 
+@register(backends=("torch",))
 class AlignPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1201,6 +1203,7 @@ class AlignPreTrainedModel(PreTrainedModel):
     """The text model from ALIGN without any head or projection on top.""",
     ALIGN_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class AlignTextModel(AlignPreTrainedModel):
     config_class = AlignTextConfig
 
@@ -1327,6 +1330,7 @@ class AlignTextModel(AlignPreTrainedModel):
     """The vision model from ALIGN without any head or projection on top.""",
     ALIGN_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class AlignVisionModel(AlignPreTrainedModel):
     config_class = AlignVisionConfig
     main_input_name = "pixel_values"
@@ -1413,6 +1417,7 @@ class AlignVisionModel(AlignPreTrainedModel):
 
 
 @add_start_docstrings(ALIGN_START_DOCSTRING)
+@register(backends=("torch",))
 class AlignModel(AlignPreTrainedModel):
     config_class = AlignConfig
 
@@ -1638,3 +1643,10 @@ class AlignModel(AlignPreTrainedModel):
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )
+
+__all__ = [
+    "AlignPreTrainedModel",
+    "AlignTextModel",
+    "AlignVisionModel",
+    "AlignModel"
+]

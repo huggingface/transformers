@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_flaubert import FlaubertConfig
 
 
@@ -332,6 +333,7 @@ class FlaubertPredLayer(nn.Module):
 
 
 # Copied from transformers.models.xlm.modeling_xlm.XLMPreTrainedModel with XLM->Flaubert
+@register(backends=("torch",))
 class FlaubertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -376,6 +378,7 @@ class FlaubertPreTrainedModel(PreTrainedModel):
             )
 
 
+@register(backends=("torch",))
 class FlaubertModel(FlaubertPreTrainedModel):
     def __init__(self, config):  # , dico, is_encoder, with_output):
         super().__init__(config)
@@ -647,6 +650,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
     FLAUBERT_START_DOCSTRING,
 )
 # Copied transformers.models.xlm.modeling_xlm.XLMWithLMHeadModel with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
+@register(backends=("torch",))
 class FlaubertWithLMHeadModel(FlaubertPreTrainedModel):
     _tied_weights_keys = ["pred_layer.proj.weight"]
 
@@ -745,6 +749,7 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel):
     FLAUBERT_START_DOCSTRING,
 )
 # Copied transformers.models.xlm.modeling_xlm.XLMForSequenceClassification with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
+@register(backends=("torch",))
 class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -848,6 +853,7 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
     FLAUBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.xlm.modeling_xlm.XLMForTokenClassification with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
+@register(backends=("torch",))
 class FlaubertForTokenClassification(FlaubertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -933,6 +939,7 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
     FLAUBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.xlm.modeling_xlm.XLMForQuestionAnsweringSimple with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
+@register(backends=("torch",))
 class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1082,6 +1089,7 @@ class FlaubertForQuestionAnsweringOutput(ModelOutput):
 
 
 # Copied from transformer.models.xlm.modeling_xlm.XLMForQuestionAnswering with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
+@register(backends=("torch",))
 class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1204,6 +1212,7 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
     FLAUBERT_START_DOCSTRING,
 )
 # Copied from transformer.models.xlm.modeling_xlm.XLMForMultipleChoice with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
+@register(backends=("torch",))
 class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1300,3 +1309,14 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+__all__ = [
+    "FlaubertPreTrainedModel",
+    "FlaubertModel",
+    "FlaubertWithLMHeadModel",
+    "FlaubertForSequenceClassification",
+    "FlaubertForTokenClassification",
+    "FlaubertForQuestionAnsweringSimple",
+    "FlaubertForQuestionAnswering",
+    "FlaubertForMultipleChoice"
+]

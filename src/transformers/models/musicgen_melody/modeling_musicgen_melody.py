@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel, AutoModelForTextEncoding
 from .configuration_musicgen_melody import MusicgenMelodyConfig, MusicgenMelodyDecoderConfig
@@ -754,6 +755,7 @@ class MusicgenMelodyDecoderLayer(nn.Module):
 
 
 # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenPreTrainedModel with Musicgen->MusicgenMelody
+@register(backends=("torch",))
 class MusicgenMelodyPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -952,6 +954,7 @@ MUSICGEN_MELODY_DECODER_INPUTS_DOCSTRING = r"""
 
 
 # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenDecoder with MUSICGEN->MUSICGEN_MELODY,Musicgen->MusicgenMelody
+@register(backends=("torch",))
 class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MusicgenMelodyDecoderLayer`]
@@ -1150,6 +1153,7 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
     MUSICGEN_MELODY_START_DOCSTRING,
 )
 # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenModel with MUSICGEN->MUSICGEN_MELODY,Musicgen->MusicgenMelody
+@register(backends=("torch",))
 class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
     def __init__(self, config: MusicgenMelodyDecoderConfig):
         super().__init__(config)
@@ -1220,6 +1224,7 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
     MUSICGEN_MELODY_START_DOCSTRING,
 )
 # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenForCausalLM with MUSICGEN->MUSICGEN_MELODY,Musicgen->MusicgenMelody,MusicGen->Musicgen Melody
+@register(backends=("torch",))
 class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
     def __init__(self, config: MusicgenMelodyDecoderConfig):
         super().__init__(config)
@@ -1755,6 +1760,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
         decoder (`Optional[MusicgenMelodyForCausalLM]`, *optional*): MusicGen Melody decoder used to generate audio codes.
     """,
 )
+@register(backends=("torch",))
 class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
     config_class = MusicgenMelodyConfig
     main_input_name = "input_ids"
@@ -2799,3 +2805,11 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             )
 
         return model_kwargs
+
+__all__ = [
+    "MusicgenMelodyPreTrainedModel",
+    "MusicgenMelodyDecoder",
+    "MusicgenMelodyModel",
+    "MusicgenMelodyForCausalLM",
+    "MusicgenMelodyForConditionalGeneration"
+]

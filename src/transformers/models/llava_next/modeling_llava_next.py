@@ -32,6 +32,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava_next import LlavaNextConfig
 
@@ -183,6 +184,7 @@ LLAVA_NEXT_START_DOCSTRING = r"""
     LLAVA_NEXT_START_DOCSTRING,
 )
 # Copied from transformers.models.llava.modeling_llava.LlavaPreTrainedModel with Llava->LlavaNext,llava->llava_next
+@register(backends=("torch",))
 class LlavaNextPreTrainedModel(PreTrainedModel):
     config_class = LlavaNextConfig
     base_model_prefix = "model"
@@ -300,6 +302,7 @@ LLAVA_NEXT_INPUTS_DOCSTRING = r"""
     """The LLAVA-NeXT model which consists of a vision backbone and a language model.""",
     LLAVA_NEXT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
     def __init__(self, config: LlavaNextConfig):
         super().__init__(config)
@@ -699,3 +702,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration._reorder_cache
     def _reorder_cache(self, *args, **kwargs):
         return self.language_model._reorder_cache(*args, **kwargs)
+
+__all__ = [
+    "LlavaNextPreTrainedModel",
+    "LlavaNextForConditionalGeneration"
+]

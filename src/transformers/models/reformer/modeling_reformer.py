@@ -42,6 +42,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_reformer import ReformerConfig
 
 
@@ -1773,6 +1774,7 @@ class ReformerOnlyLMHead(nn.Module):
         self.bias = self.decoder.bias
 
 
+@register(backends=("torch",))
 class ReformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1970,6 +1972,7 @@ REFORMER_INPUTS_DOCSTRING = r"""
     "The bare Reformer Model transformer outputting raw hidden-stateswithout any specific head on top.",
     REFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ReformerModel(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2182,6 +2185,7 @@ class ReformerModel(ReformerPreTrainedModel):
 
 
 @add_start_docstrings("""Reformer Model with a `language modeling` head on top.""", REFORMER_START_DOCSTRING)
+@register(backends=("torch",))
 class ReformerModelWithLMHead(ReformerPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
@@ -2308,6 +2312,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
 
 @add_start_docstrings("""Reformer Model with a `language modeling` head on top.""", REFORMER_START_DOCSTRING)
+@register(backends=("torch",))
 class ReformerForMaskedLM(ReformerPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
@@ -2438,6 +2443,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
     """,
     REFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ReformerForSequenceClassification(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2585,6 +2591,7 @@ class ReformerClassificationHead(nn.Module):
     """,
     REFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ReformerForQuestionAnswering(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2677,3 +2684,12 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
             hidden_states=reformer_outputs.hidden_states,
             attentions=reformer_outputs.attentions,
         )
+
+__all__ = [
+    "ReformerPreTrainedModel",
+    "ReformerModel",
+    "ReformerModelWithLMHead",
+    "ReformerForMaskedLM",
+    "ReformerForSequenceClassification",
+    "ReformerForQuestionAnswering"
+]

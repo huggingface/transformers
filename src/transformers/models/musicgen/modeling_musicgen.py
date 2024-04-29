@@ -51,6 +51,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from .configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig
@@ -780,6 +781,7 @@ class MusicgenDecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class MusicgenPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1005,6 +1007,7 @@ MUSICGEN_DECODER_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("torch",))
 class MusicgenDecoder(MusicgenPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MusicgenDecoderLayer`]
@@ -1223,6 +1226,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
     "The bare Musicgen decoder model outputting raw hidden-states without any specific head on top.",
     MUSICGEN_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MusicgenModel(MusicgenPreTrainedModel):
     def __init__(self, config: MusicgenDecoderConfig):
         super().__init__(config)
@@ -1294,6 +1298,7 @@ class MusicgenModel(MusicgenPreTrainedModel):
     "The MusicGen decoder model with a language modelling head on top.",
     MUSICGEN_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MusicgenForCausalLM(MusicgenPreTrainedModel):
     def __init__(self, config: MusicgenDecoderConfig):
         super().__init__(config)
@@ -1814,6 +1819,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
     "for music generation tasks with one or both of text and audio prompts.",
     MUSICGEN_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MusicgenForConditionalGeneration(PreTrainedModel):
     config_class = MusicgenConfig
     base_model_prefix = "encoder_decoder"
@@ -2946,3 +2952,11 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             attention_mask=attention_mask,
             guidance_scale=1.0,
         )
+
+__all__ = [
+    "MusicgenPreTrainedModel",
+    "MusicgenDecoder",
+    "MusicgenModel",
+    "MusicgenForCausalLM",
+    "MusicgenForConditionalGeneration"
+]

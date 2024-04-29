@@ -28,6 +28,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Ima
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_vivit import VivitConfig
 
 
@@ -377,6 +378,7 @@ class VivitPooler(nn.Module):
         return pooled_output
 
 
+@register(backends=("torch",))
 class VivitPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -446,6 +448,7 @@ VIVIT_INPUTS_DOCSTRING = r"""
     "The bare ViViT Transformer model outputting raw hidden-states without any specific head on top.",
     VIVIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class VivitModel(VivitPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
@@ -600,6 +603,7 @@ class VivitModel(VivitPreTrainedModel):
 [CLS] token) e.g. for Kinetics-400.""",
     VIVIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class VivitForVideoClassification(VivitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -742,3 +746,9 @@ class VivitForVideoClassification(VivitPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "VivitPreTrainedModel",
+    "VivitModel",
+    "VivitForVideoClassification"
+]

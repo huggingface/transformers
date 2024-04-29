@@ -45,6 +45,7 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_electra import ElectraConfig
 
 
@@ -673,6 +674,7 @@ class FlaxElectraDiscriminatorPredictions(nn.Module):
         return hidden_states
 
 
+@register(backends=("flax",))
 class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -917,6 +919,7 @@ class FlaxElectraModule(nn.Module):
     "The bare Electra Model transformer outputting raw hidden-states without any specific head on top.",
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxElectraModel(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraModule
 
@@ -1004,6 +1007,7 @@ class FlaxElectraForMaskedLMModule(nn.Module):
 
 
 @add_start_docstrings("""Electra Model with a `language modeling` head on top.""", ELECTRA_START_DOCSTRING)
+@register(backends=("flax",))
 class FlaxElectraForMaskedLM(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForMaskedLMModule
 
@@ -1068,6 +1072,7 @@ class FlaxElectraForPreTrainingModule(nn.Module):
     """,
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxElectraForPreTraining(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForPreTrainingModule
 
@@ -1163,6 +1168,7 @@ class FlaxElectraForTokenClassificationModule(nn.Module):
     """,
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxElectraForTokenClassification(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForTokenClassificationModule
 
@@ -1311,6 +1317,7 @@ class FlaxElectraForMultipleChoiceModule(nn.Module):
     """,
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxElectraForMultipleChoice(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForMultipleChoiceModule
 
@@ -1386,6 +1393,7 @@ class FlaxElectraForQuestionAnsweringModule(nn.Module):
     """,
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxElectraForQuestionAnswering(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForQuestionAnsweringModule
 
@@ -1479,6 +1487,7 @@ class FlaxElectraForSequenceClassificationModule(nn.Module):
     """,
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxElectraForSequenceClassification(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForSequenceClassificationModule
 
@@ -1563,6 +1572,7 @@ class FlaxElectraForCausalLMModule(nn.Module):
     ELECTRA_START_DOCSTRING,
 )
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForCausalLM with Bert->Electra
+@register(backends=("flax",))
 class FlaxElectraForCausalLM(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForCausalLMModule
 
@@ -1599,3 +1609,15 @@ append_call_sample_docstring(
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxElectraPreTrainedModel",
+    "FlaxElectraModel",
+    "FlaxElectraForMaskedLM",
+    "FlaxElectraForPreTraining",
+    "FlaxElectraForTokenClassification",
+    "FlaxElectraForMultipleChoice",
+    "FlaxElectraForQuestionAnswering",
+    "FlaxElectraForSequenceClassification",
+    "FlaxElectraForCausalLM"
+]

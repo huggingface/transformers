@@ -38,6 +38,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_openai import OpenAIGPTConfig
 
 
@@ -265,6 +266,7 @@ class Block(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class OpenAIGPTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -397,6 +399,7 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
     "The bare OpenAI GPT transformer model outputting raw hidden-states without any specific head on top.",
     OPENAI_GPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -528,6 +531,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     """,
     OPENAI_GPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -619,6 +623,7 @@ input sequence).
 """,
     OPENAI_GPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -747,6 +752,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
     """,
     OPENAI_GPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -857,3 +863,11 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+__all__ = [
+    "OpenAIGPTPreTrainedModel",
+    "OpenAIGPTModel",
+    "OpenAIGPTLMHeadModel",
+    "OpenAIGPTDoubleHeadsModel",
+    "OpenAIGPTForSequenceClassification"
+]

@@ -37,6 +37,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import BackboneMixin
+from ...utils.import_utils import register
 from .configuration_focalnet import FocalNetConfig
 
 
@@ -626,6 +627,7 @@ class FocalNetEncoder(nn.Module):
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->FocalNet,swin->focalnet
+@register(backends=("torch",))
 class FocalNetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -680,6 +682,7 @@ FOCALNET_INPUTS_DOCSTRING = r"""
     "The bare FocalNet Model outputting raw hidden-states without any specific head on top.",
     FOCALNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class FocalNetModel(FocalNetPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
         super().__init__(config)
@@ -770,6 +773,7 @@ class FocalNetModel(FocalNetPreTrainedModel):
     """,
     FOCALNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -878,6 +882,7 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
     """,
     FOCALNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class FocalNetForImageClassification(FocalNetPreTrainedModel):
     # Copied from transformers.models.swin.modeling_swin.SwinForImageClassification.__init__ with Swin->FocalNet, swin->focalnet
     def __init__(self, config):
@@ -967,6 +972,7 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
     """,
     FOCALNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
     def __init__(self, config: FocalNetConfig):
         super().__init__(config)
@@ -1031,3 +1037,11 @@ class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+__all__ = [
+    "FocalNetPreTrainedModel",
+    "FocalNetModel",
+    "FocalNetForMaskedImageModeling",
+    "FocalNetForImageClassification",
+    "FocalNetBackbone"
+]

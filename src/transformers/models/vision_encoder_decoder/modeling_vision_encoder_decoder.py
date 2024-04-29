@@ -28,6 +28,7 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel, AutoModelForCausalLM
 from .configuration_vision_encoder_decoder import VisionEncoderDecoderConfig
@@ -148,6 +149,7 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(VISION_ENCODER_DECODER_START_DOCSTRING)
+@register(backends=("torch",))
 class VisionEncoderDecoderModel(PreTrainedModel):
     r"""
     [`VisionEncoderDecoderModel`] is a generic model class that will be instantiated as a transformer architecture with
@@ -666,3 +668,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
     def _reorder_cache(self, past_key_values, beam_idx):
         # apply decoder cache reordering here
         return self.decoder._reorder_cache(past_key_values, beam_idx)
+
+__all__ = [
+    "VisionEncoderDecoderModel"
+]

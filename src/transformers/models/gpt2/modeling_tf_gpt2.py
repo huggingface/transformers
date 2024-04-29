@@ -50,6 +50,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_gpt2 import GPT2Config
 
 
@@ -580,6 +581,7 @@ class TFGPT2MainLayer(keras.layers.Layer):
                     layer.build(None)
 
 
+@register(backends=("tf",))
 class TFGPT2PreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -752,6 +754,7 @@ GPT2_INPUTS_DOCSTRING = r"""
     "The bare GPT2 Model transformer outputting raw hidden-states without any specific head on top.",
     GPT2_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFGPT2Model(TFGPT2PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -837,6 +840,7 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
     """,
     GPT2_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -979,6 +983,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
     """,
     GPT2_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1125,6 +1130,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
     """,
     GPT2_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1236,3 +1242,11 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
         if getattr(self, "transformer", None) is not None:
             with tf.name_scope(self.transformer.name):
                 self.transformer.build(None)
+
+__all__ = [
+    "TFGPT2PreTrainedModel",
+    "TFGPT2Model",
+    "TFGPT2LMHeadModel",
+    "TFGPT2DoubleHeadsModel",
+    "TFGPT2ForSequenceClassification"
+]

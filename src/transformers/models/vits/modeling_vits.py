@@ -32,6 +32,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_vits import VitsConfig
 
 
@@ -1240,6 +1241,7 @@ class VitsTextEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class VitsPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1323,6 +1325,7 @@ VITS_INPUTS_DOCSTRING = r"""
     "The complete VITS model, for text-to-speech synthesis.",
     VITS_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class VitsModel(VitsPreTrainedModel):
     def __init__(self, config: VitsConfig):
         super().__init__(config)
@@ -1481,3 +1484,8 @@ class VitsModel(VitsPreTrainedModel):
             hidden_states=text_encoder_output.hidden_states,
             attentions=text_encoder_output.attentions,
         )
+
+__all__ = [
+    "VitsPreTrainedModel",
+    "VitsModel"
+]

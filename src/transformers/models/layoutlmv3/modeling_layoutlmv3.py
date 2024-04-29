@@ -34,6 +34,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_layoutlmv3 import LayoutLMv3Config
 
 
@@ -347,6 +348,7 @@ class LayoutLMv3TextEmbeddings(nn.Module):
         return embeddings
 
 
+@register(backends=("torch",))
 class LayoutLMv3PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -733,6 +735,7 @@ class LayoutLMv3Output(nn.Module):
     "The bare LayoutLMv3 Model transformer outputting raw hidden-states without any specific head on top.",
     LAYOUTLMV3_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1020,6 +1023,7 @@ class LayoutLMv3ClassificationHead(nn.Module):
     """,
     LAYOUTLMV3_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1132,6 +1136,7 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
     """,
     LAYOUTLMV3_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1262,6 +1267,7 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
     """,
     LAYOUTLMV3_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1369,3 +1375,11 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "LayoutLMv3PreTrainedModel",
+    "LayoutLMv3Model",
+    "LayoutLMv3ForTokenClassification",
+    "LayoutLMv3ForQuestionAnswering",
+    "LayoutLMv3ForSequenceClassification"
+]

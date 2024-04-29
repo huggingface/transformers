@@ -51,6 +51,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_fsmt import FSMTConfig
 
 
@@ -339,6 +340,7 @@ def _prepare_fsmt_decoder_inputs(
     return decoder_input_ids, decoder_padding_mask, causal_mask
 
 
+@register(backends=("torch",))
 class PretrainedFSMTModel(PreTrainedModel):
     config_class = FSMTConfig
     base_model_prefix = "model"
@@ -1384,3 +1386,7 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
             self.make_weight(max_pos, self.embedding_dim, self.padding_idx)
         positions = self.make_positions(input, self.padding_idx)
         return super().forward(positions)
+
+__all__ = [
+    "PretrainedFSMTModel"
+]

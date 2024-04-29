@@ -42,7 +42,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.import_utils import is_torch_fx_available
+from ...utils.import_utils import is_torch_fx_available, register
 from .configuration_gemma import GemmaConfig
 
 
@@ -693,6 +693,7 @@ GEMMA_START_DOCSTRING = r"""
     "The bare Gemma Model outputting raw hidden-states without any specific head on top.",
     GEMMA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GemmaPreTrainedModel(PreTrainedModel):
     config_class = GemmaConfig
     base_model_prefix = "model"
@@ -812,6 +813,7 @@ GEMMA_INPUTS_DOCSTRING = r"""
     GEMMA_START_DOCSTRING,
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaModel with LLAMA->GEMMA,Llama->Gemma
+@register(backends=("torch",))
 class GemmaModel(GemmaPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`GemmaDecoderLayer`]
@@ -1036,6 +1038,7 @@ class GemmaModel(GemmaPreTrainedModel):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->GEMMA,Llama->Gemma,llama->gemma
+@register(backends=("torch",))
 class GemmaForCausalLM(GemmaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1271,6 +1274,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
     GEMMA_START_DOCSTRING,
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->GEMMA,Llama->Gemma
+@register(backends=("torch",))
 class GemmaForSequenceClassification(GemmaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1377,3 +1381,10 @@ class GemmaForSequenceClassification(GemmaPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+__all__ = [
+    "GemmaPreTrainedModel",
+    "GemmaModel",
+    "GemmaForCausalLM",
+    "GemmaForSequenceClassification"
+]

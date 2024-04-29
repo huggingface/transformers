@@ -35,6 +35,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_prophetnet import ProphetNetConfig
 
 
@@ -540,6 +541,7 @@ class ProphetNetDecoderLMOutput(ModelOutput):
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
+@register(backends=("torch",))
 class ProphetNetPreTrainedModel(PreTrainedModel):
     config_class = ProphetNetConfig
     base_model_prefix = "prophetnet"
@@ -1223,6 +1225,7 @@ class ProphetNetDecoderLayer(nn.Module):
     "The standalone encoder part of the ProphetNetModel.",
     PROPHETNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ProphetNetEncoder(ProphetNetPreTrainedModel):
     r"""
     word_embeddings  (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
@@ -1357,6 +1360,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
     "The standalone decoder part of the ProphetNetModel.",
     PROPHETNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ProphetNetDecoder(ProphetNetPreTrainedModel):
     r"""
     word_embeddings  (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
@@ -1725,6 +1729,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
     "The bare ProphetNet Model outputting raw hidden-states without any specific head on top.",
     PROPHETNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ProphetNetModel(ProphetNetPreTrainedModel):
     _tied_weights_keys = ["encoder.word_embeddings.weight", "decoder.word_embeddings.weight"]
 
@@ -1859,6 +1864,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
     "The ProphetNet Model with a language modeling head. Can be used for sequence generation tasks.",
     PROPHETNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     _tied_weights_keys = ["encoder.word_embeddings.weight", "decoder.word_embeddings.weight", "lm_head.weight"]
 
@@ -2076,6 +2082,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     " language modeling.",
     PROPHETNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
     _tied_weights_keys = [
         "prophetnet.word_embeddings.weight",
@@ -2318,6 +2325,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         return reordered_past
 
 
+@register(backends=("torch",))
 class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
     """
     This is a wrapper class, so that [`ProphetNetForCausalLM`] can correctly be loaded from pretrained prophetnet
@@ -2338,3 +2346,13 @@ class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
+
+__all__ = [
+    "ProphetNetPreTrainedModel",
+    "ProphetNetEncoder",
+    "ProphetNetDecoder",
+    "ProphetNetModel",
+    "ProphetNetForConditionalGeneration",
+    "ProphetNetForCausalLM",
+    "ProphetNetDecoderWrapper"
+]

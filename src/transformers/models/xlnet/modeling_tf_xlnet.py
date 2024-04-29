@@ -52,6 +52,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_xlnet import XLNetConfig
 
 
@@ -829,6 +830,7 @@ class TFXLNetMainLayer(keras.layers.Layer):
         )
 
 
+@register(backends=("tf",))
 class TFXLNetPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1170,6 +1172,7 @@ XLNET_INPUTS_DOCSTRING = r"""
     "The bare XLNet Model transformer outputting raw hidden-states without any specific head on top.",
     XLNET_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFXLNetModel(TFXLNetPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1233,6 +1236,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
     """,
     XLNET_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1404,6 +1408,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
     """,
     XLNET_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1506,6 +1511,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
     """,
     XLNET_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1622,6 +1628,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
     """,
     XLNET_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1714,6 +1721,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
     """,
     XLNET_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1811,3 +1819,13 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+__all__ = [
+    "TFXLNetPreTrainedModel",
+    "TFXLNetModel",
+    "TFXLNetLMHeadModel",
+    "TFXLNetForSequenceClassification",
+    "TFXLNetForMultipleChoice",
+    "TFXLNetForTokenClassification",
+    "TFXLNetForQuestionAnsweringSimple"
+]

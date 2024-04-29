@@ -40,6 +40,7 @@ from ...pytorch_utils import (
     prune_linear_layer,
 )
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_vilt import ViltConfig
 
 
@@ -557,6 +558,7 @@ class ViltEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class ViltPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -711,6 +713,7 @@ VILT_IMAGES_AND_TEXT_CLASSIFICATION_INPUTS_DOCSTRING = r"""
     "The bare ViLT Model transformer outputting raw hidden-states without any specific head on top.",
     VILT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ViltModel(ViltPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
@@ -877,6 +880,7 @@ class ViltPooler(nn.Module):
     """,
     VILT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ViltForMaskedLM(ViltPreTrainedModel):
     _tied_weights_keys = ["mlm_score.decoder.weight", "mlm_score.decoder.bias"]
 
@@ -1053,6 +1057,7 @@ class ViltMLMHead(nn.Module):
     """,
     VILT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ViltForQuestionAnswering(ViltPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1166,6 +1171,7 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
     """,
     VILT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1267,6 +1273,7 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
     """,
     VILT_IMAGES_AND_TEXT_CLASSIFICATION_INPUTS_DOCSTRING,
 )
+@register(backends=("torch",))
 class ViltForImagesAndTextClassification(ViltPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1409,6 +1416,7 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
     """,
     VILT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ViltForTokenClassification(ViltPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1486,3 +1494,13 @@ class ViltForTokenClassification(ViltPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "ViltPreTrainedModel",
+    "ViltModel",
+    "ViltForMaskedLM",
+    "ViltForQuestionAnswering",
+    "ViltForImageAndTextRetrieval",
+    "ViltForImagesAndTextClassification",
+    "ViltForTokenClassification"
+]

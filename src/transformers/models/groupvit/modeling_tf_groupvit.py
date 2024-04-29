@@ -44,6 +44,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_groupvit import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
 
 
@@ -1698,6 +1699,7 @@ class TFGroupViTMainLayer(keras.layers.Layer):
         )
 
 
+@register(backends=("tf",))
 class TFGroupViTPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1845,6 +1847,7 @@ GROUPVIT_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("tf",))
 class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
     config_class = GroupViTTextConfig
     main_input_name = "input_ids"
@@ -1906,6 +1909,7 @@ class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
                 self.groupvit.build(None)
 
 
+@register(backends=("tf",))
 class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
     config_class = GroupViTVisionConfig
     main_input_name = "pixel_values"
@@ -1969,6 +1973,7 @@ class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
 
 
 @add_start_docstrings(GROUPVIT_START_DOCSTRING)
+@register(backends=("tf",))
 class TFGroupViTModel(TFGroupViTPreTrainedModel):
     config_class = GroupViTConfig
 
@@ -2131,3 +2136,10 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
         if getattr(self, "groupvit", None) is not None:
             with tf.name_scope(self.groupvit.name):
                 self.groupvit.build(None)
+
+__all__ = [
+    "TFGroupViTPreTrainedModel",
+    "TFGroupViTTextModel",
+    "TFGroupViTVisionModel",
+    "TFGroupViTModel"
+]

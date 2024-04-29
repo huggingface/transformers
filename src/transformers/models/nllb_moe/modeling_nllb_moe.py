@@ -39,6 +39,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_nllb_moe import NllbMoeConfig
 
 
@@ -825,6 +826,7 @@ class NllbMoeDecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class NllbMoePreTrainedModel(PreTrainedModel):
     config_class = NllbMoeConfig
     base_model_prefix = "model"
@@ -971,6 +973,7 @@ NLLB_MOE_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("torch",))
 class NllbMoeEncoder(NllbMoePreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -1161,6 +1164,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class NllbMoeDecoder(NllbMoePreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`NllbMoeDecoderLayer`]
@@ -1451,6 +1455,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
     "The bare NllbMoe Model outputting raw hidden-states without any specific head on top.",
     NLLB_MOE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class NllbMoeModel(NllbMoePreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1588,6 +1593,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
 @add_start_docstrings(
     "The NllbMoe Model with a language modeling head. Can be used for summarization.", NLLB_MOE_START_DOCSTRING
 )
+@register(backends=("torch",))
 class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
     base_model_prefix = "model"
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
@@ -1790,3 +1796,11 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "NllbMoePreTrainedModel",
+    "NllbMoeEncoder",
+    "NllbMoeDecoder",
+    "NllbMoeModel",
+    "NllbMoeForConditionalGeneration"
+]

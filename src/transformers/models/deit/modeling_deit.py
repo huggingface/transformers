@@ -42,6 +42,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_deit import DeiTConfig
 
 
@@ -380,6 +381,7 @@ class DeiTEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class DeiTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -445,6 +447,7 @@ DEIT_INPUTS_DOCSTRING = r"""
     "The bare DeiT Model transformer outputting raw hidden-states without any specific head on top.",
     DEIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DeiTModel(DeiTPreTrainedModel):
     def __init__(self, config: DeiTConfig, add_pooling_layer: bool = True, use_mask_token: bool = False) -> None:
         super().__init__(config)
@@ -565,6 +568,7 @@ class DeiTPooler(nn.Module):
     """,
     DEIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
     def __init__(self, config: DeiTConfig) -> None:
         super().__init__(config)
@@ -677,6 +681,7 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
     """,
     DEIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DeiTForImageClassification(DeiTPreTrainedModel):
     def __init__(self, config: DeiTConfig) -> None:
         super().__init__(config)
@@ -827,6 +832,7 @@ class DeiTForImageClassificationWithTeacherOutput(ModelOutput):
     """,
     DEIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
     def __init__(self, config: DeiTConfig) -> None:
         super().__init__(config)
@@ -889,3 +895,11 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "DeiTPreTrainedModel",
+    "DeiTModel",
+    "DeiTForMaskedImageModeling",
+    "DeiTForImageClassification",
+    "DeiTForImageClassificationWithTeacher"
+]

@@ -57,6 +57,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_electra import ElectraConfig
 
 
@@ -698,6 +699,7 @@ class TFElectraGeneratorPredictions(keras.layers.Layer):
                 self.dense.build([None, None, self.config.hidden_size])
 
 
+@register(backends=("tf",))
 class TFElectraPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1038,6 +1040,7 @@ ELECTRA_INPUTS_DOCSTRING = r"""
     "Both the generator and discriminator checkpoints may be loaded into this model.",
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFElectraModel(TFElectraPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1125,6 +1128,7 @@ class TFElectraModel(TFElectraPreTrainedModel):
     """,
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFElectraForPreTraining(TFElectraPreTrainedModel):
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
@@ -1245,6 +1249,7 @@ class TFElectraMaskedLMHead(keras.layers.Layer):
     """,
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
@@ -1390,6 +1395,7 @@ class TFElectraClassificationHead(keras.layers.Layer):
     """,
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1472,6 +1478,7 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
     """,
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1580,6 +1587,7 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
     """,
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
@@ -1669,6 +1677,7 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
     """,
     ELECTRA_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1766,3 +1775,14 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+__all__ = [
+    "TFElectraPreTrainedModel",
+    "TFElectraModel",
+    "TFElectraForPreTraining",
+    "TFElectraForMaskedLM",
+    "TFElectraForSequenceClassification",
+    "TFElectraForMultipleChoice",
+    "TFElectraForTokenClassification",
+    "TFElectraForQuestionAnswering"
+]

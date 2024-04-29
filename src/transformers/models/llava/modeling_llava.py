@@ -31,6 +31,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava import LlavaConfig
 
@@ -122,6 +123,7 @@ LLAVA_START_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAVA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LlavaPreTrainedModel(PreTrainedModel):
     config_class = LlavaConfig
     base_model_prefix = "model"
@@ -236,6 +238,7 @@ LLAVA_INPUTS_DOCSTRING = r"""
     """The LLAVA model which consists of a vision backbone and a language model.""",
     LLAVA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LlavaForConditionalGeneration(LlavaPreTrainedModel):
     def __init__(self, config: LlavaConfig):
         super().__init__(config)
@@ -573,3 +576,8 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
 
     def _reorder_cache(self, *args, **kwargs):
         return self.language_model._reorder_cache(*args, **kwargs)
+
+__all__ = [
+    "LlavaPreTrainedModel",
+    "LlavaForConditionalGeneration"
+]

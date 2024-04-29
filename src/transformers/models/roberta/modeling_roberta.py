@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_roberta import RobertaConfig
 
 
@@ -579,6 +580,7 @@ class RobertaPooler(nn.Module):
         return pooled_output
 
 
+@register(backends=("torch",))
 class RobertaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -679,6 +681,7 @@ ROBERTA_INPUTS_DOCSTRING = r"""
     "The bare RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
     ROBERTA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RobertaModel(RobertaPreTrainedModel):
     """
 
@@ -863,6 +866,7 @@ class RobertaModel(RobertaPreTrainedModel):
 @add_start_docstrings(
     """RoBERTa Model with a `language modeling` head on top for CLM fine-tuning.""", ROBERTA_START_DOCSTRING
 )
+@register(backends=("torch",))
 class RobertaForCausalLM(RobertaPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
@@ -1023,6 +1027,7 @@ class RobertaForCausalLM(RobertaPreTrainedModel):
 
 
 @add_start_docstrings("""RoBERTa Model with a `language modeling` head on top.""", ROBERTA_START_DOCSTRING)
+@register(backends=("torch",))
 class RobertaForMaskedLM(RobertaPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
@@ -1154,6 +1159,7 @@ class RobertaLMHead(nn.Module):
     """,
     ROBERTA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RobertaForSequenceClassification(RobertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1253,6 +1259,7 @@ class RobertaForSequenceClassification(RobertaPreTrainedModel):
     """,
     ROBERTA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RobertaForMultipleChoice(RobertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1345,6 +1352,7 @@ class RobertaForMultipleChoice(RobertaPreTrainedModel):
     """,
     ROBERTA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RobertaForTokenClassification(RobertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1452,6 +1460,7 @@ class RobertaClassificationHead(nn.Module):
     """,
     ROBERTA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RobertaForQuestionAnswering(RobertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1560,3 +1569,14 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
+__all__ = [
+    "RobertaPreTrainedModel",
+    "RobertaModel",
+    "RobertaForCausalLM",
+    "RobertaForMaskedLM",
+    "RobertaForSequenceClassification",
+    "RobertaForMultipleChoice",
+    "RobertaForTokenClassification",
+    "RobertaForQuestionAnswering"
+]

@@ -40,6 +40,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import BackboneMixin
+from ...utils.import_utils import register
 from .configuration_bit import BitConfig
 
 
@@ -649,6 +650,7 @@ class BitEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class BitPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -697,6 +699,7 @@ BIT_INPUTS_DOCSTRING = r"""
     "The bare BiT model outputting raw features without any specific head on top.",
     BIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BitModel(BitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -760,6 +763,7 @@ class BitModel(BitPreTrainedModel):
     """,
     BIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BitForImageClassification(BitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -836,6 +840,7 @@ class BitForImageClassification(BitPreTrainedModel):
     """,
     BIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BitBackbone(BitPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
@@ -897,3 +902,10 @@ class BitBackbone(BitPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+__all__ = [
+    "BitPreTrainedModel",
+    "BitModel",
+    "BitForImageClassification",
+    "BitBackbone"
+]

@@ -37,6 +37,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_vit_mae import ViTMAEConfig
 
 
@@ -560,6 +561,7 @@ class ViTMAEEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class ViTMAEPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -622,6 +624,7 @@ VIT_MAE_INPUTS_DOCSTRING = r"""
     "The bare ViTMAE Model transformer outputting raw hidden-states without any specific head on top.",
     VIT_MAE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ViTMAEModel(ViTMAEPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -828,6 +831,7 @@ class ViTMAEDecoder(nn.Module):
     """,
     VIT_MAE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1006,3 +1010,9 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "ViTMAEPreTrainedModel",
+    "ViTMAEModel",
+    "ViTMAEForPreTraining"
+]

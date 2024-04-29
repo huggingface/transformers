@@ -38,6 +38,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from ..auto import AutoModel
 from .configuration_idefics2 import Idefics2Config, Idefics2VisionConfig
 
@@ -1339,6 +1340,7 @@ IDEFICS2_START_DOCSTRING = r"""
     "The bare Idefics2 Model outputting raw hidden-states without any specific head on top.",
     IDEFICS2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Idefics2PreTrainedModel(PreTrainedModel):
     config_class = Idefics2Config
     base_model_prefix = "model"
@@ -1468,6 +1470,7 @@ IDEFICS2_INPUTS_DOCSTRING = r"""
     """Idefics2 model consisting of a SIGLIP vision encoder and Mistral language decoder""",
     IDEFICS2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Idefics2Model(Idefics2PreTrainedModel):
     def __init__(self, config: Idefics2Config):
         super().__init__(config)
@@ -1688,6 +1691,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
     """The Idefics2 Model with a language modeling head. It is made up a SigLIP vision encoder, with a language modeling head on top. """,
     IDEFICS2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1960,3 +1964,9 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "Idefics2PreTrainedModel",
+    "Idefics2Model",
+    "Idefics2ForConditionalGeneration"
+]

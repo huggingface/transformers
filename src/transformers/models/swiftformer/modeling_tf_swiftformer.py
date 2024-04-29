@@ -31,6 +31,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_swiftformer import SwiftFormerConfig
 
 
@@ -587,6 +588,7 @@ class TFSwiftFormerEncoder(keras.layers.Layer):
                 layer.build(None)
 
 
+@register(backends=("tf",))
 class TFSwiftFormerPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -711,6 +713,7 @@ class TFSwiftFormerMainLayer(keras.layers.Layer):
     "The bare TFSwiftFormer Model transformer outputting raw hidden-states without any specific head on top.",
     TFSWIFTFORMER_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
     def __init__(self, config: SwiftFormerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -749,6 +752,7 @@ class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
     """,
     TFSWIFTFORMER_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
     def __init__(self, config: SwiftFormerConfig, **kwargs) -> None:
         super().__init__(config, **kwargs)
@@ -868,3 +872,9 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
             with tf.name_scope(self.dist_head.name):
                 self.dist_head.build(self.config.embed_dims[-1])
         self.built = True
+
+__all__ = [
+    "TFSwiftFormerPreTrainedModel",
+    "TFSwiftFormerModel",
+    "TFSwiftFormerForImageClassification"
+]

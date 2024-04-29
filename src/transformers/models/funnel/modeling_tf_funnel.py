@@ -55,6 +55,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_funnel import FunnelConfig
 
 
@@ -1072,6 +1073,7 @@ class TFFunnelClassificationHead(keras.layers.Layer):
                 self.linear_out.build([None, None, self.config.d_model])
 
 
+@register(backends=("tf",))
 class TFFunnelPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1210,6 +1212,7 @@ FUNNEL_INPUTS_DOCSTRING = r"""
     """,
     FUNNEL_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFFunnelBaseModel(TFFunnelPreTrainedModel):
     def __init__(self, config: FunnelConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
@@ -1266,6 +1269,7 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
     "The bare Funnel Transformer Model transformer outputting raw hidden-states without any specific head on top.",
     FUNNEL_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFFunnelModel(TFFunnelPreTrainedModel):
     def __init__(self, config: FunnelConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
@@ -1324,6 +1328,7 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
     """,
     FUNNEL_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
     def __init__(self, config: FunnelConfig, **kwargs) -> None:
         super().__init__(config, **kwargs)
@@ -1403,6 +1408,7 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
 
 
 @add_start_docstrings("""Funnel Model with a `language modeling` head on top.""", FUNNEL_START_DOCSTRING)
+@register(backends=("tf",))
 class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config: FunnelConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
@@ -1492,6 +1498,7 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
     """,
     FUNNEL_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: FunnelConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
@@ -1578,6 +1585,7 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
     """,
     FUNNEL_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config: FunnelConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
@@ -1684,6 +1692,7 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
     """,
     FUNNEL_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config: FunnelConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
@@ -1773,6 +1782,7 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
     """,
     FUNNEL_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config: FunnelConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
@@ -1869,3 +1879,15 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+__all__ = [
+    "TFFunnelPreTrainedModel",
+    "TFFunnelBaseModel",
+    "TFFunnelModel",
+    "TFFunnelForPreTraining",
+    "TFFunnelForMaskedLM",
+    "TFFunnelForSequenceClassification",
+    "TFFunnelForMultipleChoice",
+    "TFFunnelForTokenClassification",
+    "TFFunnelForQuestionAnswering"
+]

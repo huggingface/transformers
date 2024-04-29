@@ -31,6 +31,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_levit import LevitConfig
 
 
@@ -482,6 +483,7 @@ class LevitClassificationLayer(nn.Module):
         return logits
 
 
+@register(backends=("torch",))
 class LevitPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -535,6 +537,7 @@ LEVIT_INPUTS_DOCSTRING = r"""
     "The bare Levit model outputting raw features without any specific head on top.",
     LEVIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LevitModel(LevitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -595,6 +598,7 @@ class LevitModel(LevitPreTrainedModel):
     """,
     LEVIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LevitForImageClassification(LevitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -682,6 +686,7 @@ class LevitForImageClassification(LevitPreTrainedModel):
     """,
     LEVIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -736,3 +741,10 @@ class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):
             distillation_logits=distill_logits,
             hidden_states=outputs.hidden_states,
         )
+
+__all__ = [
+    "LevitPreTrainedModel",
+    "LevitModel",
+    "LevitForImageClassification",
+    "LevitForImageClassificationWithTeacher"
+]

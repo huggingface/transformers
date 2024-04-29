@@ -31,6 +31,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_patchtsmixer import PatchTSMixerConfig
 
 
@@ -759,6 +760,7 @@ class PatchTSMixerLinearHead(nn.Module):
         return hidden_features
 
 
+@register(backends=("torch",))
 class PatchTSMixerPreTrainedModel(PreTrainedModel):
     # Weight initialization
     config_class = PatchTSMixerConfig
@@ -1187,6 +1189,7 @@ class PatchTSMixerEncoderOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
+@register(backends=("torch",))
 class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
     """
     Encoder for PatchTSMixer which inputs patched time-series and outputs patched embeddings.
@@ -1297,6 +1300,7 @@ class PatchTSMixerModelOutput(ModelOutput):
     "The PatchTSMixer Model for time-series forecasting.",
     PATCHTSMIXER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig, mask_input: bool = False):
         super().__init__(config)
@@ -1409,6 +1413,7 @@ class PatchTSMixerForPreTrainingOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
+@register(backends=("torch",))
 class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
     r"""
     `PatchTSMixer` for mask pretraining.
@@ -1591,6 +1596,7 @@ def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor]
         return input_tensor.mean(dim=dim)
 
 
+@register(backends=("torch",))
 class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
     r"""
     `PatchTSMixer` for forecasting application.
@@ -1824,6 +1830,7 @@ class PatchTSMixerForTimeSeriesClassificationOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
+@register(backends=("torch",))
 class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
     r"""
     `PatchTSMixer` for classification application.
@@ -1995,6 +2002,7 @@ class InjectScalerStatistics4D(nn.Module):
         return inputs
 
 
+@register(backends=("torch",))
 class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
     r"""
     `PatchTSMixer` for regression application.
@@ -2172,3 +2180,13 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         # [batch_size x num_samples x num_targets]
         samples = torch.stack(samples, dim=1).view(-1, num_parallel_samples, self.config.num_targets)
         return SamplePatchTSMixerRegressionOutput(sequences=samples)
+
+__all__ = [
+    "PatchTSMixerPreTrainedModel",
+    "PatchTSMixerEncoder",
+    "PatchTSMixerModel",
+    "PatchTSMixerForPretraining",
+    "PatchTSMixerForPrediction",
+    "PatchTSMixerForTimeSeriesClassification",
+    "PatchTSMixerForRegression"
+]

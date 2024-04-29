@@ -34,6 +34,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_x_clip import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
 
 
@@ -459,6 +460,7 @@ class XCLIPVisionEncoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class XCLIPPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -786,6 +788,7 @@ class XCLIPTextTransformer(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class XCLIPTextModel(XCLIPPreTrainedModel):
     config_class = XCLIPTextConfig
 
@@ -995,6 +998,7 @@ class XCLIPVisionTransformer(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class XCLIPVisionModel(XCLIPPreTrainedModel):
     config_class = XCLIPVisionConfig
     main_input_name = "pixel_values"
@@ -1239,6 +1243,7 @@ class XCLIPPromptGenerator(nn.Module):
 
 
 @add_start_docstrings(X_CLIP_START_DOCSTRING)
+@register(backends=("torch",))
 class XCLIPModel(XCLIPPreTrainedModel):
     config_class = XCLIPConfig
 
@@ -1623,3 +1628,10 @@ class XCLIPModel(XCLIPPreTrainedModel):
             vision_model_output=vision_outputs,
             mit_output=mit_outputs,
         )
+
+__all__ = [
+    "XCLIPPreTrainedModel",
+    "XCLIPTextModel",
+    "XCLIPVisionModel",
+    "XCLIPModel"
+]

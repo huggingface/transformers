@@ -43,6 +43,7 @@ from ...utils import (
     is_peft_available,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_wavlm import WavLMConfig
 
 
@@ -948,6 +949,7 @@ class WavLMAdapterLayer(nn.Module):
         return hidden_states
 
 
+@register(backends=("torch",))
 class WavLMPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1098,6 +1100,7 @@ WAVLM_INPUTS_DOCSTRING = r"""
     WAVLM_START_DOCSTRING,
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model with Wav2Vec2->WavLM, wav2vec2->wavlm, WAV_2_VEC_2->WAVLM, WavLMBaseModelOutput->Wav2Vec2BaseModelOutput
+@register(backends=("torch",))
 class WavLMModel(WavLMPreTrainedModel):
     def __init__(self, config: WavLMConfig):
         super().__init__(config)
@@ -1250,6 +1253,7 @@ class WavLMModel(WavLMPreTrainedModel):
     WAVLM_START_DOCSTRING,
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->WavLM, wav2vec2->wavlm, WAV_2_VEC_2->WAVLM
+@register(backends=("torch",))
 class WavLMForCTC(WavLMPreTrainedModel):
     def __init__(self, config, target_lang: Optional[str] = None):
         super().__init__(config)
@@ -1409,6 +1413,7 @@ class WavLMForCTC(WavLMPreTrainedModel):
     """,
     WAVLM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class WavLMForSequenceClassification(WavLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1534,6 +1539,7 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
     WAVLM_START_DOCSTRING,
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForAudioFrameClassification with Wav2Vec2->WavLM, wav2vec2->wavlm, WAV_2_VEC_2->WAVLM
+@register(backends=("torch",))
 class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1703,6 +1709,7 @@ class TDNNLayer(nn.Module):
     WAVLM_START_DOCSTRING,
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForXVector with Wav2Vec2->WavLM, wav2vec2->wavlm, WAV_2_VEC_2->WAVLM
+@register(backends=("torch",))
 class WavLMForXVector(WavLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1847,3 +1854,12 @@ class WavLMForXVector(WavLMPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "WavLMPreTrainedModel",
+    "WavLMModel",
+    "WavLMForCTC",
+    "WavLMForSequenceClassification",
+    "WavLMForAudioFrameClassification",
+    "WavLMForXVector"
+]

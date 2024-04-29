@@ -25,6 +25,7 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 
 from ...modeling_flax_utils import FlaxPreTrainedModel, append_replace_return_docstrings, overwrite_call_docstring
 from ...utils import add_start_docstrings, logging
+from ...utils.import_utils import register
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_flax_auto import FLAX_MODEL_MAPPING, FlaxAutoModel
 from ..clip.modeling_flax_clip import FlaxCLIPOutput, FlaxCLIPVisionModel
@@ -217,6 +218,7 @@ class FlaxVisionTextDualEncoderModule(nn.Module):
 
 
 @add_start_docstrings(VISION_TEXT_DUAL_ENCODER_START_DOCSTRING)
+@register(backends=("flax",))
 class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
     config_class = VisionTextDualEncoderConfig
     module_class = FlaxVisionTextDualEncoderModule
@@ -597,3 +599,7 @@ overwrite_call_docstring(
 append_replace_return_docstrings(
     FlaxVisionTextDualEncoderModel, output_type=FlaxCLIPOutput, config_class=_CONFIG_FOR_DOC
 )
+
+__all__ = [
+    "FlaxVisionTextDualEncoderModel"
+]

@@ -44,6 +44,7 @@ from ...utils import (
     is_torch_cuda_available,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_mra import MraConfig
 
 
@@ -827,6 +828,7 @@ class MraOnlyMLMHead(nn.Module):
 
 
 # Copied from transformers.models.yoso.modeling_yoso.YosoPreTrainedModel with Yoso->Mra,yoso->mra
+@register(backends=("torch",))
 class MraPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -916,6 +918,7 @@ MRA_INPUTS_DOCSTRING = r"""
     "The bare MRA Model transformer outputting raw hidden-states without any specific head on top.",
     MRA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MraModel(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1025,6 +1028,7 @@ class MraModel(MraPreTrainedModel):
 
 
 @add_start_docstrings("""MRA Model with a `language modeling` head on top.""", MRA_START_DOCSTRING)
+@register(backends=("torch",))
 class MraForMaskedLM(MraPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
@@ -1127,6 +1131,7 @@ class MraClassificationHead(nn.Module):
     the pooled output) e.g. for GLUE tasks.""",
     MRA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MraForSequenceClassification(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1216,6 +1221,7 @@ class MraForSequenceClassification(MraPreTrainedModel):
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks.""",
     MRA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MraForMultipleChoice(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1305,6 +1311,7 @@ class MraForMultipleChoice(MraPreTrainedModel):
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks.""",
     MRA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MraForTokenClassification(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1388,6 +1395,7 @@ class MraForTokenClassification(MraPreTrainedModel):
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).""",
     MRA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MraForQuestionAnswering(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1478,3 +1486,13 @@ class MraForQuestionAnswering(MraPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "MraPreTrainedModel",
+    "MraModel",
+    "MraForMaskedLM",
+    "MraForSequenceClassification",
+    "MraForMultipleChoice",
+    "MraForTokenClassification",
+    "MraForQuestionAnswering"
+]

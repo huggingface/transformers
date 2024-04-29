@@ -33,6 +33,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import softmax_backward_data
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_deberta import DebertaConfig
 
 
@@ -802,6 +803,7 @@ class DebertaEmbeddings(nn.Module):
         return embeddings
 
 
+@register(backends=("torch",))
 class DebertaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -892,6 +894,7 @@ DEBERTA_INPUTS_DOCSTRING = r"""
     "The bare DeBERTa Model transformer outputting raw hidden-states without any specific head on top.",
     DEBERTA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DebertaModel(DebertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1004,6 +1007,7 @@ class DebertaModel(DebertaPreTrainedModel):
 
 
 @add_start_docstrings("""DeBERTa Model with a `language modeling` head on top.""", DEBERTA_START_DOCSTRING)
+@register(backends=("torch",))
 class DebertaForMaskedLM(DebertaPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
@@ -1141,6 +1145,7 @@ class DebertaOnlyMLMHead(nn.Module):
     """,
     DEBERTA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DebertaForSequenceClassification(DebertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1259,6 +1264,7 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
     """,
     DEBERTA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DebertaForTokenClassification(DebertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1332,6 +1338,7 @@ class DebertaForTokenClassification(DebertaPreTrainedModel):
     """,
     DEBERTA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DebertaForQuestionAnswering(DebertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1424,3 +1431,12 @@ class DebertaForQuestionAnswering(DebertaPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "DebertaPreTrainedModel",
+    "DebertaModel",
+    "DebertaForMaskedLM",
+    "DebertaForSequenceClassification",
+    "DebertaForTokenClassification",
+    "DebertaForQuestionAnswering"
+]

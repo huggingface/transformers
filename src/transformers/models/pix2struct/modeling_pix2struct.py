@@ -40,6 +40,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_pix2struct import Pix2StructConfig, Pix2StructTextConfig, Pix2StructVisionConfig
 
 
@@ -350,6 +351,7 @@ class Pix2StructVisionEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class Pix2StructPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -519,6 +521,7 @@ PIX2STRUCT_VISION_INPUTS_DOCSTRING = r"""
     "The bare Pix2StructVision Model transformer outputting raw hidden-states without any specific head on top.",
     PIX2STRUCT_VISION_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Pix2StructVisionModel(Pix2StructPreTrainedModel):
     config_class = Pix2StructVisionConfig
     main_input_name = "flattened_patches"
@@ -1284,6 +1287,7 @@ PIX2STRUCT_INPUTS_DOCSTRING = r"""
     "The standalone text decoder of Pix2Struct",
     PIX2STRUCT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Pix2StructTextModel(Pix2StructPreTrainedModel):
     config_class = Pix2StructTextConfig
     _no_split_modules = ["Pix2StructTextBlock"]
@@ -1556,6 +1560,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
     "A conditional generation model with a language modeling head. Can be used for sequence generation tasks.",
     PIX2STRUCT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
     config_class = Pix2StructConfig
     main_input_name = "flattened_patches"
@@ -1784,3 +1789,10 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,
         }
+
+__all__ = [
+    "Pix2StructPreTrainedModel",
+    "Pix2StructVisionModel",
+    "Pix2StructTextModel",
+    "Pix2StructForConditionalGeneration"
+]

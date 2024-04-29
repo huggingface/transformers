@@ -36,6 +36,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_speech_to_text import Speech2TextConfig
 
 
@@ -523,6 +524,7 @@ class Speech2TextDecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class Speech2TextPreTrainedModel(PreTrainedModel):
     config_class = Speech2TextConfig
     base_model_prefix = "model"
@@ -670,6 +672,7 @@ SPEECH_TO_TEXT_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("torch",))
 class Speech2TextEncoder(Speech2TextPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -825,6 +828,7 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class Speech2TextDecoder(Speech2TextPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`Speech2TextDecoderLayer`]
@@ -1079,6 +1083,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
     "The bare Speech2Text Model outputting raw hidden-states without any specific head on top.",
     SPEECH_TO_TEXT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Speech2TextModel(Speech2TextPreTrainedModel):
     def __init__(self, config: Speech2TextConfig):
         super().__init__(config)
@@ -1210,6 +1215,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
     "The Speech2Text Model with a language modeling head. Can be used for summarization.",
     SPEECH_TO_TEXT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
     base_model_prefix = "model"
     _tied_weights_keys = ["lm_head.weight"]
@@ -1368,3 +1374,11 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "Speech2TextPreTrainedModel",
+    "Speech2TextEncoder",
+    "Speech2TextDecoder",
+    "Speech2TextModel",
+    "Speech2TextForConditionalGeneration"
+]

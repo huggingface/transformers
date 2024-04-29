@@ -46,6 +46,7 @@ from ...utils import (
     is_torch_fx_available,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_gpt_neo import GPTNeoConfig
 
 
@@ -593,6 +594,7 @@ class GPTNeoBlock(nn.Module):
         return outputs  # hidden_states, present, (attentions, cross_attentions)
 
 
+@register(backends=("torch",))
 class GPTNeoPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -712,6 +714,7 @@ GPT_NEO_INPUTS_DOCSTRING = r"""
     "The bare GPT Neo Model transformer outputting raw hidden-states without any specific head on top.",
     GPT_NEO_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTNeoModel(GPTNeoPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -880,6 +883,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
     """,
     GPT_NEO_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1048,6 +1052,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
     """,
     GPT_NEO_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1169,6 +1174,7 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
     """,
     GPT_NEO_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1254,6 +1260,7 @@ class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
     """,
     GPT_NEO_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTNeoForQuestionAnswering(GPTNeoPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1344,3 +1351,12 @@ class GPTNeoForQuestionAnswering(GPTNeoPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "GPTNeoPreTrainedModel",
+    "GPTNeoModel",
+    "GPTNeoForCausalLM",
+    "GPTNeoForSequenceClassification",
+    "GPTNeoForTokenClassification",
+    "GPTNeoForQuestionAnswering"
+]

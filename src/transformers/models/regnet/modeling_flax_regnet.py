@@ -41,6 +41,8 @@ from transformers.utils import (
     add_start_docstrings_to_model_forward,
 )
 
+from ...utils.import_utils import register
+
 
 REGNET_START_DOCSTRING = r"""
 
@@ -551,6 +553,7 @@ class FlaxRegNetEncoder(nn.Module):
 
 
 # Copied from transformers.models.resnet.modeling_flax_resnet.FlaxResNetPreTrainedModel with ResNet->RegNet,resnet->regnet,RESNET->REGNET
+@register(backends=("flax",))
 class FlaxRegNetPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -687,6 +690,7 @@ class FlaxRegNetModule(nn.Module):
     "The bare RegNet model outputting raw features without any specific head on top.",
     REGNET_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxRegNetModel(FlaxRegNetPreTrainedModel):
     module_class = FlaxRegNetModule
 
@@ -780,6 +784,7 @@ class FlaxRegNetForImageClassificationModule(nn.Module):
     """,
     REGNET_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxRegNetForImageClassification(FlaxRegNetPreTrainedModel):
     module_class = FlaxRegNetForImageClassificationModule
 
@@ -817,3 +822,9 @@ append_replace_return_docstrings(
     output_type=FlaxImageClassifierOutputWithNoAttention,
     config_class=RegNetConfig,
 )
+
+__all__ = [
+    "FlaxRegNetPreTrainedModel",
+    "FlaxRegNetModel",
+    "FlaxRegNetForImageClassification"
+]

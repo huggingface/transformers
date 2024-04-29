@@ -51,6 +51,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_bart import BartConfig
 
 
@@ -558,6 +559,7 @@ class TFBartClassificationHead(keras.layers.Layer):
                 self.out_proj.build([None, None, self.inner_dim])
 
 
+@register(backends=("tf",))
 class TFBartPretrainedModel(TFPreTrainedModel):
     config_class = BartConfig
     base_model_prefix = "model"
@@ -1710,3 +1712,7 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
         if getattr(self, "classification_head", None) is not None:
             with tf.name_scope(self.classification_head.name):
                 self.classification_head.build(None)
+
+__all__ = [
+    "TFBartPretrainedModel"
+]

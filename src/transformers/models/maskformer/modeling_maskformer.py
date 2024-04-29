@@ -39,6 +39,7 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
+from ...utils.import_utils import register
 from ..detr import DetrConfig
 from .configuration_maskformer import MaskFormerConfig
 from .configuration_maskformer_swin import MaskFormerSwinConfig
@@ -1559,6 +1560,7 @@ MASKFORMER_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("torch",))
 class MaskFormerPreTrainedModel(PreTrainedModel):
     config_class = MaskFormerConfig
     base_model_prefix = "model"
@@ -1608,6 +1610,7 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
     "The bare MaskFormer Model outputting raw hidden-states without any specific head on top.",
     MASKFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MaskFormerModel(MaskFormerPreTrainedModel):
     def __init__(self, config: MaskFormerConfig):
         super().__init__(config)
@@ -1707,6 +1710,7 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         return output
 
 
+@register(backends=("torch",))
 class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
     def __init__(self, config: MaskFormerConfig):
         super().__init__(config)
@@ -1961,3 +1965,9 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             masks_queries_logits=masks_queries_logits,
             auxiliary_logits=auxiliary_logits,
         )
+
+__all__ = [
+    "MaskFormerPreTrainedModel",
+    "MaskFormerModel",
+    "MaskFormerForInstanceSegmentation"
+]

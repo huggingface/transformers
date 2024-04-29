@@ -42,6 +42,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_marian import MarianConfig
 
 
@@ -456,6 +457,7 @@ class MarianDecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class MarianPreTrainedModel(PreTrainedModel):
     config_class = MarianConfig
     base_model_prefix = "model"
@@ -618,6 +620,7 @@ MARIAN_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("torch",))
 class MarianEncoder(MarianPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -788,6 +791,7 @@ class MarianEncoder(MarianPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class MarianDecoder(MarianPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`MarianDecoderLayer`]
@@ -1039,6 +1043,7 @@ class MarianDecoder(MarianPreTrainedModel):
 @add_start_docstrings(
     "The bare Marian Model outputting raw hidden-states without any specific head on top.", MARIAN_START_DOCSTRING
 )
+@register(backends=("torch",))
 class MarianModel(MarianPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1225,6 +1230,7 @@ class MarianModel(MarianPreTrainedModel):
 @add_start_docstrings(
     "The Marian Model with a language modeling head. Can be used for summarization.", MARIAN_START_DOCSTRING
 )
+@register(backends=("torch",))
 class MarianMTModel(MarianPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
@@ -1490,6 +1496,7 @@ class MarianMTModel(MarianPreTrainedModel):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->Marian
+@register(backends=("torch",))
 class MarianDecoderWrapper(MarianPreTrainedModel):
     """
     This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
@@ -1505,6 +1512,7 @@ class MarianDecoderWrapper(MarianPreTrainedModel):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Marian, facebook/bart-base->Helsinki-NLP/opus-mt-fr-en
+@register(backends=("torch",))
 class MarianForCausalLM(MarianPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1717,3 +1725,13 @@ class MarianForCausalLM(MarianPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "MarianPreTrainedModel",
+    "MarianEncoder",
+    "MarianDecoder",
+    "MarianModel",
+    "MarianMTModel",
+    "MarianDecoderWrapper",
+    "MarianForCausalLM"
+]

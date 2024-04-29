@@ -48,6 +48,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_gpt2 import GPT2Config
 
@@ -663,6 +664,7 @@ class GPT2Block(nn.Module):
         return outputs  # hidden_states, present, (attentions, cross_attentions)
 
 
+@register(backends=("torch",))
 class GPT2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -890,6 +892,7 @@ DEPARALLELIZE_DOCSTRING = r"""
     "The bare GPT2 Model transformer outputting raw hidden-states without any specific head on top.",
     GPT2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPT2Model(GPT2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1172,6 +1175,7 @@ class GPT2Model(GPT2PreTrainedModel):
     """,
     GPT2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPT2LMHeadModel(GPT2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1374,6 +1378,7 @@ input sequence).
 """,
     GPT2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1619,6 +1624,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     """,
     GPT2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPT2ForSequenceClassification(GPT2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1745,6 +1751,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
     """,
     GPT2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPT2ForTokenClassification(GPT2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1856,6 +1863,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
     """,
     GPT2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1950,3 +1958,13 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "GPT2PreTrainedModel",
+    "GPT2Model",
+    "GPT2LMHeadModel",
+    "GPT2DoubleHeadsModel",
+    "GPT2ForSequenceClassification",
+    "GPT2ForTokenClassification",
+    "GPT2ForQuestionAnswering"
+]

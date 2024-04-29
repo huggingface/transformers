@@ -32,6 +32,7 @@ from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_persimmon import PersimmonConfig
 
 
@@ -451,6 +452,7 @@ PERSIMMON_START_DOCSTRING = r"""
     "The bare Persimmon Model outputting raw hidden-states without any specific head on top.",
     PERSIMMON_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PersimmonPreTrainedModel(PreTrainedModel):
     config_class = PersimmonConfig
     base_model_prefix = "model"
@@ -545,6 +547,7 @@ PERSIMMON_INPUTS_DOCSTRING = r"""
     "The bare Persimmon Model outputting raw hidden-states without any specific head on top.",
     PERSIMMON_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PersimmonModel(PersimmonPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PersimmonDecoderLayer`]
@@ -698,6 +701,7 @@ class PersimmonModel(PersimmonPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class PersimmonForCausalLM(PersimmonPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -905,6 +909,7 @@ class PersimmonForCausalLM(PersimmonPreTrainedModel):
     PERSIMMON_START_DOCSTRING,
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->PERSIMMON,Llama->Persimmon
+@register(backends=("torch",))
 class PersimmonForSequenceClassification(PersimmonPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1011,3 +1016,10 @@ class PersimmonForSequenceClassification(PersimmonPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+__all__ = [
+    "PersimmonPreTrainedModel",
+    "PersimmonModel",
+    "PersimmonForCausalLM",
+    "PersimmonForSequenceClassification"
+]

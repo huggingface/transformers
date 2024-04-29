@@ -38,6 +38,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import check_embeddings_within_bounds, invert_attention_mask, stable_softmax
 from ...utils import add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_blip import BlipTextConfig
 
 
@@ -714,6 +715,7 @@ class TFBlipTextOnlyMLMHead(keras.layers.Layer):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L548
+@register(backends=("tf",))
 class TFBlipTextPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -726,6 +728,7 @@ class TFBlipTextPreTrainedModel(TFPreTrainedModel):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/3a29b7410476bf5f2ba0955827390eb6ea1f4f9d/models/med.py#L571
+@register(backends=("tf",))
 class TFBlipTextModel(TFBlipTextPreTrainedModel):
     """
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -967,6 +970,7 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L811
+@register(backends=("tf",))
 class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
@@ -1120,3 +1124,9 @@ class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
         if getattr(self, "cls", None) is not None:
             with tf.name_scope(self.cls.name):
                 self.cls.build(None)
+
+__all__ = [
+    "TFBlipTextPreTrainedModel",
+    "TFBlipTextModel",
+    "TFBlipTextLMHeadModel"
+]

@@ -35,6 +35,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_nystromformer import NystromformerConfig
 
 
@@ -443,6 +444,7 @@ class NystromformerOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
+@register(backends=("torch",))
 class NystromformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -535,6 +537,7 @@ NYSTROMFORMER_INPUTS_DOCSTRING = r"""
     "The bare Nyströmformer Model transformer outputting raw hidden-states without any specific head on top.",
     NYSTROMFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class NystromformerModel(NystromformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -647,6 +650,7 @@ class NystromformerModel(NystromformerPreTrainedModel):
 
 
 @add_start_docstrings("""Nyströmformer Model with a `language modeling` head on top.""", NYSTROMFORMER_START_DOCSTRING)
+@register(backends=("torch",))
 class NystromformerForMaskedLM(NystromformerPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder"]
 
@@ -752,6 +756,7 @@ class NystromformerClassificationHead(nn.Module):
     """,
     NYSTROMFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class NystromformerForSequenceClassification(NystromformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -845,6 +850,7 @@ class NystromformerForSequenceClassification(NystromformerPreTrainedModel):
     """,
     NYSTROMFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -940,6 +946,7 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
     """,
     NYSTROMFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class NystromformerForTokenClassification(NystromformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1018,6 +1025,7 @@ class NystromformerForTokenClassification(NystromformerPreTrainedModel):
     """,
     NYSTROMFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class NystromformerForQuestionAnswering(NystromformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1110,3 +1118,13 @@ class NystromformerForQuestionAnswering(NystromformerPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "NystromformerPreTrainedModel",
+    "NystromformerModel",
+    "NystromformerForMaskedLM",
+    "NystromformerForSequenceClassification",
+    "NystromformerForMultipleChoice",
+    "NystromformerForTokenClassification",
+    "NystromformerForQuestionAnswering"
+]

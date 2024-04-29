@@ -42,6 +42,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 
 
 logger = logging.getLogger(__name__)
@@ -404,6 +405,7 @@ class UdopPatchEmbeddings(nn.Module):
         return embeddings
 
 
+@register(backends=("torch",))
 class UdopPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1272,6 +1274,7 @@ def create_relative_bias(config: UdopConfig) -> Sequence[RelativePositionBiasBas
     return bias_list
 
 
+@register(backends=("torch",))
 class UdopStack(UdopPreTrainedModel):
     """
     This class is based on `T5Stack`, but modified to take into account the image modality as well as 2D position
@@ -1518,6 +1521,7 @@ class UdopStack(UdopPreTrainedModel):
     "The bare UDOP encoder-decoder Transformer outputting raw hidden-states without any specific head on top.",
     UDOP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class UdopModel(UdopPreTrainedModel):
     _tied_weights_keys = [
         "encoder.embed_tokens.weight",
@@ -1682,6 +1686,7 @@ class UdopModel(UdopPreTrainedModel):
     This class is based on [`T5ForConditionalGeneration`], extended to deal with images and layout (2D) data.""",
     UDOP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class UdopForConditionalGeneration(UdopPreTrainedModel):
     _tied_weights_keys = [
         "encoder.embed_tokens.weight",
@@ -1937,6 +1942,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
     "The bare UDOP Model transformer outputting encoder's raw hidden-states without any specific head on top.",
     UDOP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class UdopEncoderModel(UdopPreTrainedModel):
     _tied_weights_keys = [
         "encoder.embed_tokens.weight",
@@ -2042,3 +2048,11 @@ class UdopEncoderModel(UdopPreTrainedModel):
         )
 
         return encoder_outputs
+
+__all__ = [
+    "UdopPreTrainedModel",
+    "UdopStack",
+    "UdopModel",
+    "UdopForConditionalGeneration",
+    "UdopEncoderModel"
+]

@@ -54,6 +54,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_bert import BertConfig
 
 
@@ -816,6 +817,7 @@ class BertPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
+@register(backends=("torch",))
 class BertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -949,6 +951,7 @@ BERT_INPUTS_DOCSTRING = r"""
     "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
     BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BertModel(BertPreTrainedModel):
     """
 
@@ -1167,6 +1170,7 @@ class BertModel(BertPreTrainedModel):
     """,
     BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BertForPreTraining(BertPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
@@ -1273,6 +1277,7 @@ class BertForPreTraining(BertPreTrainedModel):
 @add_start_docstrings(
     """Bert Model with a `language modeling` head on top for CLM fine-tuning.""", BERT_START_DOCSTRING
 )
+@register(backends=("torch",))
 class BertLMHeadModel(BertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
@@ -1423,6 +1428,7 @@ class BertLMHeadModel(BertPreTrainedModel):
 
 
 @add_start_docstrings("""Bert Model with a `language modeling` head on top.""", BERT_START_DOCSTRING)
+@register(backends=("torch",))
 class BertForMaskedLM(BertPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
@@ -1533,6 +1539,7 @@ class BertForMaskedLM(BertPreTrainedModel):
     """Bert Model with a `next sentence prediction (classification)` head on top.""",
     BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BertForNextSentencePrediction(BertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1638,6 +1645,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
     """,
     BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BertForSequenceClassification(BertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1741,6 +1749,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
     """,
     BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BertForMultipleChoice(BertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1835,6 +1844,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
     """,
     BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BertForTokenClassification(BertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1918,6 +1928,7 @@ class BertForTokenClassification(BertPreTrainedModel):
     """,
     BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BertForQuestionAnswering(BertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2012,3 +2023,16 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "BertPreTrainedModel",
+    "BertModel",
+    "BertForPreTraining",
+    "BertLMHeadModel",
+    "BertForMaskedLM",
+    "BertForNextSentencePrediction",
+    "BertForSequenceClassification",
+    "BertForMultipleChoice",
+    "BertForTokenClassification",
+    "BertForQuestionAnswering"
+]

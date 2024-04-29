@@ -36,6 +36,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import BackboneMixin
+from ...utils.import_utils import register
 from .configuration_pvt_v2 import PvtV2Config
 
 
@@ -402,6 +403,7 @@ class PvtV2Encoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class PvtV2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -463,6 +465,7 @@ PVT_V2_INPUTS_DOCSTRING = r"""
     "The bare Pvt-v2 encoder outputting raw hidden-states without any specific head on top.",
     PVT_V2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PvtV2Model(PvtV2PreTrainedModel):
     def __init__(self, config: PvtV2Config):
         super().__init__(config)
@@ -528,6 +531,7 @@ class PvtV2Model(PvtV2PreTrainedModel):
     """,
     PVT_V2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PvtV2ForImageClassification(PvtV2PreTrainedModel):
     def __init__(self, config: PvtV2Config) -> None:
         super().__init__(config)
@@ -698,3 +702,9 @@ class PvtV2Backbone(PvtV2Model, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+__all__ = [
+    "PvtV2PreTrainedModel",
+    "PvtV2Model",
+    "PvtV2ForImageClassification"
+]

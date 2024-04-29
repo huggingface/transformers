@@ -44,6 +44,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import logging
+from ...utils.import_utils import register
 from .configuration_mobilevit import MobileViTConfig
 
 
@@ -909,6 +910,7 @@ class TFMobileViTMainLayer(keras.layers.Layer):
                 self.conv_1x1_exp.build(None)
 
 
+@register(backends=("tf",))
 class TFMobileViTPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -981,6 +983,7 @@ MOBILEVIT_INPUTS_DOCSTRING = r"""
     "The bare MobileViT model outputting raw hidden-states without any specific head on top.",
     MOBILEVIT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMobileViTModel(TFMobileViTPreTrainedModel):
     def __init__(self, config: MobileViTConfig, expand_output: bool = True, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1024,6 +1027,7 @@ class TFMobileViTModel(TFMobileViTPreTrainedModel):
     """,
     MOBILEVIT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMobileViTForImageClassification(TFMobileViTPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: MobileViTConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
@@ -1255,6 +1259,7 @@ class TFMobileViTDeepLabV3(keras.layers.Layer):
     """,
     MOBILEVIT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
     def __init__(self, config: MobileViTConfig, **kwargs) -> None:
         super().__init__(config, **kwargs)
@@ -1371,3 +1376,10 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
         if getattr(self, "segmentation_head", None) is not None:
             with tf.name_scope(self.segmentation_head.name):
                 self.segmentation_head.build(None)
+
+__all__ = [
+    "TFMobileViTPreTrainedModel",
+    "TFMobileViTModel",
+    "TFMobileViTForImageClassification",
+    "TFMobileViTForSemanticSegmentation"
+]

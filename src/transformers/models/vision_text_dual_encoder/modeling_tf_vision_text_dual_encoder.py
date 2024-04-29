@@ -32,6 +32,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_tf_auto import TFAutoModel
 from ..clip.modeling_tf_clip import CLIPVisionConfig, TFCLIPOutput, TFCLIPVisionModel
@@ -172,6 +173,7 @@ def clip_loss(similarity: tf.Tensor) -> tf.Tensor:
 
 
 @add_start_docstrings(VISION_TEXT_DUAL_ENCODER_START_DOCSTRING)
+@register(backends=("tf",))
 class TFVisionTextDualEncoderModel(TFPreTrainedModel):
     config_class = VisionTextDualEncoderConfig
     base_model_prefix = "vision_text_dual_encoder"
@@ -620,3 +622,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         pixel_values = tf.constant(VISION_DUMMY_INPUTS)
         dummy = {"pixel_values": pixel_values, "input_ids": input_ids}
         return dummy
+
+__all__ = [
+    "TFVisionTextDualEncoderModel"
+]

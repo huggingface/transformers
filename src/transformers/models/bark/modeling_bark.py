@@ -37,6 +37,7 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     logging,
 )
+from ...utils.import_utils import register
 from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,
@@ -473,6 +474,7 @@ class BarkBlock(nn.Module):
         return outputs  # hidden_states, ((present), attentions)
 
 
+@register(backends=("torch",))
 class BarkPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -652,6 +654,7 @@ BARK_CAUSAL_MODEL_INPUTS_DOCSTRING = r"""
 
 
 # GPT2-like autoregressive model
+@register(backends=("torch",))
 class BarkCausalModel(BarkPreTrainedModel):
     config_class = BarkSubModelConfig
 
@@ -1242,6 +1245,7 @@ class BarkCoarseModel(BarkCausalModel):
     language modeling heads, one for each codebook.""",
     BARK_MODEL_START_DOCSTRING.format(config="BarkFineConfig"),
 )
+@register(backends=("torch",))
 class BarkFineModel(BarkPreTrainedModel):
     base_model_prefix = "fine_acoustics"
     config_class = BarkFineConfig
@@ -1642,6 +1646,7 @@ class BarkFineModel(BarkPreTrainedModel):
     """,
     BARK_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BarkModel(BarkPreTrainedModel):
     config_class = BarkConfig
 
@@ -1906,3 +1911,10 @@ class BarkModel(BarkPreTrainedModel):
         config.coarse_acoustics_config._attn_implementation = config._attn_implementation
         config.fine_acoustics_config._attn_implementation = config._attn_implementation
         return config
+
+__all__ = [
+    "BarkPreTrainedModel",
+    "BarkCausalModel",
+    "BarkFineModel",
+    "BarkModel"
+]

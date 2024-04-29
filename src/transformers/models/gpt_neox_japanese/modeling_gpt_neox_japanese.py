@@ -26,6 +26,7 @@ from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_fo
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ...utils.import_utils import register
 from .configuration_gpt_neox_japanese import GPTNeoXJapaneseConfig
 
 
@@ -38,6 +39,7 @@ _CONFIG_FOR_DOC = "GPTNeoXJapaneseConfig"
 from ..deprecated._archive_maps import GPT_NEOX_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
+@register(backends=("torch",))
 class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -437,6 +439,7 @@ GPT_NEOX_JAPANESE_INPUTS_DOCSTRING = r"""
     "The bare GPTNeoXJapanese Model transformer outputting raw hidden-states without any specific head on top.",
     GPT_NEOX_JAPANESE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -592,6 +595,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
     """GPTNeoXJapanese Model with a `language modeling` head on top for Classifier Model fine-tuning.""",
     GPT_NEOX_JAPANESE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
     _tied_weights_keys = ["embed_out.weight"]
 
@@ -727,3 +731,9 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
                 + layer_past[2:],
             )
         return reordered_past
+
+__all__ = [
+    "GPTNeoXJapanesePreTrainedModel",
+    "GPTNeoXJapaneseModel",
+    "GPTNeoXJapaneseForCausalLM"
+]

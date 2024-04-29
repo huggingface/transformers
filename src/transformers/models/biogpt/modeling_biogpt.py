@@ -38,6 +38,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_biogpt import BioGptConfig
 
 
@@ -318,6 +319,7 @@ class BioGptDecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class BioGptPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -415,6 +417,7 @@ BIOGPT_INPUTS_DOCSTRING = r"""
     "The bare BioGPT Model transformer outputting raw hidden-states without any specific head on top.",
     BIOGPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BioGptModel(BioGptPreTrainedModel):
     def __init__(self, config: BioGptConfig):
         super().__init__(config)
@@ -584,6 +587,7 @@ class BioGptModel(BioGptPreTrainedModel):
 @add_start_docstrings(
     """BioGPT Model with a `language modeling` head on top for CLM fine-tuning.""", BIOGPT_START_DOCSTRING
 )
+@register(backends=("torch",))
 class BioGptForCausalLM(BioGptPreTrainedModel):
     _tied_weights_keys = ["output_projection.weight"]
 
@@ -713,6 +717,7 @@ class BioGptForCausalLM(BioGptPreTrainedModel):
     """,
     BIOGPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BioGptForTokenClassification(BioGptPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -813,6 +818,7 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
     """,
     BIOGPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BioGptForSequenceClassification(BioGptPreTrainedModel):
     def __init__(self, config: BioGptConfig):
         super().__init__(config)
@@ -922,3 +928,11 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.biogpt.embed_tokens = value
+
+__all__ = [
+    "BioGptPreTrainedModel",
+    "BioGptModel",
+    "BioGptForCausalLM",
+    "BioGptForTokenClassification",
+    "BioGptForSequenceClassification"
+]

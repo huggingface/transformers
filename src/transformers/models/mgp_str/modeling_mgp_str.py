@@ -32,6 +32,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_mgp_str import MgpstrConfig
 
 
@@ -309,6 +310,7 @@ class MgpstrA3Module(nn.Module):
         return (a3_out, attentions)
 
 
+@register(backends=("torch",))
 class MgpstrPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -364,6 +366,7 @@ MGP_STR_INPUTS_DOCSTRING = r"""
     "The bare MGP-STR Model transformer outputting raw hidden-states without any specific head on top.",
     MGP_STR_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MgpstrModel(MgpstrPreTrainedModel):
     def __init__(self, config: MgpstrConfig):
         super().__init__(config)
@@ -416,6 +419,7 @@ class MgpstrModel(MgpstrPreTrainedModel):
     """,
     MGP_STR_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
     config_class = MgpstrConfig
     main_input_name = "pixel_values"
@@ -511,3 +515,9 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
             attentions=mgp_outputs.attentions,
             a3_attentions=all_a3_attentions,
         )
+
+__all__ = [
+    "MgpstrPreTrainedModel",
+    "MgpstrModel",
+    "MgpstrForSceneTextRecognition"
+]

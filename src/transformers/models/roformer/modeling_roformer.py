@@ -44,6 +44,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_roformer import RoFormerConfig
 
 
@@ -674,6 +675,7 @@ class RoFormerOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
+@register(backends=("torch",))
 class RoFormerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -764,6 +766,7 @@ ROFORMER_INPUTS_DOCSTRING = r"""
     "The bare RoFormer Model transformer outputting raw hidden-states without any specific head on top.",
     ROFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RoFormerModel(RoFormerPreTrainedModel):
     """
 
@@ -931,6 +934,7 @@ class RoFormerModel(RoFormerPreTrainedModel):
 
 
 @add_start_docstrings("""RoFormer Model with a `language modeling` head on top.""", ROFORMER_START_DOCSTRING)
+@register(backends=("torch",))
 class RoFormerForMaskedLM(RoFormerPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
@@ -1033,6 +1037,7 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
 @add_start_docstrings(
     """RoFormer Model with a `language modeling` head on top for CLM fine-tuning.""", ROFORMER_START_DOCSTRING
 )
+@register(backends=("torch",))
 class RoFormerForCausalLM(RoFormerPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
@@ -1215,6 +1220,7 @@ class RoFormerClassificationHead(nn.Module):
     """,
     ROFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RoFormerForSequenceClassification(RoFormerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1306,6 +1312,7 @@ class RoFormerForSequenceClassification(RoFormerPreTrainedModel):
     """,
     ROFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1397,6 +1404,7 @@ class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
     """,
     ROFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RoFormerForTokenClassification(RoFormerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1473,6 +1481,7 @@ class RoFormerForTokenClassification(RoFormerPreTrainedModel):
     """,
     ROFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RoFormerForQuestionAnswering(RoFormerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1563,3 +1572,14 @@ class RoFormerForQuestionAnswering(RoFormerPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "RoFormerPreTrainedModel",
+    "RoFormerModel",
+    "RoFormerForMaskedLM",
+    "RoFormerForCausalLM",
+    "RoFormerForSequenceClassification",
+    "RoFormerForMultipleChoice",
+    "RoFormerForTokenClassification",
+    "RoFormerForQuestionAnswering"
+]

@@ -39,6 +39,7 @@ from ...modeling_flax_outputs import (
 )
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, overwrite_call_docstring
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_roberta_prelayernorm import RobertaPreLayerNormConfig
 
 
@@ -723,6 +724,7 @@ class FlaxRobertaPreLayerNormClassificationHead(nn.Module):
 
 
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaPreTrainedModel with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
+@register(backends=("flax",))
 class FlaxRobertaPreLayerNormPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -993,6 +995,7 @@ class FlaxRobertaPreLayerNormModule(nn.Module):
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaModel with Roberta->RobertaPreLayerNorm
+@register(backends=("flax",))
 class FlaxRobertaPreLayerNormModel(FlaxRobertaPreLayerNormPreTrainedModel):
     module_class = FlaxRobertaPreLayerNormModule
 
@@ -1070,6 +1073,7 @@ class FlaxRobertaPreLayerNormForMaskedLMModule(nn.Module):
     """RoBERTa-PreLayerNorm Model with a `language modeling` head on top.""", ROBERTA_PRELAYERNORM_START_DOCSTRING
 )
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForMaskedLM with Roberta->RobertaPreLayerNorm
+@register(backends=("flax",))
 class FlaxRobertaPreLayerNormForMaskedLM(FlaxRobertaPreLayerNormPreTrainedModel):
     module_class = FlaxRobertaPreLayerNormForMaskedLMModule
 
@@ -1144,6 +1148,7 @@ class FlaxRobertaPreLayerNormForSequenceClassificationModule(nn.Module):
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForSequenceClassification with Roberta->RobertaPreLayerNorm
+@register(backends=("flax",))
 class FlaxRobertaPreLayerNormForSequenceClassification(FlaxRobertaPreLayerNormPreTrainedModel):
     module_class = FlaxRobertaPreLayerNormForSequenceClassificationModule
 
@@ -1226,6 +1231,7 @@ class FlaxRobertaPreLayerNormForMultipleChoiceModule(nn.Module):
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForMultipleChoice with Roberta->RobertaPreLayerNorm
+@register(backends=("flax",))
 class FlaxRobertaPreLayerNormForMultipleChoice(FlaxRobertaPreLayerNormPreTrainedModel):
     module_class = FlaxRobertaPreLayerNormForMultipleChoiceModule
 
@@ -1310,6 +1316,7 @@ class FlaxRobertaPreLayerNormForTokenClassificationModule(nn.Module):
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForTokenClassification with Roberta->RobertaPreLayerNorm
+@register(backends=("flax",))
 class FlaxRobertaPreLayerNormForTokenClassification(FlaxRobertaPreLayerNormPreTrainedModel):
     module_class = FlaxRobertaPreLayerNormForTokenClassificationModule
 
@@ -1388,6 +1395,7 @@ class FlaxRobertaPreLayerNormForQuestionAnsweringModule(nn.Module):
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForQuestionAnswering with Roberta->RobertaPreLayerNorm
+@register(backends=("flax",))
 class FlaxRobertaPreLayerNormForQuestionAnswering(FlaxRobertaPreLayerNormPreTrainedModel):
     module_class = FlaxRobertaPreLayerNormForQuestionAnsweringModule
 
@@ -1476,6 +1484,7 @@ class FlaxRobertaPreLayerNormForCausalLMModule(nn.Module):
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForCausalLM with Roberta->RobertaPreLayerNorm
+@register(backends=("flax",))
 class FlaxRobertaPreLayerNormForCausalLM(FlaxRobertaPreLayerNormPreTrainedModel):
     module_class = FlaxRobertaPreLayerNormForCausalLMModule
 
@@ -1512,3 +1521,14 @@ append_call_sample_docstring(
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxRobertaPreLayerNormPreTrainedModel",
+    "FlaxRobertaPreLayerNormModel",
+    "FlaxRobertaPreLayerNormForMaskedLM",
+    "FlaxRobertaPreLayerNormForSequenceClassification",
+    "FlaxRobertaPreLayerNormForMultipleChoice",
+    "FlaxRobertaPreLayerNormForTokenClassification",
+    "FlaxRobertaPreLayerNormForQuestionAnswering",
+    "FlaxRobertaPreLayerNormForCausalLM"
+]

@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_xlm_roberta import XLMRobertaConfig
 
 
@@ -581,6 +582,7 @@ class XLMRobertaPooler(nn.Module):
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaPreTrainedModel with Roberta->XLMRoberta
+@register(backends=("torch",))
 class XLMRobertaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -681,6 +683,7 @@ XLM_ROBERTA_INPUTS_DOCSTRING = r"""
     XLM_ROBERTA_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaModel with Roberta->XLMRoberta, ROBERTA->XLM_ROBERTA
+@register(backends=("torch",))
 class XLMRobertaModel(XLMRobertaPreTrainedModel):
     """
 
@@ -867,6 +870,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
     XLM_ROBERTA_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with Roberta->XLMRoberta, ROBERTA->XLM_ROBERTA
+@register(backends=("torch",))
 class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
@@ -1031,6 +1035,7 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel):
     XLM_ROBERTA_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM with Roberta->XLMRoberta, ROBERTA->XLM_ROBERTA
+@register(backends=("torch",))
 class XLMRobertaForMaskedLM(XLMRobertaPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
@@ -1164,6 +1169,7 @@ class XLMRobertaLMHead(nn.Module):
     XLM_ROBERTA_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification with Roberta->XLMRoberta, ROBERTA->XLM_ROBERTA
+@register(backends=("torch",))
 class XLMRobertaForSequenceClassification(XLMRobertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1264,6 +1270,7 @@ class XLMRobertaForSequenceClassification(XLMRobertaPreTrainedModel):
     XLM_ROBERTA_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice with Roberta->XLMRoberta, ROBERTA->XLM_ROBERTA
+@register(backends=("torch",))
 class XLMRobertaForMultipleChoice(XLMRobertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1359,6 +1366,7 @@ class XLMRobertaForMultipleChoice(XLMRobertaPreTrainedModel):
     XLM_ROBERTA_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification with Roberta->XLMRoberta, ROBERTA->XLM_ROBERTA
+@register(backends=("torch",))
 class XLMRobertaForTokenClassification(XLMRobertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1468,6 +1476,7 @@ class XLMRobertaClassificationHead(nn.Module):
     XLM_ROBERTA_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering with Roberta->XLMRoberta, ROBERTA->XLM_ROBERTA
+@register(backends=("torch",))
 class XLMRobertaForQuestionAnswering(XLMRobertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1577,3 +1586,14 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
+__all__ = [
+    "XLMRobertaPreTrainedModel",
+    "XLMRobertaModel",
+    "XLMRobertaForCausalLM",
+    "XLMRobertaForMaskedLM",
+    "XLMRobertaForSequenceClassification",
+    "XLMRobertaForMultipleChoice",
+    "XLMRobertaForTokenClassification",
+    "XLMRobertaForQuestionAnswering"
+]

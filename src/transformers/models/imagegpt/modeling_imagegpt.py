@@ -34,6 +34,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_imagegpt import ImageGPTConfig
 
 
@@ -480,6 +481,7 @@ class ImageGPTBlock(nn.Module):
         return outputs  # hidden_states, present, (attentions, cross_attentions)
 
 
+@register(backends=("torch",))
 class ImageGPTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -606,6 +608,7 @@ IMAGEGPT_INPUTS_DOCSTRING = r"""
     "The bare ImageGPT Model transformer outputting raw hidden-states without any specific head on top.",
     IMAGEGPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ImageGPTModel(ImageGPTPreTrainedModel):
     def __init__(self, config: ImageGPTConfig):
         super().__init__(config)
@@ -877,6 +880,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
     """,
     IMAGEGPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1077,6 +1081,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
     """,
     IMAGEGPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
     def __init__(self, config: ImageGPTConfig):
         super().__init__(config)
@@ -1199,3 +1204,10 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+__all__ = [
+    "ImageGPTPreTrainedModel",
+    "ImageGPTModel",
+    "ImageGPTForCausalImageModeling",
+    "ImageGPTForImageClassification"
+]

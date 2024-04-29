@@ -38,6 +38,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 
 
@@ -449,6 +450,7 @@ class SiglipEncoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class SiglipPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -771,6 +773,7 @@ class SiglipTextTransformer(nn.Module):
     """The text model from SigLIP without any head or projection on top.""",
     SIGLIP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SiglipTextModel(SiglipPreTrainedModel):
     config_class = SiglipTextConfig
 
@@ -912,6 +915,7 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
     """The vision model from SigLIP without any head or projection on top.""",
     SIGLIP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SiglipVisionModel(SiglipPreTrainedModel):
     config_class = SiglipVisionConfig
     main_input_name = "pixel_values"
@@ -969,6 +973,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
 
 
 @add_start_docstrings(SIGLIP_START_DOCSTRING)
+@register(backends=("torch",))
 class SiglipModel(SiglipPreTrainedModel):
     config_class = SiglipConfig
 
@@ -1200,6 +1205,7 @@ class SiglipModel(SiglipPreTrainedModel):
     """,
     SIGLIP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SiglipForImageClassification(SiglipPreTrainedModel):
     main_input_name = "pixel_values"
 
@@ -1315,3 +1321,11 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "SiglipPreTrainedModel",
+    "SiglipTextModel",
+    "SiglipVisionModel",
+    "SiglipModel",
+    "SiglipForImageClassification"
+]
