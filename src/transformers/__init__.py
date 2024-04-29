@@ -6098,8 +6098,8 @@ if TYPE_CHECKING:
         BitsAndBytesConfig,
         EetqConfig,
         GPTQConfig,
-        QuantoConfig,
         HqqConfig,
+        QuantoConfig,
     )
 
     try:
