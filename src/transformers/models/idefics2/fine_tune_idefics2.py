@@ -209,14 +209,30 @@ def similarity_score(a_ij, o_q_i, tau=0.5):
     nl = normalized_levenshtein(a_ij, o_q_i)
     return 1 - nl if nl < tau else 0
 
+def average_normalized_levenshtein_similarity(ground_truth, predicted_answers):
+    assert len(ground_truth) == len(predicted_answers), "Length of ground_truth and predicted_answers must match."
+
+    N = len(ground_truth)
+    total_score = 0
+
+    for i in range(N):
+        a_i = ground_truth[i]
+        o_q_i = predicted_answers[i]
+        if o_q_i == "":
+            print("Warning: Skipped an empty prediction.")
+            max_score = 0
+        else:
+            max_score = max(similarity_score(a_ij, o_q_i) for a_ij in a_i)
+
+        total_score += max_score
+
+    return total_score / N
+
 def postprocess_text(preds, labels):
     preds = [pred.strip() for pred in preds]
     labels = [[label.strip()] for label in labels]
 
     return preds, labels
-
-
-metric = evaluate.load("sacrebleu")
 
 def compute_metrics(eval_preds):
     preds, labels = eval_preds
@@ -231,8 +247,8 @@ def compute_metrics(eval_preds):
     # Some simple post-processing
     decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
 
-    result = metric.compute(predictions=decoded_preds, references=decoded_labels)
-    result = {"bleu": result["score"]}
+    score = average_normalized_levenshtein_similarity(decoded_labels, decoded_preds)
+    result = {"levenshtein": score}
 
     prediction_lens = [np.count_nonzero(pred != processor.tokenizer.pad_token_id) for pred in preds]
     result["gen_len"] = np.mean(prediction_lens)
@@ -407,10 +423,10 @@ class Idefics2Trainer(Seq2SeqTrainer):
         custom_inputs["pixel_values"] = generation_inputs["pixel_values"]
         custom_inputs["pixel_attention_mask"] = generation_inputs["pixel_attention_mask"]
 
-        print("Custom inputs:")
-        for k,v in custom_inputs.items():
-            if isinstance(v, torch.Tensor):
-                print(k,v.shape)
+        # print("Custom inputs:")
+        # for k,v in custom_inputs.items():
+        #     if isinstance(v, torch.Tensor):
+        #         print(k,v.shape)
 
         generated_tokens = self.model.generate(**custom_inputs, **gen_kwargs)
 
