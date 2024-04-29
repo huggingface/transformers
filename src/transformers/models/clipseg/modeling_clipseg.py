@@ -664,7 +664,7 @@ class CLIPSegTextTransformer(nn.Module):
         self.embeddings = CLIPSegTextEmbeddings(config)
         self.encoder = CLIPSegEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self._use_sdpa = config._attn_implementation == "sdpa"
+        self._attn_implementation = config._attn_implementation
 
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
