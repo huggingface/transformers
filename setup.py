@@ -301,6 +301,7 @@ extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
     deps_list(
         "pytest",
+        "pytest-rich",
         "pytest-xdist",
         "timeout-decorator",
         "parameterized",
