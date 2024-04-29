@@ -27,7 +27,7 @@ def parse_pytest_failure_output(file_path):
                 failed_tests[reason] = failed_tests.get(reason, []) + [error]
     print("Number of failed tests:", failed_count)
     for k,v in sorted(failed_tests.items(), key=lambda x:len(x[1])):
-        print(f"{len(v):4} failed because {k}:{v}")
+        print(f"{len(v):4} failed because {k}:{v[0]}")
     if failed_count>0:
         exit(1)
 
@@ -44,7 +44,7 @@ def parse_pytest_errors_output(file_path):
                 error_tests[reason] = error_tests.get(reason, []) + [test_error]
     print("Number of errors:", error_count)
     for k,v in sorted(error_tests.items(), key=lambda x:len(x[1])):
-        print(f"{len(v):4} errored out because of {k}: {v}")
+        print(f"{len(v):4} errored out because of {k}: {v[0]}")
     if error_count>0:
         exit(1)
 
