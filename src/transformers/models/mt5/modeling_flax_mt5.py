@@ -17,6 +17,7 @@
 import jax.numpy as jnp
 
 from ...utils import logging
+from ...utils.import_utils import register
 from ..t5.modeling_flax_t5 import FlaxT5EncoderModel, FlaxT5ForConditionalGeneration, FlaxT5Model
 from .configuration_mt5 import MT5Config
 
@@ -39,6 +40,7 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_
     return shifted_input_ids
 
 
+@register(backends=('flax',))
 class FlaxMT5Model(FlaxT5Model):
     r"""
     This class overrides [`FlaxT5Model`]. Please check the superclass for the appropriate documentation alongside usage
@@ -66,6 +68,7 @@ class FlaxMT5Model(FlaxT5Model):
     config_class = MT5Config
 
 
+@register(backends=('flax',))
 class FlaxMT5EncoderModel(FlaxT5EncoderModel):
     r"""
     This class overrides [`FlaxT5EncoderModel`]. Please check the superclass for the appropriate documentation
@@ -93,6 +96,7 @@ class FlaxMT5EncoderModel(FlaxT5EncoderModel):
     config_class = MT5Config
 
 
+@register(backends=('flax',))
 class FlaxMT5ForConditionalGeneration(FlaxT5ForConditionalGeneration):
     r"""
     This class overrides [`FlaxT5ForConditionalGeneration`]. Please check the superclass for the appropriate
@@ -118,3 +122,9 @@ class FlaxMT5ForConditionalGeneration(FlaxT5ForConditionalGeneration):
 
     model_type = "mt5"
     config_class = MT5Config
+
+__all__ = [
+    "FlaxMT5Model",
+    "FlaxMT5EncoderModel",
+    "FlaxMT5ForConditionalGeneration"
+]

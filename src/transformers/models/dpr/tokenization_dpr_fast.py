@@ -20,6 +20,7 @@ from typing import List, Optional, Union
 
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, add_end_docstrings, add_start_docstrings, logging
+from ...utils.import_utils import register
 from ..bert.tokenization_bert_fast import BertTokenizerFast
 from .tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer, DPRReaderTokenizer
 
@@ -29,6 +30,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=('tokenizers',))
 class DPRContextEncoderTokenizerFast(BertTokenizerFast):
     r"""
     Construct a "fast" DPRContextEncoder tokenizer (backed by HuggingFace's *tokenizers* library).
@@ -43,6 +45,7 @@ class DPRContextEncoderTokenizerFast(BertTokenizerFast):
     slow_tokenizer_class = DPRContextEncoderTokenizer
 
 
+@register(backends=('tokenizers',))
 class DPRQuestionEncoderTokenizerFast(BertTokenizerFast):
     r"""
     Constructs a "fast" DPRQuestionEncoder tokenizer (backed by HuggingFace's *tokenizers* library).
@@ -301,6 +304,7 @@ class CustomDPRReaderTokenizerMixin:
         return chosen_span_intervals
 
 
+@register(backends=('tokenizers',))
 @add_end_docstrings(CUSTOM_DPR_READER_DOCSTRING)
 class DPRReaderTokenizerFast(CustomDPRReaderTokenizerMixin, BertTokenizerFast):
     r"""
@@ -317,3 +321,10 @@ class DPRReaderTokenizerFast(CustomDPRReaderTokenizerMixin, BertTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = DPRReaderTokenizer
+
+
+__all__ = [
+    "DPRContextEncoderTokenizerFast",
+    "DPRQuestionEncoderTokenizerFast",
+    "DPRReaderTokenizerFast",
+]

@@ -20,11 +20,14 @@ from typing import List, Optional
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
 from .configuration_rag import RagConfig
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+
+@register()
 class RagTokenizer:
     def __init__(self, question_encoder, generator):
         self.question_encoder = question_encoder
@@ -118,3 +121,6 @@ class RagTokenizer:
         )
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
+
+
+__all__ = ["RagTokenizer"]

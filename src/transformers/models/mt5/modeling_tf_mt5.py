@@ -15,6 +15,7 @@
 """ Tensorflow mT5 model."""
 
 from ...utils import logging
+from ...utils.import_utils import register
 from ..t5.modeling_tf_t5 import TFT5EncoderModel, TFT5ForConditionalGeneration, TFT5Model
 from .configuration_mt5 import MT5Config
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "T5Config"
 
 
+@register(backends=('tf',))
 class TFMT5Model(TFT5Model):
     r"""
     This class overrides [`TFT5Model`]. Please check the superclass for the appropriate documentation alongside usage
@@ -49,6 +51,7 @@ class TFMT5Model(TFT5Model):
     config_class = MT5Config
 
 
+@register(backends=('tf',))
 class TFMT5ForConditionalGeneration(TFT5ForConditionalGeneration):
     r"""
     This class overrides [`TFT5ForConditionalGeneration`]. Please check the superclass for the appropriate
@@ -73,6 +76,7 @@ class TFMT5ForConditionalGeneration(TFT5ForConditionalGeneration):
     config_class = MT5Config
 
 
+@register(backends=('tf',))
 class TFMT5EncoderModel(TFT5EncoderModel):
     r"""
     This class overrides [`TFT5EncoderModel`]. Please check the superclass for the appropriate documentation alongside
@@ -93,3 +97,10 @@ class TFMT5EncoderModel(TFT5EncoderModel):
 
     model_type = "mt5"
     config_class = MT5Config
+
+
+__all__ = [
+    "TFMT5Model",
+    "TFMT5EncoderModel",
+    "TFMT5ForConditionalGeneration"
+]
