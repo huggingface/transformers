@@ -572,10 +572,7 @@ class GemmaSdpaAttention(GemmaAttention):
 
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this if statement instead of an
         # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
-        if causal_mask is None and q_len > 1:
-            is_causal = True
-        else:
-            is_causal = False
+        is_causal = True if causal_mask is None and q_len > 1 else False
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
