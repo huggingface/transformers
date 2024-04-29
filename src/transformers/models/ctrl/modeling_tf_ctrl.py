@@ -345,8 +345,10 @@ class TFCTRLMainLayer(keras.layers.Layer):
             past_length = shape_list(past_key_values[0][0])[-2]
         if position_ids is None:
             if attention_mask is not None:
-                position_ids = tf.cumsum(attention_mask, axis=-1) - 1
-                position_ids = tf.where(attention_mask == 0, 1, position_ids)
+                position_ids = tf.cumsum(tf.cast(attention_mask, tf.int64), axis=-1) - 1
+                # create ones tensor to match dtypes, otherwise we get errors
+                ones_tensor = tf.ones_like(position_ids, dtype=tf.int64)
+                position_ids = tf.where(attention_mask == 0, ones_tensor, position_ids)
                 position_ids = position_ids[..., -input_shape[-1] :]
                 position_ids = tf.reshape(position_ids, (-1, input_shape[-1]))
             else:
@@ -707,8 +709,9 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
         attention_mask = kwargs.get("attention_mask", None)
 
         if attention_mask is not None and position_ids is None:
-            position_ids = tf.cumsum(attention_mask, axis=-1) - 1
-            position_ids = tf.where(attention_mask == 0, 1, position_ids)
+            position_ids = tf.cumsum(tf.cast(attention_mask, tf.int64), axis=-1) - 1
+            ones_tensor = tf.ones_like(position_ids, dtype=tf.int64)
+            position_ids = tf.where(attention_mask == 0, ones_tensor, position_ids)
             if past_key_values:
                 position_ids = tf.expand_dims(position_ids[:, -1], -1)
 

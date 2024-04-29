@@ -17,6 +17,7 @@
 import tempfile
 import unittest
 
+import jax.numpy as jnp
 import numpy as np
 
 from transformers import is_flax_available, is_torch_available
@@ -299,13 +300,20 @@ class FlaxEncoderDecoderMixin:
         flax_inputs = inputs_dict
         pt_inputs = {k: torch.tensor(v.tolist()) for k, v in flax_inputs.items()}
 
+        # when model weights are random init masking with attn_mask still leads to logits
+        # mismatch, which does not happen if pre-trained models are used. That causes error in encoder-decoder models
+        # when decoder_only is used in as backbone (GPT2), because GPT prepares positions depending on attn mask (for torch)
+        # and as arange in flax. That's why we init attn mask with all `1`
+        if "decoder_attention_mask" in pt_inputs:
+            pt_inputs["decoder_attention_mask"] = torch.ones_like(pt_inputs["attention_mask"])
+            inputs_dict["decoder_attention_mask"] = jnp.ones_like(inputs_dict["attention_mask"])
+
         with torch.no_grad():
             pt_outputs = pt_model(**pt_inputs).to_tuple()
 
         fx_outputs = fx_model(**inputs_dict).to_tuple()
         self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
         for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-            print("PASSED")
             self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-5)
 
         # PT -> Flax
