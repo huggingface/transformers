@@ -228,10 +228,10 @@ class RTDetrConfig(PretrainedConfig):
         auxiliary_loss=True,
         focal_loss_alpha=0.75,
         focal_loss_gamma=2.0,
-        weight_loss_vfl=1.0,
+        weight_loss_vfl=2.0,
         weight_loss_bbox=5.0,
         weight_loss_giou=2.0,
-        eos_coefficient=0.1,
+        eos_coefficient=1e-4,
         **kwargs,
     ):
         backbone_kwargs = (

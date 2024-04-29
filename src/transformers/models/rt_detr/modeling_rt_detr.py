@@ -31,7 +31,6 @@ from torch.autograd.function import once_differentiable
 
 from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -444,7 +443,7 @@ def get_contrastive_denoising_training_group(
 
     Args:
         targets (`List[dict]`):
-            The target objects, each containing 'labels' and 'boxes' for objects in an image.
+            The target objects, each containing 'class_labels' and 'boxes' for objects in an image.
         num_classes (`int`):
             Total number of classes in the dataset.
         num_queries (`int`):
@@ -472,8 +471,8 @@ def get_contrastive_denoising_training_group(
     if num_denoising_queries <= 0:
         return None, None, None, None
 
-    num_ground_truths = [len(t["labels"]) for t in targets]
-    device = targets[0]["labels"].device
+    num_ground_truths = [len(t["class_labels"]) for t in targets]
+    device = targets[0]["class_labels"].device
 
     max_gt_num = max(num_ground_truths)
     if max_gt_num == 0:
@@ -491,7 +490,7 @@ def get_contrastive_denoising_training_group(
     for i in range(batch_size):
         num_gt = num_ground_truths[i]
         if num_gt > 0:
-            input_query_class[i, :num_gt] = targets[i]["labels"]
+            input_query_class[i, :num_gt] = targets[i]["class_labels"]
             input_query_bbox[i, :num_gt] = targets[i]["boxes"]
             pad_gt_mask[i, :num_gt] = 1
     # each group has positive and negative queries.
@@ -919,7 +918,6 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
         return output, attention_weights
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiheadAttention with DeformableDetr->RTDetr
 class RTDetrMultiheadAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper.
@@ -994,8 +992,8 @@ class RTDetrMultiheadAttention(nn.Module):
 
         # expand attention_mask
         if attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+            # [seq_len, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
+            attention_mask = attention_mask.expand(batch_size, 1, *attention_mask.size())
 
         if attention_mask is not None:
             if attention_mask.size() != (batch_size, 1, target_len, source_len):
@@ -1100,6 +1098,7 @@ class RTDetrDecoderLayer(nn.Module):
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
+            attention_mask=encoder_attention_mask,
             position_embeddings=position_embeddings,
             output_attentions=output_attentions,
         )
@@ -1114,9 +1113,7 @@ class RTDetrDecoderLayer(nn.Module):
         cross_attn_weights = None
         hidden_states, cross_attn_weights = self.encoder_attn(
             hidden_states=hidden_states,
-            attention_mask=encoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             position_embeddings=position_embeddings,
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
@@ -1788,7 +1785,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
             (
                 denoising_class,
                 denoising_bbox_unact,
-                mask_flatten,
+                attention_mask,
                 denoising_meta_values,
             ) = get_contrastive_denoising_training_group(
                 targets=labels,
@@ -1800,7 +1797,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
                 box_noise_scale=self.config.box_noise_scale,
             )
         else:
-            denoising_class, denoising_bbox_unact, mask_flatten, denoising_meta_values = None, None, None, None
+            denoising_class, denoising_bbox_unact, attention_mask, denoising_meta_values = None, None, None, None
 
         batch_size = len(source_flatten)
         device = source_flatten.device
@@ -1848,7 +1845,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         decoder_outputs = self.decoder(
             inputs_embeds=target,
             encoder_hidden_states=source_flatten,
-            encoder_attention_mask=mask_flatten,
+            encoder_attention_mask=attention_mask,
             reference_points=init_reference_points,
             spatial_shapes=spatial_shapes,
             level_start_index=level_start_index,
@@ -2015,7 +2012,7 @@ class RTDetrLoss(nn.Module):
 
     def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
         """Classification loss (NLL)
-        targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
+        targets dicts must contain the key "class_labels" containing a tensor of dim [nb_target_boxes]
         """
         if "logits" not in outputs:
             raise KeyError("No logits were found in the outputs")
@@ -2105,7 +2102,7 @@ class RTDetrLoss(nn.Module):
     def loss_labels_bce(self, outputs, targets, indices, num_boxes, log=True):
         src_logits = outputs["logits"]
         idx = self._get_source_permutation_idx(indices)
-        target_classes_original = torch.cat([_target["labels"][i] for _target, (_, i) in zip(targets, indices)])
+        target_classes_original = torch.cat([_target["class_labels"][i] for _target, (_, i) in zip(targets, indices)])
         target_classes = torch.full(
             src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
         )
@@ -2135,7 +2132,7 @@ class RTDetrLoss(nn.Module):
         src_logits = outputs["logits"]
 
         idx = self._get_source_permutation_idx(indices)
-        target_classes_original = torch.cat([_target["labels"][i] for _target, (_, i) in zip(targets, indices)])
+        target_classes_original = torch.cat([_target["class_labels"][i] for _target, (_, i) in zip(targets, indices)])
         target_classes = torch.full(
             src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
         )
@@ -2163,8 +2160,8 @@ class RTDetrLoss(nn.Module):
     @staticmethod
     def get_cdn_matched_indices(dn_meta, targets):
         dn_positive_idx, dn_num_group = dn_meta["dn_positive_idx"], dn_meta["dn_num_group"]
-        num_gts = [len(t["labels"]) for t in targets]
-        device = targets[0]["labels"].device
+        num_gts = [len(t["class_labels"]) for t in targets]
+        device = targets[0]["class_labels"].device
 
         dn_match_indices = []
         for i, num_gt in enumerate(num_gts):
@@ -2306,7 +2303,7 @@ class RTDetrHungarianMatcher(nn.Module):
                  "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates
 
             targets: This is a list of targets (len(targets) = batch_size), where each target is a dict containing:
-                 "labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of ground-truth
+                 "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of ground-truth
                            objects in the target) containing the class labels
                  "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates
 
@@ -2599,6 +2596,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             encoder_outputs=encoder_outputs,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
+            labels=labels,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
