@@ -34,7 +34,6 @@ import numpy as np
 from huggingface_hub import HfFolder, ModelCard, delete_repo, list_repo_commits, list_repo_files
 from parameterized import parameterized
 from requests.exceptions import HTTPError
-from safetensors.torch import load_file
 
 from transformers import (
     AutoTokenizer,
@@ -128,6 +127,7 @@ if is_torch_available():
 
     if is_safetensors_available():
         import safetensors.torch
+        
 
 # for version specific tests in TrainerIntegrationTest
 require_accelerate_version_min_0_28 = partial(require_accelerate, min_version="0.28")
@@ -2013,7 +2013,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # this goes by the last `eval` step check to do so, so it won't be
             # the last model *saved*
             model_state = trainer.model.state_dict()
-            final_model_weights = load_file(os.path.join(tmpdir, "checkpoint-10", "model.safetensors"))
+            final_model_weights = safetensors.torch.load_file(os.path.join(tmpdir, "checkpoint-10", "model.safetensors"))
             for k, v in model_state.items():
                 assert torch.allclose(v, final_model_weights[k]), f"{k} is not the same"
 
