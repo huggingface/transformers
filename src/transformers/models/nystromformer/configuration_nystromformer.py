@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Nystromformer model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class NystromformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`NystromformerModel`]. It is used to instantiate
@@ -130,3 +132,8 @@ class NystromformerConfig(PretrainedConfig):
         self.inv_coeff_init_option = inv_coeff_init_option
         self.layer_norm_eps = layer_norm_eps
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+__all__ = [
+    "NystromformerConfig"
+]
+    

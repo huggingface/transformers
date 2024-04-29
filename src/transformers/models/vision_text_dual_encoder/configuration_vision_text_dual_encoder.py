@@ -15,6 +15,7 @@
 """ VisionTextDualEncoder model configuration"""
 
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
@@ -32,6 +33,7 @@ VISION_MODEL_CONFIGS = {
 }
 
 
+@register()
 class VisionTextDualEncoderConfig(PretrainedConfig):
     r"""
     [`VisionTextDualEncoderConfig`] is the configuration class to store the configuration of a
@@ -117,3 +119,8 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
         """
 
         return cls(vision_config=vision_config.to_dict(), text_config=text_config.to_dict(), **kwargs)
+
+__all__ = [
+    "VisionTextDualEncoderConfig"
+]
+    

@@ -14,6 +14,7 @@
 # limitations under the License.
 """ ESM model configuration"""
 
+from ...utils.import_utils import register
 from dataclasses import asdict, dataclass
 from typing import Optional
 
@@ -28,6 +29,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class EsmConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ESMModel`]. It is used to instantiate a ESM model
@@ -359,3 +361,8 @@ def get_default_vocab_list():
         "<null_1>",
         "<mask>",
     )
+
+__all__ = [
+    "EsmConfig"
+]
+    

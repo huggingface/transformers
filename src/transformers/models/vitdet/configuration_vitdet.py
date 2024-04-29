@@ -15,6 +15,7 @@
 """ VitDet model configuration"""
 
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
@@ -26,6 +27,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class VitDetConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VitDetModel`]. It is used to instantiate an
@@ -155,3 +157,8 @@ class VitDetConfig(BackboneConfigMixin, PretrainedConfig):
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
+
+__all__ = [
+    "VitDetConfig"
+]
+    

@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ BART model configuration"""
+from ...utils.import_utils import register
 import warnings
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
@@ -27,6 +28,7 @@ from ...utils import TensorType, is_torch_available, logging
 logger = logging.get_logger(__name__)
 
 
+@register()
 class BartConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BartModel`]. It is used to instantiate a BART
@@ -178,6 +180,7 @@ class BartConfig(PretrainedConfig):
             )
 
 
+@register()
 class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -399,3 +402,9 @@ class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
             flattened_output = super(OnnxSeq2SeqConfigWithPast, self)._flatten_past_key_values_(
                 flattened_output, name, idx, t
             )
+
+__all__ = [
+    "BartConfig",
+    "BartOnnxConfig"
+]
+    

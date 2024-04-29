@@ -15,6 +15,7 @@
 # limitations under the License.
 """ MPNet model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -25,6 +26,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class MPNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MPNetModel`] or a [`TFMPNetModel`]. It is used to
@@ -114,3 +116,8 @@ class MPNetConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.relative_attention_num_buckets = relative_attention_num_buckets
+
+__all__ = [
+    "MPNetConfig"
+]
+    

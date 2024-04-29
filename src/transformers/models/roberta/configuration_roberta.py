@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ RoBERTa configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -28,6 +29,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class RobertaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RobertaModel`] or a [`TFRobertaModel`]. It is
@@ -139,6 +141,7 @@ class RobertaConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
 
 
+@register()
 class RobertaOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -152,3 +155,9 @@ class RobertaOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+__all__ = [
+    "RobertaConfig",
+    "RobertaOnnxConfig"
+]
+    

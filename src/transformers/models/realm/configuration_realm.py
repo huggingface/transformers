@@ -14,6 +14,7 @@
 # limitations under the License.
 """ REALM model configuration."""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import REALM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class RealmConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of
@@ -167,3 +169,8 @@ class RealmConfig(PretrainedConfig):
         # Retrieval config
         self.num_block_records = num_block_records
         self.searcher_beam_size = searcher_beam_size
+
+__all__ = [
+    "RealmConfig"
+]
+    

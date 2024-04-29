@@ -493,45 +493,45 @@ EMOTICONS = r"""
 # URL pattern due to John Gruber, modified by Tom Winzig. See
 # https://gist.github.com/winzig/8894715
 # docstyle-ignore
-URLS = r"""			# Capture 1: entire matched URL
+URLS = r"""            # Capture 1: entire matched URL
   (?:
-  https?:				# URL protocol and colon
+  https?:                # URL protocol and colon
     (?:
-      /{1,3}				# 1-3 slashes
-      |					#   or
-      [a-z0-9%]				# Single letter or digit or '%'
+      /{1,3}                # 1-3 slashes
+      |                    #   or
+      [a-z0-9%]                # Single letter or digit or '%'
                                        # (Trying not to match e.g. "URI::Escape")
     )
-    |					#   or
+    |                    #   or
                                        # looks like domain name followed by a slash:
     [a-z0-9.\-]+[.]
     (?:[a-z]{2,13})
     /
   )
-  (?:					# One or more:
-    [^\s()<>{}\[\]]+			# Run of non-space, non-()<>{}[]
-    |					#   or
+  (?:                    # One or more:
+    [^\s()<>{}\[\]]+            # Run of non-space, non-()<>{}[]
+    |                    #   or
     \([^\s()]*?\([^\s()]+\)[^\s()]*?\) # balanced parens, one level deep: (...(...)...)
     |
-    \([^\s]+?\)				# balanced parens, non-recursive: (...)
+    \([^\s]+?\)                # balanced parens, non-recursive: (...)
   )+
-  (?:					# End with:
+  (?:                    # End with:
     \([^\s()]*?\([^\s()]+\)[^\s()]*?\) # balanced parens, one level deep: (...(...)...)
     |
-    \([^\s]+?\)				# balanced parens, non-recursive: (...)
-    |					#   or
-    [^\s`!()\[\]{};:'".,<>?«»“”‘’]	# not a space or one of these punct chars
+    \([^\s]+?\)                # balanced parens, non-recursive: (...)
+    |                    #   or
+    [^\s`!()\[\]{};:'".,<>?«»“”‘’]    # not a space or one of these punct chars
   )
-  |					# OR, the following to match naked domains:
+  |                    # OR, the following to match naked domains:
   (?:
-    (?<!@)			        # not preceded by a @, avoid matching foo@_gmail.com_
+    (?<!@)                    # not preceded by a @, avoid matching foo@_gmail.com_
     [a-z0-9]+
     (?:[.\-][a-z0-9]+)*
     [.]
     (?:[a-z]{2,13})
     \b
     /?
-    (?!@)			        # not succeeded by a @,
+    (?!@)                    # not succeeded by a @,
                             # avoid matching "foo.na" in "foo.na@example.com"
   )
 """

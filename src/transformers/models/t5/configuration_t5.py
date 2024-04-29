@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ T5 model configuration"""
+from ...utils.import_utils import register
 from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
@@ -26,6 +27,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import T5_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class T5Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`T5Model`] or a [`TFT5Model`]. It is used to
@@ -140,6 +142,7 @@ class T5Config(PretrainedConfig):
         )
 
 
+@register()
 class T5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -163,3 +166,9 @@ class T5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+__all__ = [
+    "T5Config",
+    "T5OnnxConfig"
+]
+    

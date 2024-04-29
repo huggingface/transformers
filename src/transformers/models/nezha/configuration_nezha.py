@@ -1,7 +1,9 @@
+from ...utils.import_utils import register
 from ... import PretrainedConfig
 from ..deprecated._archive_maps import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class NezhaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`NezhaModel`]. It is used to instantiate an Nezha
@@ -101,3 +103,8 @@ class NezhaConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
+
+__all__ = [
+    "NezhaConfig"
+]
+    

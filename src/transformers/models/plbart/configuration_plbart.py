@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PLBART model configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class PLBartConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PLBartModel`]. It is used to instantiate an
@@ -163,6 +165,7 @@ class PLBartConfig(PretrainedConfig):
         )
 
 
+@register()
 class PLBartOnnxConfig(OnnxConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -190,3 +193,9 @@ class PLBartOnnxConfig(OnnxConfigWithPast):
                     ("encoder_last_hidden_state", {0: "batch", 1: "sequence"}),
                 ]
             )
+
+__all__ = [
+    "PLBartConfig",
+    "PLBartOnnxConfig"
+]
+    

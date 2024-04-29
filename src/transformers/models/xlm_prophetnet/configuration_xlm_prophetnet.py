@@ -15,6 +15,7 @@
 """ XLM-ProphetNet model configuration"""
 
 
+from ...utils.import_utils import register
 from typing import Callable, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class XLMProphetNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XLMProphetNetModel`]. It is used to instantiate a
@@ -180,3 +182,8 @@ class XLMProphetNetConfig(PretrainedConfig):
             "This model does not support the setting of `num_hidden_layers`. Please set `num_encoder_layers` and"
             " `num_decoder_layers`."
         )
+
+__all__ = [
+    "XLMProphetNetConfig"
+]
+    

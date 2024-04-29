@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Mask2Former model configuration"""
+from ...utils.import_utils import register
 from typing import Dict, List, Optional
 
 from ...configuration_utils import PretrainedConfig
@@ -24,6 +25,7 @@ from ..deprecated._archive_maps import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP
 logger = logging.get_logger(__name__)
 
 
+@register()
 class Mask2FormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Mask2FormerModel`]. It is used to instantiate a
@@ -253,3 +255,8 @@ class Mask2FormerConfig(PretrainedConfig):
             backbone_config=backbone_config,
             **kwargs,
         )
+
+__all__ = [
+    "Mask2FormerConfig"
+]
+    

@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Wav2Vec2 model configuration"""
 
+from ...utils.import_utils import register
 import functools
 import operator
 
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class Wav2Vec2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Wav2Vec2Model`]. It is used to instantiate an
@@ -345,3 +347,8 @@ class Wav2Vec2Config(PretrainedConfig):
     @property
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
+
+__all__ = [
+    "Wav2Vec2Config"
+]
+    

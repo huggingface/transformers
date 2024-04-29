@@ -14,6 +14,7 @@
 # limitations under the License.
 """ LeViT model configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -30,6 +31,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class LevitConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LevitModel`]. It is used to instantiate a LeViT
@@ -128,6 +130,7 @@ class LevitConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
+@register()
 class LevitOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -142,3 +145,9 @@ class LevitOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+__all__ = [
+    "LevitConfig",
+    "LevitOnnxConfig"
+]
+    

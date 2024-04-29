@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from ...utils.import_utils import register
 from typing import List
 
 from ...configuration_utils import PretrainedConfig
@@ -24,6 +25,7 @@ SUPERPOINT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
+@register()
 class SuperPointConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SuperPointForKeypointDetection`]. It is used to instantiate a
@@ -89,3 +91,8 @@ class SuperPointConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
         super().__init__(**kwargs)
+
+__all__ = [
+    "SuperPointConfig"
+]
+    

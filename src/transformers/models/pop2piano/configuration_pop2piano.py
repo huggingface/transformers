@@ -15,6 +15,7 @@
 """ Pop2Piano model configuration"""
 
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -25,6 +26,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class Pop2PianoConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Pop2PianoForConditionalGeneration`]. It is used
@@ -126,3 +128,8 @@ class Pop2PianoConfig(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
+
+__all__ = [
+    "Pop2PianoConfig"
+]
+    

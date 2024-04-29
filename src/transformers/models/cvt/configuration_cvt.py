@@ -14,6 +14,7 @@
 # limitations under the License.
 """ CvT model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class CvtConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CvtModel`]. It is used to instantiate a CvT model
@@ -144,3 +146,8 @@ class CvtConfig(PretrainedConfig):
         self.stride_q = stride_q
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+
+__all__ = [
+    "CvtConfig"
+]
+    

@@ -14,6 +14,7 @@
 # limitations under the License.
 """ ResNet model configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -31,6 +32,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class ResNetConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ResNetModel`]. It is used to instantiate an
@@ -120,6 +122,7 @@ class ResNetConfig(BackboneConfigMixin, PretrainedConfig):
         )
 
 
+@register()
 class ResNetOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -134,3 +137,9 @@ class ResNetOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-3
+
+__all__ = [
+    "ResNetConfig",
+    "ResNetOnnxConfig"
+]
+    

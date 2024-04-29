@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PatchTSMixer model configuration"""
 
+from ...utils.import_utils import register
 from typing import List, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
@@ -26,6 +27,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class PatchTSMixerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PatchTSMixerModel`]. It is used to instantiate a
@@ -233,3 +235,8 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.unmasked_channel_indices = unmasked_channel_indices
         self.norm_eps = norm_eps
         super().__init__(**kwargs)
+
+__all__ = [
+    "PatchTSMixerConfig"
+]
+    

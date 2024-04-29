@@ -19,6 +19,7 @@
 # limitations under the License.
 """ Cohere model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -28,6 +29,7 @@ logger = logging.get_logger(__name__)
 COHERE_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
+@register()
 class CohereConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CohereModel`]. It is used to instantiate an Cohere
@@ -157,3 +159,8 @@ class CohereConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+__all__ = [
+    "CohereConfig"
+]
+    

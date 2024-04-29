@@ -14,6 +14,7 @@
 # limitations under the License.
 """ XGLM model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class XGLMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XGLMModel`]. It is used to instantiate an XGLM
@@ -137,3 +139,8 @@ class XGLMConfig(PretrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
+
+__all__ = [
+    "XGLMConfig"
+]
+    

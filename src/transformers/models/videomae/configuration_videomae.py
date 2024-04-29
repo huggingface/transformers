@@ -14,6 +14,7 @@
 # limitations under the License.
 """ VideoMAE model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class VideoMAEConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VideoMAEModel`]. It is used to instantiate a
@@ -146,3 +148,8 @@ class VideoMAEConfig(PretrainedConfig):
         self.decoder_num_hidden_layers = decoder_num_hidden_layers
         self.decoder_intermediate_size = decoder_intermediate_size
         self.norm_pix_loss = norm_pix_loss
+
+__all__ = [
+    "VideoMAEConfig"
+]
+    

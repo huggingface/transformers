@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ M2M100 model configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
 
@@ -29,6 +30,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class M2M100Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`M2M100Model`]. It is used to instantiate an
@@ -159,6 +161,7 @@ class M2M100Config(PretrainedConfig):
         )
 
 
+@register()
 class M2M100OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -280,3 +283,9 @@ class M2M100OnnxConfig(OnnxSeq2SeqConfigWithPast):
         return common_inputs
 
     generate_dummy_inputs = _generate_dummy_inputs_for_default_and_seq2seq_lm
+
+__all__ = [
+    "M2M100Config",
+    "M2M100OnnxConfig"
+]
+    

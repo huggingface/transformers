@@ -14,6 +14,7 @@
 # limitations under the License.
 """ MusicGen model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
@@ -25,6 +26,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class MusicgenDecoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`MusicgenDecoder`]. It is used to instantiate a
@@ -134,6 +136,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
         )
 
 
+@register()
 class MusicgenConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MusicgenModel`]. It is used to instantiate a
@@ -256,3 +259,9 @@ class MusicgenConfig(PretrainedConfig):
     def _attn_implementation(self, value):
         self._attn_implementation_internal = value
         self.decoder._attn_implementation = value
+
+__all__ = [
+    "MusicgenDecoderConfig",
+    "MusicgenConfig"
+]
+    

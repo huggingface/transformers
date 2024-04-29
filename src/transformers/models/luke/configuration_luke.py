@@ -14,6 +14,7 @@
 # limitations under the License.
 """ LUKE configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class LukeConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LukeModel`]. It is used to instantiate a LUKE
@@ -140,3 +142,8 @@ class LukeConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_entity_aware_attention = use_entity_aware_attention
         self.classifier_dropout = classifier_dropout
+
+__all__ = [
+    "LukeConfig"
+]
+    

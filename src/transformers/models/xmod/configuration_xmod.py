@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ X-MOD configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -28,6 +29,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class XmodConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XmodModel`]. It is used to instantiate an X-MOD
@@ -169,6 +171,7 @@ class XmodConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.roberta.configuration_roberta.RobertaOnnxConfig with Roberta->Xmod
+@register()
 class XmodOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -182,3 +185,9 @@ class XmodOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+__all__ = [
+    "XmodConfig",
+    "XmodOnnxConfig"
+]
+    

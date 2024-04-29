@@ -14,6 +14,7 @@
 # limitations under the License.
 """ MGP-STR model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class MgpstrConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`MgpstrModel`]. It is used to instantiate an
@@ -135,3 +137,8 @@ class MgpstrConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.output_a3_attentions = output_a3_attentions
         self.initializer_range = initializer_range
+
+__all__ = [
+    "MgpstrConfig"
+]
+    

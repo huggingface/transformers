@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Autoformer model configuration"""
 
+from ...utils.import_utils import register
 from typing import List, Optional
 
 from ...configuration_utils import PretrainedConfig
@@ -26,6 +27,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class AutoformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`AutoformerModel`]. It is used to instantiate an
@@ -243,3 +245,8 @@ class AutoformerConfig(PretrainedConfig):
             + self.num_static_real_features
             + self.input_size * 2  # the log1p(abs(loc)) and log(scale) features
         )
+
+__all__ = [
+    "AutoformerConfig"
+]
+    

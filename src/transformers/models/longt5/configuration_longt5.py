@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ LongT5 model configuration"""
+from ...utils.import_utils import register
 from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
@@ -26,6 +27,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class LongT5Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LongT5Model`] or a [`FlaxLongT5Model`]. It is
@@ -149,6 +151,7 @@ class LongT5Config(PretrainedConfig):
         )
 
 
+@register()
 class LongT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -172,3 +175,9 @@ class LongT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+__all__ = [
+    "LongT5Config",
+    "LongT5OnnxConfig"
+]
+    

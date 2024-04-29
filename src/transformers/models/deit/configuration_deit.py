@@ -14,6 +14,7 @@
 # limitations under the License.
 """ DeiT model configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -30,6 +31,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class DeiTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DeiTModel`]. It is used to instantiate an DeiT
@@ -126,6 +128,7 @@ class DeiTConfig(PretrainedConfig):
         self.encoder_stride = encoder_stride
 
 
+@register()
 class DeiTOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -140,3 +143,9 @@ class DeiTOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+__all__ = [
+    "DeiTConfig",
+    "DeiTOnnxConfig"
+]
+    

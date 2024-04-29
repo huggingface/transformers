@@ -14,6 +14,7 @@
 # limitations under the License.
 """ FastSpeech2Conformer model configuration"""
 
+from ...utils.import_utils import register
 from typing import Dict
 
 from ...configuration_utils import PretrainedConfig
@@ -30,6 +31,7 @@ from ..deprecated._archive_maps import (  # noqa: F401, E402
 )
 
 
+@register()
 class FastSpeech2ConformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FastSpeech2ConformerModel`]. It is used to
@@ -331,6 +333,7 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         )
 
 
+@register()
 class FastSpeech2ConformerHifiGanConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FastSpeech2ConformerHifiGanModel`]. It is used to
@@ -410,6 +413,7 @@ class FastSpeech2ConformerHifiGanConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
+@register()
 class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`FastSpeech2ConformerWithHifiGan`]. It is used to
@@ -480,3 +484,10 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
         self.vocoder_config = FastSpeech2ConformerHifiGanConfig(**vocoder_config)
 
         super().__init__(**kwargs)
+
+__all__ = [
+    "FastSpeech2ConformerConfig",
+    "FastSpeech2ConformerHifiGanConfig",
+    "FastSpeech2ConformerWithHifiGanConfig"
+]
+    

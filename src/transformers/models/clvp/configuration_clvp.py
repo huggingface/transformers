@@ -15,6 +15,7 @@
 """ CLVP model configuration"""
 
 
+from ...utils.import_utils import register
 import os
 from typing import TYPE_CHECKING, Union
 
@@ -32,6 +33,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class ClvpEncoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ClvpEncoder`]. It is used to instantiate a CLVP
@@ -163,6 +165,7 @@ class ClvpEncoderConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class ClvpDecoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ClvpDecoder`]. It is used to instantiate a CLVP
@@ -337,6 +340,7 @@ class ClvpDecoderConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class ClvpConfig(PretrainedConfig):
     r"""
     [`ClvpConfig`] is the configuration class to store the configuration of a [`ClvpModelForConditionalGeneration`]. It
@@ -454,3 +458,10 @@ class ClvpConfig(PretrainedConfig):
             decoder_config=decoder_config.to_dict(),
             **kwargs,
         )
+
+__all__ = [
+    "ClvpEncoderConfig",
+    "ClvpDecoderConfig",
+    "ClvpConfig"
+]
+    

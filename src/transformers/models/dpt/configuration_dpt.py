@@ -14,6 +14,7 @@
 # limitations under the License.
 """ DPT model configuration"""
 
+from ...utils.import_utils import register
 import copy
 
 from ...configuration_utils import PretrainedConfig
@@ -28,6 +29,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class DPTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DPTModel`]. It is used to instantiate an DPT
@@ -282,3 +284,8 @@ class DPTConfig(PretrainedConfig):
 
         output["model_type"] = self.__class__.model_type
         return output
+
+__all__ = [
+    "DPTConfig"
+]
+    

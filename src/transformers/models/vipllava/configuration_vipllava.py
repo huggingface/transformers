@@ -13,6 +13,7 @@
 # limitations under the License.
 """ VipLlava model configuration"""
 
+from ...utils.import_utils import register
 import warnings
 
 from ...configuration_utils import PretrainedConfig
@@ -26,6 +27,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class VipLlavaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VipLlavaForConditionalGeneration`]. It is used to instantiate an
@@ -142,3 +144,8 @@ class VipLlavaConfig(PretrainedConfig):
             output = super().to_dict()
             output.pop("_vocab_size", None)
             return output
+
+__all__ = [
+    "VipLlavaConfig"
+]
+    

@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Data2VecVision model configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -29,6 +30,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class Data2VecVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Data2VecVisionModel`]. It is used to instantiate
@@ -177,6 +179,7 @@ class Data2VecVisionConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
+@register()
 class Data2VecVisionOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -191,3 +194,9 @@ class Data2VecVisionOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+__all__ = [
+    "Data2VecVisionConfig",
+    "Data2VecVisionOnnxConfig"
+]
+    

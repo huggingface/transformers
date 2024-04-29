@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ NLLB-MoE model configuration"""
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -23,6 +24,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class NllbMoeConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`NllbMoeModel`]. It is used to instantiate an
@@ -216,3 +218,8 @@ class NllbMoeConfig(PretrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
+
+__all__ = [
+    "NllbMoeConfig"
+]
+    

@@ -15,6 +15,7 @@
 # limitations under the License.
 """ OpenAI GPT configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -25,6 +26,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class OpenAIGPTConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`OpenAIGPTModel`] or a [`TFOpenAIGPTModel`]. It is
@@ -154,3 +156,8 @@ class OpenAIGPTConfig(PretrainedConfig):
         self.summary_first_dropout = summary_first_dropout
         self.summary_proj_to_labels = summary_proj_to_labels
         super().__init__(**kwargs)
+
+__all__ = [
+    "OpenAIGPTConfig"
+]
+    

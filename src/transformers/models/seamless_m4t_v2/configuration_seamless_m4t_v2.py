@@ -14,6 +14,7 @@
 # limitations under the License.
 """ SeamlessM4Tv2 model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import SEAMLESS_M4T_V2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class SeamlessM4Tv2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`~SeamlessM4Tv2Model`]. It is used to instantiate
@@ -423,3 +425,8 @@ class SeamlessM4Tv2Config(PretrainedConfig):
             max_position_embeddings=max_position_embeddings,
             **kwargs,
         )
+
+__all__ = [
+    "SeamlessM4Tv2Config"
+]
+    

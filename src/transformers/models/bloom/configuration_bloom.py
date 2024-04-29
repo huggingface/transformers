@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Bloom configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, List, Mapping, Optional
 
@@ -33,6 +34,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class BloomConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`BloomModel`]. It is used to instantiate a Bloom
@@ -143,6 +145,7 @@ class BloomConfig(PretrainedConfig):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
 
+@register()
 class BloomOnnxConfig(OnnxConfigWithPast):
     torch_onnx_minimum_version = version.parse("1.12")
 
@@ -234,3 +237,9 @@ class BloomOnnxConfig(OnnxConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+__all__ = [
+    "BloomConfig",
+    "BloomOnnxConfig"
+]
+    

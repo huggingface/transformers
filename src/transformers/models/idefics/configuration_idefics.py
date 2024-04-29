@@ -19,6 +19,7 @@
 # limitations under the License.
 """ Idefics model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -29,6 +30,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class IdeficsVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`IdeficsModel`]. It is used to instantiate an
@@ -108,6 +110,7 @@ class IdeficsVisionConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
+@register()
 class IdeficsPerceiverConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`IdeficsModel`]. It is used to instantiate an
@@ -156,6 +159,7 @@ class IdeficsPerceiverConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
+@register()
 class IdeficsConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`IdeficsModel`]. It is used to instantiate an
@@ -325,3 +329,10 @@ class IdeficsConfig(PretrainedConfig):
         # updates the config object with `kwargs` from from_pretrained, so during the instantiation
         # of this object many attributes have default values and haven't yet been overridden.
         # Do any required checks inside `from_pretrained` once the superclass' `from_pretrained` was run.
+
+__all__ = [
+    "IdeficsVisionConfig",
+    "IdeficsPerceiverConfig",
+    "IdeficsConfig"
+]
+    

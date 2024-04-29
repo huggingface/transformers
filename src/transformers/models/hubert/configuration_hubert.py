@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Hubert model configuration"""
 
+from ...utils.import_utils import register
 import functools
 import operator
 
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class HubertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`HubertModel`]. It is used to instantiate an
@@ -259,3 +261,8 @@ class HubertConfig(PretrainedConfig):
     @property
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
+
+__all__ = [
+    "HubertConfig"
+]
+    

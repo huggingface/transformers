@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Blip model configuration"""
 
+from ...utils.import_utils import register
 import os
 from typing import Union
 
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class BlipTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BlipTextModel`]. It is used to instantiate a BLIP
@@ -168,6 +170,7 @@ class BlipTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class BlipVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BlipVisionModel`]. It is used to instantiate a
@@ -267,6 +270,7 @@ class BlipVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class BlipConfig(PretrainedConfig):
     r"""
     [`BlipConfig`] is the configuration class to store the configuration of a [`BlipModel`]. It is used to instantiate
@@ -363,3 +367,10 @@ class BlipConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+__all__ = [
+    "BlipTextConfig",
+    "BlipVisionConfig",
+    "BlipConfig"
+]
+    

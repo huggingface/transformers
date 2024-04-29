@@ -15,6 +15,7 @@
 """ FSMT configuration"""
 
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -25,6 +26,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class DecoderConfig(PretrainedConfig):
     r"""
     Configuration class for FSMT's decoder specific things. note: this is a private helper class
@@ -38,6 +40,7 @@ class DecoderConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
 
 
+@register()
 class FSMTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FSMTModel`]. It is used to instantiate a FSMT
@@ -217,3 +220,9 @@ class FSMTConfig(PretrainedConfig):
             early_stopping=early_stopping,
             **common_kwargs,
         )
+
+__all__ = [
+    "DecoderConfig",
+    "FSMTConfig"
+]
+    

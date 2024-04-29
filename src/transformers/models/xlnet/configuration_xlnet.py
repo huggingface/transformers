@@ -15,6 +15,7 @@
 # limitations under the License.
 """ XLNet configuration"""
 
+from ...utils.import_utils import register
 import warnings
 
 from ...configuration_utils import PretrainedConfig
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class XLNetConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`XLNetModel`] or a [`TFXLNetModel`]. It is used to
@@ -238,3 +240,8 @@ class XLNetConfig(PretrainedConfig):
         raise NotImplementedError(
             f"The model {self.model_type} is one of the few models that has no sequence length limit."
         )
+
+__all__ = [
+    "XLNetConfig"
+]
+    

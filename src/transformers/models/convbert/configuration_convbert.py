@@ -14,6 +14,7 @@
 # limitations under the License.
 """ ConvBERT model configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -28,6 +29,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class ConvBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ConvBertModel`]. It is used to instantiate an
@@ -144,6 +146,7 @@ class ConvBertConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.bert.configuration_bert.BertOnnxConfig
+@register()
 class ConvBertOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -158,3 +161,9 @@ class ConvBertOnnxConfig(OnnxConfig):
                 ("token_type_ids", dynamic_axis),
             ]
         )
+
+__all__ = [
+    "ConvBertConfig",
+    "ConvBertOnnxConfig"
+]
+    

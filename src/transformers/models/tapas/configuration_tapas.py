@@ -23,10 +23,12 @@ Hyperparameters are taken from run_task_main.py and hparam_utils.py of the origi
 """
 
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ..deprecated._archive_maps import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class TapasConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TapasModel`]. It is used to instantiate a TAPAS
@@ -226,3 +228,8 @@ class TapasConfig(PretrainedConfig):
 
         if isinstance(self.aggregation_labels, dict):
             self.aggregation_labels = {int(k): v for k, v in aggregation_labels.items()}
+
+__all__ = [
+    "TapasConfig"
+]
+    

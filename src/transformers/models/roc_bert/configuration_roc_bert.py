@@ -14,6 +14,7 @@
 # limitations under the License.
 """ RoCBert model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class RoCBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RoCBertModel`]. It is used to instantiate a
@@ -161,3 +163,8 @@ class RoCBertConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.classifier_dropout = classifier_dropout
         super().__init__(pad_token_id=pad_token_id, **kwargs)
+
+__all__ = [
+    "RoCBertConfig"
+]
+    

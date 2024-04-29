@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Mpt configuration"""
+from ...utils.import_utils import register
 from typing import TYPE_CHECKING, Optional, Union
 
 
@@ -29,6 +30,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import MPT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class MptAttentionConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`MptAttention`] class. It is used to instantiate
@@ -117,6 +119,7 @@ class MptAttentionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class MptConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`MptModel`]. It is used to instantiate a Mpt model
@@ -244,3 +247,9 @@ class MptConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.initializer_range = initializer_range
         super().__init__(**kwargs)
+
+__all__ = [
+    "MptAttentionConfig",
+    "MptConfig"
+]
+    

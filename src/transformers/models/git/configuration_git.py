@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ...utils.import_utils import register
 import os
 from typing import Union
 
@@ -26,6 +27,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import GIT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class GitVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GitVisionModel`]. It is used to instantiate a GIT
@@ -124,6 +126,7 @@ class GitVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class GitConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GitModel`]. It is used to instantiate a GIT model
@@ -238,3 +241,9 @@ class GitConfig(PretrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+
+__all__ = [
+    "GitVisionConfig",
+    "GitConfig"
+]
+    

@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ DeBERTa-v2 model configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 
@@ -31,6 +32,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class DebertaV2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DebertaV2Model`]. It is used to instantiate a
@@ -155,6 +157,7 @@ class DebertaV2Config(PretrainedConfig):
         self.pooler_hidden_act = pooler_hidden_act
 
 
+@register()
 class DebertaV2OnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -190,3 +193,9 @@ class DebertaV2OnnxConfig(OnnxConfig):
         if self._config.type_vocab_size == 0 and "token_type_ids" in dummy_inputs:
             del dummy_inputs["token_type_ids"]
         return dummy_inputs
+
+__all__ = [
+    "DebertaV2Config",
+    "DebertaV2OnnxConfig"
+]
+    

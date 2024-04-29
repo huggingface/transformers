@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ MaskFormer model configuration"""
+from ...utils.import_utils import register
 from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig
@@ -26,6 +27,7 @@ from ..swin import SwinConfig
 logger = logging.get_logger(__name__)
 
 
+@register()
 class MaskFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MaskFormerModel`]. It is used to instantiate a
@@ -223,3 +225,8 @@ class MaskFormerConfig(PretrainedConfig):
             decoder_config=decoder_config,
             **kwargs,
         )
+
+__all__ = [
+    "MaskFormerConfig"
+]
+    

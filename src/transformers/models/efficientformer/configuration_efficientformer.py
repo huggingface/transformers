@@ -14,6 +14,7 @@
 # limitations under the License.
 """ EfficientFormer model configuration"""
 
+from ...utils.import_utils import register
 from typing import List
 
 from ...configuration_utils import PretrainedConfig
@@ -26,6 +27,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class EfficientFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`EfficientFormerModel`]. It is used to
@@ -168,3 +170,8 @@ class EfficientFormerConfig(PretrainedConfig):
         self.layer_scale_init_value = layer_scale_init_value
         self.image_size = image_size
         self.batch_norm_eps = batch_norm_eps
+
+__all__ = [
+    "EfficientFormerConfig"
+]
+    

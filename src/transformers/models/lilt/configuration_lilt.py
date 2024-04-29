@@ -14,6 +14,7 @@
 # limitations under the License.
 """ LiLT configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import LILT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class LiltConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LiltModel`]. It is used to instantiate a LiLT
@@ -129,3 +131,8 @@ class LiltConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.channel_shrink_ratio = channel_shrink_ratio
         self.max_2d_position_embeddings = max_2d_position_embeddings
+
+__all__ = [
+    "LiltConfig"
+]
+    

@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Starcoder2 model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class Starcoder2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Starcoder2Model`]. It is used to instantiate a
@@ -146,3 +148,8 @@ class Starcoder2Config(PretrainedConfig):
             eos_token_id=eos_token_id,
             **kwargs,
         )
+
+__all__ = [
+    "Starcoder2Config"
+]
+    

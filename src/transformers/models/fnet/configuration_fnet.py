@@ -14,6 +14,7 @@
 # limitations under the License.
 """ FNet model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class FNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FNetModel`]. It is used to instantiate an FNet
@@ -117,3 +119,8 @@ class FNetConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_tpu_fourier_optimizations = use_tpu_fourier_optimizations
         self.tpu_short_seq_length = tpu_short_seq_length
+
+__all__ = [
+    "FNetConfig"
+]
+    

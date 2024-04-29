@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ...utils.import_utils import register
 from typing import TYPE_CHECKING, Any, Mapping, Optional, OrderedDict
 
 from packaging import version
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+@register()
 class VisionEncoderDecoderConfig(PretrainedConfig):
     r"""
     [`VisionEncoderDecoderConfig`] is the configuration class to store the configuration of a
@@ -115,6 +117,7 @@ class VisionEncoderDecoderConfig(PretrainedConfig):
         return cls(encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict(), **kwargs)
 
 
+@register()
 class VisionEncoderDecoderEncoderOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -135,6 +138,7 @@ class VisionEncoderDecoderEncoderOnnxConfig(OnnxConfig):
         return OrderedDict({"last_hidden_state": {0: "batch", 1: "encoder_sequence"}})
 
 
+@register()
 class VisionEncoderDecoderDecoderOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -170,6 +174,7 @@ class VisionEncoderDecoderDecoderOnnxConfig(OnnxConfig):
         return common_inputs
 
 
+@register()
 class VisionEncoderDecoderOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> None:
@@ -207,3 +212,11 @@ class VisionEncoderDecoderOnnxConfig(OnnxConfig):
         """
         decoder_config.encoder_hidden_size = encoder_config.hidden_size
         return VisionEncoderDecoderDecoderOnnxConfig(decoder_config, feature)
+
+__all__ = [
+    "VisionEncoderDecoderConfig",
+    "VisionEncoderDecoderEncoderOnnxConfig",
+    "VisionEncoderDecoderDecoderOnnxConfig",
+    "VisionEncoderDecoderOnnxConfig"
+]
+    

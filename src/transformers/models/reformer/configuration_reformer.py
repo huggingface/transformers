@@ -15,6 +15,7 @@
 # limitations under the License.
 """ Reformer model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -25,6 +26,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class ReformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ReformerModel`]. It is used to instantiate a
@@ -233,3 +235,8 @@ class ReformerConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+__all__ = [
+    "ReformerConfig"
+]
+    

@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Blenderbot model configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
 
@@ -31,6 +32,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class BlenderbotConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BlenderbotModel`]. It is used to instantiate an
@@ -168,6 +170,7 @@ class BlenderbotConfig(PretrainedConfig):
         )
 
 
+@register()
 class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -393,3 +396,9 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
             inputs_or_outputs[f"{name}.{i}.decoder.value"] = {0: "batch", 2: decoder_sequence}
             inputs_or_outputs[f"{name}.{i}.encoder.key"] = {0: "batch", 2: encoder_sequence}
             inputs_or_outputs[f"{name}.{i}.encoder.value"] = {0: "batch", 2: encoder_sequence}
+
+__all__ = [
+    "BlenderbotConfig",
+    "BlenderbotOnnxConfig"
+]
+    

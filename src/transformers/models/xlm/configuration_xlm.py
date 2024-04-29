@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ XLM configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class XLMConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`XLMModel`] or a [`TFXLMModel`]. It is used to
@@ -224,6 +226,7 @@ class XLMConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.bert.configuration_bert.BertOnnxConfig
+@register()
 class XLMOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -238,3 +241,9 @@ class XLMOnnxConfig(OnnxConfig):
                 ("token_type_ids", dynamic_axis),
             ]
         )
+
+__all__ = [
+    "XLMConfig",
+    "XLMOnnxConfig"
+]
+    

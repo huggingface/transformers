@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ OpenAI GPT-2 configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
@@ -29,6 +30,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class GPT2Config(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`GPT2Model`] or a [`TFGPT2Model`]. It is used to
@@ -191,6 +193,7 @@ class GPT2Config(PretrainedConfig):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
 
+@register()
 class GPT2OnnxConfig(OnnxConfigWithPast):
     def __init__(
         self,
@@ -270,3 +273,9 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+__all__ = [
+    "GPT2Config",
+    "GPT2OnnxConfig"
+]
+    

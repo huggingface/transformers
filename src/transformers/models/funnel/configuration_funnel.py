@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Funnel Transformer model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class FunnelConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FunnelModel`] or a [`TFBertModel`]. It is used to
@@ -164,3 +166,8 @@ class FunnelConfig(PretrainedConfig):
     @num_blocks.setter
     def num_blocks(self, value):
         raise NotImplementedError("This model does not support the setting of `num_blocks`. Please set `block_sizes`.")
+
+__all__ = [
+    "FunnelConfig"
+]
+    

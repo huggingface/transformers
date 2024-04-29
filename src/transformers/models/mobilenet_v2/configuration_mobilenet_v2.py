@@ -14,6 +14,7 @@
 # limitations under the License.
 """ MobileNetV2 model configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -30,6 +31,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class MobileNetV2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MobileNetV2Model`]. It is used to instantiate a
@@ -135,6 +137,7 @@ class MobileNetV2Config(PretrainedConfig):
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
 
 
+@register()
 class MobileNetV2OnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -152,3 +155,9 @@ class MobileNetV2OnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+__all__ = [
+    "MobileNetV2Config",
+    "MobileNetV2OnnxConfig"
+]
+    

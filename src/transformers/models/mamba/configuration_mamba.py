@@ -14,6 +14,7 @@
 # limitations under the License.
 """MAMBA configuration"""
 
+from ...utils.import_utils import register
 import math
 
 from ...configuration_utils import PretrainedConfig
@@ -26,6 +27,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class MambaConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`MambaModel`]. It is used to instantiate a MAMBA
@@ -154,3 +156,8 @@ class MambaConfig(PretrainedConfig):
         self.use_cache = use_cache
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
+
+__all__ = [
+    "MambaConfig"
+]
+    

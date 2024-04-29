@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Fuyu model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
@@ -25,6 +26,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class FuyuConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FuyuForCausalLM`]. It is used to instantiate an
@@ -209,3 +211,8 @@ class FuyuConfig(PretrainedConfig):
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
             raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
+
+__all__ = [
+    "FuyuConfig"
+]
+    

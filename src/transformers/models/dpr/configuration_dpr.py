@@ -14,6 +14,7 @@
 # limitations under the License.
 """ DPR model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import DPR_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class DPRConfig(PretrainedConfig):
     r"""
     [`DPRConfig`] is the configuration class to store the configuration of a *DPRModel*.
@@ -129,3 +131,8 @@ class DPRConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.projection_dim = projection_dim
         self.position_embedding_type = position_embedding_type
+
+__all__ = [
+    "DPRConfig"
+]
+    

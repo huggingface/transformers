@@ -14,6 +14,7 @@
 # limitations under the License.
 """ DETR model configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -31,6 +32,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class DetrConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DetrModel`]. It is used to instantiate a DETR
@@ -273,6 +275,7 @@ class DetrConfig(PretrainedConfig):
         return cls(backbone_config=backbone_config, **kwargs)
 
 
+@register()
 class DetrOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -292,3 +295,9 @@ class DetrOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 12
+
+__all__ = [
+    "DetrConfig",
+    "DetrOnnxConfig"
+]
+    

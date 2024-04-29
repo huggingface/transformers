@@ -14,6 +14,7 @@
 # limitations under the License.
 """ LayoutLMv3 model configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
@@ -36,6 +37,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class LayoutLMv3Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LayoutLMv3Model`]. It is used to instantiate an
@@ -190,6 +192,7 @@ class LayoutLMv3Config(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
 
 
+@register()
 class LayoutLMv3OnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.12")
 
@@ -291,3 +294,9 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
         )
 
         return inputs
+
+__all__ = [
+    "LayoutLMv3Config",
+    "LayoutLMv3OnnxConfig"
+]
+    

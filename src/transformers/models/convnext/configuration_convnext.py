@@ -14,6 +14,7 @@
 # limitations under the License.
 """ ConvNeXT model configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -31,6 +32,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class ConvNextConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ConvNextModel`]. It is used to instantiate an
@@ -126,6 +128,7 @@ class ConvNextConfig(BackboneConfigMixin, PretrainedConfig):
         )
 
 
+@register()
 class ConvNextOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -140,3 +143,9 @@ class ConvNextOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-5
+
+__all__ = [
+    "ConvNextConfig",
+    "ConvNextOnnxConfig"
+]
+    

@@ -14,6 +14,7 @@
 # limitations under the License.
 """ LayoutLMv2 model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import is_detectron2_available, logging
 
@@ -29,6 +30,7 @@ if is_detectron2_available():
     import detectron2
 
 
+@register()
 class LayoutLMv2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LayoutLMv2Model`]. It is used to instantiate an
@@ -220,3 +222,8 @@ class LayoutLMv2Config(PretrainedConfig):
             setattr(to_set, attributes[-1], v)
 
         return detectron2_config
+
+__all__ = [
+    "LayoutLMv2Config"
+]
+    

@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ LayoutLM model configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class LayoutLMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LayoutLMModel`]. It is used to instantiate a
@@ -136,6 +138,7 @@ class LayoutLMConfig(PretrainedConfig):
         self.max_2d_position_embeddings = max_2d_position_embeddings
 
 
+@register()
 class LayoutLMOnnxConfig(OnnxConfig):
     def __init__(
         self,
@@ -196,3 +199,9 @@ class LayoutLMOnnxConfig(OnnxConfig):
         batch_size, seq_length = input_dict["input_ids"].shape
         input_dict["bbox"] = torch.tensor([*[box] * seq_length]).tile(batch_size, 1, 1)
         return input_dict
+
+__all__ = [
+    "LayoutLMConfig",
+    "LayoutLMOnnxConfig"
+]
+    

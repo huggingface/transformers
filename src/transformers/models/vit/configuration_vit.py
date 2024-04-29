@@ -14,6 +14,7 @@
 # limitations under the License.
 """ ViT model configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -30,6 +31,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class ViTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ViTModel`]. It is used to instantiate an ViT
@@ -125,6 +127,7 @@ class ViTConfig(PretrainedConfig):
         self.encoder_stride = encoder_stride
 
 
+@register()
 class ViTOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -139,3 +142,9 @@ class ViTOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+__all__ = [
+    "ViTConfig",
+    "ViTOnnxConfig"
+]
+    

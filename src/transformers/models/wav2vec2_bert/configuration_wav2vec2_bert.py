@@ -15,6 +15,7 @@
 """ Wav2Vec2Bert model configuration"""
 
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -25,6 +26,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class Wav2Vec2BertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Wav2Vec2BertModel`]. It is used to
@@ -312,3 +314,8 @@ class Wav2Vec2BertConfig(PretrainedConfig):
         if self.add_adapter:
             ratio = ratio * (self.adapter_stride**self.num_adapter_layers)
         return ratio
+
+__all__ = [
+    "Wav2Vec2BertConfig"
+]
+    

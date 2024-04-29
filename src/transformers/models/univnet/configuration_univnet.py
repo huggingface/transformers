@@ -13,6 +13,7 @@
 # limitations under the License.
 """ UnivNetModel model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -23,6 +24,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class UnivNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`UnivNetModel`]. It is used to instantiate a
@@ -123,3 +125,8 @@ class UnivNetConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.leaky_relu_slope = leaky_relu_slope
         super().__init__(**kwargs)
+
+__all__ = [
+    "UnivNetConfig"
+]
+    

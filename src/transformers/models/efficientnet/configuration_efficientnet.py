@@ -14,6 +14,7 @@
 # limitations under the License.
 """ EfficientNet model configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import List, Mapping
 
@@ -30,6 +31,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class EfficientNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EfficientNetModel`]. It is used to instantiate an
@@ -153,6 +155,7 @@ class EfficientNetConfig(PretrainedConfig):
         self.num_hidden_layers = sum(num_block_repeats) * 4
 
 
+@register()
 class EfficientNetOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -167,3 +170,9 @@ class EfficientNetOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-5
+
+__all__ = [
+    "EfficientNetConfig",
+    "EfficientNetOnnxConfig"
+]
+    

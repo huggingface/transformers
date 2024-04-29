@@ -14,6 +14,7 @@
 # limitations under the License.
 """ GPTNeoX Japanese model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class GPTNeoXJapaneseConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GPTNeoXModelJapanese`]. It is used to instantiate
@@ -118,3 +120,8 @@ class GPTNeoXJapaneseConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
         self.hidden_dropout = hidden_dropout
+
+__all__ = [
+    "GPTNeoXJapaneseConfig"
+]
+    

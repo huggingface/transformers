@@ -14,6 +14,7 @@
 # limitations under the License.
 """ OpenAI ImageGPT configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
@@ -31,6 +32,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class ImageGPTConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`ImageGPTModel`] or a [`TFImageGPTModel`]. It is
@@ -146,6 +148,7 @@ class ImageGPTConfig(PretrainedConfig):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
+@register()
 class ImageGPTOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -197,3 +200,9 @@ class ImageGPTOnnxConfig(OnnxConfig):
         inputs = dict(preprocessor(images=input_image, return_tensors=framework))
 
         return inputs
+
+__all__ = [
+    "ImageGPTConfig",
+    "ImageGPTOnnxConfig"
+]
+    

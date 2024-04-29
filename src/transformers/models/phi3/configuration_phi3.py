@@ -16,6 +16,7 @@
 """ Phi-3 model configuration"""
 
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -28,6 +29,7 @@ PHI3_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
+@register()
 class Phi3Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Phi3Model`]. It is used to instantiate a Phi-3
@@ -211,3 +213,8 @@ class Phi3Config(PretrainedConfig):
             raise ValueError(
                 f"`rope_scaling`'s long_factor field must have length {self.hidden_size // self.num_attention_heads // 2}, got {len(rope_scaling_long_factor)}"
             )
+
+__all__ = [
+    "Phi3Config"
+]
+    

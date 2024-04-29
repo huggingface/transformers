@@ -15,6 +15,7 @@
 """ ViT Hybrid model configuration"""
 
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import CONFIG_MAPPING
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class ViTHybridConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ViTHybridModel`]. It is used to instantiate a ViT
@@ -171,3 +173,8 @@ class ViTHybridConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
+
+__all__ = [
+    "ViTHybridConfig"
+]
+    

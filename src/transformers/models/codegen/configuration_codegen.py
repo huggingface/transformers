@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ CodeGen model configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
@@ -28,6 +29,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class CodeGenConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CodeGenModel`]. It is used to instantiate a
@@ -148,6 +150,7 @@ class CodeGenConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.gpt2.configuration_gpt2.GPT2OnnxConfig
+@register()
 class CodeGenOnnxConfig(OnnxConfigWithPast):
     def __init__(
         self,
@@ -227,3 +230,9 @@ class CodeGenOnnxConfig(OnnxConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+__all__ = [
+    "CodeGenConfig",
+    "CodeGenOnnxConfig"
+]
+    

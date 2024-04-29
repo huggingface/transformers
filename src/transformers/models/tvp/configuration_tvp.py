@@ -14,6 +14,7 @@
 # limitations under the License.
 """ TVP model configuration"""
 
+from ...utils.import_utils import register
 import copy
 
 from ...configuration_utils import PretrainedConfig
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import TVP_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class TvpConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TvpModel`]. It is used to instantiate an Tvp
@@ -199,3 +201,8 @@ class TvpConfig(PretrainedConfig):
             output["backbone_config"] = self.backbone_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
+
+__all__ = [
+    "TvpConfig"
+]
+    

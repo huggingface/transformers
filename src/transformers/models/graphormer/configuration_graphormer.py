@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Graphormer model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class GraphormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`~GraphormerModel`]. It is used to instantiate an
@@ -216,3 +218,8 @@ class GraphormerConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             **kwargs,
         )
+
+__all__ = [
+    "GraphormerConfig"
+]
+    

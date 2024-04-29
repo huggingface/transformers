@@ -14,6 +14,7 @@
 # limitations under the License.
 """ KOSMOS-2 model configuration"""
 
+from ...utils.import_utils import register
 import os
 from typing import Union
 
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class Kosmos2TextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Kosmos2TextModel`]. It is used to instantiate a
@@ -146,6 +148,7 @@ class Kosmos2TextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class Kosmos2VisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Kosmos2VisionModel`]. It is used to instantiate a
@@ -237,6 +240,7 @@ class Kosmos2VisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class Kosmos2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Kosmos2Model`]. It is used to instantiate a
@@ -293,3 +297,10 @@ class Kosmos2Config(PretrainedConfig):
         self.vision_config = Kosmos2VisionConfig(**vision_config)
 
         self.latent_query_num = latent_query_num
+
+__all__ = [
+    "Kosmos2TextConfig",
+    "Kosmos2VisionConfig",
+    "Kosmos2Config"
+]
+    

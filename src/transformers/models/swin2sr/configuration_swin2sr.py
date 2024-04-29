@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Swin2SR Transformer model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class Swin2SRConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Swin2SRModel`]. It is used to instantiate a Swin
@@ -152,3 +154,8 @@ class Swin2SRConfig(PretrainedConfig):
         self.img_range = img_range
         self.resi_connection = resi_connection
         self.upsampler = upsampler
+
+__all__ = [
+    "Swin2SRConfig"
+]
+    

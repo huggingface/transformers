@@ -14,6 +14,7 @@
 # limitations under the License.
 """ BLIP-2 model configuration"""
 
+from ...utils.import_utils import register
 import os
 from typing import Union
 
@@ -29,6 +30,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class Blip2VisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Blip2VisionModel`]. It is used to instantiate a
@@ -128,6 +130,7 @@ class Blip2VisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class Blip2QFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Blip2QFormerModel`]. It is used to instantiate a
@@ -247,6 +250,7 @@ class Blip2QFormerConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class Blip2Config(PretrainedConfig):
     r"""
     [`Blip2Config`] is the configuration class to store the configuration of a [`Blip2ForConditionalGeneration`]. It is
@@ -353,3 +357,10 @@ class Blip2Config(PretrainedConfig):
             text_config=text_config.to_dict(),
             **kwargs,
         )
+
+__all__ = [
+    "Blip2VisionConfig",
+    "Blip2QFormerConfig",
+    "Blip2Config"
+]
+    

@@ -13,6 +13,7 @@
 # limitations under the License.
 """Idefics2 model configuration"""
 
+from ...utils.import_utils import register
 import os
 from typing import Union
 
@@ -24,6 +25,7 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
+@register()
 class Idefics2VisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Idefics2VisionModel`]. It is used to instantiate a
@@ -126,6 +128,7 @@ class Idefics2VisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class Idefics2PerceiverConfig(PretrainedConfig):
     r"""
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -176,6 +179,7 @@ class Idefics2PerceiverConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
+@register()
 class Idefics2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Idefics2Model`]. It is used to instantiate a
@@ -260,3 +264,10 @@ class Idefics2Config(PretrainedConfig):
         self.text_config = text_config
 
         super().__init__(**kwargs, tie_word_embeddings=tie_word_embeddings)
+
+__all__ = [
+    "Idefics2VisionConfig",
+    "Idefics2PerceiverConfig",
+    "Idefics2Config"
+]
+    

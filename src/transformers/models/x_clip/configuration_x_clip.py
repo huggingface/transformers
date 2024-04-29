@@ -14,6 +14,7 @@
 # limitations under the License.
 """ X-CLIP model configuration"""
 
+from ...utils.import_utils import register
 import os
 from typing import Union
 
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class XCLIPTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XCLIPModel`]. It is used to instantiate an X-CLIP
@@ -134,6 +136,7 @@ class XCLIPTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class XCLIPVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XCLIPModel`]. It is used to instantiate an X-CLIP
@@ -261,6 +264,7 @@ class XCLIPVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class XCLIPConfig(PretrainedConfig):
     r"""
     [`XCLIPConfig`] is the configuration class to store the configuration of a [`XCLIPModel`]. It is used to
@@ -415,3 +419,10 @@ class XCLIPConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+__all__ = [
+    "XCLIPTextConfig",
+    "XCLIPVisionConfig",
+    "XCLIPConfig"
+]
+    

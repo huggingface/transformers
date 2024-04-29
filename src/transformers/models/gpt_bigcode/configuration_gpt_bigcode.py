@@ -14,6 +14,7 @@
 # limitations under the License.
 """ GPTBigCode configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class GPTBigCodeConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`GPTBigCodeModel`]. It is used to instantiate a
@@ -142,3 +144,8 @@ class GPTBigCodeConfig(PretrainedConfig):
         self.eos_token_id = eos_token_id
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+__all__ = [
+    "GPTBigCodeConfig"
+]
+    

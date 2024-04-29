@@ -14,6 +14,7 @@
 # limitations under the License.
 """ SwiftFormer model configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -30,6 +31,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class SwiftFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SwiftFormerModel`]. It is used to instantiate an
@@ -132,6 +134,7 @@ class SwiftFormerConfig(PretrainedConfig):
         self.batch_norm_eps = batch_norm_eps
 
 
+@register()
 class SwiftFormerOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -146,3 +149,9 @@ class SwiftFormerOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+__all__ = [
+    "SwiftFormerConfig",
+    "SwiftFormerOnnxConfig"
+]
+    

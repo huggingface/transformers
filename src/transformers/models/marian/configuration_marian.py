@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Marian model configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
 
@@ -26,6 +27,7 @@ from ...utils import TensorType, is_torch_available, logging
 logger = logging.get_logger(__name__)
 
 
+@register()
 class MarianConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MarianModel`]. It is used to instantiate an
@@ -162,6 +164,7 @@ class MarianConfig(PretrainedConfig):
         )
 
 
+@register()
 class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig.inputs
@@ -388,3 +391,9 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+__all__ = [
+    "MarianConfig",
+    "MarianOnnxConfig"
+]
+    

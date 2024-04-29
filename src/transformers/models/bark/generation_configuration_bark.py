@@ -14,6 +14,7 @@
 # limitations under the License.
 """ BARK model generation configuration"""
 
+from ...utils.import_utils import register
 import copy
 from typing import Dict
 
@@ -24,6 +25,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
+@register()
 class BarkSemanticGenerationConfig(GenerationConfig):
     model_type = "semantic"
 
@@ -115,6 +117,7 @@ class BarkSemanticGenerationConfig(GenerationConfig):
         self.min_eos_p = min_eos_p
 
 
+@register()
 class BarkCoarseGenerationConfig(GenerationConfig):
     model_type = "coarse_acoustics"
 
@@ -195,6 +198,7 @@ class BarkCoarseGenerationConfig(GenerationConfig):
         self.sliding_window_len = sliding_window_len
 
 
+@register()
 class BarkFineGenerationConfig(GenerationConfig):
     model_type = "fine_acoustics"
 
@@ -238,6 +242,7 @@ class BarkFineGenerationConfig(GenerationConfig):
         pass
 
 
+@register()
 class BarkGenerationConfig(GenerationConfig):
     model_type = "bark"
     is_composition = True
@@ -329,3 +334,11 @@ class BarkGenerationConfig(GenerationConfig):
 
         output["model_type"] = self.__class__.model_type
         return output
+
+__all__ = [
+    "BarkSemanticGenerationConfig",
+    "BarkCoarseGenerationConfig",
+    "BarkFineGenerationConfig",
+    "BarkGenerationConfig"
+]
+    

@@ -15,6 +15,7 @@
 """ EnCodec model configuration"""
 
 
+from ...utils.import_utils import register
 import math
 from typing import Optional
 
@@ -30,6 +31,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class EncodecConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`EncodecModel`]. It is used to instantiate a
@@ -191,3 +193,8 @@ class EncodecConfig(PretrainedConfig):
     @property
     def num_quantizers(self) -> int:
         return int(1000 * self.target_bandwidths[-1] // (self.frame_rate * 10))
+
+__all__ = [
+    "EncodecConfig"
+]
+    

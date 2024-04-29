@@ -14,6 +14,7 @@
 # limitations under the License.
 """ BridgeTower model configuration"""
 
+from ...utils.import_utils import register
 import os
 from typing import Union
 
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class BridgeTowerVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the vision configuration of a [`BridgeTowerModel`]. Instantiating a
@@ -114,6 +116,7 @@ class BridgeTowerVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class BridgeTowerTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the text configuration of a [`BridgeTowerModel`]. The default values here
@@ -236,6 +239,7 @@ class BridgeTowerTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class BridgeTowerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BridgeTowerModel`]. It is used to instantiate a
@@ -347,3 +351,10 @@ class BridgeTowerConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+__all__ = [
+    "BridgeTowerVisionConfig",
+    "BridgeTowerTextConfig",
+    "BridgeTowerConfig"
+]
+    

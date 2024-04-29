@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PEGASUS model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class PegasusConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PegasusModel`]. It is used to instantiate an
@@ -162,3 +164,8 @@ class PegasusConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
+
+__all__ = [
+    "PegasusConfig"
+]
+    

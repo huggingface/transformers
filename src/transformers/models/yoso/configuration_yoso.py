@@ -14,6 +14,7 @@
 # limitations under the License.
 """ YOSO model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class YosoConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`YosoModel`]. It is used to instantiate an YOSO
@@ -142,3 +144,8 @@ class YosoConfig(PretrainedConfig):
         self.conv_window = conv_window
         self.use_fast_hash = use_fast_hash
         self.lsh_backward = lsh_backward
+
+__all__ = [
+    "YosoConfig"
+]
+    

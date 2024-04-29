@@ -14,6 +14,7 @@
 # limitations under the License.
 """ BlenderbotSmall model configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
 
@@ -30,6 +31,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class BlenderbotSmallConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BlenderbotSmallModel`]. It is used to instantiate
@@ -166,6 +168,7 @@ class BlenderbotSmallConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig
+@register()
 class BlenderbotSmallOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -387,3 +390,9 @@ class BlenderbotSmallOnnxConfig(OnnxSeq2SeqConfigWithPast):
             flattened_output = super(OnnxSeq2SeqConfigWithPast, self)._flatten_past_key_values_(
                 flattened_output, name, idx, t
             )
+
+__all__ = [
+    "BlenderbotSmallConfig",
+    "BlenderbotSmallOnnxConfig"
+]
+    

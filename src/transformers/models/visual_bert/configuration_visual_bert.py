@@ -14,6 +14,7 @@
 # limitations under the License.
 """ VisualBERT model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class VisualBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VisualBertModel`]. It is used to instantiate an
@@ -133,3 +135,8 @@ class VisualBertConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.bypass_transformer = bypass_transformer
         self.special_visual_initialize = special_visual_initialize
+
+__all__ = [
+    "VisualBertConfig"
+]
+    

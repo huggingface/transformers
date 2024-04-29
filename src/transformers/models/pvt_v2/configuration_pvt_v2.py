@@ -16,6 +16,7 @@
 # limitations under the License.
 """Pvt V2 model configuration"""
 
+from ...utils.import_utils import register
 from typing import Callable, List, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
@@ -26,6 +27,7 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 logger = logging.get_logger(__name__)
 
 
+@register()
 class PvtV2Config(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PvtV2Model`]. It is used to instantiate a Pvt V2
@@ -151,3 +153,8 @@ class PvtV2Config(BackboneConfigMixin, PretrainedConfig):
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
+
+__all__ = [
+    "PvtV2Config"
+]
+    

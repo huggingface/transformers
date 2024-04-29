@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Qwen2MoE model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -25,6 +26,7 @@ QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
+@register()
 class Qwen2MoeConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen2MoeModel`]. It is used to instantiate a
@@ -173,3 +175,8 @@ class Qwen2MoeConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+__all__ = [
+    "Qwen2MoeConfig"
+]
+    

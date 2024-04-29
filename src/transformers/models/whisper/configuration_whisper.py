@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Whisper model configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 
@@ -59,6 +60,7 @@ NON_SPEECH_TOKENS_MULTI = [
 # fmt: on
 
 
+@register()
 class WhisperConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`WhisperModel`]. It is used to instantiate a
@@ -284,6 +286,7 @@ class WhisperConfig(PretrainedConfig):
         )
 
 
+@register()
 class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -341,3 +344,9 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def atol_for_validation(self) -> float:
         return 1e-3
+
+__all__ = [
+    "WhisperConfig",
+    "WhisperOnnxConfig"
+]
+    

@@ -16,6 +16,7 @@
 # limitations under the License.
 """ Pvt model configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Callable, List, Mapping
 
@@ -32,6 +33,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class PvtConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PvtModel`]. It is used to instantiate an Pvt
@@ -142,6 +144,7 @@ class PvtConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
 
 
+@register()
 class PvtOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -160,3 +163,9 @@ class PvtOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 12
+
+__all__ = [
+    "PvtConfig",
+    "PvtOnnxConfig"
+]
+    

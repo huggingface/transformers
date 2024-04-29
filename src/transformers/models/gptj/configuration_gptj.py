@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ GPT-J model configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
@@ -28,6 +29,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class GPTJConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GPTJModel`]. It is used to instantiate a GPT-J
@@ -137,6 +139,7 @@ class GPTJConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.gpt2.configuration_gpt2.GPT2OnnxConfig
+@register()
 class GPTJOnnxConfig(OnnxConfigWithPast):
     def __init__(
         self,
@@ -216,3 +219,9 @@ class GPTJOnnxConfig(OnnxConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+__all__ = [
+    "GPTJConfig",
+    "GPTJOnnxConfig"
+]
+    

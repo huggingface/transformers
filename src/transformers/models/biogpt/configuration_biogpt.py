@@ -14,6 +14,7 @@
 # limitations under the License.
 """ BioGPT model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import BIOGPT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class BioGptConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BioGptModel`]. It is used to instantiate an
@@ -132,3 +134,8 @@ class BioGptConfig(PretrainedConfig):
         self.layerdrop = layerdrop
         self.activation_dropout = activation_dropout
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+__all__ = [
+    "BioGptConfig"
+]
+    

@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Chinese-CLIP model configuration"""
 
+from ...utils.import_utils import register
 import os
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
@@ -34,6 +35,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class ChineseCLIPTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used to instantiate a
@@ -163,6 +165,7 @@ class ChineseCLIPTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class ChineseCLIPVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used to instantiate an
@@ -271,6 +274,7 @@ class ChineseCLIPVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class ChineseCLIPConfig(PretrainedConfig):
     r"""
     [`ChineseCLIPConfig`] is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used
@@ -422,6 +426,7 @@ class ChineseCLIPConfig(PretrainedConfig):
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
 
+@register()
 class ChineseCLIPOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -466,3 +471,11 @@ class ChineseCLIPOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 14
+
+__all__ = [
+    "ChineseCLIPTextConfig",
+    "ChineseCLIPVisionConfig",
+    "ChineseCLIPConfig",
+    "ChineseCLIPOnnxConfig"
+]
+    

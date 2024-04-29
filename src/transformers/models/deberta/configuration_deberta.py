@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ DeBERTa model configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 
@@ -31,6 +32,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class DebertaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DebertaModel`] or a [`TFDebertaModel`]. It is
@@ -156,6 +158,7 @@ class DebertaConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.deberta_v2.configuration_deberta_v2.DebertaV2OnnxConfig
+@register()
 class DebertaOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -191,3 +194,9 @@ class DebertaOnnxConfig(OnnxConfig):
         if self._config.type_vocab_size == 0 and "token_type_ids" in dummy_inputs:
             del dummy_inputs["token_type_ids"]
         return dummy_inputs
+
+__all__ = [
+    "DebertaConfig",
+    "DebertaOnnxConfig"
+]
+    

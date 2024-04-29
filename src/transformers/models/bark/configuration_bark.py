@@ -14,6 +14,7 @@
 # limitations under the License.
 """ BARK model configuration"""
 
+from ...utils.import_utils import register
 import os
 from typing import Dict, Optional, Union
 
@@ -63,6 +64,7 @@ BARK_SUBMODELCONFIG_START_DOCSTRING = """
 """
 
 
+@register()
 class BarkSubModelConfig(PretrainedConfig):
     model_type = "bark_module"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -152,6 +154,7 @@ class BarkSubModelConfig(PretrainedConfig):
     >>> configuration = model.config
     ```""",
 )
+@register()
 class BarkSemanticConfig(BarkSubModelConfig):
     model_type = "semantic"
 
@@ -174,6 +177,7 @@ class BarkSemanticConfig(BarkSubModelConfig):
     >>> configuration = model.config
     ```""",
 )
+@register()
 class BarkCoarseConfig(BarkSubModelConfig):
     model_type = "coarse_acoustics"
 
@@ -201,6 +205,7 @@ class BarkCoarseConfig(BarkSubModelConfig):
     >>> configuration = model.config
     ```""",
 )
+@register()
 class BarkFineConfig(BarkSubModelConfig):
     model_type = "fine_acoustics"
 
@@ -211,6 +216,7 @@ class BarkFineConfig(BarkSubModelConfig):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
+@register()
 class BarkConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`BarkModel`]. It is used to instantiate a Bark
@@ -323,3 +329,12 @@ class BarkConfig(PretrainedConfig):
             codec_config=codec_config.to_dict(),
             **kwargs,
         )
+
+__all__ = [
+    "BarkSubModelConfig",
+    "BarkSemanticConfig",
+    "BarkCoarseConfig",
+    "BarkFineConfig",
+    "BarkConfig"
+]
+    

@@ -14,6 +14,7 @@
 # limitations under the License.
 """ GLPN model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class GLPNConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GLPNModel`]. It is used to instantiate an GLPN
@@ -133,3 +135,8 @@ class GLPNConfig(PretrainedConfig):
         self.decoder_hidden_size = decoder_hidden_size
         self.max_depth = max_depth
         self.head_in_index = head_in_index
+
+__all__ = [
+    "GLPNConfig"
+]
+    

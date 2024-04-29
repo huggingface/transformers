@@ -14,6 +14,7 @@
 # limitations under the License.
 """ YOLOS model configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -30,6 +31,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class YolosConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`YolosModel`]. It is used to instantiate a YOLOS
@@ -158,6 +160,7 @@ class YolosConfig(PretrainedConfig):
         self.eos_coefficient = eos_coefficient
 
 
+@register()
 class YolosOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -176,3 +179,9 @@ class YolosOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 12
+
+__all__ = [
+    "YolosConfig",
+    "YolosOnnxConfig"
+]
+    

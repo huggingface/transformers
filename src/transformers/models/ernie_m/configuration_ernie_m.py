@@ -15,6 +15,7 @@
 """ ErnieM model configuration"""
 # Adapted from original paddlenlp repository.(https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/transformers/ernie_m/configuration.py)
 
+from ...utils.import_utils import register
 from __future__ import annotations
 
 from typing import Dict
@@ -23,6 +24,7 @@ from ...configuration_utils import PretrainedConfig
 from ..deprecated._archive_maps import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class ErnieMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ErnieMModel`]. It is used to instantiate a
@@ -110,3 +112,8 @@ class ErnieMConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.classifier_dropout = classifier_dropout
         self.act_dropout = act_dropout
+
+__all__ = [
+    "ErnieMConfig"
+]
+    

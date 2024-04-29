@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Jukebox configuration"""
 
+from ...utils.import_utils import register
 import os
 from typing import List, Union
 
@@ -139,6 +140,7 @@ ATTENTION_PATTERNS = {
 }
 
 
+@register()
 class JukeboxPriorConfig(PretrainedConfig):
     """
         This is the configuration class to store the configuration of a [`JukeboxPrior`]. It is used to instantiate a
@@ -368,6 +370,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class JukeboxVQVAEConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`JukeboxVQVAE`]. It is used to instantiate a
@@ -491,6 +494,7 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class JukeboxConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`JukeboxModel`].
@@ -611,3 +615,10 @@ class JukeboxConfig(PretrainedConfig):
         result = super().to_dict()
         result["prior_config_list"] = [config.to_dict() for config in result.pop("prior_configs")]
         return result
+
+__all__ = [
+    "JukeboxPriorConfig",
+    "JukeboxVQVAEConfig",
+    "JukeboxConfig"
+]
+    

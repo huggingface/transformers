@@ -14,6 +14,7 @@
 # limitations under the License.
 """ MEGATRON_BERT model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class MegatronBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MegatronBertModel`]. It is used to instantiate a
@@ -127,3 +129,8 @@ class MegatronBertConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
+
+__all__ = [
+    "MegatronBertConfig"
+]
+    

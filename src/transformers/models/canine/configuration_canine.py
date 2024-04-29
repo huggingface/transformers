@@ -14,6 +14,7 @@
 # limitations under the License.
 """ CANINE model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class CanineConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CanineModel`]. It is used to instantiate an
@@ -139,3 +141,8 @@ class CanineConfig(PretrainedConfig):
         self.num_hash_functions = num_hash_functions
         self.num_hash_buckets = num_hash_buckets
         self.local_transformer_stride = local_transformer_stride
+
+__all__ = [
+    "CanineConfig"
+]
+    

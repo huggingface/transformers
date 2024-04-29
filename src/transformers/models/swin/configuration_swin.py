@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Swin Transformer model configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -31,6 +32,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class SwinConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SwinModel`]. It is used to instantiate a Swin
@@ -163,6 +165,7 @@ class SwinConfig(BackboneConfigMixin, PretrainedConfig):
         )
 
 
+@register()
 class SwinOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -177,3 +180,9 @@ class SwinOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+__all__ = [
+    "SwinConfig",
+    "SwinOnnxConfig"
+]
+    

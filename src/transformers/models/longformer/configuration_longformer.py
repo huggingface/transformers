@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Longformer configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, List, Mapping, Optional, Union
 
@@ -32,6 +33,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class LongformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LongformerModel`] or a [`TFLongformerModel`]. It
@@ -140,6 +142,7 @@ class LongformerConfig(PretrainedConfig):
         self.onnx_export = onnx_export
 
 
+@register()
 class LongformerOnnxConfig(OnnxConfig):
     def __init__(self, config: "PretrainedConfig", task: str = "default", patching_specs: "List[PatchingSpec]" = None):
         super().__init__(config, task, patching_specs)
@@ -201,3 +204,9 @@ class LongformerOnnxConfig(OnnxConfig):
         inputs["global_attention_mask"][:, ::2] = 1
 
         return inputs
+
+__all__ = [
+    "LongformerConfig",
+    "LongformerOnnxConfig"
+]
+    

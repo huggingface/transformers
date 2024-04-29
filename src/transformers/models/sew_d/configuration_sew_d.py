@@ -14,6 +14,7 @@
 # limitations under the License.
 """ SEW-D model configuration"""
 
+from ...utils.import_utils import register
 import functools
 import operator
 
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class SEWDConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SEWDModel`]. It is used to instantiate a SEW-D
@@ -294,3 +296,8 @@ class SEWDConfig(PretrainedConfig):
         output = super().to_dict()
         output["hidden_dropout"] = output.pop("_hidden_dropout")
         return output
+
+__all__ = [
+    "SEWDConfig"
+]
+    

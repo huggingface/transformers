@@ -14,6 +14,7 @@
 # limitations under the License.
 """ ViViT model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class VivitConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VivitModel`]. It is used to instantiate a ViViT
@@ -117,3 +119,8 @@ class VivitConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
 
         super().__init__(**kwargs)
+
+__all__ = [
+    "VivitConfig"
+]
+    

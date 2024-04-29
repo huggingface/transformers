@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ RemBERT model configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class RemBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RemBertModel`]. It is used to instantiate an
@@ -141,6 +143,7 @@ class RemBertConfig(PretrainedConfig):
         self.tie_word_embeddings = False
 
 
+@register()
 class RemBertOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -159,3 +162,9 @@ class RemBertOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+__all__ = [
+    "RemBertConfig",
+    "RemBertOnnxConfig"
+]
+    

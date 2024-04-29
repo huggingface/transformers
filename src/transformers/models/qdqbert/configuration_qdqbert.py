@@ -14,6 +14,7 @@
 # limitations under the License.
 """ QDQBERT model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class QDQBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`QDQBertModel`]. It is used to instantiate an
@@ -121,3 +123,8 @@ class QDQBertConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
+
+__all__ = [
+    "QDQBertConfig"
+]
+    

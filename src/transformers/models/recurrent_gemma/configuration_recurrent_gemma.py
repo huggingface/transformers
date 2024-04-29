@@ -14,6 +14,7 @@
 # limitations under the License.
 """ RecurrentGemma model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -21,6 +22,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
+@register()
 class RecurrentGemmaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RecurrentGemmaModel`]. It is used to instantiate a RecurrentGemma
@@ -156,3 +158,8 @@ class RecurrentGemmaConfig(PretrainedConfig):
     @property
     def layers_block_type(self):
         return (self.block_types * 100)[: self.num_hidden_layers]
+
+__all__ = [
+    "RecurrentGemmaConfig"
+]
+    

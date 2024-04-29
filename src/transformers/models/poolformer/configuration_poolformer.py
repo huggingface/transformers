@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PoolFormer model configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -29,6 +30,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class PoolFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of [`PoolFormerModel`]. It is used to instantiate a
@@ -131,6 +133,7 @@ class PoolFormerConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
+@register()
 class PoolFormerOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -145,3 +148,9 @@ class PoolFormerOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 2e-3
+
+__all__ = [
+    "PoolFormerConfig",
+    "PoolFormerOnnxConfig"
+]
+    

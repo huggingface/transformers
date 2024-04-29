@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ MEGA configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class MegaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MegaModel`]. It is used to instantiate a Mega
@@ -227,6 +229,7 @@ class MegaConfig(PretrainedConfig):
         self.num_attention_heads = 1  # not used but required by Hugging Face
 
 
+@register()
 class MegaOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -240,3 +243,9 @@ class MegaOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+__all__ = [
+    "MegaConfig",
+    "MegaOnnxConfig"
+]
+    

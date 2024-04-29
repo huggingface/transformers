@@ -14,6 +14,7 @@
 # limitations under the License.
 """ VitMatte model configuration"""
 
+from ...utils.import_utils import register
 import copy
 from typing import List
 
@@ -28,6 +29,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class VitMatteConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of [`VitMatteForImageMatting`]. It is used to
@@ -134,3 +136,8 @@ class VitMatteConfig(PretrainedConfig):
         output["backbone_config"] = self.backbone_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
+
+__all__ = [
+    "VitMatteConfig"
+]
+    

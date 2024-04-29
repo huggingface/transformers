@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Perceiver model configuration"""
 
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Any, Mapping, Optional, Union
 
@@ -31,6 +32,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class PerceiverConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PerceiverModel`]. It is used to instantiate an
@@ -184,6 +186,7 @@ class PerceiverConfig(PretrainedConfig):
         self._label_trainable_num_channels = _label_trainable_num_channels
 
 
+@register()
 class PerceiverOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -242,3 +245,9 @@ class PerceiverOnnxConfig(OnnxConfig):
             raise ValueError(
                 "Unable to generate dummy inputs for the model. Please provide a tokenizer or a preprocessor."
             )
+
+__all__ = [
+    "PerceiverConfig",
+    "PerceiverOnnxConfig"
+]
+    

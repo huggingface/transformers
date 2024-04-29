@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Musicgen Melody model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import MUSICGEN_MELODY_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class MusicgenMelodyDecoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`MusicgenMelodyDecoder`]. It is used to instantiate a
@@ -135,6 +137,7 @@ class MusicgenMelodyDecoderConfig(PretrainedConfig):
         )
 
 
+@register()
 class MusicgenMelodyConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MusicgenMelodyModel`]. It is used to instantiate a
@@ -269,3 +272,9 @@ class MusicgenMelodyConfig(PretrainedConfig):
     def _attn_implementation(self, value):
         self._attn_implementation_internal = value
         self.decoder._attn_implementation = value
+
+__all__ = [
+    "MusicgenMelodyDecoderConfig",
+    "MusicgenMelodyConfig"
+]
+    

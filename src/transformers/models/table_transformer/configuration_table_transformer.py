@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Table Transformer model configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -30,6 +31,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class TableTransformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TableTransformerModel`]. It is used to
@@ -262,6 +264,7 @@ class TableTransformerConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.detr.configuration_detr.DetrOnnxConfig
+@register()
 class TableTransformerOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -281,3 +284,9 @@ class TableTransformerOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 12
+
+__all__ = [
+    "TableTransformerConfig",
+    "TableTransformerOnnxConfig"
+]
+    

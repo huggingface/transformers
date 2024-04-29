@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ I-BERT configuration"""
+from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -29,6 +30,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class IBertConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`IBertModel`]. It is used to instantiate a I-BERT
@@ -126,6 +128,7 @@ class IBertConfig(PretrainedConfig):
         self.force_dequant = force_dequant
 
 
+@register()
 class IBertOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -139,3 +142,9 @@ class IBertOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+__all__ = [
+    "IBertConfig",
+    "IBertOnnxConfig"
+]
+    

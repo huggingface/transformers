@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Siglip model configuration"""
 
+from ...utils.import_utils import register
 import os
 from typing import Union
 
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class SiglipTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SiglipTextModel`]. It is used to instantiate a
@@ -132,6 +134,7 @@ class SiglipTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class SiglipVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SiglipVisionModel`]. It is used to instantiate a
@@ -228,6 +231,7 @@ class SiglipVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class SiglipConfig(PretrainedConfig):
     r"""
     [`SiglipConfig`] is the configuration class to store the configuration of a [`SiglipModel`]. It is used to
@@ -299,3 +303,10 @@ class SiglipConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+__all__ = [
+    "SiglipTextConfig",
+    "SiglipVisionConfig",
+    "SiglipConfig"
+]
+    

@@ -14,6 +14,7 @@
 # limitations under the License.
 """ DBRX model configuration """
 
+from ...utils.import_utils import register
 from typing import Any, Optional
 
 from ...configuration_utils import PretrainedConfig
@@ -23,6 +24,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
+@register()
 class DbrxAttentionConfig(PretrainedConfig):
     """Configuration class for Dbrx Attention.
 
@@ -79,6 +81,7 @@ class DbrxAttentionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class DbrxFFNConfig(PretrainedConfig):
     """Configuration class for Dbrx FFN.
 
@@ -146,6 +149,7 @@ class DbrxFFNConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class DbrxConfig(PretrainedConfig):
     r"""
 
@@ -255,3 +259,10 @@ class DbrxConfig(PretrainedConfig):
             raise ValueError("tie_word_embeddings is not supported for DBRX models.")
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+
+__all__ = [
+    "DbrxAttentionConfig",
+    "DbrxFFNConfig",
+    "DbrxConfig"
+]
+    

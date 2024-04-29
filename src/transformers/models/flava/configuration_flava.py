@@ -14,6 +14,7 @@
 # limitations under the License.
 """ FLAVA model configurations"""
 
+from ...utils.import_utils import register
 import os
 from typing import Any, Dict, Union
 
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class FlavaImageConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FlavaImageModel`]. It is used to instantiate an
@@ -146,6 +148,7 @@ class FlavaImageConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class FlavaTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FlavaTextModel`]. It is used to instantiate an
@@ -276,6 +279,7 @@ class FlavaTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class FlavaMultimodalConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FlavaMultimodalModel`]. It is used to instantiate
@@ -379,6 +383,7 @@ class FlavaMultimodalConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class FlavaImageCodebookConfig(PretrainedConfig):
     model_type = "flava_image_codebook"
 
@@ -464,6 +469,7 @@ class FlavaImageCodebookConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class FlavaConfig(PretrainedConfig):
     r"""
     [`FlavaConfig`] is the configuration class to store the configuration of a [`FlavaModel`]. It is used to
@@ -762,3 +768,12 @@ class FlavaConfig(PretrainedConfig):
             image_codebook_config=image_codebook_config.to_dict(),
             **kwargs,
         )
+
+__all__ = [
+    "FlavaImageConfig",
+    "FlavaTextConfig",
+    "FlavaMultimodalConfig",
+    "FlavaImageCodebookConfig",
+    "FlavaConfig"
+]
+    

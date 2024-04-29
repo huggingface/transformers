@@ -14,6 +14,7 @@
 # limitations under the License.
 """PatchTST model configuration"""
 
+from ...utils.import_utils import register
 from typing import List, Optional, Union
 
 from transformers.configuration_utils import PretrainedConfig
@@ -26,6 +27,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class PatchTSTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`PatchTSTModel`]. It is used to instantiate an
@@ -258,3 +260,8 @@ class PatchTSTConfig(PretrainedConfig):
         self.output_range = output_range
 
         super().__init__(**kwargs)
+
+__all__ = [
+    "PatchTSTConfig"
+]
+    

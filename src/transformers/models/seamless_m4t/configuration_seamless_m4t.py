@@ -14,6 +14,7 @@
 # limitations under the License.
 """ SeamlessM4T model configuration"""
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +25,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class SeamlessM4TConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`~SeamlessM4TModel`]. It is used to instantiate an
@@ -414,3 +416,8 @@ class SeamlessM4TConfig(PretrainedConfig):
             max_position_embeddings=max_position_embeddings,
             **kwargs,
         )
+
+__all__ = [
+    "SeamlessM4TConfig"
+]
+    

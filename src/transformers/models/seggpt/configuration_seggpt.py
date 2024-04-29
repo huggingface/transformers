@@ -15,6 +15,7 @@
 """ SegGpt model configuration"""
 
 
+from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -25,6 +26,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
+@register()
 class SegGptConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SegGptModel`]. It is used to instantiate a SegGPT
@@ -142,3 +144,8 @@ class SegGptConfig(PretrainedConfig):
         self.intermediate_hidden_state_indices = intermediate_hidden_state_indices
         self.beta = beta
         self.mlp_dim = int(hidden_size * 4) if mlp_dim is None else mlp_dim
+
+__all__ = [
+    "SegGptConfig"
+]
+    
