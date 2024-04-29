@@ -17,6 +17,7 @@ Processor class for IDEFICS2.
 """
 
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
+import warnings
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
@@ -285,10 +286,14 @@ class Idefics2Processor(ProcessorMixin):
                 chat_template = self.chat_template
             else:
                 chat_template = self.default_chat_template
-
-        return self.tokenizer.apply_chat_template(
-            conversation, chat_template=chat_template, tokenize=tokenize, **kwargs
-        )
+        with warnings.catch_warnings():
+            # TODO Matt: This is a workaround to avoid annoying warnings until we properly remove default
+            #            chat templates, which are already deprecated. Once they are removed in v4.43, we can remove
+            #            this and clean up Tokenizer.apply_chat_template as well.
+            warnings.simplefilter("ignore")
+            return self.tokenizer.apply_chat_template(
+                conversation, chat_template=chat_template, tokenize=tokenize, **kwargs
+            )
 
     @property
     def default_chat_template(self):
