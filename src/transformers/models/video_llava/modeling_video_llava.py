@@ -382,11 +382,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
             video_outputs = None
 
         if pixel_values_images is not None:
-            image_outputs = self.image_tower(
-                pixel_values_images,
-                output_hidden_states=True,
-            )
-
+            image_outputs = self.image_tower(pixel_values_images, output_hidden_states=True)
             image_outputs = image_outputs.hidden_states[vision_feature_layer].squeeze(1)
 
             if vision_feature_select_strategy == "default":
