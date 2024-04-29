@@ -11,9 +11,9 @@ def parse_pytest_output(file_path):
                 skipped_count += 1
                 test_file, test_line, reason = match.groups()
                 skipped_tests[reason] = skipped_tests.get(reason, []) + [(test_file, test_line)]
-    print("Number of skipped tests:", skipped_count)
     for k,v in sorted(skipped_tests.items(), key=lambda x:len(x[1])):
         print(f"{len(v):4} skipped because: {k}")
+    print("Number of skipped tests:", skipped_count)
 
 def parse_pytest_failure_output(file_path):
     failed_tests = {}
@@ -25,9 +25,9 @@ def parse_pytest_failure_output(file_path):
                 failed_count += 1
                 _, error, reason = match.groups()
                 failed_tests[reason] = failed_tests.get(reason, []) + [error]
-    print("Number of failed tests:", failed_count)
     for k,v in sorted(failed_tests.items(), key=lambda x:len(x[1])):
         print(f"{len(v):4} failed because `{v[0]}` -> {k}")
+    print("Number of failed tests:", failed_count)
     if failed_count>0:
         exit(1)
 
@@ -42,9 +42,9 @@ def parse_pytest_errors_output(file_path):
                 error_count += 1
                 _, test_error, reason = match.groups()
                 error_tests[reason] = error_tests.get(reason, []) + [test_error]
-    print("Number of errors:", error_count)
     for k,v in sorted(error_tests.items(), key=lambda x:len(x[1])):
         print(f"{len(v):4} errored out because of `{v[0]}` -> {k}")
+    print("Number of errors:", error_count)
     if error_count>0:
         exit(1)
 
