@@ -21,11 +21,6 @@ if is_torch_available():
 else:
     torch = None
 
-if is_hqq_available():
-    from hqq.core.quantize import HQQLinear
-else:
-    HQQLinear = None
-
 logger = logging.get_logger(__name__)
 
 
