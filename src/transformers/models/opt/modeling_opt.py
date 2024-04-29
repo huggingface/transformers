@@ -63,6 +63,8 @@ _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
 
 from ..deprecated._archive_maps import OPT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
+reduction_ratio_list = []
+import time
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
@@ -133,6 +135,14 @@ class OPTAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.enable_bias)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.enable_bias)
 
+        self.heavy_budget_ratio = 0.9
+        self.prompt = True
+        self.heavy_budget = None
+
+    def _evict_reset(self):
+        self.prompt = True
+        self.heavy_budget = None
+
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
@@ -144,14 +154,18 @@ class OPTAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        layer_index: Optional[int] = None,
+        evict_layer: Optional[List[int]] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
+
+        self.evict_layer = evict_layer
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
 
-        bsz, tgt_len, _ = hidden_states.size()
+        bsz, tgt_len, hidden_size = hidden_states.size()
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -166,12 +180,14 @@ class OPTAttention(nn.Module):
             value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
         elif past_key_value is not None:
             # reuse k, v, self_attention
+            self.prompt = False
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
             value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
         else:
             # self_attention
+            self._evict_reset()
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
             value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
@@ -191,6 +207,7 @@ class OPTAttention(nn.Module):
         value_states = value_states.view(*proj_shape)
 
         src_len = key_states.size(1)
+
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
@@ -211,10 +228,31 @@ class OPTAttention(nn.Module):
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         # upcast to fp32 if the weights are in fp16. Please see https://github.com/huggingface/transformers/pull/17437
+        # start = time.time()
         if attn_weights.dtype == torch.float16:
             attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(torch.float16)
         else:
             attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+        ## Eviction -------------------------------------------------------------
+        if self.prompt == True and layer_index in self.evict_layer:
+            current_scores_sum = attn_weights.sum(1) # (bs * heads, k-tokens)
+            self.heavy_budget = int(self.heavy_budget_ratio * current_scores_sum.shape[-1])
+
+            _, keep_topk = current_scores_sum.topk(k = self.heavy_budget, dim = -1, largest = True, sorted = True)
+
+            new_key_states = torch.zeros(keep_topk.shape[0], self.heavy_budget, self.head_dim).to(key_states.dtype).to(key_states.device)
+            new_value_states = torch.zeros(keep_topk.shape[0], self.heavy_budget, self.head_dim).to(value_states.dtype).to(value_states.device)
+
+            for i in range(keep_topk.shape[0]):
+                new_key_states[i] = key_states[i,keep_topk[i],:].contiguous()
+                new_value_states[i] = value_states[i,keep_topk[i],:].contiguous()
+
+            new_key_states = new_key_states.view(bsz, self.num_heads, -1, self.head_dim).contiguous()
+            new_value_states = new_value_states.view(bsz, self.num_heads, -1, self.head_dim).contiguous()
+
+            past_key_value = (new_key_states, new_value_states)
+
 
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
@@ -236,8 +274,8 @@ class OPTAttention(nn.Module):
             attn_weights_reshaped = None
 
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value_states)
+        
+        attn_output = torch.matmul(attn_probs, value_states)
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
@@ -480,7 +518,7 @@ class OPTDecoderLayer(nn.Module):
         self.embed_dim = config.hidden_size
 
         self.self_attn = OPT_ATTENTION_CLASSES[config._attn_implementation](config=config, is_decoder=True)
-
+        # self.self_attn = "flash_attention_2"
         self.do_layer_norm_before = config.do_layer_norm_before
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -492,6 +530,13 @@ class OPTDecoderLayer(nn.Module):
         self.fc2 = nn.Linear(config.ffn_dim, self.embed_dim, bias=config.enable_bias)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim, elementwise_affine=config.layer_norm_elementwise_affine)
 
+        # our method
+        self.eviction_layers = [16, 17, 18, 19, 20, 21, 22, 23]
+        self.merge_layers = [15]
+        # self.eviction_layers = []
+        # self.merge_layers = []
+        self.merge_threshold = 0.95
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -500,6 +545,8 @@ class OPTDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
+        calculate_similarity: Optional[bool] = False,
+        layer_index: Optional[int] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -530,6 +577,8 @@ class OPTDecoderLayer(nn.Module):
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
+            layer_index=layer_index,
+            evict_layer=self.eviction_layers,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -537,6 +586,51 @@ class OPTDecoderLayer(nn.Module):
         # 350m applies layer norm AFTER attention
         if not self.do_layer_norm_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
+
+        def merge_hidden_states(hidden_states, merge_indexes):
+            new_hidden_states = []
+            idx = 0
+            while idx < len(hidden_states):
+                if idx in merge_indexes:
+                    new_hidden_states.append((hidden_states[idx] + hidden_states[idx + 1])/2.0)
+                    idx += 2
+                else:
+                    new_hidden_states.append(hidden_states[idx])
+                    idx += 1
+            
+            return torch.stack(new_hidden_states).to(hidden_states.device).unsqueeze(0)
+
+        ## Token Merging -------------------------------------------------------
+        perform_tome = layer_index in self.merge_layers and hidden_states.shape[1] > 1
+        if perform_tome:
+            original_length = hidden_states.shape[1]
+            
+            key_states = present_key_value[0]
+            key_states = key_states.transpose(1, 2)
+            key_states = key_states.reshape(hidden_states.shape[0], hidden_states.shape[1], -1).squeeze(0)
+            cos_similarities = F.cosine_similarity(key_states[:-1], key_states[1:], dim=1)
+            normalized_similarities = (cos_similarities + 1) / 2
+
+            merge_indexes = torch.where(normalized_similarities > self.merge_threshold)[0]
+
+            hidden_states = merge_hidden_states(hidden_states.squeeze(0), merge_indexes)
+
+            reduction_ratio_list.append(1 - (hidden_states.shape[1] / original_length))
+
+            # print(f"merge threshold: {merge_threshold}")
+            # print(f"reduction ratio: {1 - (hidden_states.shape[1] / original_length)}")
+            # print(f"average reduction ratio: {sum(reduction_ratio_list) / len(reduction_ratio_list)}")
+            # print(f"reduce token from {original_length} to {hidden_states.shape[1]}")
+            # logger.info(f"average reduction ratio: {sum(reduction_ratio_list) / len(reduction_ratio_list)}")
+
+            # generate new attention mask
+            new_attention_mask = torch.ones(1, hidden_states.shape[1], device=hidden_states.device)
+
+            new_causal_attn_mask = _prepare_4d_causal_attention_mask(
+                new_attention_mask, hidden_states.size()[:-1], hidden_states, 0
+            )
+
+            # print(new_causal_attn_mask.shape)
 
         # Fully Connected
         hidden_states_shape = hidden_states.shape
@@ -566,6 +660,9 @@ class OPTDecoderLayer(nn.Module):
 
         if use_cache:
             outputs += (present_key_value,)
+        
+        if perform_tome:
+            outputs += (new_causal_attn_mask,)
 
         return outputs
 
@@ -890,9 +987,23 @@ class OPTDecoder(OPTPreTrainedModel):
                     past_key_value=past_key_value,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
+                    layer_index=idx,
                 )
+                if len(layer_outputs) == 3:
+                    causal_attention_mask = layer_outputs[-1]
 
             hidden_states = layer_outputs[0]
+
+
+            if idx < len(self.layers) - 1 and hidden_states.shape[1] <= 1:
+                past_key_value_length = past_key_values[idx+1][0].shape[2] if past_key_values is not None else 0
+                # print(f"decoder layer {idx+1}: past_key_value_length: {past_key_value_length}")
+                mask_seq_length = past_key_value_length + seq_length
+                attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
+                causal_attention_mask = _prepare_4d_causal_attention_mask(
+                    attention_mask, input_shape, inputs_embeds, past_key_value_length
+                )
+
 
             if use_cache:
                 next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
