@@ -191,17 +191,17 @@ class HqqConfig(QuantizationConfigMixin):
             Number of bits. Supported values are (8, 4, 3, 2, 1).
         group_size (`int`, defaults to 64):
             Group-size value. Supported values are any value that is divisble by weight.shape[axis]).
-        quant_zero (`bool`, defaults to `False`):
+        quant_zero (`bool`, defaults to `True`):
             Quantize the zero-point if set to True.
         quant_scale (`bool`, defaults to `False`):
             Quantize the scaling if set to True.
         offload_meta (`bool`, defaults to `False`):
-            Offload the meta-data on the CPU if set to True.
+            Offload the meta-data to the CPU if set to True.
         view_as_float (`bool`, defaults to `False`):
             View the quantized weight as float (used in distributed training) if set to True.
         axis (`int`, defaults to 0):
             Axis along which grouping is performed. Supported values are 0 or 1.
-        dynamic_config ('Optional[dict]', defaults to `None`):
+        dynamic_config (dict, *optional*, defaults to `None`):
             Parameters for dynamic configuration. The key is the name tag of the layer.
         skip_modules (`List[str]`, defaults to `["lm_head"]`):
             List of nn.Linear layers to skip.
