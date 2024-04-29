@@ -201,9 +201,9 @@ class HqqConfig(QuantizationConfigMixin):
             View the quantized weight as float (used in distributed training) if set to True.
         axis (`int`, defaults to 0):
             Axis along which grouping is performed. Supported values are 0 or 1.
-        dynamic_config ('dict', defaults to `None`):
+        dynamic_config ('Optional[dict]', defaults to `None`):
             Parameters for dynamic configuration. The key is the name tag of the layer.
-        skip_modules (`List[str]`):
+        skip_modules (`List[str]`, defaults to `["lm_head"]`):
             List of nn.Linear layers to skip.
         show_progress ('bool', defaults to `True`):
             Show tqdm quantization progress for each shard.
@@ -221,8 +221,8 @@ class HqqConfig(QuantizationConfigMixin):
         view_as_float: bool = False,
         axis: int = 0,
         dynamic_config: Optional[dict] = None,
-        skip_modules=["lm_head"],
-        show_progress=True,
+        skip_modules: List[str] = ["lm_head"],
+        show_progress: bool = True,
         **kwargs,
     ):
         if is_hqq_available():
