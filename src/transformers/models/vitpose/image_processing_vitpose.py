@@ -17,8 +17,6 @@
 import math
 from typing import Dict, List, Optional, Union
 
-# TODO get rid of cv2?
-import cv2
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
@@ -34,11 +32,15 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, is_cv2_available, is_vision_available, logging
 
 
 if is_vision_available():
     import PIL
+
+if is_cv2_available():
+    # TODO get rid of cv2?
+    import cv2
 
 
 logger = logging.get_logger(__name__)

@@ -18,7 +18,7 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import require_cv2, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
@@ -93,6 +93,7 @@ class ViTPoseImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
+@require_cv2
 class ViTPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = ViTPoseImageProcessor if is_vision_available() else None
 
