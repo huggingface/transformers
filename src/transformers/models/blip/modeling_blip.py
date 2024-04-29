@@ -322,7 +322,7 @@ class BlipAttention(nn.Module):
         query_states, key_states, value_states = mixed_qkv[0], mixed_qkv[1], mixed_qkv[2]
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_states, key_states.to(query_states.device).transpose(-1, -2))
+        attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
 
         attention_scores = attention_scores * self.scale
 

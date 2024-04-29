@@ -610,7 +610,7 @@ class GitVisionEmbeddings(nn.Module):
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding(self.position_ids).to(embeddings.device)
+        embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
 
 
@@ -678,7 +678,7 @@ class GitVisionAttention(nn.Module):
         value_states = value_states.view(*proj_shape)
 
         src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.to(query_states.device).transpose(1, 2))
+        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
@@ -771,12 +771,12 @@ class GitVisionEncoderLayer(nn.Module):
             causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = residual.to(hidden_states.device) + hidden_states
+        hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual.to(hidden_states.device) + hidden_states
+        hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
 
@@ -1241,7 +1241,7 @@ class GitModel(GitPreTrainedModel):
         # Repeat visual features to match embedding batch size.
         projected_visual_features = projected_visual_features.repeat(
             embedding_output.size(0) // projected_visual_features.size(0), 1, 1
-        ).to(embedding_output.device)
+        )
 
         # concatenate patch token and text token embeddings
         hidden_states = torch.cat((projected_visual_features, embedding_output), dim=1)

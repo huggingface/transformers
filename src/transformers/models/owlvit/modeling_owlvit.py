@@ -490,12 +490,12 @@ class OwlViTEncoderLayer(nn.Module):
             causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = residual.to(hidden_states.device) + hidden_states
+        hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual.to(hidden_states.device) + hidden_states
+        hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
 

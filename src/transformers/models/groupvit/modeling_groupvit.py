@@ -265,9 +265,7 @@ class GroupViTTokenAssign(nn.Module):
         new_image_tokens, attention = self.assign(projected_group_tokens, image_tokens)
         new_image_tokens += projected_group_tokens
 
-        new_image_tokens = new_image_tokens + self.mlp_channels(self.norm_new_x(new_image_tokens)).to(
-            new_image_tokens.device
-        )
+        new_image_tokens = new_image_tokens + self.mlp_channels(self.norm_new_x(new_image_tokens))
 
         return new_image_tokens, attention
 
@@ -637,7 +635,7 @@ class GroupViTAttention(nn.Module):
         value_states = value_states.view(*proj_shape)
 
         src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.to(query_states.device).transpose(1, 2))
+        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
@@ -652,9 +650,7 @@ class GroupViTAttention(nn.Module):
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
                     f" {causal_attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask.to(
-                attn_weights.device
-            )
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if attention_mask is not None:
@@ -662,9 +658,7 @@ class GroupViTAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask.to(
-                attn_weights.device
-            )
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -681,7 +675,7 @@ class GroupViTAttention(nn.Module):
 
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
-        attn_output = torch.bmm(attn_probs, value_states.to(attn_probs.device))
+        attn_output = torch.bmm(attn_probs, value_states)
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
@@ -734,12 +728,12 @@ class GroupViTEncoderLayer(nn.Module):
             causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = residual.to(hidden_states.device) + hidden_states
+        hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual.to(hidden_states.device) + hidden_states
+        hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
 
@@ -1526,7 +1520,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
 
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t()).to(logit_scale.device) * logit_scale
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
         logits_per_image = logits_per_text.t()
 
         seg_logits = None

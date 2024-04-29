@@ -724,9 +724,9 @@ class AlignTextEmbeddings(nn.Module):
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
-        embeddings = inputs_embeds + token_type_embeddings.to(inputs_embeds.device)
+        embeddings = inputs_embeds + token_type_embeddings
         if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids).to(inputs_embeds.device)
+            position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
@@ -815,7 +815,7 @@ class AlignTextSelfAttention(nn.Module):
             past_key_value = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.to(query_layer.device).transpose(-1, -2))
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             query_length, key_length = query_layer.shape[2], key_layer.shape[2]
@@ -1612,7 +1612,7 @@ class AlignModel(AlignPreTrainedModel):
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t()).to(self.temperature.device) / self.temperature
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) / self.temperature
         logits_per_image = logits_per_text.t()
 
         loss = None

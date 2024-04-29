@@ -392,7 +392,7 @@ class VideoMAELayer(nn.Module):
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
-        hidden_states = attention_output.to(hidden_states.device) + hidden_states
+        hidden_states = attention_output + hidden_states
 
         # in VideoMAE, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
