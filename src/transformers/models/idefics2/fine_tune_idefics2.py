@@ -1,5 +1,5 @@
 """
-Fine-tune Idefics2 using the `Seq2SeqTrainer` API.
+Fine-tune Idefics2 by tweaking the `Seq2SeqTrainer` class.
 
 One can run the script using `CUDA_VISIBLE_DEVICES=3 python src/transformers/models/idefics2/fine_tune_idefics2.py`.
 """
