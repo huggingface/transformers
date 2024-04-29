@@ -24,7 +24,7 @@ def parse_pytest_failure_output(file_path):
     with open(file_path, 'r') as file:
         for line in file:
             print(line)
-            match = re.match(r'^FAILED (tests/[^/]+/[^:]+) - (.*): (.*)$', line)
+            match = re.match(r'^FAILED (tests/.*) - (.*): (.*)$', line)
             if match:
                 skipped_count += 1
                 print(match.groups())
@@ -43,7 +43,7 @@ def parse_pytest_errors_output(file_path):
     with open(file_path, 'r') as file:
         for line in file:
             print(line)
-            match = re.match(r'^ERROR (tests/[^/]+/[^:]+):(\d+): (.*)$', line)
+            match = re.match(r'^ERROR (tests/.*) - (.*): (.*)$', line)
             if match:
                 skipped_count += 1
                 print(match.groups())
