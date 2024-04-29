@@ -18,7 +18,6 @@ from ..utils import _LazyModule
 
 _import_structure = {
     "aqlm": ["replace_with_aqlm_linear"],
-    "hqq": ["prepare_for_hqq_linear"],
     "awq": [
         "fuse_awq_modules",
         "post_init_awq_exllama_modules",
@@ -44,6 +43,7 @@ _import_structure = {
         "unset_hf_deepspeed_config",
     ],
     "eetq": ["replace_with_eetq_linear"],
+    "hqq": ["prepare_for_hqq_linear"],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
         "AzureMLCallback",

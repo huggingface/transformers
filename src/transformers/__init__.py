@@ -1133,8 +1133,8 @@ _import_structure = {
         "BitsAndBytesConfig",
         "EetqConfig",
         "GPTQConfig",
-        "QuantoConfig",
         "HqqConfig",
+        "QuantoConfig",
     ],
 }
 
