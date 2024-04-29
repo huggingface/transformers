@@ -373,10 +373,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         if pixel_values_videos is not None:
             batch_size_vid, num_frames, channels, height, width = pixel_values_videos.shape
             pixel_values = pixel_values_videos.reshape(batch_size_vid * num_frames, channels, height, width)
-            video_outputs = self.video_tower(
-                pixel_values,
-                output_hidden_states=True,
-            )
+            video_outputs = self.video_tower(pixel_values, output_hidden_states=True)
             video_outputs = video_outputs.hidden_states[vision_feature_layer].squeeze(1)
         else:
             video_outputs = None
