@@ -451,7 +451,7 @@ def cached_file(
             revision = "main"
         raise EnvironmentError(
             f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
-            f"'https://huggingface.co/{path_or_repo_id}/{revision}' for available files."
+            f"'https://huggingface.co/{path_or_repo_id}/tree/{revision}' for available files."
         ) from e
     except HTTPError as err:
         resolved_file = _get_cache_file_to_return(path_or_repo_id, full_filename, cache_dir, revision)
