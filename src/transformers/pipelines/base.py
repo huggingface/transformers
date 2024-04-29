@@ -841,6 +841,8 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             if hf_device_map is not None:
                 # Take the first device used by `accelerate`.
                 device = next(iter(hf_device_map.values()))
+            elif self.model.device is not None:
+                device = self.model.device
             else:
                 device = -1
 
