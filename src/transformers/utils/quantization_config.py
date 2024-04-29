@@ -202,7 +202,7 @@ class HqqConfig(QuantizationConfigMixin):
             Axis along which grouping is performed.
         dynamic_config ('dict', defaults to None):
             Parameters for dynamic configuration. The key is the name tag of the layer.
-        skip_modules (List[str]):
+        skip_modules (`List[str]`):
             List of nn.Linear layers to skip.
         show_progress ('bool', defaults to True):
             Show tqdm quantization progress for each shard.
