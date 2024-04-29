@@ -188,3 +188,13 @@ for block in text_block:
         code = "from random import choice, seed\nseed(12)\nchoice(['win', 'lose', 'draw'])"
         result = evaluate_python_code(code, {}, state={})
         assert result == "lose"
+
+    def test_tuples(self):
+        code = "x = (1, 2, 3)\nx[1]"
+        result = evaluate_python_code(code, {}, state={})
+        assert result == 2
+
+    def test_listcomp(self):
+        code = "x = [i for i in range(3)]"
+        result = evaluate_python_code(code, {"range":range}, state={})
+        assert result == [0, 1, 2]

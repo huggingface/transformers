@@ -101,7 +101,7 @@ Action:
         assert output == '7.2904'
         assert agent.logs[0]['task'] == "What is 2 multiplied by 3.6452?"
         assert agent.logs[1]['observation'] == '\n12.511648652635412'
-        assert agent.logs[2]['tool_call'] == {'tool_arguments': 'final_answer(7.2904)\n', 'tool_name': 'code interpreter'}
+        assert agent.logs[2]['tool_call'] == {'tool_arguments': 'final_answer(7.2904)', 'tool_name': 'code interpreter'}
 
     def test_fake_code_agent(self):
         agent = CodeAgent(tools=[CalculatorTool()], llm_engine=fake_code_llm_oneshot)

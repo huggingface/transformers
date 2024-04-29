@@ -653,6 +653,7 @@ class ReactCodeAgent(ReactAgent):
             else self.default_tool_description_template,
             **kwargs,
         )
+        self.python_evaluator = evaluate_python_code
 
     def step(self):
         self.agent_memory = self.write_inner_memory_from_logs()
@@ -690,12 +691,12 @@ class ReactCodeAgent(ReactAgent):
         self.log.warn(f"====Agent is executing the code below:\n{code_action}\n====")
         try:
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
-            result = evaluate_python_code(code_action, available_tools, state=self.state)
+            result = self.python_evaluator(code_action, available_tools, state=self.state)
             information = self.state['print_outputs']
             self.log.info(information)
             self.logs[-1]["observation"] = information
         except Exception as e:
-            error_msg = f"Executing code:\n{code_action}\nYielded error:\n{str(e)}\nMake sure to provide correct code."
+            error_msg = f"Failed while trying to execute the code below:\n{code_action}\Failed due to the following error:\n{str(e)}\nMake sure to provide correct code."
             raise AgentExecutionError(error_msg)
         for line in code_action.split("\n"):
             if line[: len("final_answer")] == "final_answer":

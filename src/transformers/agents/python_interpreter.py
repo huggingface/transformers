@@ -98,6 +98,10 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
     elif isinstance(expression, ast.Constant):
         # Constant -> just return the value
         return expression.value
+    elif isinstance(expression, ast.Tuple):
+        return tuple(evaluate_ast(elt, state, tools) for elt in expression.elts)
+    elif isinstance(expression, ast.ListComp):
+        return evaluate_listcomp(expression, state, tools)
     elif isinstance(expression, ast.UnaryOp):
         operand = evaluate_ast(expression.operand, state, tools)
         if isinstance(expression.op, ast.USub):
@@ -411,4 +415,18 @@ def evaluate_for(for_loop, state, tools):
             line_result = evaluate_ast(expression, state, tools)
             if line_result is not None:
                 result = line_result
+    return result
+
+
+def evaluate_listcomp(listcomp, state, tools):
+    result = []
+    vars = {}
+    for generator in listcomp.generators:
+        var_name = generator.target.id
+        iter_value = evaluate_ast(generator.iter, state, tools)
+        for value in iter_value:
+            vars[var_name] = value
+            if all(evaluate_ast(if_clause, {**state, **vars}, tools) for if_clause in generator.ifs):
+                elem = evaluate_ast(listcomp.elt, {**state, **vars}, tools)
+                result.append(elem)
     return result
