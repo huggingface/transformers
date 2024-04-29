@@ -101,9 +101,7 @@ class VideoLlavaConfig(PretrainedConfig):
         self.vision_config = vision_config
 
         if isinstance(self.vision_config, dict):
-            vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "clip_vision_model"
-            )
+            vision_config["model_type"] = vision_config.get("model_type", "clip_vision_model")
             self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
             self.vision_config = CONFIG_MAPPING["clip_vision_model"](
