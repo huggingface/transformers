@@ -17,7 +17,6 @@
 import tempfile
 import unittest
 
-import jax.numpy as jnp
 import numpy as np
 
 from transformers import is_flax_available, is_torch_available
@@ -43,6 +42,7 @@ if is_flax_available():
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
     )
+    import jax.numpy as jnp
 
 if is_torch_available():
     import torch
