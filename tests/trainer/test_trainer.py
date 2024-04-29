@@ -31,6 +31,7 @@ from typing import Dict, List
 from unittest.mock import Mock, patch
 
 import numpy as np
+import psutil
 from huggingface_hub import HfFolder, ModelCard, delete_repo, list_repo_commits, list_repo_files
 from parameterized import parameterized
 from requests.exceptions import HTTPError
@@ -3332,6 +3333,21 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     output_dir=tmp_dir,
                 )
             self.assertTrue("Tried passing in a callable to `accelerator_config`" in str(context.exception))
+
+    def test_free_memory(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            free_cpu_ram_before = psutil.virtual_memory().available // 1024 // 1024
+
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            model = RegressionPreTrainedModel(config)
+            args = RegressionTrainingArguments(
+                output_dir=tmp_dir,
+            )
+            trainer = None
+            trainer = Trainer(model=model, args=args)
+            model = trainer.free_memory(model)
+            free_cpu_ram_after = psutil.virtual_memory().available // 1024 // 1024
+            self.assertLess(free_cpu_ram_after, free_cpu_ram_before)
 
 
 @require_torch

@@ -4573,7 +4573,7 @@ class Trainer:
             wrapper = "DeepSpeed" if self.is_deepspeed_enabled else "FSDP"
             raise NotImplementedError(f"`{wrapper}` doesn't support `auto_find_batch_size`.")
 
-    def release_memory(self, *models):
+    def free_memory(self, *models):
         """
         Will release all references to the internal objects stored and call the garbage collector.
 
@@ -4588,10 +4588,11 @@ class Trainer:
         >>> model = MyModel()
         >>> trainer = Trainer(model, ...)
         >>> trainer.train()
-        >>> model = trainer.release_memory(model)
+        >>> model = trainer.free_memory(model)
         ```
         """
-        return release_memory(*models)
+        *models, self.optimizer = release_memory(*models, self.optimizer)
+        return models
 
     def propagate_args_to_deepspeed(self, auto_find_batch_size=False):
         """
