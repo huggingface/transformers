@@ -37,7 +37,7 @@ class VideoLlavaConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`VideoLlavaVisionConfig`,  *optional*):
+        vision_config (`VideoLlavaVisionConfig`, *optional*):
             Custom vision config or dict
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
