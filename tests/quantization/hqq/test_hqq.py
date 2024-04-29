@@ -23,14 +23,11 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
 )
-from transformers.utils import is_accelerate_available, is_hqq_available, is_torch_available
+from transformers.utils import is_hqq_available, is_torch_available
 
 
 if is_torch_available():
     import torch
-
-if is_accelerate_available():
-    pass
 
 if is_hqq_available():
     from hqq.core.quantize import HQQBackend, HQQLinear
