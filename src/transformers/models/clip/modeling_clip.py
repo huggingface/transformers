@@ -450,6 +450,11 @@ class CLIPPreTrainedModel(PreTrainedModel):
                 module.text_projection.weight,
                 std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
             )
+        elif isinstance(module, CLIPForImageClassification):
+            nn.init.normal_(
+                module.classifier.weight,
+                std=self.config.vision_config.hidden_size**-0.5 * self.config.initializer_factor,
+            )
 
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()

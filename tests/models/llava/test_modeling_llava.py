@@ -591,14 +591,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         fast_tokenizer.add_tokens("<image>", True)
 
         prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
-        # If the token is added as special, it's not normalized, and the only diff is the extra space after special tokens.
-        # https://github.com/huggingface/transformers/pull/28881 is the fix for this.
-        self.assertEqual(
-            slow_tokenizer.tokenize(prompt),
-            ['<|im_start|>', 'system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', 'user', '\n', '<image>', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', 'ass', 'istant', '\n']
-        )  # fmt: skip
-
-        self.assertEqual(
-            fast_tokenizer.tokenize(prompt),
-            ['<|im_start|>', '▁system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', '▁user', '\n', '<image>', '▁', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', '▁assistant', '\n']
-        )  # fmt: skip
+        EXPECTED_OUTPUT = ['<|im_start|>', 'system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', 'user', '\n', '<image>', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', 'ass', 'istant', '\n']  # fmt: skip
+        self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
+        self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)

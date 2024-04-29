@@ -367,7 +367,9 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.backbone = AutoBackbone.from_config(config.backbone_config)
+        self.backbone = AutoBackbone.from_config(
+            config.backbone_config, attn_implementation=config._attn_implementation
+        )
         self.neck = DepthAnythingNeck(config)
         self.head = DepthAnythingDepthEstimationHead(config)
 
