@@ -6,9 +6,11 @@ from keras_nlp.tokenizers import BytePairTokenizer
 from tensorflow_text import pad_model_inputs
 
 from ...modeling_tf_utils import keras
+from ...utils.import_utils import register
 from .tokenization_gpt2 import GPT2Tokenizer
 
 
+@register(backends=("tf",))
 class TFGPT2Tokenizer(keras.layers.Layer):
     """
     This is an in-graph tokenizer for GPT2. It should be initialized similarly to other tokenizers, using the
@@ -102,3 +104,6 @@ class TFGPT2Tokenizer(keras.layers.Layer):
                 )
 
         return {"attention_mask": attention_mask, "input_ids": input_ids}
+
+
+__all__ = ["TFGPT2Tokenizer"]

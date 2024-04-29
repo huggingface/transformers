@@ -19,6 +19,7 @@ from typing import List, Optional, Union
 
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, add_end_docstrings, add_start_docstrings, logging
+from ...utils.import_utils import register
 from ..bert.tokenization_bert import BertTokenizer
 
 
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
 
+@register()
 class DPRContextEncoderTokenizer(BertTokenizer):
     r"""
     Construct a DPRContextEncoder tokenizer.
@@ -40,6 +42,7 @@ class DPRContextEncoderTokenizer(BertTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
 
 
+@register()
 class DPRQuestionEncoderTokenizer(BertTokenizer):
     r"""
     Constructs a DPRQuestionEncoder tokenizer.
@@ -129,6 +132,7 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
     """
 
 
+@register()
 @add_start_docstrings(CUSTOM_DPR_READER_DOCSTRING)
 class CustomDPRReaderTokenizerMixin:
     def __call__(
@@ -302,6 +306,7 @@ class CustomDPRReaderTokenizerMixin:
         return chosen_span_intervals
 
 
+@register()
 @add_end_docstrings(CUSTOM_DPR_READER_DOCSTRING)
 class DPRReaderTokenizer(CustomDPRReaderTokenizerMixin, BertTokenizer):
     r"""
@@ -316,3 +321,11 @@ class DPRReaderTokenizer(CustomDPRReaderTokenizerMixin, BertTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+
+
+__all__ = [
+    "DPRContextEncoderTokenizer",
+    "DPRQuestionEncoderTokenizer",
+    "DPRReaderOutput",
+    "DPRReaderTokenizer",
+]
