@@ -821,12 +821,12 @@ class ZoeDepthProjector(nn.Module):
         self.act = nn.ReLU(inplace=True)
         self.conv2 = nn.Conv2d(mlp_dim, out_features, 1, 1, 0)
 
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.act(x)
-        x = self.conv2(x)
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.conv1(hidden_state)
+        hidden_state = self.act(hidden_state)
+        hidden_state = self.conv2(hidden_state)
 
-        return x
+        return hidden_state
 
 
 class ZoeDepthPatchTransformerEncoder(nn.Module):
@@ -895,6 +895,23 @@ class ZoeDepthPatchTransformerEncoder(nn.Module):
         return x
 
 
+class ZoeDepthMLPClassifier(nn.Module):
+    def __init__(self, in_features, out_features, hidden_features=None) -> None:
+        super().__init__()
+
+        hidden_features = hidden_features or in_features
+        self.linear1 = nn.Linear(in_features, hidden_features)
+        self.activation = nn.ReLU()
+        self.linear2 = nn.Linear(hidden_features, out_features)
+
+    def forward(self, hidden_state):
+        hidden_state = self.linear1(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        domain_logits = self.linear2(hidden_state)
+
+        return domain_logits
+
+
 class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
     """
     Multiple metric depth estimation heads. A MLP classifier is used to route between 2 different heads.
@@ -915,7 +932,8 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
 
         # Transformer classifier on the bottleneck
         self.patch_transformer = ZoeDepthPatchTransformerEncoder(bottleneck_features, 1, 128, use_class_token=True)
-        self.mlp_classifier = nn.Sequential(nn.Linear(128, 128), nn.ReLU(), nn.Linear(128, 2))
+        # MLP classifier
+        self.mlp_classifier = ZoeDepthMLPClassifier(in_features=128, out_features=2)
 
         # Regressor and attractor
         if self.bin_centers_type == "normed":
@@ -987,9 +1005,12 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         x = self.conv2(bottleneck)
 
         # Predict which path to take
-        embedding = self.patch_transformer(x)[:, 0, :]  # batch_size, hidden_size
-        domain_logits = self.mlp_classifier(embedding)  # batch_size, 2
-        domain_vote = torch.softmax(domain_logits.sum(dim=0, keepdim=True), dim=-1)  # 1, 2
+        # Embedding is of shape (batch_size, hidden_size)
+        embedding = self.patch_transformer(x)[:, 0, :]
+
+        # MLP classifier to get logits of shape (batch_size, 2)
+        domain_logits = self.mlp_classifier(embedding)
+        domain_vote = torch.softmax(domain_logits.sum(dim=0, keepdim=True), dim=-1)
 
         # Get the path
         names = [configuration["name"] for configuration in self.bin_configurations]

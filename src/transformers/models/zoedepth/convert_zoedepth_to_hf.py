@@ -184,8 +184,10 @@ def rename_key(name):
     if "patch_transformer" in name:
         name = name.replace("patch_transformer", "metric_head.patch_transformer")
 
-    if "mlp_classifier" in name:
-        name = name.replace("mlp_classifier", "metric_head.mlp_classifier")
+    if "mlp_classifier.0" in name:
+        name = name.replace("mlp_classifier.0", "metric_head.mlp_classifier.linear1")
+    if "mlp_classifier.2" in name:
+        name = name.replace("mlp_classifier.2", "metric_head.mlp_classifier.linear2")
 
     if "projectors" in name:
         name = name.replace("projectors", "metric_head.projectors")
