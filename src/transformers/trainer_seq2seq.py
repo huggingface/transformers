@@ -308,8 +308,6 @@ class Seq2SeqTrainer(Trainer):
                 k: v for k, v in inputs.items() if k not in ("decoder_input_ids", "decoder_attention_mask")
             }
 
-        # TODO fix this
-        gen_kwargs["max_new_tokens"] = 200
         generated_tokens = self.model.generate(**generation_inputs, **gen_kwargs)
 
         # Temporary hack to ensure the generation config is not initialized for each iteration of the evaluation loop

@@ -275,6 +275,7 @@ training_args = Seq2SeqTrainingArguments(
     report_to="none",
     eval_do_concat_batches=False,
     predict_with_generate=True,
+    generation_config={"max_new_tokens": 200},
 )
 
 # important: we need to disable caching during training
