@@ -205,7 +205,7 @@ class HqqConfig(QuantizationConfigMixin):
             Parameters for dynamic configuration. The key is the name tag of the layer.
         skip_modules (`List[str]`, *optional*):
             List of nn.Linear layers to skip.
-        show_progress ('bool', defaults to `True`):
+        show_progress ('bool', *optional*, defaults to `True`):
             Show tqdm quantization progress for each shard.
         kwargs (`Dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
@@ -221,8 +221,8 @@ class HqqConfig(QuantizationConfigMixin):
         view_as_float: bool = False,
         axis: int = 0,
         dynamic_config: Optional[dict] = None,
-        skip_modules: List[str] = ["lm_head"],
-        show_progress: bool = True,
+        skip_modules: Optional[List[str]] = ["lm_head"],
+        show_progress: Optional[bool] = True,
         **kwargs,
     ):
         if is_hqq_available():
