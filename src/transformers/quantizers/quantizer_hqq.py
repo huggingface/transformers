@@ -80,11 +80,16 @@ class HQQHfQuantizer(HfQuantizer):
         if self.torch_dtype is None:
             self.torch_dtype = kwargs.get("torch_dtype", torch.float16)
 
+        device_map = kwargs.get("device_map", None)
         if self.using_multi_gpu is False:
-            if "device_map" in kwargs:
-                if isinstance(kwargs["device_map"], dict):
-                    target_devices = {item[1] for item in kwargs["device_map"].items()} - set({"cpu", "disk"})
-                    self.using_multi_gpu = len(target_devices) > 1
+            if isinstance(device_map, dict):
+                if "cpu" in device_map.values() or "disk" in device_map.values():
+                    raise ValueError(
+                        "You are attempting to use an HQQ model with a device_map that contains a CPU or disk device."
+                        " This is not supported. Please remove the CPU or disk device from the device_map."
+                    )
+                else:
+                    self.using_multi_gpu = len(set(device_map.values())) > 1
 
     def check_quantized_param(
         self,
