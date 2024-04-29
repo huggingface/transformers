@@ -15,7 +15,7 @@
 """Image processor class for ViTPose."""
 
 import math
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -321,8 +321,8 @@ class ViTPoseImageProcessor(BaseImageProcessor):
     def affine_transform(
         self,
         image: np.array,
-        center: tuple[float],
-        scale: tuple[float],
+        center: Tuple[float],
+        scale: Tuple[float],
         rotation: float,
         size: Dict[str, int],
         data_format: Optional[ChannelDimension] = None,
@@ -334,9 +334,9 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         Args:
             image (`np.array`):
                 Image to transform.
-            center (`tuple[float]`):
+            center (`Tuple[float]`):
                 Center of the bounding box (x, y).
-            scale (`tuple[float]`):
+            scale (`Tuple[float]`):
                 Scale of the bounding box with respect to height/width.
             rotation (`float`):
                 Rotation angle in degrees.
