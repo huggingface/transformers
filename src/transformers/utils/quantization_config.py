@@ -184,29 +184,30 @@ class QuantizationConfigMixin:
 @dataclass
 class HqqConfig(QuantizationConfigMixin):
     """
-    Main HqqConfig.
+    This is wrapper around hqq's BaseQuantizeConfig.
+
     Args:
-        nbits (`int`, defaults to 4. Supported: 8, 4, 3, 2, 1):
-            Number of bits.
-        group_size (`int`, defaults to 64. Supported: any value that is divisble by weight.shape[axis]):
-            Group-size value.
-        quant_zero (`bool`, defaults to False):
-            Quantize the zero-point.
-        quant_scale (`bool`, defaults to False):
-            Quantize the scaling.
-        offload_meta (`bool`, defaults to False):
-            Offload the meta-data on the CPU.
-        view_as_float (`bool`, defaults to False):
-            View the quantized weight as float (used in distributed training)
-        axis (`int`, defaults to 0. Supported: 0, 1):
-            Axis along which grouping is performed.
-        dynamic_config ('dict', defaults to None):
+        nbits (`int`, defaults to 4):
+            Number of bits. Supported values are (8, 4, 3, 2, 1).
+        group_size (`int`, defaults to 64):
+            Group-size value. Supported values are any value that is divisble by weight.shape[axis]).
+        quant_zero (`bool`, defaults to `False`):
+            Quantize the zero-point if set to True.
+        quant_scale (`bool`, defaults to `False`):
+            Quantize the scaling if set to True.
+        offload_meta (`bool`, defaults to `False`):
+            Offload the meta-data on the CPU if set to True.
+        view_as_float (`bool`, defaults to `False`):
+            View the quantized weight as float (used in distributed training) if set to True.
+        axis (`int`, defaults to 0):
+            Axis along which grouping is performed. Supported values are 0 or 1.
+        dynamic_config ('dict', defaults to `None`):
             Parameters for dynamic configuration. The key is the name tag of the layer.
         skip_modules (`List[str]`):
             List of nn.Linear layers to skip.
-        show_progress ('bool', defaults to True):
+        show_progress ('bool', defaults to `True`):
             Show tqdm quantization progress for each shard.
-        kwargs (`Dict[str, Any]`):
+        kwargs (`Dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
 
