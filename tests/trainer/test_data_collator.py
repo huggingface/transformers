@@ -939,9 +939,9 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["labels"][1].tolist(), list(range(6)) + [-100] * 1)
 
         data_collator = DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.DO_NOT_PAD, return_tensors="np")
-        with self.assertRaises(ValueError):
-            # expects an error due to unequal shapes to create tensor
-            data_collator(features)
+        # numpy doesn't have issues handling unequal shapes via `dtype=object`
+        # with self.assertRaises(ValueError):
+        #     data_collator(features)
         batch = data_collator([features[0], features[0]])
         self.assertEqual(batch["input_ids"][0].tolist(), features[0]["input_ids"])
         self.assertEqual(batch["input_ids"][1].tolist(), features[0]["input_ids"])
