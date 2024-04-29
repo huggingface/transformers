@@ -29,6 +29,8 @@ from ..gpt2.test_modeling_flax_gpt2 import FlaxGPT2ModelTester
 
 
 if is_flax_available():
+    import jax.numpy as jnp
+
     from transformers import (
         AutoTokenizer,
         EncoderDecoderConfig,
@@ -42,7 +44,6 @@ if is_flax_available():
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
     )
-    import jax.numpy as jnp
 
 if is_torch_available():
     import torch
