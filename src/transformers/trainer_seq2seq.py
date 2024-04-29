@@ -308,6 +308,11 @@ class Seq2SeqTrainer(Trainer):
                 k: v for k, v in inputs.items() if k not in ("decoder_input_ids", "decoder_attention_mask")
             }
 
+        print("Generation inputs:")
+        for k,v in generation_inputs.items():
+            if isinstance(v, torch.Tensor):
+                print(k,v.shape)
+
         generated_tokens = self.model.generate(**generation_inputs, **gen_kwargs)
 
         # Temporary hack to ensure the generation config is not initialized for each iteration of the evaluation loop

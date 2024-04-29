@@ -3700,11 +3700,6 @@ class Trainer:
             if is_torch_xla_available():
                 xm.mark_step()
 
-            for k,v in inputs.items():
-                print(k,v.shape)
-
-            print("Loss:", loss)
-
             # Update containers
             if loss is not None:
                 losses = self.gather_function((loss.repeat(batch_size)))
