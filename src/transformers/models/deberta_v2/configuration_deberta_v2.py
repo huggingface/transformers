@@ -77,7 +77,7 @@ class DebertaV2Config(PretrainedConfig):
             as `max_position_embeddings`.
         pad_token_id (`int`, *optional*, defaults to 0):
             The value used to pad input_ids.
-        position_biased_input (`bool`, *optional*, defaults to `False`):
+        position_biased_input (`bool`, *optional*, defaults to `True`):
             Whether add absolute position embedding to content embedding.
         pos_att_type (`List[str]`, *optional*):
             The type of relative position attention, it can be a combination of `["p2c", "c2p"]`, e.g. `["p2c"]`,

@@ -283,9 +283,7 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     )
     test_headmasking = False
     test_pruning = False
-    fx_compatible = (
-        False  # FIXME @michaelbenayoun or @fxmarty from https://github.com/huggingface/transformers/pull/29753
-    )
+    fx_compatible = True
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -376,6 +374,7 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 @slow
 class CohereIntegrationTest(unittest.TestCase):
     @require_torch_multi_gpu
+    @require_bitsandbytes
     def test_batched_4bit(self):
         model_id = "CohereForAI/c4ai-command-r-v01-4bit"
 
@@ -395,6 +394,7 @@ class CohereIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         self.assertEqual(tokenizer.batch_decode(output, skip_special_tokens=True), EXPECTED_TEXT)
 
+    @require_torch_sdpa
     def test_batched_small_model_logits(self):
         # Since the model is very large, we created a random cohere model so that we can do a simple
         # logits check on it.

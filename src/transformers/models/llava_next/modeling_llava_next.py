@@ -403,8 +403,11 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         if labels is not None:
             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
 
-        # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
-        image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
+        # 5. Fill the embeddings corresponding to the images. Anything that is not `text_positions` needs filling (#29835)
+        image_to_overwrite = torch.full(
+            (batch_size, max_embed_dim), True, dtype=torch.bool, device=inputs_embeds.device
+        )
+        image_to_overwrite[batch_indices, text_to_overwrite] = False
         image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
 
         if image_to_overwrite.sum() != image_features.shape[:-1].numel():
@@ -569,10 +572,11 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
 
                 # Get the target length
-                target_seqlen = first_layer_past_key_value.shape[-1] + 1
+                target_length = input_ids.shape[1]
+                past_length = first_layer_past_key_value.shape[-1]
 
                 extended_attention_mask = torch.ones(
-                    (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
+                    (attention_mask.shape[0], past_length),
                     dtype=attention_mask.dtype,
                     device=attention_mask.device,
                 )
@@ -587,7 +591,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 # Zero-out the places where we don't need to attend
                 extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
 
-                attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
+                attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                 position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
         outputs = self.language_model(

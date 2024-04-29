@@ -92,6 +92,8 @@ class MixtralConfig(PretrainedConfig):
             allow the model to output the auxiliary loss. See [here]() for more details
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
+        router_jitter_noise (`float`, *optional*, defaults to 0.0):
+            Amount of noise to add to the router.
 
     ```python
     >>> from transformers import MixtralModel, MixtralConfig
@@ -133,6 +135,7 @@ class MixtralConfig(PretrainedConfig):
         num_local_experts=8,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
+        router_jitter_noise=0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -159,6 +162,7 @@ class MixtralConfig(PretrainedConfig):
         self.num_local_experts = num_local_experts
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
+        self.router_jitter_noise = router_jitter_noise
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
