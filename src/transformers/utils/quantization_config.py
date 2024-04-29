@@ -186,26 +186,26 @@ class HqqConfig(QuantizationConfigMixin):
     """
     Main HqqConfig.
     Args:
-        nbits (`int`):
+        nbits (`int`, defaults to 4. Supported: 8, 4, 3, 2, 1):
             Number of bits.
-        group_size (`int`):
+        group_size (`int`, defaults to 64. Supported: any value that is divisble by weight.shape[axis]):
             Group-size value.
-        quant_zero (`bool`):
+        quant_zero (`bool`, defaults to False):
             Quantize the zero-point.
-        quant_scale (`bool`):
+        quant_scale (`bool`, defaults to False):
             Quantize the scaling.
-        offload_meta (`bool`):
+        offload_meta (`bool`, defaults to False):
             Offload the meta-data on the CPU.
-        view_as_float (`bool`):
+        view_as_float (`bool`, defaults to False):
             View the quantized weight as float (used in distributed training)
-        int (`axis`):
-            Axis along-which grouping is performed.
-        dynamic_config ('dict'):
+        int (`axis`, defaults to 0. Supported: 0, 1):
+            Axis along which grouping is performed.
+        dynamic_config ('dict', defaults to None):
             Parameters for dynamic configuration. The key is the name tag of the layer.
-        skip_modules (List[str])::
-            nn,Linear layers to skip.
-        show_progress (bool):
-            Show tqdm quantization for each shard
+        skip_modules (List[str]):
+            List of nn.Linear layers to skip.
+        show_progress ('bool', defaults to True):
+            Show tqdm quantization progress for each shard.
         kwargs (`Dict[str, Any]`):
             Additional parameters from which to initialize the configuration object.
     """
