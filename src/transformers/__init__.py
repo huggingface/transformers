@@ -709,6 +709,7 @@ _import_structure = {
     ],
     "models.persimmon": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "PersimmonConfig"],
     "models.phi": ["PHI_PRETRAINED_CONFIG_ARCHIVE_MAP", "PhiConfig"],
+    "models.phi3": ["PHI3_PRETRAINED_CONFIG_ARCHIVE_MAP", "Phi3Config"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -3058,6 +3059,16 @@ else:
             "PhiPreTrainedModel",
         ]
     )
+    _import_structure["models.phi3"].extend(
+        [
+            "PHI3_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Phi3ForCausalLM",
+            "Phi3ForSequenceClassification",
+            "Phi3ForTokenClassification",
+            "Phi3Model",
+            "Phi3PreTrainedModel",
+        ]
+    )
     _import_structure["models.pix2struct"].extend(
         [
             "PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3901,6 +3912,7 @@ else:
         "get_linear_schedule_with_warmup",
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
+        "get_wsd_schedule",
     ]
     _import_structure["pytorch_utils"] = [
         "Conv1D",
@@ -5670,6 +5682,7 @@ if TYPE_CHECKING:
         PersimmonConfig,
     )
     from .models.phi import PHI_PRETRAINED_CONFIG_ARCHIVE_MAP, PhiConfig
+    from .models.phi3 import PHI3_PRETRAINED_CONFIG_ARCHIVE_MAP, Phi3Config
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -7716,6 +7729,14 @@ if TYPE_CHECKING:
             PhiModel,
             PhiPreTrainedModel,
         )
+        from .models.phi3 import (
+            PHI3_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Phi3ForCausalLM,
+            Phi3ForSequenceClassification,
+            Phi3ForTokenClassification,
+            Phi3Model,
+            Phi3PreTrainedModel,
+        )
         from .models.pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Pix2StructForConditionalGeneration,
@@ -8395,6 +8416,7 @@ if TYPE_CHECKING:
             get_linear_schedule_with_warmup,
             get_polynomial_decay_schedule_with_warmup,
             get_scheduler,
+            get_wsd_schedule,
         )
         from .pytorch_utils import Conv1D, apply_chunking_to_forward, prune_layer
 

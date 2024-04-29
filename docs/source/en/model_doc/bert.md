@@ -61,6 +61,53 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
     
 - The model must predict the original sentence, but has a second objective: inputs are two sentences A and B (with a separation token in between). With probability 50%, the sentences are consecutive in the corpus, in the remaining 50% they are not related. The model has to predict if the sentences are consecutive or not.
 
+### Using Scaled Dot Product Attention (SDPA)
+
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
+page for more information.
+
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
+
+```
+from transformers import BertModel
+
+model = BertModel.from_pretrained("bert-base-uncased", torch_dtype=torch.float16, attn_implementation="sdpa")
+...
+```
+
+For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
+
+On a local benchmark (A100-80GB, CPUx12, RAM 96.6GB, PyTorch 2.2.0, OS Ubuntu 22.04) with `float16`, we saw the 
+following speedups during training and inference.
+
+#### Training
+
+|batch_size|seq_len|Time per batch (eager - s)|Time per batch (sdpa - s)|Speedup (%)|Eager peak mem (MB)|sdpa peak mem (MB)|Mem saving (%)|
+|----------|-------|--------------------------|-------------------------|-----------|-------------------|------------------|--------------|
+|4         |256    |0.023                     |0.017                    |35.472     |939.213            |764.834           |22.800        |
+|4         |512    |0.023                     |0.018                    |23.687     |1970.447           |1227.162          |60.569        |
+|8         |256    |0.023                     |0.018                    |23.491     |1594.295           |1226.114          |30.028        |
+|8         |512    |0.035                     |0.025                    |43.058     |3629.401           |2134.262          |70.054        |
+|16        |256    |0.030                     |0.024                    |25.583     |2874.426           |2134.262          |34.680        |
+|16        |512    |0.064                     |0.044                    |46.223     |6964.659           |3961.013          |75.830        |
+
+#### Inference
+
+|batch_size|seq_len|Per token latency eager (ms)|Per token latency SDPA (ms)|Speedup (%)|Mem eager (MB)|Mem BT (MB)|Mem saved (%)|
+|----------|-------|----------------------------|---------------------------|-----------|--------------|-----------|-------------|
+|1         |128    |5.736                       |4.987                      |15.022     |282.661       |282.924    |-0.093       |
+|1         |256    |5.689                       |4.945                      |15.055     |298.686       |298.948    |-0.088       |
+|2         |128    |6.154                       |4.982                      |23.521     |314.523       |314.785    |-0.083       |
+|2         |256    |6.201                       |4.949                      |25.303     |347.546       |347.033    |0.148        |
+|4         |128    |6.049                       |4.987                      |21.305     |378.895       |379.301    |-0.107       |
+|4         |256    |6.285                       |5.364                      |17.166     |443.209       |444.382    |-0.264       |
+
+
+
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with BERT. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
