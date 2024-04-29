@@ -13,8 +13,6 @@ import numpy as np
 import requests
 from PIL import Image
 
-import evaluate
-
 import torch
 from torch import nn
 from torch.utils.data import Dataset
@@ -244,6 +242,9 @@ def compute_metrics(eval_preds):
     labels = np.where(labels != -100, labels, processor.tokenizer.pad_token_id)
     decoded_labels = processor.batch_decode(labels, skip_special_tokens=True)
 
+    print("Decoded predictions:", decoded_preds)
+    print("Decoded labels:", decoded_labels)
+
     # Some simple post-processing
     decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
 
@@ -298,7 +299,7 @@ def compute_metrics(eval_preds):
 
 ## Define Training Arguments and Trainer
 
-generation_config = GenerationConfig.from_pretrained("HuggingFaceM4/idefics2-8b", max_new_tokens=2)
+generation_config = GenerationConfig.from_pretrained("HuggingFaceM4/idefics2-8b", max_new_tokens=500)
 
 training_args = Seq2SeqTrainingArguments(
     num_train_epochs=2,
@@ -310,8 +311,7 @@ training_args = Seq2SeqTrainingArguments(
     weight_decay=0.01,
     logging_steps=25,
     output_dir="idefics2_ft_tutorial",
-    eval_strategy="steps",
-    eval_steps=1,
+    eval_strategy="epoch",
     save_strategy="steps",
     save_steps=250,
     save_total_limit=1,
@@ -430,6 +430,9 @@ class Idefics2Trainer(Seq2SeqTrainer):
 
         generated_tokens = self.model.generate(**custom_inputs, **gen_kwargs)
 
+        # Strip the prompt from the generated_tokens
+        generated_tokens = generated_tokens[:, custom_inputs["input_ids"].size(1):]
+
         # Temporary hack to ensure the generation config is not initialized for each iteration of the evaluation loop
         # TODO: remove this hack when the legacy code that initializes generation_config from a model config is
         # removed in https://github.com/huggingface/transformers/blob/98d88b23f54e5a23e741833f1e973fdf600cc2c5/src/transformers/generation/utils.py#L1183
@@ -468,6 +471,15 @@ class Idefics2Trainer(Seq2SeqTrainer):
             labels = None
 
         return loss, generated_tokens, labels
+    
+    def _pad_tensors_to_max_len(self, tensor, max_length):
+        pad_token_id = processor.tokenizer.pad_token_id
+
+        padded_tensor = pad_token_id * torch.ones(
+            (tensor.shape[0], max_length), dtype=tensor.dtype, device=tensor.device
+        )
+        padded_tensor[:, : tensor.shape[-1]] = tensor
+        return padded_tensor
 
 
 trainer = Idefics2Trainer(
