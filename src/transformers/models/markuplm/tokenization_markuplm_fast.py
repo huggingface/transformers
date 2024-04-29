@@ -17,6 +17,7 @@ Fast tokenization class for MarkupLM. It overwrites 2 methods of the slow tokeni
 and _encode_plus, in which the Rust tokenizer is used.
 """
 
+from ...utils.import_utils import register
 import json
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
@@ -80,6 +81,7 @@ def get_pairs(word):
     return pairs
 
 
+@register(backends=("tokenizers",))
 class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a MarkupLM tokenizer. Based on byte-level Byte-Pair-Encoding (BPE).
@@ -916,3 +918,8 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
+
+__all__ = [
+    "MarkupLMTokenizerFast"
+]
+    

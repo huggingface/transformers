@@ -15,6 +15,7 @@
 """ Tokenization classes for FNet model."""
 
 
+from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
@@ -36,6 +37,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.
 SPIECE_UNDERLINE = "▁"
 
 
+@register(backends=("tokenizers",))
 class FNetTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" FNetTokenizer (backed by HuggingFace's *tokenizers* library). Adapted from
@@ -185,3 +187,8 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+__all__ = [
+    "FNetTokenizerFast"
+]
+    

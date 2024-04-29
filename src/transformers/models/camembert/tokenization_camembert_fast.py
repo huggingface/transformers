@@ -15,6 +15,7 @@
 """ Fast tokenization classes for Camembert model."""
 
 
+from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
@@ -38,6 +39,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": 
 SPIECE_UNDERLINE = "▁"
 
 
+@register(backends=("tokenizers",))
 class CamembertTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" CamemBERT tokenizer (backed by HuggingFace's *tokenizers* library). Adapted from
@@ -197,3 +199,8 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+__all__ = [
+    "CamembertTokenizerFast"
+]
+    

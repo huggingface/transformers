@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast Tokenization class for Blenderbot."""
+from ...utils.import_utils import register
 import json
 from typing import List, Optional, Tuple
 
@@ -34,6 +35,7 @@ VOCAB_FILES_NAMES = {
 }
 
 
+@register(backends=("tokenizers",))
 class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" Blenderbot tokenizer (backed by HuggingFace's *tokenizers* library), derived from the GPT-2
@@ -308,3 +310,8 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
             "{% endfor %}"
             "{{ eos_token }}"
         )
+
+__all__ = [
+    "BlenderbotTokenizerFast"
+]
+    

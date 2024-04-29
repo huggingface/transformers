@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast tokenization class for BlenderbotSmall."""
+from ...utils.import_utils import register
 from typing import List, Optional
 
 from tokenizers import ByteLevelBPETokenizer
@@ -31,6 +32,7 @@ VOCAB_FILES_NAMES = {
 }
 
 
+@register(backends=("tokenizers",))
 class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" BlenderbotSmall tokenizer (backed by HuggingFace's *tokenizers* library).
@@ -119,3 +121,8 @@ class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
             "{% endfor %}"
             "{{ eos_token }}"
         )
+
+__all__ = [
+    "BlenderbotSmallTokenizerFast"
+]
+    

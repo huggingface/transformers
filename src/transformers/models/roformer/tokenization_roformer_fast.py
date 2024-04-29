@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for RoFormer."""
+from ...utils.import_utils import register
 import json
 from typing import List, Optional, Tuple
 
@@ -30,6 +31,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class RoFormerTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" RoFormer tokenizer (backed by HuggingFace's *tokenizers* library).
@@ -174,3 +176,8 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
     ):
         self.backend_tokenizer.pre_tokenizer = BertPreTokenizer()
         return super().save_pretrained(save_directory, legacy_format, filename_prefix, push_to_hub, **kwargs)
+
+__all__ = [
+    "RoFormerTokenizerFast"
+]
+    

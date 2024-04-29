@@ -14,6 +14,7 @@
 # limitations under the License.
 """Tokenization classes for LED."""
 
+from ...utils.import_utils import register
 import json
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -31,6 +32,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class LEDTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" LED tokenizer (backed by HuggingFace's *tokenizers* library), derived from the GPT-2 tokenizer,
@@ -323,3 +325,8 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
                     raise ValueError("Invalid padding strategy:" + str(self.padding_side))
 
         return encoded_inputs
+
+__all__ = [
+    "LEDTokenizerFast"
+]
+    

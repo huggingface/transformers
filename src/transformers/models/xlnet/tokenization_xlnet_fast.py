@@ -15,6 +15,7 @@
 """ Tokenization classes for XLNet model."""
 
 
+from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
@@ -45,6 +46,7 @@ SEG_ID_SEP = 3
 SEG_ID_PAD = 4
 
 
+@register(backends=("tokenizers",))
 class XLNetTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" XLNet tokenizer (backed by HuggingFace's *tokenizers* library). Based on
@@ -230,3 +232,8 @@ class XLNetTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+__all__ = [
+    "XLNetTokenizerFast"
+]
+    

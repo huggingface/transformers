@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import Optional, Tuple
@@ -46,6 +47,7 @@ correct. If you don't know the answer to a question, please don't share false in
 # fmt: on
 
 
+@register(backends=("tokenizers",))
 class LlamaTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding.
@@ -315,3 +317,8 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             output = output + bos_token_id + token_ids_1 + eos_token_id
 
         return output
+
+__all__ = [
+    "LlamaTokenizerFast"
+]
+    

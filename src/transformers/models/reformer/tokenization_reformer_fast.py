@@ -15,6 +15,7 @@
 """ Tokenization class for model Reformer."""
 
 
+from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import Optional, Tuple
@@ -37,6 +38,7 @@ SPIECE_UNDERLINE = "▁"
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class ReformerTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" Reformer tokenizer (backed by HuggingFace's *tokenizers* library). Based on
@@ -114,3 +116,8 @@ class ReformerTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+__all__ = [
+    "ReformerTokenizerFast"
+]
+    

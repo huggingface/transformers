@@ -15,6 +15,7 @@
 """ Tokenization classes for UDOP model."""
 
 
+from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import Dict, List, Optional, Tuple, Union
@@ -154,6 +155,7 @@ UDOP_ENCODE_KWARGS_DOCSTRING = r"""
 """
 
 
+@register(backends=("tokenizers",))
 class UdopTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" UDOP tokenizer (backed by HuggingFace's *tokenizers* library). Adapted from
@@ -1015,3 +1017,8 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+__all__ = [
+    "UdopTokenizerFast"
+]
+    

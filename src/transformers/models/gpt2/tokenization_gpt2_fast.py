@@ -15,6 +15,7 @@
 """Tokenization classes for OpenAI GPT."""
 
 
+from ...utils.import_utils import register
 import json
 from typing import Optional, Tuple
 
@@ -31,6 +32,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class GPT2TokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" GPT-2 tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
@@ -155,3 +157,8 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
             "then to ensure that this model continues working without issues."
         )
         return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
+
+__all__ = [
+    "GPT2TokenizerFast"
+]
+    

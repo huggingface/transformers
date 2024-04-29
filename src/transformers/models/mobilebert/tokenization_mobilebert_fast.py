@@ -15,6 +15,7 @@
 # limitations under the License.
 """Tokenization classes for MobileBERT."""
 
+from ...utils.import_utils import register
 import json
 from typing import List, Optional, Tuple
 
@@ -31,6 +32,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 
 # Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast with BERT->MobileBERT,Bert->MobileBert
+@register(backends=("tokenizers",))
 class MobileBertTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" MobileBERT tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
@@ -172,3 +174,8 @@ class MobileBertTokenizerFast(PreTrainedTokenizerFast):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
+
+__all__ = [
+    "MobileBertTokenizerFast"
+]
+    

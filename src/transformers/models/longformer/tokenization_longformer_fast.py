@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast Tokenization classes for Longformer."""
+from ...utils.import_utils import register
 import json
 from typing import List, Optional, Tuple
 
@@ -30,6 +31,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "t
 
 
 # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast with FacebookAI/roberta-base->allenai/longformer-base-4096, RoBERTa->Longformer all-casing, Roberta->Longformer
+@register(backends=("tokenizers",))
 class LongformerTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" Longformer tokenizer (backed by HuggingFace's *tokenizers* library), derived from the GPT-2
@@ -267,3 +269,8 @@ class LongformerTokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
+
+__all__ = [
+    "LongformerTokenizerFast"
+]
+    

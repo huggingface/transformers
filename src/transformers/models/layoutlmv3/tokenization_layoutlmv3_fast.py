@@ -17,6 +17,7 @@ Fast tokenization class for LayoutLMv3. It overwrites 2 methods of the slow toke
 and _encode_plus, in which the Rust tokenizer is used.
 """
 
+from ...utils.import_utils import register
 import json
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -46,6 +47,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" LayoutLMv3 tokenizer (backed by HuggingFace's *tokenizers* library). Based on BPE.
@@ -835,3 +837,8 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
+
+__all__ = [
+    "LayoutLMv3TokenizerFast"
+]
+    

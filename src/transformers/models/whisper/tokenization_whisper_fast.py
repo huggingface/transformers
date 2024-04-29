@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for Whisper."""
+from ...utils.import_utils import register
 import json
 import os
 import re
@@ -40,6 +41,7 @@ VOCAB_FILES_NAMES = {
 }
 
 
+@register(backends=("tokenizers",))
 class WhisperTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" Whisper tokenizer (backed by HuggingFace's *tokenizers* library).
@@ -599,3 +601,8 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 return []
 
         return token_ids
+
+__all__ = [
+    "WhisperTokenizerFast"
+]
+    

@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import Optional, Tuple
@@ -34,6 +35,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class GemmaTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a Gemma tokenizer fast. Based on byte-level Byte-Pair-Encoding.
@@ -197,3 +199,8 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
             output = output + bos_token_id + token_ids_1 + eos_token_id
 
         return output
+
+__all__ = [
+    "GemmaTokenizerFast"
+]
+    

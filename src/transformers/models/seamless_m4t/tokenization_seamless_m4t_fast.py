@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast Tokenization class for SeamlessM4T."""
+from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple, Union
@@ -38,6 +39,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" SeamlessM4T tokenizer (backed by HuggingFace's *tokenizers* library). Based on
@@ -444,3 +446,8 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         )
 
         return output
+
+__all__ = [
+    "SeamlessM4TTokenizerFast"
+]
+    

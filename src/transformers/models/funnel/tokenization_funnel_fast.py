@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Tokenization class for Funnel Transformer."""
 
+from ...utils.import_utils import register
 import json
 from typing import List, Optional, Tuple
 
@@ -42,6 +43,7 @@ _model_names = [
 ]
 
 
+@register(backends=("tokenizers",))
 class FunnelTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" Funnel Transformer tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
@@ -198,3 +200,8 @@ class FunnelTokenizerFast(PreTrainedTokenizerFast):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
+
+__all__ = [
+    "FunnelTokenizerFast"
+]
+    

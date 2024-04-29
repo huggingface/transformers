@@ -14,6 +14,7 @@
 # limitations under the License.
 """Fast Tokenization class for model DeBERTa."""
 
+from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import Optional, Tuple
@@ -33,6 +34,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spm.model", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class DebertaV2TokenizerFast(PreTrainedTokenizerFast):
     r"""
     Constructs a DeBERTa-v2 fast tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -218,3 +220,8 @@ class DebertaV2TokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+__all__ = [
+    "DebertaV2TokenizerFast"
+]
+    

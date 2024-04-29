@@ -14,6 +14,7 @@
 # limitations under the License.
 """Tokenization classes for DistilBERT."""
 
+from ...utils.import_utils import register
 import json
 from typing import List, Optional, Tuple
 
@@ -29,6 +30,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class DistilBertTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" DistilBERT tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
@@ -174,3 +176,8 @@ class DistilBertTokenizerFast(PreTrainedTokenizerFast):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
+
+__all__ = [
+    "DistilBertTokenizerFast"
+]
+    

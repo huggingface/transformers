@@ -15,6 +15,7 @@
 """ Tokenization class for model T5."""
 
 
+from ...utils.import_utils import register
 import os
 import re
 import warnings
@@ -39,6 +40,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.
 # TODO(PVP) - this should be removed in Transformers v5
 
 
+@register(backends=("tokenizers",))
 class T5TokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" T5 tokenizer (backed by HuggingFace's *tokenizers* library). Based on
@@ -232,3 +234,8 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
 
     def get_sentinel_token_ids(self):
         return [self.convert_tokens_to_ids(token) for token in self.get_sentinel_tokens()]
+
+__all__ = [
+    "T5TokenizerFast"
+]
+    

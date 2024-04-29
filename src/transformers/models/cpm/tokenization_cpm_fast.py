@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes."""
+from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
@@ -26,6 +27,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class CpmTokenizerFast(PreTrainedTokenizerFast):
     """Runs pre-tokenization with Jieba segmentation tool. It is used in CPM models."""
 
@@ -235,3 +237,8 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
         text = super()._decode(*args, **kwargs)
         text = text.replace(" ", "").replace("\u2582", " ").replace("\u2583", "\n")
         return text
+
+__all__ = [
+    "CpmTokenizerFast"
+]
+    

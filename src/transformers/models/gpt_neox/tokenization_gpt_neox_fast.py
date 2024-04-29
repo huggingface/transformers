@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for GPTNeoX."""
+from ...utils.import_utils import register
 import json
 from typing import List, Optional, Tuple
 
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" GPT-NeoX-20B tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
@@ -242,3 +244,8 @@ class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
             "then to ensure that this model continues working without issues."
         )
         return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
+
+__all__ = [
+    "GPTNeoXTokenizerFast"
+]
+    

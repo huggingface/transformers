@@ -15,6 +15,7 @@
 """ Tokenization classes for RemBERT model."""
 
 
+from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
@@ -36,6 +37,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.model", "tokenizer_file": "tok
 SPIECE_UNDERLINE = "▁"
 
 
+@register(backends=("tokenizers",))
 class RemBertTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" RemBert tokenizer (backed by HuggingFace's *tokenizers* library). Based on
@@ -228,3 +230,8 @@ class RemBertTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+__all__ = [
+    "RemBertTokenizerFast"
+]
+    

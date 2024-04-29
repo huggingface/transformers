@@ -15,6 +15,7 @@
 """
 Fast tokenizer class for Nougat.
 """
+from ...utils.import_utils import register
 import re
 from functools import partial
 from multiprocessing import Pool
@@ -367,6 +368,7 @@ def remove_slice_from_lines(lines, clean_text, slice) -> str:
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
+@register(backends=("tokenizers",))
 class NougatTokenizerFast(PreTrainedTokenizerFast):
     """
     Fast tokenizer for Nougat (backed by HuggingFace tokenizers library).
@@ -623,3 +625,8 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
                 return [self.post_process_single(s, fix_markdown=fix_markdown) for s in generation]
         else:
             return self.post_process_single(generation, fix_markdown=fix_markdown)
+
+__all__ = [
+    "NougatTokenizerFast"
+]
+    

@@ -15,6 +15,7 @@
 """ Tokenization class for model PEGASUS."""
 
 
+from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
@@ -37,6 +38,7 @@ SPIECE_UNDERLINE = "▁"
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class PegasusTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" PEGASUS tokenizer (backed by HuggingFace's *tokenizers* library). Based on
@@ -215,3 +217,8 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+__all__ = [
+    "PegasusTokenizerFast"
+]
+    

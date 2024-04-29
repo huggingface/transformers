@@ -15,6 +15,7 @@
 
 # This file is based on the tokenization_llama_fast.py file in transformers
 
+from ...utils.import_utils import register
 import pickle
 from typing import Dict, List, Literal, Union
 
@@ -48,6 +49,7 @@ Unless the user asks for a different style of answer, you should answer in full 
 # fmt: on
 
 
+@register(backends=("tokenizers",))
 class CohereTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a Cohere tokenizer. Based on byte-level Byte-Pair-Encoding.
@@ -700,3 +702,8 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             output = output + bos_token_id + token_ids_1 + eos_token_id
 
         return output
+
+__all__ = [
+    "CohereTokenizerFast"
+]
+    

@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ...utils.import_utils import register
 import json
 from typing import List, Optional, Tuple
 
@@ -32,6 +33,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "t
 # See all BART models at https://huggingface.co/models?filter=bart
 
 
+@register(backends=("tokenizers",))
 class BartTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" BART tokenizer (backed by HuggingFace's *tokenizers* library), derived from the GPT-2 tokenizer,
@@ -274,3 +276,8 @@ class BartTokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
+
+__all__ = [
+    "BartTokenizerFast"
+]
+    
