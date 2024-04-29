@@ -1546,7 +1546,7 @@ def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
     return module
 
 
-def register(*, backends=tuple()):
+def register(*, backends=()):
     """
     This method enables two things:
     - Attaching a `__backends` tuple to an object to see what are the necessary backends for it
@@ -1591,7 +1591,7 @@ def define_import_structure(module_path):
                     backends_string = previous_line.split("backends=")[1].split("(")[1].split(")")[0]
                     backends = tuple(sorted([b.strip("'\",") for b in backends_string.split(", ")]))
                 else:
-                    backends = tuple()
+                    backends = ()
 
                 if backends not in module_requirements:
                     module_requirements[backends] = {}
@@ -1601,7 +1601,7 @@ def define_import_structure(module_path):
                 module_requirements[backends][module_name].append(line[6:].split("(")[0])
             previous_line = line
 
-    _import_structure = module_requirements.pop(tuple())
+    _import_structure = module_requirements.pop(())
 
     for backends, modules in module_requirements.items():
         try:

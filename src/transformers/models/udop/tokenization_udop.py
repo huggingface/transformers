@@ -34,6 +34,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -157,6 +158,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 
+@register()
 class UdopTokenizer(PreTrainedTokenizer):
     """
     Adapted from [`LayoutXLMTokenizer`] and [`T5Tokenizer`]. Based on
@@ -1474,3 +1476,6 @@ class UdopTokenizer(PreTrainedTokenizer):
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
 
         return encoded_inputs
+
+
+__all__ = ["UdopTokenizer"]

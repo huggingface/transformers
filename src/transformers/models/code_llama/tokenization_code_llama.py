@@ -24,6 +24,7 @@ import sentencepiece as spm
 from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging, requires_backends
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -45,6 +46,7 @@ correct. If you don't know the answer to a question, please don't share false in
 # fmt: on
 
 
+@register()
 class CodeLlamaTokenizer(PreTrainedTokenizer):
     """
     Construct a CodeLlama tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as
@@ -508,3 +510,6 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         self.__dict__ = d
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
+
+
+__all__ = ["CodeLlamaTokenizer"]

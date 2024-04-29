@@ -28,6 +28,7 @@ from ...tokenization_utils import (
 )
 from ...tokenization_utils_base import AddedToken
 from ...utils import PaddingStrategy, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -39,6 +40,7 @@ SPIECE_UNDERLINE = "▁"
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
 
+@register()
 class SeamlessM4TTokenizer(PreTrainedTokenizer):
     """
     Construct a SeamlessM4T tokenizer.
@@ -560,3 +562,6 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         self.prefix_tokens = [self.eos_token_id, self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]
+
+
+__all__ = ["SeamlessM4TTokenizer"]

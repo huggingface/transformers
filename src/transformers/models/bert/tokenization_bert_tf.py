@@ -6,9 +6,11 @@ from tensorflow_text import BertTokenizer as BertTokenizerLayer
 from tensorflow_text import FastBertTokenizer, ShrinkLongestTrimmer, case_fold_utf8, combine_segments, pad_model_inputs
 
 from ...modeling_tf_utils import keras
+from ...utils.import_utils import register
 from .tokenization_bert import BertTokenizer
 
 
+@register(backends=("tf",))
 class TFBertTokenizer(keras.layers.Layer):
     """
     This is an in-graph tokenizer for BERT. It should be initialized similarly to other tokenizers, using the
@@ -252,3 +254,6 @@ class TFBertTokenizer(keras.layers.Layer):
             "sep_token_id": self.sep_token_id,
             "pad_token_id": self.pad_token_id,
         }
+
+
+__all__ = ["TFBertTokenizer"]

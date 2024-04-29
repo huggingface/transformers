@@ -10,6 +10,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import is_torch_available, logging
+from ...utils.import_utils import register
 
 
 if is_torch_available():
@@ -20,6 +21,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 
+@register()
 class GPTSw3Tokenizer(PreTrainedTokenizer):
     """
     Construct an GPTSw3 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -317,3 +319,6 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
             "{% endfor %}"
             "Bot:"
         )
+
+
+__all__ = ["GPTSw3Tokenizer"]
