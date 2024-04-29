@@ -192,9 +192,9 @@ class CircleCIJob:
             test_command = f"({test_command} | tee tests_output.txt) || true"
         steps.append({"run": {"name": "Run tests", "command": test_command}})
 
-        steps.append({"run": {"name": "Show skip reasons", "command": f"python3 .circleci/parse_test_outputs.py --file ~/transformers/tests_output.txt --skip"}})
-        steps.append({"run": {"name": "Show fail reasons", "command": f"python3 .circleci/parse_test_outputs.py --file ~/transformers/tests_output.txt --fail"}})
-        steps.append({"run": {"name": "Show errors",       "command": f"python3 .circleci/parse_test_outputs.py --file ~/transformers/tests_output.txt --errors"}})
+        steps.append({"run": {"name": "Show skip reasons", "command": f"python3 .circleci/parse_test_outputs.py --file ~/transformers/tests_output.txt --skip   || true"}})
+        steps.append({"run": {"name": "Show fail reasons", "command": f"python3 .circleci/parse_test_outputs.py --file ~/transformers/tests_output.txt --fail   || true"}})
+        steps.append({"run": {"name": "Show errors",       "command": f"python3 .circleci/parse_test_outputs.py --file ~/transformers/tests_output.txt --errors || true"}})
 
         steps.append({"store_test_results": {"path": "test-results"}})
         steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})

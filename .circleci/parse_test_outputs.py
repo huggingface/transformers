@@ -6,7 +6,7 @@ def parse_pytest_output(file_path):
     skipped_count = 0
     with open(file_path, 'r') as file:
         for line in file:
-            match = re.match(r'^SKIPPED \[(\d+)\] (tests/[^/]+/[^:]+):(\d+): (.*)$', line)
+            match = re.match(r'^SKIPPED \[(\d+)\] (tests/.*): (.*)$', line)
             if match:
                 skipped_count += 1
                 _, test_file, test_line, reason = match.groups()
@@ -18,12 +18,10 @@ def parse_pytest_output(file_path):
         exit(0)
 
 def parse_pytest_failure_output(file_path):
-    print(file_path)
     skipped_tests = {}
     skipped_count = 0
     with open(file_path, 'r') as file:
         for line in file:
-            print(line)
             match = re.match(r'^FAILED (tests/.*) - (.*): (.*)$', line)
             if match:
                 skipped_count += 1
@@ -42,13 +40,12 @@ def parse_pytest_errors_output(file_path):
     skipped_count = 0
     with open(file_path, 'r') as file:
         for line in file:
-            print(line)
             match = re.match(r'^ERROR (tests/.*) - (.*): (.*)$', line)
             if match:
                 skipped_count += 1
                 print(match.groups())
-                _, test_file, test_line, reason = match.groups()
-                skipped_tests[reason] = skipped_tests.get(reason, []) + [(test_file, test_line)]
+                test_file, test_error, reason = match.groups()
+                skipped_tests[reason] = skipped_tests.get(reason, []) + [(test_file, test_error)]
     print("Number of skipped tests:", skipped_count)
     for k,v in sorted(skipped_tests.items(), key=lambda x:len(x[1])):
         print(f"{len(v):4} skipped because: {k}")
