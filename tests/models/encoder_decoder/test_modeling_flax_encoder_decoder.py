@@ -306,8 +306,8 @@ class FlaxEncoderDecoderMixin:
         # when decoder_only is used in as backbone (GPT2), because GPT prepares positions depending on attn mask (for torch)
         # and as arange in flax. That's why we init attn mask with all `1`
         if "decoder_attention_mask" in pt_inputs:
-            pt_inputs["decoder_attention_mask"] = torch.ones_like(pt_inputs["attention_mask"])
-            inputs_dict["decoder_attention_mask"] = jnp.ones_like(inputs_dict["attention_mask"])
+            pt_inputs["decoder_attention_mask"] = torch.ones_like(pt_inputs["decoder_attention_mask"])
+            inputs_dict["decoder_attention_mask"] = jnp.ones_like(inputs_dict["decoder_attention_mask"])
 
         with torch.no_grad():
             pt_outputs = pt_model(**pt_inputs).to_tuple()

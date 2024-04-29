@@ -414,6 +414,14 @@ class FlaxEncoderDecoderMixin:
         flax_inputs = inputs_dict
         pt_inputs = {k: torch.tensor(v.tolist()) for k, v in flax_inputs.items()}
 
+        # when model weights are random init masking with attn_mask still leads to logits
+        # mismatch, which does not happen if pre-trained models are used. That causes error in encoder-decoder models
+        # when decoder_only is used in as backbone (GPT2), because GPT prepares positions depending on attn mask (for torch)
+        # and as arange in flax. That's why we init attn mask with all `1`
+        if "decoder_attention_mask" in pt_inputs:
+            pt_inputs["decoder_attention_mask"] = torch.ones_like(pt_inputs["decoder_attention_mask"])
+            inputs_dict["decoder_attention_mask"] = jnp.ones_like(inputs_dict["decoder_attention_mask"])
+
         with torch.no_grad():
             pt_outputs = pt_model(**pt_inputs).to_tuple()
 
