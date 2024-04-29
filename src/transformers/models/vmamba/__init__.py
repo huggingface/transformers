@@ -13,14 +13,27 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
     "configuration_vmamba": ["VMAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP", "VMambaConfig"],
 }
 
-if is_torch_available():
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_detr"] = ["DetrImageProcessor"]
+
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_vmamba"] = [
         "VMAMBA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "VMambaForImageClassification",
@@ -28,11 +41,23 @@ if is_torch_available():
         "VMambaPreTrainedModel",
     ]
 
-
 if TYPE_CHECKING:
     from .configuration_vmamba import VMAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP, VMambaConfig
 
-    if is_torch_available():
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from ..detr.image_processing_detr import DetrImageProcessor
+
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_vmamba import (
             VMAMBA_PRETRAINED_MODEL_ARCHIVE_LIST,
             VMambaForImageClassification,
