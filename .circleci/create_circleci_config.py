@@ -189,7 +189,7 @@ class CircleCIJob:
             # failure.
             test_command = f"({test_command}) || true"
         else:
-            test_command = f"({test_command} | tee tests_output.txt) || true"
+            test_command = f"({test_command} | tee tests_output.txt)"
         steps.append({"run": {"name": "Run tests", "command": test_command}})
 
         steps.append({"run": {"name": "Skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file ~/transformers/tests_output.txt --skip"}})
