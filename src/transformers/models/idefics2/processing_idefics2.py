@@ -16,8 +16,8 @@
 Processor class for IDEFICS2.
 """
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
 import warnings
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
