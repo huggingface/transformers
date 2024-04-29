@@ -443,16 +443,19 @@ class FalconAttention(nn.Module):
 
         if alibi is None:
             if self._use_sdpa and not output_attentions:
-                attn_output = F.scaled_dot_product_attention(
+                # We dispatch to SDPA's Flash Attention or Efficient kernels via this if statement instead of an
+                # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
+                # The query_length > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not
+                # create a causal mask in case query_length == 1.
+                is_causal = True if self.is_causal and attention_mask is None and query_length > 1 else False
+                attn_output = torch.nn.functional.scaled_dot_product_attention(
                     query_layer,
                     key_layer,
                     value_layer,
-                    attention_mask,
-                    0.0,
-                    # The query_length > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case query_length == 1.
-                    is_causal=self.is_causal and attention_mask is None and query_length > 1,
+                    attn_mask=attention_mask,
+                    dropout_p=0.0,
+                    is_causal=is_causal,
                 )
-
                 attention_scores = None
             else:
                 attention_scores = query_layer @ key_layer.transpose(-1, -2)
@@ -475,13 +478,16 @@ class FalconAttention(nn.Module):
 
         else:
             if self._use_sdpa and not output_attentions and head_mask is None:
-                attn_output = F.scaled_dot_product_attention(
+                # We dispatch to SDPA's Flash Attention or Efficient kernels via this if statement instead of an
+                # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
+                is_causal = True if self.is_causal and attention_mask is None and query_length > 1 else False
+                attn_output = torch.nn.functional.scaled_dot_product_attention(
                     query_layer,
                     key_layer,
                     value_layer,
                     attn_mask=attention_mask,
                     dropout_p=self.attention_dropout.p if self.training else 0.0,
-                    is_causal=self.is_causal and attention_mask is None and query_length > 1,
+                    is_causal=is_causal,
                 )
                 attn_output = attn_output.transpose(1, 2)
                 attn_output = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)

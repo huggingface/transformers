@@ -552,14 +552,19 @@ class GPTBigCodeSdpaAttention(GPTBigCodeAttention):
                 key = key.contiguous()
                 value = value.contiguous()
 
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this if statement instead of an
+        # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
+        # The query_length > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not
+        # create a causal mask in case query_length == 1.
+        is_causal = True if self.is_causal and attention_mask is None and query_length > 1 else False
+
         sdpa_result = torch.nn.functional.scaled_dot_product_attention(
             query,
             key,
             value,
             attn_mask=attention_mask,
             dropout_p=self.attn_pdrop if self.training else 0.0,
-            # The query_length > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case query_length == 1.
-            is_causal=self.is_causal and attention_mask is None and query_length > 1,
+            is_causal=is_causal,
             scale=scale,
         )
 
