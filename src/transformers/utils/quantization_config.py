@@ -30,11 +30,6 @@ from ..utils import is_auto_awq_available, is_hqq_available, is_torch_available,
 if is_torch_available():
     import torch
 
-if is_hqq_available():
-    from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
-else:
-    HQQBaseQuantizeConfig = None
-
 
 logger = logging.get_logger(__name__)
 
@@ -229,6 +224,9 @@ class HqqConfig(QuantizationConfigMixin):
         show_progress=True,
         **kwargs,
     ):
+        if is_hqq_available():
+            from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
+
         if dynamic_config is not None:
             self.quant_config = {}
             for key in dynamic_config:
