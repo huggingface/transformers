@@ -116,7 +116,6 @@ _deps = [
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
-    "hf-doc-builder>=0.3.0",
     "huggingface-hub>=0.19.3,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
@@ -315,7 +314,6 @@ extras["testing"] = (
         "rouge-score",
         "nltk",
         "GitPython",
-        "hf-doc-builder",
         "sacremoses",
         "rjieba",
         "beautifulsoup4",
@@ -346,9 +344,6 @@ extras["all"] = (
     + extras["accelerate"]
     + extras["video"]
 )
-
-# Might need to add doc-builder and some specific deps in the future
-extras["docs_specific"] = ["hf-doc-builder"]
 
 # "docs" needs "all" to resolve all the references
 extras["docs"] = extras["all"] + extras["docs_specific"]
