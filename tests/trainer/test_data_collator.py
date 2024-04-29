@@ -593,7 +593,7 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["labels"][0].numpy().tolist(), list(range(3)) + [-100] * 4)
         self.assertEqual(batch["labels"][1].numpy().tolist(), list(range(6)) + [-100] * 1)
 
-        data_collator = DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.DO_NOT_PAD)
+        data_collator = DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.DO_NOT_PAD, return_tensors="tf")
         with self.assertRaises(ValueError):
             # expects an error due to unequal shapes to create tensor
             data_collator(features)
@@ -938,7 +938,7 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["labels"][0].tolist(), list(range(3)) + [-100] * 4)
         self.assertEqual(batch["labels"][1].tolist(), list(range(6)) + [-100] * 1)
 
-        data_collator = DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.DO_NOT_PAD)
+        data_collator = DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.DO_NOT_PAD, return_tensors="np")
         with self.assertRaises(ValueError):
             # expects an error due to unequal shapes to create tensor
             data_collator(features)
