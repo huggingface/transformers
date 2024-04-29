@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
@@ -21,6 +20,7 @@ from tokenizers import normalizers, processors
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
+from ...utils.import_utils import register
 from ...utils.versions import require_version
 
 
@@ -444,4 +444,3 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "CodeLlamaTokenizerFast"
 ]
-    

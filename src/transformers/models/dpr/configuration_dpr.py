@@ -14,9 +14,9 @@
 # limitations under the License.
 """ DPR model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -135,4 +135,3 @@ class DPRConfig(PretrainedConfig):
 __all__ = [
     "DPRConfig"
 ]
-    

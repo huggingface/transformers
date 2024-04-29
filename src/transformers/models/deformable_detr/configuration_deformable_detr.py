@@ -14,9 +14,9 @@
 # limitations under the License.
 """ Deformable DETR model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 
 
@@ -291,4 +291,3 @@ class DeformableDetrConfig(PretrainedConfig):
 __all__ = [
     "DeformableDetrConfig"
 ]
-    

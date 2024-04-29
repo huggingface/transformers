@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for RoFormer."""
-from ...utils.import_utils import register
 import json
 from typing import List, Optional, Tuple
 
@@ -22,6 +21,7 @@ from tokenizers.pre_tokenizers import BertPreTokenizer, PreTokenizer
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_roformer import RoFormerTokenizer
 from .tokenization_utils import JiebaPreTokenizer
 
@@ -180,4 +180,3 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "RoFormerTokenizerFast"
 ]
-    

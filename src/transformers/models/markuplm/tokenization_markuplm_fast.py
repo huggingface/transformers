@@ -17,7 +17,6 @@ Fast tokenization class for MarkupLM. It overwrites 2 methods of the slow tokeni
 and _encode_plus, in which the Rust tokenizer is used.
 """
 
-from ...utils.import_utils import register
 import json
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
@@ -37,6 +36,7 @@ from ...tokenization_utils_base import (
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_markuplm import MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING, MarkupLMTokenizer
 
 
@@ -922,4 +922,3 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "MarkupLMTokenizerFast"
 ]
-    

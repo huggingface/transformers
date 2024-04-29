@@ -14,9 +14,9 @@
 # limitations under the License.
 """ Musicgen Melody model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto.configuration_auto import AutoConfig
 
 
@@ -277,4 +277,3 @@ __all__ = [
     "MusicgenMelodyDecoderConfig",
     "MusicgenMelodyConfig"
 ]
-    

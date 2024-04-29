@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast tokenization class for BlenderbotSmall."""
-from ...utils.import_utils import register
 from typing import List, Optional
 
 from tokenizers import ByteLevelBPETokenizer
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_blenderbot_small import BlenderbotSmallTokenizer
 
 
@@ -125,4 +125,3 @@ class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "BlenderbotSmallTokenizerFast"
 ]
-    

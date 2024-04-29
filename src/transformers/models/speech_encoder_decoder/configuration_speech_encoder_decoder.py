@@ -15,9 +15,9 @@
 # limitations under the License.
 
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto.configuration_auto import AutoConfig
 
 
@@ -112,4 +112,3 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
 __all__ = [
     "SpeechEncoderDecoderConfig"
 ]
-    

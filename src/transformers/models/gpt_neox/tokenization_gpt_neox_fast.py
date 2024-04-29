@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for GPTNeoX."""
-from ...utils.import_utils import register
 import json
 from typing import List, Optional, Tuple
 
@@ -21,6 +20,7 @@ from tokenizers import pre_tokenizers, processors
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -248,4 +248,3 @@ class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "GPTNeoXTokenizerFast"
 ]
-    

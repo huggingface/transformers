@@ -13,9 +13,9 @@
 # limitations under the License.
 """ Llava-NeXT model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 
 
@@ -145,4 +145,3 @@ class LlavaNextConfig(PretrainedConfig):
 __all__ = [
     "LlavaNextConfig"
 ]
-    

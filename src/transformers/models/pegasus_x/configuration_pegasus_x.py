@@ -14,9 +14,9 @@
 # limitations under the License.
 """ PEGASUS-X model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -181,4 +181,3 @@ class PegasusXConfig(PretrainedConfig):
 __all__ = [
     "PegasusXConfig"
 ]
-    

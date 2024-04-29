@@ -14,11 +14,11 @@
 # limitations under the License.
 """ DPT model configuration"""
 
-from ...utils.import_utils import register
 import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto.configuration_auto import CONFIG_MAPPING
 from ..bit import BitConfig
 
@@ -288,4 +288,3 @@ class DPTConfig(PretrainedConfig):
 __all__ = [
     "DPTConfig"
 ]
-    

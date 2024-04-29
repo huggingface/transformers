@@ -14,10 +14,11 @@
 # limitations under the License.
 """ CLIP model configuration"""
 
-from ...utils.import_utils import register
 import os
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
+
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -466,4 +467,3 @@ __all__ = [
     "CLIPConfig",
     "CLIPOnnxConfig"
 ]
-    

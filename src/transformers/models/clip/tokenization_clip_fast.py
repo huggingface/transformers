@@ -15,13 +15,13 @@
 """Tokenization classes for OpenAI GPT."""
 
 
-from ...utils.import_utils import register
 from typing import List, Optional, Tuple
 
 from tokenizers import pre_tokenizers
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_clip import CLIPTokenizer
 
 
@@ -163,4 +163,3 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "CLIPTokenizerFast"
 ]
-    

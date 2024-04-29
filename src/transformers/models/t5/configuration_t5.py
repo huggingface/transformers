@@ -13,12 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ T5 model configuration"""
-from ...utils.import_utils import register
 from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxSeq2SeqConfigWithPast
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -171,4 +171,3 @@ __all__ = [
     "T5Config",
     "T5OnnxConfig"
 ]
-    

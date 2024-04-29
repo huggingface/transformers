@@ -14,11 +14,11 @@
 # limitations under the License.
 """ TVP model configuration"""
 
-from ...utils.import_utils import register
 import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 
 
@@ -205,4 +205,3 @@ class TvpConfig(PretrainedConfig):
 __all__ = [
     "TvpConfig"
 ]
-    

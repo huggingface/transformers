@@ -14,9 +14,9 @@
 # limitations under the License.
 """ Graphormer model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -222,4 +222,3 @@ class GraphormerConfig(PretrainedConfig):
 __all__ = [
     "GraphormerConfig"
 ]
-    

@@ -1,5 +1,5 @@
-from ...utils.import_utils import register
 from ... import PretrainedConfig
+from ...utils.import_utils import register
 from ..deprecated._archive_maps import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
@@ -107,4 +107,3 @@ class NezhaConfig(PretrainedConfig):
 __all__ = [
     "NezhaConfig"
 ]
-    

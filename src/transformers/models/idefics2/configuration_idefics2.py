@@ -13,12 +13,12 @@
 # limitations under the License.
 """Idefics2 model configuration"""
 
-from ...utils.import_utils import register
 import os
 from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 
 
@@ -270,4 +270,3 @@ __all__ = [
     "Idefics2PerceiverConfig",
     "Idefics2Config"
 ]
-    

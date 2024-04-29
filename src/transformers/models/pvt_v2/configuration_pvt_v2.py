@@ -16,12 +16,12 @@
 # limitations under the License.
 """Pvt V2 model configuration"""
 
-from ...utils.import_utils import register
 from typing import Callable, List, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -157,4 +157,3 @@ class PvtV2Config(BackboneConfigMixin, PretrainedConfig):
 __all__ = [
     "PvtV2Config"
 ]
-    

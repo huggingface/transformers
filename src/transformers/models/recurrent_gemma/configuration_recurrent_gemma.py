@@ -14,9 +14,9 @@
 # limitations under the License.
 """ RecurrentGemma model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -162,4 +162,3 @@ class RecurrentGemmaConfig(PretrainedConfig):
 __all__ = [
     "RecurrentGemmaConfig"
 ]
-    

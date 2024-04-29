@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Tokenization class for Funnel Transformer."""
 
-from ...utils.import_utils import register
 import json
 from typing import List, Optional, Tuple
 
@@ -22,6 +21,7 @@ from tokenizers import normalizers
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_funnel import FunnelTokenizer
 
 
@@ -204,4 +204,3 @@ class FunnelTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "FunnelTokenizerFast"
 ]
-    

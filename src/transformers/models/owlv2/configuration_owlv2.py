@@ -14,9 +14,10 @@
 # limitations under the License.
 """ OWLv2 model configuration"""
 
-from ...utils.import_utils import register
 import os
 from typing import TYPE_CHECKING, Dict, Union
+
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -345,4 +346,3 @@ __all__ = [
     "Owlv2VisionConfig",
     "Owlv2Config"
 ]
-    

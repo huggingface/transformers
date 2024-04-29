@@ -14,11 +14,11 @@
 # limitations under the License.
 """MAMBA configuration"""
 
-from ...utils.import_utils import register
 import math
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -160,4 +160,3 @@ class MambaConfig(PretrainedConfig):
 __all__ = [
     "MambaConfig"
 ]
-    

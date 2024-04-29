@@ -14,9 +14,9 @@
 # limitations under the License.
 """ Speech2Text model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -138,4 +138,3 @@ class Speech2Text2Config(PretrainedConfig):
 __all__ = [
     "Speech2Text2Config"
 ]
-    

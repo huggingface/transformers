@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ OPT model configuration"""
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -146,4 +146,3 @@ class OPTConfig(PretrainedConfig):
 __all__ = [
     "OPTConfig"
 ]
-    

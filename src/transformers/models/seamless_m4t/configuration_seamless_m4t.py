@@ -14,9 +14,9 @@
 # limitations under the License.
 """ SeamlessM4T model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -420,4 +420,3 @@ class SeamlessM4TConfig(PretrainedConfig):
 __all__ = [
     "SeamlessM4TConfig"
 ]
-    

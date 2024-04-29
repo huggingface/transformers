@@ -14,9 +14,9 @@
 # limitations under the License.
 """ VisualBERT model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -139,4 +139,3 @@ class VisualBertConfig(PretrainedConfig):
 __all__ = [
     "VisualBertConfig"
 ]
-    

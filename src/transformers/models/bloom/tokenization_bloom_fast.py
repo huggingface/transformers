@@ -15,13 +15,13 @@
 """Tokenization classes for Bloom."""
 
 
-from ...utils.import_utils import register
 import pickle
 from typing import Optional, Tuple
 
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -169,4 +169,3 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "BloomTokenizerFast"
 ]
-    

@@ -14,12 +14,12 @@
 # limitations under the License.
 """Tokenization classes for Qwen2."""
 
-from ...utils.import_utils import register
 from typing import Optional, Tuple
 
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_qwen2 import Qwen2Tokenizer
 
 
@@ -138,4 +138,3 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "Qwen2TokenizerFast"
 ]
-    

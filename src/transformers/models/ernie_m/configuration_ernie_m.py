@@ -15,12 +15,12 @@
 """ ErnieM model configuration"""
 # Adapted from original paddlenlp repository.(https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/transformers/ernie_m/configuration.py)
 
-from ...utils.import_utils import register
 from __future__ import annotations
 
 from typing import Dict
 
 from ...configuration_utils import PretrainedConfig
+from ...utils.import_utils import register
 from ..deprecated._archive_maps import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
@@ -116,4 +116,3 @@ class ErnieMConfig(PretrainedConfig):
 __all__ = [
     "ErnieMConfig"
 ]
-    

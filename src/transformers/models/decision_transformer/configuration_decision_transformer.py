@@ -14,9 +14,9 @@
 # limitations under the License.
 """ Decision Transformer model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -161,4 +161,3 @@ class DecisionTransformerConfig(PretrainedConfig):
 __all__ = [
     "DecisionTransformerConfig"
 ]
-    

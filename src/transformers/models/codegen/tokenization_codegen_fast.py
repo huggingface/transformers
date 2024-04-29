@@ -15,7 +15,6 @@
 """Tokenization classes for OpenAI GPT."""
 
 
-from ...utils.import_utils import register
 import json
 import re
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
@@ -23,6 +22,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 import numpy as np
 
 from ...utils import is_tf_available, is_torch_available, logging
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -277,4 +277,3 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "CodeGenTokenizerFast"
 ]
-    

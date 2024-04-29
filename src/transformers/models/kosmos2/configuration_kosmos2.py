@@ -14,12 +14,12 @@
 # limitations under the License.
 """ KOSMOS-2 model configuration"""
 
-from ...utils.import_utils import register
 import os
 from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -303,4 +303,3 @@ __all__ = [
     "Kosmos2VisionConfig",
     "Kosmos2Config"
 ]
-    

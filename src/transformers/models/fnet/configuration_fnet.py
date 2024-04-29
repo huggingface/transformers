@@ -14,9 +14,9 @@
 # limitations under the License.
 """ FNet model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -123,4 +123,3 @@ class FNetConfig(PretrainedConfig):
 __all__ = [
     "FNetConfig"
 ]
-    

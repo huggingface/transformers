@@ -14,12 +14,12 @@
 # limitations under the License.
 """ BARK model generation configuration"""
 
-from ...utils.import_utils import register
 import copy
 from typing import Dict
 
 from ...generation.configuration_utils import GenerationConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -341,4 +341,3 @@ __all__ = [
     "BarkFineGenerationConfig",
     "BarkGenerationConfig"
 ]
-    

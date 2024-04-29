@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Perceiver model configuration"""
 
-from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Any, Mapping, Optional, Union
 
@@ -24,6 +23,7 @@ from ...onnx import OnnxConfig
 from ...onnx.utils import compute_effective_axis_dimension
 from ...tokenization_utils_base import PreTrainedTokenizerBase
 from ...utils import TensorType, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -250,4 +250,3 @@ __all__ = [
     "PerceiverConfig",
     "PerceiverOnnxConfig"
 ]
-    

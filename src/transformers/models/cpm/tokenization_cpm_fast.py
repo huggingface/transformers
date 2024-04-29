@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes."""
-from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
 from ...tokenization_utils_fast import AddedToken, PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -241,4 +241,3 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "CpmTokenizerFast"
 ]
-    

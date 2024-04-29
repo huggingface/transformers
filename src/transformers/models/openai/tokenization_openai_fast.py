@@ -15,11 +15,11 @@
 """Fast Tokenization classes for OpenAI GPT."""
 
 
-from ...utils.import_utils import register
 from typing import Optional, Tuple
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_openai import OpenAIGPTTokenizer
 
 
@@ -68,4 +68,3 @@ class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "OpenAIGPTTokenizerFast"
 ]
-    

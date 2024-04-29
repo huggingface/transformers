@@ -14,9 +14,9 @@
 # limitations under the License.
 """ Splinter model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -127,4 +127,3 @@ class SplinterConfig(PretrainedConfig):
 __all__ = [
     "SplinterConfig"
 ]
-    

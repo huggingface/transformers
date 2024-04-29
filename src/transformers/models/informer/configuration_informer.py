@@ -14,11 +14,11 @@
 # limitations under the License.
 """Informer model configuration"""
 
-from ...utils.import_utils import register
 from typing import List, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -253,4 +253,3 @@ class InformerConfig(PretrainedConfig):
 __all__ = [
     "InformerConfig"
 ]
-    

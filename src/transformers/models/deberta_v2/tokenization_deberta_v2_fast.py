@@ -14,7 +14,6 @@
 # limitations under the License.
 """Fast Tokenization class for model DeBERTa."""
 
-from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import Optional, Tuple
@@ -22,6 +21,7 @@ from typing import Optional, Tuple
 from ...file_utils import is_sentencepiece_available
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 if is_sentencepiece_available():
@@ -224,4 +224,3 @@ class DebertaV2TokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "DebertaV2TokenizerFast"
 ]
-    

@@ -14,12 +14,12 @@
 # limitations under the License.
 """ BARK model configuration"""
 
-from ...utils.import_utils import register
 import os
 from typing import Dict, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings, logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 
 
@@ -337,4 +337,3 @@ __all__ = [
     "BarkFineConfig",
     "BarkConfig"
 ]
-    

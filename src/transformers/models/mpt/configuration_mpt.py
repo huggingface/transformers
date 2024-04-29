@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Mpt configuration"""
-from ...utils.import_utils import register
 from typing import TYPE_CHECKING, Optional, Union
+
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -252,4 +253,3 @@ __all__ = [
     "MptAttentionConfig",
     "MptConfig"
 ]
-    

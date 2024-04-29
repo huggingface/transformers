@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ BEiT model configuration"""
-from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -23,6 +22,7 @@ from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -237,4 +237,3 @@ __all__ = [
     "BeitConfig",
     "BeitOnnxConfig"
 ]
-    

@@ -13,11 +13,11 @@
 # limitations under the License.
 """ VipLlava model configuration"""
 
-from ...utils.import_utils import register
 import warnings
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 
 
@@ -148,4 +148,3 @@ class VipLlavaConfig(PretrainedConfig):
 __all__ = [
     "VipLlavaConfig"
 ]
-    

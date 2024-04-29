@@ -13,11 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Jamba model configuration"""
-from ...utils.import_utils import register
 import math
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -227,4 +227,3 @@ class JambaConfig(PretrainedConfig):
 __all__ = [
     "JambaConfig"
 ]
-    

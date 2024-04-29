@@ -15,7 +15,6 @@
 """ Tokenization classes for LayoutXLM model."""
 
 
-from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import Dict, List, Optional, Tuple, Union
@@ -31,6 +30,7 @@ from ...tokenization_utils_base import (
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, is_sentencepiece_available, logging
+from ...utils.import_utils import register
 from ..xlm_roberta.tokenization_xlm_roberta_fast import (
     VOCAB_FILES_NAMES,
 )
@@ -804,4 +804,3 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "LayoutXLMTokenizerFast"
 ]
-    

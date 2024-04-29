@@ -15,9 +15,9 @@
 """ RAG model configuration"""
 
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings
+from ...utils.import_utils import register
 
 
 RAG_CONFIG_DOC = r"""
@@ -186,4 +186,3 @@ class RagConfig(PretrainedConfig):
 __all__ = [
     "RagConfig"
 ]
-    

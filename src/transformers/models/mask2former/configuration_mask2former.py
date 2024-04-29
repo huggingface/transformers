@@ -13,11 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Mask2Former model configuration"""
-from ...utils.import_utils import register
 from typing import Dict, List, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 from ..deprecated._archive_maps import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
@@ -259,4 +259,3 @@ class Mask2FormerConfig(PretrainedConfig):
 __all__ = [
     "Mask2FormerConfig"
 ]
-    

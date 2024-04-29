@@ -14,11 +14,11 @@
 # limitations under the License.
 """ Data2VecText configuration"""
 
-from ...utils.import_utils import register
 import math
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -289,4 +289,3 @@ class Data2VecAudioConfig(PretrainedConfig):
 __all__ = [
     "Data2VecAudioConfig"
 ]
-    

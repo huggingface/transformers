@@ -14,9 +14,10 @@
 # limitations under the License.
 """ ALIGN model configuration"""
 
-from ...utils.import_utils import register
 import os
 from typing import TYPE_CHECKING, List, Union
+
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -391,4 +392,3 @@ __all__ = [
     "AlignVisionConfig",
     "AlignConfig"
 ]
-    

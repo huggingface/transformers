@@ -15,10 +15,10 @@
 """ ConvNeXTV2 model configuration"""
 
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -121,4 +121,3 @@ class ConvNextV2Config(BackboneConfigMixin, PretrainedConfig):
 __all__ = [
     "ConvNextV2Config"
 ]
-    

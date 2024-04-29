@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ LayoutLM model configuration"""
-from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
 from ... import PretrainedConfig, PreTrainedTokenizer
 from ...onnx import OnnxConfig, PatchingSpec
 from ...utils import TensorType, is_torch_available, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -204,4 +204,3 @@ __all__ = [
     "LayoutLMConfig",
     "LayoutLMOnnxConfig"
 ]
-    

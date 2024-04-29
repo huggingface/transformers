@@ -14,7 +14,6 @@
 # limitations under the License.
 """ LayoutLMv3 model configuration"""
 
-from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
@@ -24,6 +23,7 @@ from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...onnx.utils import compute_effective_axis_dimension
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -299,4 +299,3 @@ __all__ = [
     "LayoutLMv3Config",
     "LayoutLMv3OnnxConfig"
 ]
-    

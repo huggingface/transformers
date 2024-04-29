@@ -15,7 +15,6 @@
 """Tokenization classes for OpenAI GPT."""
 
 
-from ...utils.import_utils import register
 import json
 from typing import Optional, Tuple
 
@@ -24,6 +23,7 @@ from tokenizers import pre_tokenizers
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_gpt2 import GPT2Tokenizer
 
 
@@ -161,4 +161,3 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "GPT2TokenizerFast"
 ]
-    

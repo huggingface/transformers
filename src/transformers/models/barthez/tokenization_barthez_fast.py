@@ -15,7 +15,6 @@
 """ Tokenization classes for the BARThez model."""
 
 
-from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
@@ -23,6 +22,7 @@ from typing import List, Optional, Tuple
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
+from ...utils.import_utils import register
 
 
 if is_sentencepiece_available():
@@ -199,4 +199,3 @@ class BarthezTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "BarthezTokenizerFast"
 ]
-    

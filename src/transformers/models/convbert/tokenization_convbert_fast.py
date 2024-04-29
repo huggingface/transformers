@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for ConvBERT."""
-from ...utils.import_utils import register
 import json
 from typing import List, Optional, Tuple
 
@@ -21,6 +20,7 @@ from tokenizers import normalizers
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_convbert import ConvBertTokenizer
 
 
@@ -176,4 +176,3 @@ class ConvBertTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "ConvBertTokenizerFast"
 ]
-    

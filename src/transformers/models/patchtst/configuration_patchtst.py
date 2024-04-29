@@ -14,11 +14,12 @@
 # limitations under the License.
 """PatchTST model configuration"""
 
-from ...utils.import_utils import register
 from typing import List, Optional, Union
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
+
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -264,4 +265,3 @@ class PatchTSTConfig(PretrainedConfig):
 __all__ = [
     "PatchTSTConfig"
 ]
-    

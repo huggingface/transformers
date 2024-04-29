@@ -13,11 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ MaskFormer model configuration"""
-from ...utils.import_utils import register
 from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 from ..deprecated._archive_maps import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 from ..detr import DetrConfig
@@ -229,4 +229,3 @@ class MaskFormerConfig(PretrainedConfig):
 __all__ = [
     "MaskFormerConfig"
 ]
-    

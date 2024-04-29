@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
@@ -23,6 +22,7 @@ from tokenizers import processors
 from ...tokenization_utils import AddedToken, BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
+from ...utils.import_utils import register
 
 
 if is_sentencepiece_available():
@@ -344,4 +344,3 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "NllbTokenizerFast"
 ]
-    

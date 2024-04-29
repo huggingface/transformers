@@ -14,11 +14,11 @@
 # limitations under the License.
 """ FastSpeech2Conformer model configuration"""
 
-from ...utils.import_utils import register
 from typing import Dict
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -490,4 +490,3 @@ __all__ = [
     "FastSpeech2ConformerHifiGanConfig",
     "FastSpeech2ConformerWithHifiGanConfig"
 ]
-    

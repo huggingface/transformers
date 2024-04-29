@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ BigBird model configuration"""
-from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -181,4 +181,3 @@ __all__ = [
     "BigBirdConfig",
     "BigBirdOnnxConfig"
 ]
-    

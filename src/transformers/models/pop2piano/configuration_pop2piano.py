@@ -15,9 +15,9 @@
 """ Pop2Piano model configuration"""
 
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -132,4 +132,3 @@ class Pop2PianoConfig(PretrainedConfig):
 __all__ = [
     "Pop2PianoConfig"
 ]
-    

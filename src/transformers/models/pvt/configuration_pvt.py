@@ -16,7 +16,6 @@
 # limitations under the License.
 """ Pvt model configuration"""
 
-from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Callable, List, Mapping
 
@@ -25,6 +24,7 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -168,4 +168,3 @@ __all__ = [
     "PvtConfig",
     "PvtOnnxConfig"
 ]
-    

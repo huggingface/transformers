@@ -15,13 +15,13 @@
 """ Tokenization class for model Reformer."""
 
 
-from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import Optional, Tuple
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
+from ...utils.import_utils import register
 
 
 if is_sentencepiece_available():
@@ -120,4 +120,3 @@ class ReformerTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "ReformerTokenizerFast"
 ]
-    

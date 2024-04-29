@@ -14,12 +14,12 @@
 # limitations under the License.
 """ VitMatte model configuration"""
 
-from ...utils.import_utils import register
 import copy
 from typing import List
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto.configuration_auto import CONFIG_MAPPING
 
 
@@ -140,4 +140,3 @@ class VitMatteConfig(PretrainedConfig):
 __all__ = [
     "VitMatteConfig"
 ]
-    

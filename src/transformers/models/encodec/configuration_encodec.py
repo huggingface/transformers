@@ -15,7 +15,6 @@
 """ EnCodec model configuration"""
 
 
-from ...utils.import_utils import register
 import math
 from typing import Optional
 
@@ -23,6 +22,7 @@ import numpy as np
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -197,4 +197,3 @@ class EncodecConfig(PretrainedConfig):
 __all__ = [
     "EncodecConfig"
 ]
-    

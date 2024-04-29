@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ OpenAI GPT-2 configuration"""
-from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
@@ -22,6 +21,7 @@ from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast, PatchingSpec
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -278,4 +278,3 @@ __all__ = [
     "GPT2Config",
     "GPT2OnnxConfig"
 ]
-    

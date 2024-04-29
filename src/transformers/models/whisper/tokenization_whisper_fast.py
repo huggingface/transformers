@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for Whisper."""
-from ...utils.import_utils import register
 import json
 import os
 import re
@@ -27,6 +26,7 @@ from tokenizers import AddedToken, pre_tokenizers, processors
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .english_normalizer import BasicTextNormalizer, EnglishTextNormalizer
 from .tokenization_whisper import LANGUAGES, TASK_IDS, TO_LANGUAGE_CODE, WhisperTokenizer, _decode_asr
 
@@ -605,4 +605,3 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "WhisperTokenizerFast"
 ]
-    

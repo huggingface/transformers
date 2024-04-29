@@ -14,8 +14,8 @@
 # limitations under the License.
 """  BertGeneration model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
+from ...utils.import_utils import register
 
 
 @register()
@@ -128,4 +128,3 @@ class BertGenerationConfig(PretrainedConfig):
 __all__ = [
     "BertGenerationConfig"
 ]
-    

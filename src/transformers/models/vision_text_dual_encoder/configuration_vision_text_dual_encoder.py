@@ -15,9 +15,9 @@
 """ VisionTextDualEncoder model configuration"""
 
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto.configuration_auto import AutoConfig
 from ..chinese_clip.configuration_chinese_clip import ChineseCLIPVisionConfig
 from ..clip.configuration_clip import CLIPVisionConfig
@@ -123,4 +123,3 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
 __all__ = [
     "VisionTextDualEncoderConfig"
 ]
-    

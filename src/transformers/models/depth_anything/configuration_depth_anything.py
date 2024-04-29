@@ -14,11 +14,11 @@
 # limitations under the License.
 """ DepthAnything model configuration"""
 
-from ...utils.import_utils import register
 import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto.configuration_auto import CONFIG_MAPPING
 
 
@@ -149,4 +149,3 @@ class DepthAnythingConfig(PretrainedConfig):
 __all__ = [
     "DepthAnythingConfig"
 ]
-    

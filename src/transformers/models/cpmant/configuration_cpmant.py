@@ -14,9 +14,9 @@
 # limitations under the License.
 """ CPMAnt model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -126,4 +126,3 @@ class CpmAntConfig(PretrainedConfig):
 __all__ = [
     "CpmAntConfig"
 ]
-    

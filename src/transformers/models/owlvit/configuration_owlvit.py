@@ -14,10 +14,11 @@
 # limitations under the License.
 """ OWL-ViT model configuration"""
 
-from ...utils.import_utils import register
 import os
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Union
+
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -393,4 +394,3 @@ __all__ = [
     "OwlViTConfig",
     "OwlViTOnnxConfig"
 ]
-    

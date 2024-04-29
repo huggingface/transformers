@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast Tokenization class for SeamlessM4T."""
-from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple, Union
@@ -27,6 +26,7 @@ from ...tokenization_utils import (
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import PaddingStrategy, is_sentencepiece_available, logging
+from ...utils.import_utils import register
 
 
 if is_sentencepiece_available():
@@ -450,4 +450,3 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "SeamlessM4TTokenizerFast"
 ]
-    

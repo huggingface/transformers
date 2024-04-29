@@ -14,7 +14,6 @@
 # limitations under the License.
 """Fast Tokenization classes for Splinter."""
 
-from ...utils.import_utils import register
 import json
 from typing import List, Optional, Tuple
 
@@ -22,6 +21,7 @@ from tokenizers import normalizers
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_splinter import SplinterTokenizer
 
 
@@ -194,4 +194,3 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "SplinterTokenizerFast"
 ]
-    

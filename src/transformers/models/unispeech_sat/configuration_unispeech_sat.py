@@ -14,12 +14,12 @@
 # limitations under the License.
 """ UniSpeechSat model configuration"""
 
-from ...utils.import_utils import register
 import functools
 import operator
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -331,4 +331,3 @@ class UniSpeechSatConfig(PretrainedConfig):
 __all__ = [
     "UniSpeechSatConfig"
 ]
-    

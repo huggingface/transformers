@@ -14,12 +14,12 @@
 # limitations under the License.
 """ ESM model configuration"""
 
-from ...utils.import_utils import register
 from dataclasses import asdict, dataclass
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -365,4 +365,3 @@ def get_default_vocab_list():
 __all__ = [
     "EsmConfig"
 ]
-    

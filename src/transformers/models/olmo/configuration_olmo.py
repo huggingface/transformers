@@ -19,9 +19,9 @@
 # limitations under the License.
 """ OLMo model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..deprecated._archive_maps import OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
@@ -187,4 +187,3 @@ class OlmoConfig(PretrainedConfig):
 __all__ = [
     "OlmoConfig"
 ]
-    

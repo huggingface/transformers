@@ -15,11 +15,11 @@
 """ XLM-ProphetNet model configuration"""
 
 
-from ...utils.import_utils import register
 from typing import Callable, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -186,4 +186,3 @@ class XLMProphetNetConfig(PretrainedConfig):
 __all__ = [
     "XLMProphetNetConfig"
 ]
-    

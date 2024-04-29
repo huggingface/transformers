@@ -14,9 +14,9 @@
 # limitations under the License.
 """ LayoutLMv2 model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import is_detectron2_available, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -226,4 +226,3 @@ class LayoutLMv2Config(PretrainedConfig):
 __all__ = [
     "LayoutLMv2Config"
 ]
-    

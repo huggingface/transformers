@@ -15,7 +15,6 @@
 """
 Fast tokenizer class for Nougat.
 """
-from ...utils.import_utils import register
 import re
 from functools import partial
 from multiprocessing import Pool
@@ -28,6 +27,7 @@ from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from transformers.utils import add_end_docstrings
 
 from ...utils import is_levenshtein_available, is_nltk_available, logging, requires_backends
+from ...utils.import_utils import register
 
 
 if is_levenshtein_available():
@@ -629,4 +629,3 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "NougatTokenizerFast"
 ]
-    

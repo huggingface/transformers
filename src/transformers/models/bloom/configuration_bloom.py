@@ -13,11 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Bloom configuration"""
-from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, List, Mapping, Optional
 
 from packaging import version
+
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -242,4 +243,3 @@ __all__ = [
     "BloomConfig",
     "BloomOnnxConfig"
 ]
-    

@@ -15,9 +15,9 @@
 
 """ Configuration for Backbone models"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -87,4 +87,3 @@ class TimmBackboneConfig(PretrainedConfig):
 __all__ = [
     "TimmBackboneConfig"
 ]
-    

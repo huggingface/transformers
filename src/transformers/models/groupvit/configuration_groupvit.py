@@ -14,7 +14,6 @@
 # limitations under the License.
 """ GroupViT model configuration"""
 
-from ...utils.import_utils import register
 import os
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
@@ -22,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -462,4 +462,3 @@ __all__ = [
     "GroupViTConfig",
     "GroupViTOnnxConfig"
 ]
-    

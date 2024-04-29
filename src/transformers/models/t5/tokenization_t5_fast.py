@@ -15,7 +15,6 @@
 """ Tokenization class for model T5."""
 
 
-from ...utils.import_utils import register
 import os
 import re
 import warnings
@@ -24,6 +23,7 @@ from typing import List, Optional, Tuple
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
+from ...utils.import_utils import register
 
 
 if is_sentencepiece_available():
@@ -238,4 +238,3 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "T5TokenizerFast"
 ]
-    

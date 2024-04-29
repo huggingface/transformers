@@ -14,9 +14,9 @@
 # limitations under the License.
 """ Qwen2MoE model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -179,4 +179,3 @@ class Qwen2MoeConfig(PretrainedConfig):
 __all__ = [
     "Qwen2MoeConfig"
 ]
-    

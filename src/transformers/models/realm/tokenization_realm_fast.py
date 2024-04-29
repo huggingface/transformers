@@ -14,7 +14,6 @@
 # limitations under the License.
 """Fast Tokenization classes for REALM."""
 
-from ...utils.import_utils import register
 import json
 from typing import List, Optional, Tuple
 
@@ -23,6 +22,7 @@ from tokenizers import normalizers
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import PaddingStrategy, logging
+from ...utils.import_utils import register
 from .tokenization_realm import RealmTokenizer
 
 
@@ -253,4 +253,3 @@ class RealmTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "RealmTokenizerFast"
 ]
-    

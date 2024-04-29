@@ -15,7 +15,6 @@
 """ Tokenization classes for UDOP model."""
 
 
-from ...utils.import_utils import register
 import os
 from shutil import copyfile
 from typing import Dict, List, Optional, Tuple, Union
@@ -30,6 +29,7 @@ from ...tokenization_utils_base import (
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, is_sentencepiece_available, logging
+from ...utils.import_utils import register
 
 
 if is_sentencepiece_available():
@@ -1021,4 +1021,3 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "UdopTokenizerFast"
 ]
-    

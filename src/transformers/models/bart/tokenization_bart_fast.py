@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...utils.import_utils import register
 import json
 from typing import List, Optional, Tuple
 
@@ -22,6 +21,7 @@ from tokenizers import pre_tokenizers, processors
 from ...tokenization_utils_base import AddedToken, BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_bart import BartTokenizer
 
 
@@ -280,4 +280,3 @@ class BartTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "BartTokenizerFast"
 ]
-    

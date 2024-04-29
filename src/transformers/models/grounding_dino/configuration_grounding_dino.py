@@ -14,9 +14,9 @@
 # limitations under the License.
 """ Grounding DINO model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 
 
@@ -305,4 +305,3 @@ class GroundingDinoConfig(PretrainedConfig):
 __all__ = [
     "GroundingDinoConfig"
 ]
-    

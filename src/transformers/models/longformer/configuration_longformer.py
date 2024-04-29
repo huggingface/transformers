@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Longformer configuration"""
-from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, List, Mapping, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import TensorType, logging
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -209,4 +209,3 @@ __all__ = [
     "LongformerConfig",
     "LongformerOnnxConfig"
 ]
-    

@@ -20,9 +20,10 @@ from typing import List, Optional, Union
 
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, add_end_docstrings, add_start_docstrings, logging
+from ...utils.import_utils import register
 from ..bert.tokenization_bert_fast import BertTokenizerFast
 from .tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer, DPRReaderTokenizer
-from ...utils.import_utils import register
+
 
 logger = logging.get_logger(__name__)
 

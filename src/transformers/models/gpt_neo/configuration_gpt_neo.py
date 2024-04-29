@@ -14,7 +14,6 @@
 # limitations under the License.
 """ GPT Neo model configuration"""
 
-from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
 
@@ -22,6 +21,7 @@ from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -278,4 +278,3 @@ __all__ = [
     "GPTNeoConfig",
     "GPTNeoOnnxConfig"
 ]
-    

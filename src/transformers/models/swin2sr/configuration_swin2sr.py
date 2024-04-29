@@ -14,9 +14,9 @@
 # limitations under the License.
 """ Swin2SR Transformer model configuration"""
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -158,4 +158,3 @@ class Swin2SRConfig(PretrainedConfig):
 __all__ = [
     "Swin2SRConfig"
 ]
-    

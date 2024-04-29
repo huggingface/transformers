@@ -14,11 +14,11 @@
 # limitations under the License.
 """ DBRX model configuration """
 
-from ...utils.import_utils import register
 from typing import Any, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -265,4 +265,3 @@ __all__ = [
     "DbrxFFNConfig",
     "DbrxConfig"
 ]
-    

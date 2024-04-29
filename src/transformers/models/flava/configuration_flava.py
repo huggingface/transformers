@@ -14,12 +14,12 @@
 # limitations under the License.
 """ FLAVA model configurations"""
 
-from ...utils.import_utils import register
 import os
 from typing import Any, Dict, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -776,4 +776,3 @@ __all__ = [
     "FlavaImageCodebookConfig",
     "FlavaConfig"
 ]
-    

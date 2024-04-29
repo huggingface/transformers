@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Table Transformer model configuration"""
-from ...utils.import_utils import register
 from collections import OrderedDict
 from typing import Mapping
 
@@ -22,6 +21,7 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 
 
@@ -289,4 +289,3 @@ __all__ = [
     "TableTransformerConfig",
     "TableTransformerOnnxConfig"
 ]
-    

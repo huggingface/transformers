@@ -15,7 +15,6 @@
 
 # This file is based on the tokenization_llama_fast.py file in transformers
 
-from ...utils.import_utils import register
 import pickle
 from typing import Dict, List, Literal, Union
 
@@ -25,6 +24,7 @@ from ...pipelines.conversational import Conversation
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from ...utils.versions import require_version
 
 
@@ -706,4 +706,3 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "CohereTokenizerFast"
 ]
-    

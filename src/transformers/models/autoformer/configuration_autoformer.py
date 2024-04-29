@@ -14,11 +14,11 @@
 # limitations under the License.
 """ Autoformer model configuration"""
 
-from ...utils.import_utils import register
 from typing import List, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -249,4 +249,3 @@ class AutoformerConfig(PretrainedConfig):
 __all__ = [
     "AutoformerConfig"
 ]
-    

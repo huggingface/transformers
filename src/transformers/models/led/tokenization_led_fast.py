@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for LED."""
 
-from ...utils.import_utils import register
 import json
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -23,6 +22,7 @@ from tokenizers import pre_tokenizers, processors
 from ...tokenization_utils_base import AddedToken, BatchEncoding, EncodedInput
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import PaddingStrategy, logging
+from ...utils.import_utils import register
 from .tokenization_led import LEDTokenizer
 
 
@@ -329,4 +329,3 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "LEDTokenizerFast"
 ]
-    

@@ -17,7 +17,6 @@ Fast tokenization class for LayoutLMv3. It overwrites 2 methods of the slow toke
 and _encode_plus, in which the Rust tokenizer is used.
 """
 
-from ...utils.import_utils import register
 import json
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -35,6 +34,7 @@ from ...tokenization_utils_base import (
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import add_end_docstrings, logging
+from ...utils.import_utils import register
 from .tokenization_layoutlmv3 import (
     LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING,
     LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
@@ -841,4 +841,3 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "LayoutLMv3TokenizerFast"
 ]
-    

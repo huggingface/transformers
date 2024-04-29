@@ -15,9 +15,9 @@
 """ DETA model configuration"""
 
 
-from ...utils.import_utils import register
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 
 
@@ -275,4 +275,3 @@ class DetaConfig(PretrainedConfig):
 __all__ = [
     "DetaConfig"
 ]
-    

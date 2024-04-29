@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for SqueezeBERT."""
 
-from ...utils.import_utils import register
 import json
 from typing import List, Optional, Tuple
 
@@ -22,6 +21,7 @@ from tokenizers import normalizers
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_squeezebert import SqueezeBertTokenizer
 
 
@@ -177,4 +177,3 @@ class SqueezeBertTokenizerFast(PreTrainedTokenizerFast):
 __all__ = [
     "SqueezeBertTokenizerFast"
 ]
-    

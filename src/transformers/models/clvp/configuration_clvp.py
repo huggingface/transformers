@@ -15,9 +15,10 @@
 """ CLVP model configuration"""
 
 
-from ...utils.import_utils import register
 import os
 from typing import TYPE_CHECKING, Union
+
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -464,4 +465,3 @@ __all__ = [
     "ClvpDecoderConfig",
     "ClvpConfig"
 ]
-    
