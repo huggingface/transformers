@@ -830,7 +830,8 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
 
         # `accelerate` device map
         hf_device_map = getattr(self.model, "hf_device_map", None)
-
+        model_device = getattr(self.model, "device", None)
+        
         if hf_device_map is not None and device is not None:
             raise ValueError(
                 "The model has been loaded with `accelerate` and therefore cannot be moved to a specific device. Please "
@@ -841,8 +842,8 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             if hf_device_map is not None:
                 # Take the first device used by `accelerate`.
                 device = next(iter(hf_device_map.values()))
-            elif self.model.device is not None:
-                device = self.model.device
+            elif model_device is not None:
+                device = model_device
             else:
                 device = -1
 
