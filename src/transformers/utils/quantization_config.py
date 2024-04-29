@@ -199,13 +199,13 @@ class HqqConfig(QuantizationConfigMixin):
             Offload the meta-data to the CPU if set to True.
         view_as_float (`bool`, *optional*, defaults to `False`):
             View the quantized weight as float (used in distributed training) if set to True.
-        axis (`int`, defaults to 0, *optional*, defaults to 0):
+        axis (`int`, *optional*, defaults to 0):
             Axis along which grouping is performed. Supported values are 0 or 1.
         dynamic_config (dict, *optional*):
             Parameters for dynamic configuration. The key is the name tag of the layer.
         skip_modules (`List[str]`, *optional*, defaults to `['lm_head']`):
             List of nn.Linear layers to skip.
-        show_progress ('bool', defaults to `True`, *optional*, defaults to `True`):
+        show_progress ('bool', *optional*, defaults to `True`):
             Show tqdm quantization progress for each shard.
         kwargs (`Dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
@@ -221,10 +221,11 @@ class HqqConfig(QuantizationConfigMixin):
         view_as_float: bool = False,
         axis: int = 0,
         dynamic_config: Optional[dict] = None,
-        skip_modules: Optional[List[str]] = ["lm_head"],
-        show_progress: Optional[bool] = True,
+        skip_modules: List[str] = ["lm_head"],
+        show_progress: bool = True,
         **kwargs,
     ):
+
         if is_hqq_available():
             from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
 
