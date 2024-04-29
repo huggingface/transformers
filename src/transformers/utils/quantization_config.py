@@ -225,7 +225,6 @@ class HqqConfig(QuantizationConfigMixin):
         show_progress: bool = True,
         **kwargs,
     ):
-
         if is_hqq_available():
             from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
 
