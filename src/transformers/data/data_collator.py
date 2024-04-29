@@ -588,7 +588,7 @@ class DataCollatorForSeq2Seq:
         labels = [feature["labels"] for feature in features] if "labels" in features[0].keys() else None
         # We have to pad the labels before calling `tokenizer.pad` as this method won't pad them and needs them of the
         # same length to return tensors.
-        no_padding = self.padding == False or self.padding == PaddingStrategy.DO_NOT_PAD
+        no_padding = self.padding is False or self.padding == PaddingStrategy.DO_NOT_PAD
         if labels is not None and not no_padding:
             max_padding = self.padding == PaddingStrategy.MAX_LENGTH and self.max_length is not None
             max_label_length = max(len(l) for l in labels) if not max_padding else self.max_length

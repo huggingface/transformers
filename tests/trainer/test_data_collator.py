@@ -32,8 +32,8 @@ from transformers import (
     is_torch_available,
     set_seed,
 )
-from transformers.utils import PaddingStrategy
 from transformers.testing_utils import require_tf, require_torch
+from transformers.utils import PaddingStrategy
 
 
 if is_torch_available():
@@ -582,7 +582,9 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["labels"][0].numpy().tolist(), list(range(3)) + [-100] * 3)
         self.assertEqual(batch["labels"][1].numpy().tolist(), list(range(6)))
 
-        data_collator = DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.MAX_LENGTH, max_length=7, return_tensors="tf")
+        data_collator = DataCollatorForSeq2Seq(
+            tokenizer, padding=PaddingStrategy.MAX_LENGTH, max_length=7, return_tensors="tf"
+        )
         batch = data_collator(features)
         self.assertEqual(batch["input_ids"].shape.as_list(), [2, 7])
         self.assertEqual(batch["input_ids"][0].numpy().tolist(), list(range(3)) + [tokenizer.pad_token_id] * 4)
@@ -601,7 +603,9 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["labels"][0].numpy().tolist(), features[0]["labels"])
         self.assertEqual(batch["labels"][1].numpy().tolist(), features[0]["labels"])
 
-        data_collator = DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, pad_to_multiple_of=8, return_tensors="tf")
+        data_collator = DataCollatorForSeq2Seq(
+            tokenizer, padding=PaddingStrategy.LONGEST, pad_to_multiple_of=8, return_tensors="tf"
+        )
         batch = data_collator(features)
         self.assertEqual(batch["input_ids"].shape.as_list(), [2, 8])
         self.assertEqual(batch["labels"].shape.as_list(), [2, 8])
@@ -609,7 +613,9 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
         # side effects on labels cause mismatch on longest strategy
         features = create_features()
 
-        data_collator = DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, label_pad_token_id=-1, return_tensors="tf")
+        data_collator = DataCollatorForSeq2Seq(
+            tokenizer, padding=PaddingStrategy.LONGEST, label_pad_token_id=-1, return_tensors="tf"
+        )
         batch = data_collator(features)
         self.assertEqual(batch["input_ids"].shape.as_list(), [2, 6])
         self.assertEqual(batch["input_ids"][0].numpy().tolist(), list(range(3)) + [tokenizer.pad_token_id] * 3)
@@ -921,7 +927,9 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["labels"][0].tolist(), list(range(3)) + [-100] * 3)
         self.assertEqual(batch["labels"][1].tolist(), list(range(6)))
 
-        data_collator = DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.MAX_LENGTH, max_length=7, return_tensors="np")
+        data_collator = DataCollatorForSeq2Seq(
+            tokenizer, padding=PaddingStrategy.MAX_LENGTH, max_length=7, return_tensors="np"
+        )
         batch = data_collator(features)
         self.assertEqual(batch["input_ids"].shape, (2, 7))
         self.assertEqual(batch["input_ids"][0].tolist(), list(range(3)) + [tokenizer.pad_token_id] * 4)
@@ -940,7 +948,9 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["labels"][0].tolist(), features[0]["labels"])
         self.assertEqual(batch["labels"][1].tolist(), features[0]["labels"])
 
-        data_collator = DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, pad_to_multiple_of=8, return_tensors="np")
+        data_collator = DataCollatorForSeq2Seq(
+            tokenizer, padding=PaddingStrategy.LONGEST, pad_to_multiple_of=8, return_tensors="np"
+        )
         batch = data_collator(features)
         self.assertEqual(batch["input_ids"].shape, (2, 8))
         self.assertEqual(batch["labels"].shape, (2, 8))
@@ -948,7 +958,9 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         # side effects on labels cause mismatch on longest strategy
         features = create_features()
 
-        data_collator = DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, label_pad_token_id=-1, return_tensors="np")
+        data_collator = DataCollatorForSeq2Seq(
+            tokenizer, padding=PaddingStrategy.LONGEST, label_pad_token_id=-1, return_tensors="np"
+        )
         batch = data_collator(features)
         self.assertEqual(batch["input_ids"].shape, (2, 6))
         self.assertEqual(batch["input_ids"][0].tolist(), list(range(3)) + [tokenizer.pad_token_id] * 3)
