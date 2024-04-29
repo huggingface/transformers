@@ -198,7 +198,7 @@ class HqqConfig(QuantizationConfigMixin):
             Offload the meta-data on the CPU.
         view_as_float (`bool`, defaults to False):
             View the quantized weight as float (used in distributed training)
-        int (`axis`, defaults to 0. Supported: 0, 1):
+        axis (`int`, defaults to 0. Supported: 0, 1):
             Axis along which grouping is performed.
         dynamic_config ('dict', defaults to None):
             Parameters for dynamic configuration. The key is the name tag of the layer.
