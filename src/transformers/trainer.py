@@ -222,6 +222,7 @@ if is_accelerate_available():
         GradientAccumulationPlugin,
         load_fsdp_model,
         load_fsdp_optimizer,
+        release_memory,
         save_fsdp_model,
         save_fsdp_optimizer,
     )
@@ -1896,8 +1897,6 @@ class Trainer:
         self._train_batch_size = batch_size
         if self.args.auto_find_batch_size:
             if self.state.train_batch_size != self._train_batch_size:
-                from accelerate.utils import release_memory
-
                 (self.model_wrapped,) = release_memory(self.model_wrapped)
                 self.model_wrapped = self.model
 
@@ -4573,6 +4572,26 @@ class Trainer:
         if (self.is_deepspeed_enabled or self.is_fsdp_enabled) and self.args.auto_find_batch_size:
             wrapper = "DeepSpeed" if self.is_deepspeed_enabled else "FSDP"
             raise NotImplementedError(f"`{wrapper}` doesn't support `auto_find_batch_size`.")
+
+    def release_memory(self, *models):
+        """
+        Will release all references to the internal objects stored and call the garbage collector.
+
+        Should also explicitly pass in the (potentially multiple) `model` *original* references
+        to be released.
+
+        Example usage:
+
+        ```
+        >>> from transformers import Trainer
+
+        >>> model = MyModel()
+        >>> trainer = Trainer(model, ...)
+        >>> trainer.train()
+        >>> model = trainer.release_memory(model)
+        ```
+        """
+        return release_memory(*models)
 
     def propagate_args_to_deepspeed(self, auto_find_batch_size=False):
         """
