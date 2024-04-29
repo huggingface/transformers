@@ -36,7 +36,6 @@ class ImageQuestionAnsweringToolTester(unittest.TestCase, ToolTesterMixin):
         result = self.tool(image, "How many cats are sleeping on the couch?")
         self.assertEqual(result, "2")
 
-
     def test_exact_match_kwarg(self):
         image = Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png")
         result = self.tool(image=image, question="How many cats are sleeping on the couch?")

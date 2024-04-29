@@ -124,7 +124,7 @@ caption = image_captioner(image)
 Above example were using tools that might not exist for you. You only have acces to those Tools:
 <<tool_names>>
 
-Now Begin! 
+Now Begin!
 Remember to make sure that variables you use are all defined. <<additional_args>>
 Be sure to provide an 'Code:' sequence before the code, else you will get an, error.
 

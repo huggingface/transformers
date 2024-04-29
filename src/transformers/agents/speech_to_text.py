@@ -15,8 +15,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .tools import Tool
 from huggingface_hub import InferenceClient
+
+from .tools import Tool
 
 
 class SpeechToTextTool(Tool):
@@ -28,7 +29,7 @@ class SpeechToTextTool(Tool):
 
     def __init__(self, *args, **kwargs):
         super().__init__()
-        self.client = InferenceClient(model='distil-whisper/distil-large-v3')
+        self.client = InferenceClient(model="distil-whisper/distil-large-v3")
 
     def forward(self, audio):
         return self.client.automatic_speech_recognition(audio).text

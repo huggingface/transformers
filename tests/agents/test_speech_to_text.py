@@ -15,13 +15,15 @@
 
 import unittest
 
+import numpy as np
+
 from transformers import is_torch_available, load_tool
 
 from .test_tools_common import ToolTesterMixin
-import numpy as np
+
 
 if is_torch_available():
-    import torch
+    pass
 
 
 class SpeechToTextToolTester(unittest.TestCase, ToolTesterMixin):

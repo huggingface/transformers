@@ -25,8 +25,8 @@ from ..utils import (
 
 _import_structure = {
     "agents": ["Agent", "CodeAgent", "ReactAgent", "ReactCodeAgent", "ReactJSONAgent"],
-    "tools": ["PipelineTool", "Tool", "launch_gradio_demo", "load_tool"],
     "llm_engine": ["HfEngine"],
+    "tools": ["PipelineTool", "Tool", "launch_gradio_demo", "load_tool"],
 }
 
 try:
@@ -35,7 +35,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["default_tools"] = ["CalculatorTool", "PythonEvaluatorTool", "FinalAnswerTool"]
+    _import_structure["default_tools"] = ["CalculatorTool", "FinalAnswerTool", "PythonEvaluatorTool"]
     _import_structure["document_question_answering"] = ["DocumentQuestionAnsweringTool"]
     _import_structure["image_question_answering"] = ["ImageQuestionAnsweringTool"]
     _import_structure["speech_to_text"] = ["SpeechToTextTool"]
@@ -44,8 +44,8 @@ else:
 
 if TYPE_CHECKING:
     from .agents import Agent, CodeAgent, ReactAgent, ReactCodeAgent, ReactJSONAgent
-    from .tools import PipelineTool, Tool, launch_gradio_demo, load_tool
     from .llm_engine import HfEngine
+    from .tools import PipelineTool, Tool, launch_gradio_demo, load_tool
 
     try:
         if not is_torch_available():
@@ -53,7 +53,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .default_tools import CalculatorTool, PythonEvaluatorTool, FinalAnswerTool
+        from .default_tools import CalculatorTool, FinalAnswerTool, PythonEvaluatorTool
         from .document_question_answering import DocumentQuestionAnsweringTool
         from .image_question_answering import ImageQuestionAnsweringTool
         from .speech_to_text import SpeechToTextTool

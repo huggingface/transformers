@@ -16,13 +16,12 @@
 # limitations under the License.
 import json
 import re
-from typing import Dict, List, Union, Callable, Any, Tuple
-
-from PIL import Image
+from typing import Any, Callable, Dict, List, Tuple, Union
 
 from ..utils import logging
+from .agent_types import AgentAudio, AgentImage, AgentText
 from .default_tools import BASE_PYTHON_TOOLS, FinalAnswerTool, setup_default_tools
-from .llm_engine import MessageRole, HfEngine
+from .llm_engine import HfEngine, MessageRole
 from .prompts import DEFAULT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_SYSTEM_PROMPT
 from .python_interpreter import evaluate_python_code
 from .tools import (
@@ -32,7 +31,6 @@ from .tools import (
     get_tool_description_with_args,
     load_tool,
 )
-from .agent_types import AgentAudio, AgentImage, AgentText
 
 
 logger = logging.get_logger(__name__)
@@ -89,7 +87,10 @@ def parse_text_tool_call(text: str) -> Tuple[str, Union[str, Dict[str, str]]]:
             tool_input = tool_input.strip().replace('"', "")
         return tool_name.strip().replace('"', "").replace("\\", ""), tool_input
     except Exception as e:
-        raise ValueError(f"Error in parsing the text tool call: {e}. Be sure to provide the correct format. DO NOT repet your previous incorrect tool call.")
+        raise ValueError(
+            f"Error in parsing the text tool call: {e}. Be sure to provide the correct format. DO NOT repet your previous incorrect tool call."
+        )
+
 
 def to_text(input: Union[List[Dict[str, str]], Dict[str, str], str]) -> str:
     if isinstance(input, list):
@@ -232,7 +233,9 @@ class Agent:
 
         self._toolbox = Toolbox(tools, add_base_tools=add_base_tools)
 
-        self.system_prompt = format_prompt_with_tools(self._toolbox, self.system_prompt_template, self.tool_description_template)
+        self.system_prompt = format_prompt_with_tools(
+            self._toolbox, self.system_prompt_template, self.tool_description_template
+        )
         self.prompt = None
         self.logs = []
         self.agent_memory = []
@@ -248,9 +251,9 @@ class Agent:
     def toolbox(self) -> Dict[str, Tool]:
         """Get the toolbox currently available to the agent"""
         return self._toolbox
-    
+
     def show_logs(self):
-        self.log.info('\n'.join(self.logs))
+        self.log.info("\n".join(self.logs))
 
     def write_inner_memory_from_logs(self) -> List[Dict[str, str]]:
         """
@@ -264,11 +267,7 @@ class Agent:
         }
         memory = [prompt_message, task_message]
         for step_log in self.logs[1:]:
-            try:
-                thought_message = {"role": MessageRole.ASSISTANT, "content": step_log["llm_output"] + "\n"}
-            except:
-                self.log.error(f"Error in reading the llm_output from the logs:", step_log.keys())
-                self.log.error(self.logs)
+            thought_message = {"role": MessageRole.ASSISTANT, "content": step_log["llm_output"] + "\n"}
             memory.append(thought_message)
 
             if "error" in step_log:
@@ -347,13 +346,13 @@ class CodeAgent(Agent):
     """
 
     def __init__(
-            self,
-            tools: List[Tool],
-            llm_engine: Callable = HfEngine(),
-            system_prompt: str = DEFAULT_CODE_SYSTEM_PROMPT,
-            tool_description_template: str=None,
-            **kwargs
-        ):
+        self,
+        tools: List[Tool],
+        llm_engine: Callable = HfEngine(),
+        system_prompt: str = DEFAULT_CODE_SYSTEM_PROMPT,
+        tool_description_template: str = None,
+        **kwargs,
+    ):
         super().__init__(
             tools=tools,
             llm_engine=llm_engine,
@@ -377,7 +376,7 @@ class CodeAgent(Agent):
         )
         return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
 
-    def parse_code_blob(self, result: str)-> str:
+    def parse_code_blob(self, result: str) -> str:
         """
         Override this method if you want to change the way the code is
         cleaned in the `run` method.
@@ -407,7 +406,7 @@ class CodeAgent(Agent):
         # Run LLM
         self.state = kwargs.copy()
         self.system_prompt = add_additional_args_if_needed(self.system_prompt, self.state)
-    
+
         prompt_message = {"role": MessageRole.SYSTEM, "content": self.system_prompt}
         task_message = {
             "role": MessageRole.USER,
@@ -440,7 +439,7 @@ class CodeAgent(Agent):
             self.log.info(code_action)
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
             output = self.python_evaluator(code_action, available_tools, state=self.state)
-            self.log.info(self.state['print_outputs'])
+            self.log.info(self.state["print_outputs"])
             return output
         except Exception as e:
             error_msg = f"Error in execution: {e}. Be sure to provide correct code."
@@ -456,13 +455,13 @@ class ReactAgent(Agent):
     """
 
     def __init__(
-            self,
-            tools: List[Tool],
-            llm_engine: Callable = HfEngine(),
-            system_prompt: str = DEFAULT_REACT_SYSTEM_PROMPT,
-            tool_description_template: str=None,
-            **kwargs
-        ):
+        self,
+        tools: List[Tool],
+        llm_engine: Callable = HfEngine(),
+        system_prompt: str = DEFAULT_REACT_SYSTEM_PROMPT,
+        tool_description_template: str = None,
+        **kwargs,
+    ):
         super().__init__(
             tools=tools,
             llm_engine=llm_engine,
@@ -506,7 +505,9 @@ class ReactAgent(Agent):
         """
 
         self.logs = []
-        self.system_prompt = format_prompt_with_tools(self._toolbox, self.system_prompt_template, self.tool_description_template)
+        self.system_prompt = format_prompt_with_tools(
+            self._toolbox, self.system_prompt_template, self.tool_description_template
+        )
         self.state = kwargs.copy()
         self.system_prompt = add_additional_args_if_needed(self.system_prompt, self.state)
 
@@ -532,15 +533,23 @@ class ReactAgent(Agent):
             self.logs.append({"error": AgentMaxIterationsError(error_message)})
             self.log.error(error_message)
 
-            self.prompt = [{
-                "role": MessageRole.SYSTEM,
-                "content": "An agent tried to answer a user query but it failed to do so. You shall provide an answer instead. Here is the agent's memory:"
-            }]
+            self.prompt = [
+                {
+                    "role": MessageRole.SYSTEM,
+                    "content": "An agent tried to answer a user query but it failed to do so. You shall provide an answer instead. Here is the agent's memory:",
+                }
+            ]
             self.prompt += self.agent_memory[1:].copy()
-            self.prompt += [{"role": MessageRole.USER, "content": f"Based on the above, please provide an answer to the following request:\n{task}"}]
+            self.prompt += [
+                {
+                    "role": MessageRole.USER,
+                    "content": f"Based on the above, please provide an answer to the following request:\n{task}",
+                }
+            ]
             final_answer = self.llm_engine(self.prompt, stop=["Observation:"])
 
         return final_answer
+
 
 class ReactJSONAgent(ReactAgent):
     """
@@ -550,13 +559,13 @@ class ReactJSONAgent(ReactAgent):
     """
 
     def __init__(
-            self,
-            tools: List[Tool],
-            llm_engine: Callable = HfEngine(),
-            system_prompt: str = DEFAULT_REACT_SYSTEM_PROMPT,
-            tool_description_template: str=None,
-            **kwargs
-        ):
+        self,
+        tools: List[Tool],
+        llm_engine: Callable = HfEngine(),
+        system_prompt: str = DEFAULT_REACT_SYSTEM_PROMPT,
+        tool_description_template: str = None,
+        **kwargs,
+    ):
         super().__init__(
             tools=tools,
             llm_engine=llm_engine,
@@ -641,8 +650,8 @@ class ReactCodeAgent(ReactAgent):
         tools: List[Tool],
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
-        tool_description_template: str=None,
-        **kwargs
+        tool_description_template: str = None,
+        **kwargs,
     ):
         super().__init__(
             tools=tools,
@@ -692,11 +701,11 @@ class ReactCodeAgent(ReactAgent):
         try:
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
             result = self.python_evaluator(code_action, available_tools, state=self.state)
-            information = self.state['print_outputs']
+            information = self.state["print_outputs"]
             self.log.info(information)
             self.logs[-1]["observation"] = information
         except Exception as e:
-            error_msg = f"Failed while trying to execute the code below:\n{code_action}\Failed due to the following error:\n{str(e)}\nMake sure to provide correct code."
+            error_msg = f"Failed while trying to execute the code below:\n{code_action}\\Failed due to the following error:\n{str(e)}\nMake sure to provide correct code."
             raise AgentExecutionError(error_msg)
         for line in code_action.split("\n"):
             if line[: len("final_answer")] == "final_answer":

@@ -16,14 +16,13 @@
 import unittest
 
 from transformers import load_tool
-from transformers.agents.agent_types import AGENT_TYPE_MAPPING, INSTANCE_TYPE_MAPPING
 
-from .test_tools_common import ToolTesterMixin, output_type
+from .test_tools_common import ToolTesterMixin
 
 
 class FinalAnswerToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
-        self.inputs = {"answer": 'Final answer'}
+        self.inputs = {"answer": "Final answer"}
         self.tool = load_tool("final_answer")
         self.tool.setup()
 
@@ -32,5 +31,5 @@ class FinalAnswerToolTester(unittest.TestCase, ToolTesterMixin):
         self.assertEqual(result, "Final answer")
 
     def test_exact_match_kwarg(self):
-        result = self.tool(answer=self.inputs['answer'])
+        result = self.tool(answer=self.inputs["answer"])
         self.assertEqual(result, "Final answer")

@@ -18,16 +18,19 @@ import ast
 import difflib
 from collections.abc import Mapping
 from typing import Any, Callable, Dict, Optional
-from copy import copy
+
 
 class InterpretorError(ValueError):
     """
     An error raised when the interpretor cannot evaluate a Python expression, due to syntax error or unsupported
     operations.
     """
+
     pass
 
-LIST_SAFE_MODULES = ['random','math', 'time', 'queue', 'itertools', 're', 'stat']
+
+LIST_SAFE_MODULES = ["random", "math", "time", "queue", "itertools", "re", "stat"]
+
 
 def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, state=None):
     """
@@ -54,7 +57,7 @@ def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, s
     if state is None:
         state = {}
     result = None
-    state['print_outputs'] = ''
+    state["print_outputs"] = ""
     for idx, node in enumerate(expression.body):
         try:
             line_result = evaluate_ast(node, state, tools)
@@ -126,6 +129,7 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
     elif isinstance(expression, ast.Return):
         return evaluate_ast(expression.value, state, tools)
     elif isinstance(expression, ast.FunctionDef):
+
         def create_function(func_def, state, tools):
             def new_func(*args):
                 new_state = state.copy()
@@ -135,7 +139,9 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
                 for node in func_def.body:
                     result = evaluate_ast(node, new_state, tools)
                 return result
+
             return new_func
+
         tools[expression.name] = create_function(expression, state, tools)
         return None
     elif isinstance(expression, ast.Dict):
@@ -178,9 +184,11 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
         obj = evaluate_ast(expression.value, state, tools)
         return getattr(obj, expression.attr)
     elif isinstance(expression, ast.Slice):
-        return slice(evaluate_ast(expression.lower, state, tools) if expression.lower is not None else None,
-                 evaluate_ast(expression.upper, state, tools) if expression.upper is not None else None,
-                 evaluate_ast(expression.step, state, tools) if expression.step is not None else None)
+        return slice(
+            evaluate_ast(expression.lower, state, tools) if expression.lower is not None else None,
+            evaluate_ast(expression.upper, state, tools) if expression.upper is not None else None,
+            evaluate_ast(expression.step, state, tools) if expression.step is not None else None,
+        )
     elif isinstance(expression, ast.ListComp):
         result = []
         vars = {}
@@ -326,11 +334,13 @@ def evaluate_call(call, state, tools):
 
         # store logs of print statements
         if func_name == "print":
-            state['print_outputs'] += '\n' + output
-        
+            state["print_outputs"] += "\n" + output
+
         return output
     else:
-        raise InterpretorError(f"It is not permitted to evaluate other functions than the provided tools (tried to execute {call.func}).")
+        raise InterpretorError(
+            f"It is not permitted to evaluate other functions than the provided tools (tried to execute {call.func})."
+        )
 
 
 def evaluate_subscript(subscript, state, tools):
@@ -349,6 +359,7 @@ def evaluate_subscript(subscript, state, tools):
         if len(close_matches) > 0:
             return value[close_matches[0]]
     raise InterpretorError(f"Could not index {value} with '{index}'.")
+
 
 def evaluate_name(name, state, tools):
     if name.id in state:

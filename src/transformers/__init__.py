@@ -54,6 +54,22 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Base objects, independent of any specific backend
 _import_structure = {
+    "agents": [
+        "Agent",
+        "CodeAgent",
+        "DocumentQuestionAnsweringTool",
+        "FinalAnswerTool",
+        "HfEngine",
+        "ImageQuestionAnsweringTool",
+        "PipelineTool",
+        "ReactAgent",
+        "ReactCodeAgent",
+        "ReactJSONAgent",
+        "Tool",
+        "Toolbox",
+        "launch_gradio_demo",
+        "load_tool",
+    ],
     "audio_utils": [],
     "benchmark": [],
     "commands": [],
@@ -129,8 +145,8 @@ _import_structure = {
         "load_tf2_model_in_pytorch_model",
         "load_tf2_weights_in_pytorch_model",
     ],
-    "models": [],
     # Models
+    "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1049,22 +1065,6 @@ _import_structure = {
         "PreTrainedTokenizerBase",
         "SpecialTokensMixin",
         "TokenSpan",
-    ],
-    "agents": [
-        "Agent",
-        "ReactAgent",
-        "ReactJSONAgent",
-        "ReactCodeAgent",
-        "CodeAgent",
-        "HfEngine",
-        "PipelineTool",
-        "Tool",
-        "Toolbox",
-        "launch_gradio_demo",
-        "load_tool",
-        "FinalAnswerTool",
-        "DocumentQuestionAnsweringTool",
-        "ImageQuestionAnsweringTool",
     ],
     "trainer_callback": [
         "DefaultFlowCallback",
@@ -5043,6 +5043,19 @@ else:
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # Configuration
+    # Agents
+    from .agents import (
+        Agent,
+        CodeAgent,
+        HfEngine,
+        PipelineTool,
+        ReactAgent,
+        ReactCodeAgent,
+        ReactJSONAgent,
+        Tool,
+        launch_gradio_demo,
+        load_tool,
+    )
     from .configuration_utils import PretrainedConfig
 
     # Data
@@ -6012,20 +6025,6 @@ if TYPE_CHECKING:
         PreTrainedTokenizerBase,
         SpecialTokensMixin,
         TokenSpan,
-    )
-
-    # Agents
-    from .agents import (
-        Agent,
-        CodeAgent,
-        HfEngine,
-        PipelineTool,
-        ReactAgent,
-        ReactCodeAgent,
-        ReactJSONAgent,
-        Tool,
-        launch_gradio_demo,
-        load_tool,
     )
 
     # Trainer

@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
-from typing import Union
+
 import numpy as np
 import torch
 
@@ -31,14 +31,12 @@ if is_vision_available():
 
 class DocumentQuestionAnsweringTool(PipelineTool):
     default_checkpoint = "naver-clova-ix/donut-base-finetuned-docvqa"
-    description = (
-        "This is a tool that answers a question about an document (pdf). It returns a text that contains the answer to the question."
-    )
+    description = "This is a tool that answers a question about an document (pdf). It returns a text that contains the answer to the question."
     name = "document_qa"
     pre_processor_class = AutoProcessor
     model_class = VisionEncoderDecoderModel
 
-    inputs= {
+    inputs = {
         "document": {
             "type": "image",
             "description": "The image containing the information. Can be a PIL Image or a string path to the image.",
@@ -60,7 +58,7 @@ class DocumentQuestionAnsweringTool(PipelineTool):
             prompt, add_special_tokens=False, return_tensors="pt"
         ).input_ids
         if isinstance(document, str):
-            img = Image.open(document).convert('RGB')
+            img = Image.open(document).convert("RGB")
             img_array = np.array(img).transpose(2, 0, 1)
             document = torch.tensor(img_array)
         pixel_values = self.pre_processor(document, return_tensors="pt").pixel_values

@@ -25,9 +25,10 @@ from huggingface_hub import hf_hub_download, list_spaces
 
 from .. import requires_backends
 from ..utils import is_offline_mode
+from ..utils.import_utils import is_numexpr_available
 from .python_interpreter import evaluate_python_code
 from .tools import TASK_MAPPING, TOOL_CONFIG_FILE, Tool
-from ..utils.import_utils import is_numexpr_available
+
 
 if is_numexpr_available():
     import numexpr
@@ -105,9 +106,7 @@ def get_remote_tools(logger, organization="huggingface-tools"):
     tools = {}
     for space_info in spaces:
         repo_id = space_info.id
-        resolved_config_file = hf_hub_download(
-            repo_id, TOOL_CONFIG_FILE, repo_type="space"
-        )
+        resolved_config_file = hf_hub_download(repo_id, TOOL_CONFIG_FILE, repo_type="space")
         with open(resolved_config_file, encoding="utf-8") as reader:
             config = json.load(reader)
         task = repo_id.split("/")[-1]
@@ -206,9 +205,7 @@ class PythonEvaluatorTool(Tool):
 class FinalAnswerTool(Tool):
     name = "final_answer"
     description = "Provides a final answer to the given problem"
-    inputs = {
-        "answer": {"type": "text", "description": "The final answer to the problem"}
-    }
+    inputs = {"answer": {"type": "text", "description": "The final answer to the problem"}}
     output_type = "text"
 
     def forward(self, *args, **kwargs):

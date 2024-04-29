@@ -32,7 +32,6 @@ from ..dynamic_module_utils import (
     get_class_from_dynamic_module,
     get_imports,
 )
-from ..image_utils import is_pil_image
 from ..models.auto import AutoProcessor
 from ..utils import (
     CONFIG_NAME,

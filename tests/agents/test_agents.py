@@ -16,15 +16,15 @@ import os
 import tempfile
 import unittest
 import uuid
-import pytest
 
-from transformers.agents.agents import CodeAgent, ReactJSONAgent, ReactCodeAgent, AgentMaxIterationsError
+from transformers.agents.agents import AgentMaxIterationsError, CodeAgent, ReactCodeAgent, ReactJSONAgent
 from transformers.agents.default_tools import CalculatorTool
 
 
 def get_new_path(suffix="") -> str:
     directory = tempfile.mkdtemp()
     return os.path.join(directory, str(uuid.uuid4()) + suffix)
+
 
 def fake_react_json_llm(messages, stop=None) -> str:
     prompt = str(messages)
@@ -80,14 +80,17 @@ print(result)
 ```
 """
 
+
 class AgentTests(unittest.TestCase):
     def test_fake_react_json_agent(self):
         agent = ReactJSONAgent(tools=[CalculatorTool()], llm_engine=fake_react_json_llm)
         output = agent.run("What is 2 multiplied by 3.6452?")
         assert output == "7.2904"
-        assert agent.logs[0]['task'] == "What is 2 multiplied by 3.6452?"
-        assert agent.logs[1]['observation'] == "7.2904"
-        assert agent.logs[2]['llm_output'] == """
+        assert agent.logs[0]["task"] == "What is 2 multiplied by 3.6452?"
+        assert agent.logs[1]["observation"] == "7.2904"
+        assert (
+            agent.logs[2]["llm_output"]
+            == """
 Thought: I can now answer the initial question
 Action:
 {
@@ -95,18 +98,23 @@ Action:
     "action_input": {"answer": "7.2904"}
 }
 """
+        )
+
     def test_fake_react_code_agent(self):
         agent = ReactCodeAgent(tools=[CalculatorTool()], llm_engine=fake_react_code_llm)
         output = agent.run("What is 2 multiplied by 3.6452?")
-        assert output == '7.2904'
-        assert agent.logs[0]['task'] == "What is 2 multiplied by 3.6452?"
-        assert agent.logs[1]['observation'] == '\n12.511648652635412'
-        assert agent.logs[2]['tool_call'] == {'tool_arguments': 'final_answer(7.2904)', 'tool_name': 'code interpreter'}
+        assert output == "7.2904"
+        assert agent.logs[0]["task"] == "What is 2 multiplied by 3.6452?"
+        assert agent.logs[1]["observation"] == "\n12.511648652635412"
+        assert agent.logs[2]["tool_call"] == {
+            "tool_arguments": "final_answer(7.2904)",
+            "tool_name": "code interpreter",
+        }
 
     def test_fake_code_agent(self):
         agent = CodeAgent(tools=[CalculatorTool()], llm_engine=fake_code_llm_oneshot)
         output = agent.run("What is 2 multiplied by 3.6452?")
-        assert output == '7.2904'
+        assert output == "7.2904"
 
     def test_setup_agent_with_empty_toolbox(self):
         ReactJSONAgent(llm_engine=fake_react_json_llm, tools=[])
@@ -114,9 +122,9 @@ Action:
     def test_react_fails_max_iterations(self):
         agent = ReactCodeAgent(
             tools=[CalculatorTool()],
-            llm_engine=fake_code_llm_oneshot, # use this callable because it never ends
+            llm_engine=fake_code_llm_oneshot,  # use this callable because it never ends
             max_iterations=5,
-        ) 
+        )
         agent.run("What is 2 multiplied by 3.6452?")
         assert len(agent.logs) == 7
-        assert type(agent.logs[-1]['error']) == AgentMaxIterationsError
+        assert type(agent.logs[-1]["error"]) == AgentMaxIterationsError

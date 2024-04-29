@@ -12,14 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import unittest
 from pathlib import Path
-from typing import List, Dict, Union
+from typing import Dict, Union
+
 import numpy as np
 
 from transformers import is_torch_available, is_vision_available
+from transformers.agents.agent_types import AGENT_TYPE_MAPPING, AgentAudio, AgentImage, AgentText
 from transformers.testing_utils import get_tests_dir, is_tool_test
-from transformers.agents.agent_types import AGENT_TYPE_MAPPING, AgentAudio, AgentImage, AgentText, INSTANCE_TYPE_MAPPING, AgentType
+
 
 if is_torch_available():
     import torch
@@ -28,21 +29,21 @@ if is_vision_available():
     from PIL import Image
 
 
-AUTHORIZED_TYPES = ['text', 'audio', 'image']
+AUTHORIZED_TYPES = ["text", "audio", "image"]
 
 
 def create_inputs(tool_inputs: Dict[str, Dict[Union[str, type], str]]):
     inputs = {}
 
     for input_name, input_desc in tool_inputs.items():
-        input_type = input_desc['type']
+        input_type = input_desc["type"]
 
         if input_type == "text":
             inputs[input_name] = "Text input"
         elif input_type == "image":
-            inputs[input_name] = (
-                Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png").resize((512, 512))
-            )
+            inputs[input_name] = Image.open(
+                Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png"
+            ).resize((512, 512))
         elif input_type == "audio":
             inputs[input_name] = np.ones(3000).tobytes()
         else:
@@ -61,6 +62,7 @@ def output_type(output):
     else:
         raise ValueError(f"Invalid output: {output}")
 
+
 @is_tool_test
 class ToolTesterMixin:
     def test_inputs_output(self):
@@ -71,10 +73,10 @@ class ToolTesterMixin:
         self.assertTrue(isinstance(inputs, dict))
 
         for _, input_spec in inputs.items():
-            self.assertTrue('type' in input_spec)
-            self.assertTrue('description' in input_spec)
-            self.assertTrue(input_spec['type'] in AUTHORIZED_TYPES)
-            self.assertTrue(isinstance(input_spec['description'], str))
+            self.assertTrue("type" in input_spec)
+            self.assertTrue("description" in input_spec)
+            self.assertTrue(input_spec["type"] in AUTHORIZED_TYPES)
+            self.assertTrue(isinstance(input_spec["description"], str))
 
         output_type = self.tool.output_type
         self.assertTrue(output_type in AUTHORIZED_TYPES)
@@ -95,7 +97,7 @@ class ToolTesterMixin:
         inputs = create_inputs(self.tool.inputs)
         _inputs = []
         for _input, expected_input in zip(inputs, self.tool.inputs.values()):
-            input_type = expected_input['type']
+            input_type = expected_input["type"]
             _inputs.append(AGENT_TYPE_MAPPING[input_type](_input))
 
         output_type = AGENT_TYPE_MAPPING[self.tool.output_type]

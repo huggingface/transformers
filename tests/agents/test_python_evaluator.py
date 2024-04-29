@@ -16,9 +16,9 @@
 import unittest
 
 from transformers import load_tool
-from transformers.agents.agent_types import AGENT_TYPE_MAPPING, INSTANCE_TYPE_MAPPING
+from transformers.agents.agent_types import AGENT_TYPE_MAPPING
 
-from .test_tools_common import ToolTesterMixin, output_type
+from .test_tools_common import ToolTesterMixin
 
 
 class PythonEvaluatorToolTester(unittest.TestCase, ToolTesterMixin):
@@ -35,17 +35,17 @@ class PythonEvaluatorToolTester(unittest.TestCase, ToolTesterMixin):
         self.assertEqual(result, "4.0")
 
     def test_agent_type_output(self):
-        inputs = ['2 * 2']
+        inputs = ["2 * 2"]
         output = self.tool(*inputs)
         output_type = AGENT_TYPE_MAPPING[self.tool.output_type]
         self.assertTrue(isinstance(output, output_type))
 
     def test_agent_types_inputs(self):
-        inputs = ['2 * 2']
+        inputs = ["2 * 2"]
         _inputs = []
 
         for _input, expected_input in zip(inputs, self.tool.inputs.values()):
-            input_type = expected_input['type']
+            input_type = expected_input["type"]
             if isinstance(input_type, list):
                 _inputs.append([AGENT_TYPE_MAPPING[_input_type](_input) for _input_type in input_type])
             else:
