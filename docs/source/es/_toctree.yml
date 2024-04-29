@@ -96,6 +96,8 @@
     title: Mecanismos de atención
   - local: pad_truncation
     title: Relleno y truncamiento
+    local: peft
+    title: Carga los adaptadores con 🤗 PEFT
   - local: bertology
     title: BERTología
   - local: perplexity
