@@ -6099,6 +6099,7 @@ if TYPE_CHECKING:
         EetqConfig,
         GPTQConfig,
         QuantoConfig,
+        HqqConfig,
     )
 
     try:
