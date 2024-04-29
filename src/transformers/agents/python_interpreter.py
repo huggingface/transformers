@@ -27,6 +27,7 @@ class InterpretorError(ValueError):
     """
     pass
 
+LIST_SAFE_MODULES = ['random','math', 'time', 'queue', 'itertools', 're', 'stat']
 
 def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, state=None):
     """
@@ -188,6 +189,23 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
                     elem = evaluate_ast(expression.elt, {**state, **vars}, tools)
                     result.append(elem)
         return result
+    elif isinstance(expression, ast.Import):
+        for alias in expression.names:
+            if alias.name in LIST_SAFE_MODULES:
+                module = __import__(alias.name)
+                state[alias.asname or alias.name] = module
+            else:
+                raise InterpretorError(f"Import of {alias.name} is not allowed.")
+        return None
+
+    elif isinstance(expression, ast.ImportFrom):
+        if expression.module in LIST_SAFE_MODULES:
+            module = __import__(expression.module)
+            for alias in expression.names:
+                state[alias.asname or alias.name] = getattr(module, alias.name)
+        else:
+            raise InterpretorError(f"Import from {expression.module} is not allowed.")
+        return None
     else:
         # For now we refuse anything else. Let's add things as we need them.
         raise InterpretorError(f"{expression.__class__.__name__} is not supported.")
@@ -289,11 +307,14 @@ def evaluate_call(call, state, tools):
     elif isinstance(call.func, ast.Name):
         func_name = call.func.id
 
-        if func_name not in tools:
+        if func_name in state:
+            func = state[func_name]
+        elif func_name in tools:
+            func = tools[func_name]
+        else:
             raise InterpretorError(
-                f"It is not permitted to evaluate other functions than the provided tools (tried to execute {call.func.id})."
+                f"It is not permitted to evaluate other functions than the provided tools or imported functions (tried to execute {call.func.id})."
             )
-        func = tools[func_name]
         # Todo deal with args
         args = [evaluate_ast(arg, state, tools) for arg in call.args]
         kwargs = {keyword.arg: evaluate_ast(keyword.value, state, tools) for keyword in call.keywords}

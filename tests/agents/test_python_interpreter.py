@@ -179,3 +179,12 @@ for block in text_block:
         """
         result = evaluate_python_code(code, {"len": len, "range":range}, state={})
         assert result == 'THESEAGULL'
+
+    def test_imports(self):
+        code = "import math\nmath.sqrt(4)"
+        result = evaluate_python_code(code, {}, state={})
+        assert result == 2.0
+
+        code = "from random import choice, seed\nseed(12)\nchoice(['win', 'lose', 'draw'])"
+        result = evaluate_python_code(code, {}, state={})
+        assert result == "lose"

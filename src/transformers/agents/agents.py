@@ -264,7 +264,11 @@ class Agent:
         }
         memory = [prompt_message, task_message]
         for step_log in self.logs[1:]:
-            thought_message = {"role": MessageRole.ASSISTANT, "content": step_log["llm_output"] + "\n"}
+            try:
+                thought_message = {"role": MessageRole.ASSISTANT, "content": step_log["llm_output"] + "\n"}
+            except:
+                self.log.error(f"Error in reading the llm_output from the logs:", step_log.keys())
+                self.log.error(self.logs)
             memory.append(thought_message)
 
             if "error" in step_log:
@@ -506,10 +510,11 @@ class ReactAgent(Agent):
         self.state = kwargs.copy()
         self.system_prompt = add_additional_args_if_needed(self.system_prompt, self.state)
 
-        self.log.info("=====New task=====")
+        self.log.warn("=====New task=====")
+        self.log.warn(task)
         self.log.debug("System prompt is as follows:")
         self.log.debug(self.system_prompt)
-        self.logs.append({"task": task, "system_prompt": self.system_prompt})
+        self.logs.append({"system_prompt": self.system_prompt, "task": task})
 
         final_answer = None
         iteration = 0
