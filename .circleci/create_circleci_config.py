@@ -105,8 +105,8 @@ class CircleCIJob:
             {"attach_workspace": {"at": "~/transformers/test_preparation"}},
         ]
         steps.extend([{"run": l} for l in self.install_steps])
-        steps.append({"run": {"name": "Show installed libraries and their versions", "command": """du -h -d 1 "$(pip -V | cut -d ' ' -f 4 | sed 's/pip//g')" | grep -vE "dist-info|_distutils_hack|__pycache__" | sort -h | tail -10 | tee installed.txt"""}})
-        steps.append({"run":{"name":"Show biggest libraries","command":"""dpkg-query --show --showformat='${Installed-Size}\t${Package}\n' | sort -rh | head -25 | sort -h | awk '{ printf("%.5f GB %s\\n",$1/1024/1024, $2)}'"""}})
+        steps.append({"run": {"name": "Show installed libraries and their versions", "command": """du -h -d 1 "$(pip -V | cut -d ' ' -f 4 | sed 's/pip//g')" | grep -vE "dist-info|_distutils_hack|__pycache__" | sort -h | tail -10 | tee installed.txt || true"""}})
+        steps.append({"run":{"name":"Show biggest libraries","command":"""dpkg-query --show --showformat='${Installed-Size}\t${Package}\n' | sort -rh | head -25 | sort -h | awk '{ printf("%.5f GB %s\\n",$1/1024/1024, $2)}' || true"""}})
         steps.append({"store_artifacts": {"path": "~/transformers/installed.txt"}})
 
         all_options = {**COMMON_PYTEST_OPTIONS, **self.pytest_options}
