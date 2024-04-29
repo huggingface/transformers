@@ -345,8 +345,6 @@ extras["all"] = (
     + extras["video"]
 )
 
-# "docs" needs "all" to resolve all the references
-extras["docs"] = extras["all"] + extras["docs_specific"]
 
 extras["dev-torch"] = (
     extras["testing"]
@@ -361,7 +359,6 @@ extras["dev-torch"] = (
     + extras["codecarbon"]
     + extras["quality"]
     + extras["ja"]
-    + extras["docs_specific"]
     + extras["sklearn"]
     + extras["modelcreation"]
     + extras["onnxruntime"]
@@ -373,7 +370,6 @@ extras["dev-tensorflow"] = (
     + extras["tokenizers"]
     + extras["vision"]
     + extras["quality"]
-    + extras["docs_specific"]
     + extras["sklearn"]
     + extras["modelcreation"]
     + extras["onnx"]
@@ -384,7 +380,6 @@ extras["dev"] = (
     + extras["testing"]
     + extras["quality"]
     + extras["ja"]
-    + extras["docs_specific"]
     + extras["sklearn"]
     + extras["modelcreation"]
 )
