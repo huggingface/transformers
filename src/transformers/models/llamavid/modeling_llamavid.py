@@ -373,6 +373,7 @@ class LLaMAVIDLlavaEncoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
+
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -1587,62 +1588,61 @@ class LLaMAVIDLlavaForConditionalGeneration(LLaMAVIDLlavaPreTrainedModel):
 
         long_video, image_counts = False, 1
 
-        if pixel_values is not None:
-            # check if the pixel_values is video. If so, count the frames and flatten the pixel_values
-            # across the batch size and image count
-            if pixel_values.ndim == 5:
-                batch_size, image_counts, channels, height, width = pixel_values.shape
+      
+        # check if the pixel_values is video. If so, count the frames and flatten the pixel_values
+        # across the batch size and image count
+        if pixel_values.ndim == 5:
+            batch_size, image_counts, channels, height, width = pixel_values.shape
 
-                if image_counts > 1000:
-                    long_video = True
+            if image_counts > 1000:
+                long_video = True
 
-                if not long_video:
-                    pixel_values = pixel_values.reshape(batch_size * image_counts, channels, height, width)
-
-            # Encode images and short videos (frames  < 1000 )  using vit
             if not long_video:
-                vision_outputs = self.vision_tower(
-                    pixel_values=pixel_values,
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
-                    return_dict=return_dict,
-                )
-                image_features = vision_outputs.last_hidden_state
-            else:
-                image_features = pixel_values
+                pixel_values = pixel_values.reshape(batch_size * image_counts, channels, height, width)
 
-            # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
-            image_attention_mask = torch.ones(
-                image_features.size()[:-1], dtype=torch.long, device=image_features.device
-            )
-
-            query_tokens = self.query_tokens.expand(image_features.shape[0], -1, -1)
-            query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_features.device)
-
-            if qformer_attention_mask is None:
-                qformer_attention_mask = torch.ones_like(qformer_text_encoding)
-
-            # if video expand the query and the attention mask to the length of th frame count
-            if image_counts > 1:
-                qformer_attention_mask = qformer_attention_mask.expand(image_features.shape[0], -1)
-                qformer_text_encoding = qformer_text_encoding.expand(image_features.shape[0], -1)
-                attention_mask = attention_mask.expand(image_features.shape[0], -1)
-
-            qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
-
-            query_outputs = self.qformer(
-                input_ids=qformer_text_encoding,
-                attention_mask=qformer_attention_mask,
-                query_embeds=query_tokens,
-                encoder_hidden_states=image_features,
-                encoder_attention_mask=image_attention_mask,
+        # Encode images and short videos (frames  < 1000 )  using vit
+        if not long_video:
+            vision_outputs = self.vision_tower(
+                pixel_values=pixel_values,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-            query_output = query_outputs[0][:, : query_tokens.size(1), :]
+            image_features = vision_outputs.last_hidden_state
         else:
-            return None, None, 0, False
+            image_features = pixel_values
+
+        # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
+        image_attention_mask = torch.ones(
+            image_features.size()[:-1], dtype=torch.long, device=image_features.device
+        )
+
+        query_tokens = self.query_tokens.expand(image_features.shape[0], -1, -1)
+        query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_features.device)
+
+        if qformer_attention_mask is None:
+            qformer_attention_mask = torch.ones_like(qformer_text_encoding)
+
+        # if video expand the query and the attention mask to the length of th frame count
+        if image_counts > 1:
+            qformer_attention_mask = qformer_attention_mask.expand(image_features.shape[0], -1)
+            qformer_text_encoding = qformer_text_encoding.expand(image_features.shape[0], -1)
+            attention_mask = attention_mask.expand(image_features.shape[0], -1)
+
+        qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
+
+        query_outputs = self.qformer(
+            input_ids=qformer_text_encoding,
+            attention_mask=qformer_attention_mask,
+            query_embeds=query_tokens,
+            encoder_hidden_states=image_features,
+            encoder_attention_mask=image_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        query_output = query_outputs[0][:, : query_tokens.size(1), :]
+
 
         return query_output, vision_outputs.hidden_states, attention_mask, image_counts, long_video
 

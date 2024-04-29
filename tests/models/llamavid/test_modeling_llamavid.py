@@ -97,7 +97,7 @@ class LLaMAVIDVisionText2TextModelTester:
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
-         qformer_config={ # fix dummy
+        qformer_config={  # fix dummy
             "image_size": 30,
             "patch_size": 2,
             "num_channels": 3,
@@ -138,7 +138,7 @@ class LLaMAVIDVisionText2TextModelTester:
         return LLaMAVIDLlavaConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
-	        qformer_config =self.qformer_config,
+            qformer_config=self.qformer_config,
             ignore_index=self.ignore_index,
             image_token_index=self.image_token_index,
             projector_hidden_act=self.projector_hidden_act,
@@ -181,7 +181,7 @@ class LLaMAVIDForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestC
     """
 
     all_model_classes = (LLaMAVIDLlavaForConditionalGeneration,) if is_torch_available() else ()
-   
+
     test_pruning = False
     test_head_masking = False
 
@@ -386,12 +386,14 @@ class LLaMAVIDLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("Nilesh360/llama-vid-7b-full-336", load_in_4bit=True)
+        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained(
+            "Nilesh360/llama-vid-7b-full-336", load_in_4bit=True
+        )
 
         prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"
         image_file = "https://huggingface.co/datasets/huggingface/cats-image/blob/main/cats_image.jpeg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(prompt, images =raw_image, return_tensors="pt")
+        inputs = self.processor(prompt, images=raw_image, return_tensors="pt")
 
         EXPECTED_INPUT_IDS = torch.tensor([[ 1, 32000, 29871,    13, 11889, 29901,  1724, 29915, 29879,   278, 2793,   310,   278,  1967, 29973,    13, 22933,  9047, 13566, 29901]])  # fmt: skip
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
@@ -410,9 +412,11 @@ class LLaMAVIDLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "Nilesh360/llama-vid-7b-full-336"
 
-        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("Nilesh360/llama-vid-7b-full-336", load_in_4bit=True)
+        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained(
+            "Nilesh360/llama-vid-7b-full-336", load_in_4bit=True
+        )
         processor = LLaMAVIDLlavaProcessor.from_pretrained(model_id)
-	    #todo- add the download script and the expected outputs
+        # todo- add the download script and the expected outputs
         prompt = prompt = "USER: <image>Describe the video in details. ASSISTANT:"
         image_file = "https://huggingface.co/datasets/nielsr/video-demo/blob/main/eating_spaghetti.mp4"
         video_input = Image.open(requests.get(image_file, stream=True).raw)
@@ -432,7 +436,9 @@ class LLaMAVIDLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "Nilesh360/llama-vid-7b-full-336"
 
-        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("Nilesh360/llama-vid-7b-full-336", load_in_4bit=True)
+        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained(
+            "Nilesh360/llama-vid-7b-full-336", load_in_4bit=True
+        )
         processor = LLaMAVIDLlavaProcessor.from_pretrained(model_id)
 
         prompts = [
@@ -454,7 +460,9 @@ class LLaMAVIDLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("Nilesh360/llama-vid-7b-full-336", load_in_4bit=True)
+        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained(
+            "Nilesh360/llama-vid-7b-full-336", load_in_4bit=True
+        )
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
@@ -501,7 +509,9 @@ class LLaMAVIDLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_torch
     @require_vision
     def test_batched_generation(self):
-        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("Nilesh360/llama-vid-7b-full-336").to(torch_device)
+        model = LLaMAVIDLlavaForConditionalGeneration.from_pretrained("Nilesh360/llama-vid-7b-full-336").to(
+            torch_device
+        )
 
         processor = LLaMAVIDLlavaProcessor.from_pretrained("Nilesh360/llama-vid-7b-full-336")
 
@@ -591,5 +601,3 @@ class LLaMAVIDLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             labels=input_ids,
         ).loss
         loss.backward()
-
-   
