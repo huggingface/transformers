@@ -6,12 +6,10 @@ RUN apt-get install -y g++ cmake
 ENV VIRTUAL_ENV=/usr/local
 RUN pip --no-cache-dir install uv
 RUN uv venv
-RUN uv pip install --no-cache-dir -U pip setuptools accelerate
+RUN uv pip install --no-cache-dir -U pip setuptools accelerate soundfile
 RUN uv pip install --no-cache-dir "fsspec>=2023.5.0,<2023.10.0"
 RUN pip install --no-cache-dir 'torch' 'torchvision' 'torchaudio' --index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --no-cache-dir "transformers[sklearn,sentencepiece,vision,timm,testing]"
-
-# soundfile and librosa are also needed
 
 
 RUN pip uninstall -y transformers
