@@ -682,7 +682,6 @@ TASK_MAPPING = {
     "text-to-speech": "TextToSpeechTool",
     "translation": "TranslationTool",
     "calculator": "CalculatorTool",
-    "final_answer": "FinalAnswerTool",
     "python_evaluator": "PythonEvaluatorTool",
 }
 

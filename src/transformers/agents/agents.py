@@ -586,7 +586,7 @@ class ReactAgent(Agent):
 
         final_answer = None
         iteration = 0
-        while not final_answer and iteration < self.max_iterations:
+        while final_answer is None and iteration < self.max_iterations:
             try:
                 final_answer = self.step()
             except AgentError as e:
@@ -595,7 +595,8 @@ class ReactAgent(Agent):
             finally:
                 iteration += 1
 
-        if not final_answer and iteration == self.max_iterations:
+
+        if final_answer is None and iteration == self.max_iterations:
             error_message = "Reached max iterations."
             self.logs.append({"error": AgentMaxIterationsError(error_message)})
             self.logger.error(error_message)
@@ -788,6 +789,7 @@ class ReactCodeAgent(ReactAgent):
             raise AgentExecutionError(error_msg)
         for line in code_action.split("\n"):
             if line[: len("final_answer")] == "final_answer":
+                print("Final answer in step:", result, type(result))
                 self.logger.warning(result)
                 return result
         return None

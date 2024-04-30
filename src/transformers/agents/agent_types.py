@@ -214,7 +214,7 @@ AGENT_TYPE_MAPPING = {str: AgentText, "text": AgentText, "image": AgentImage, "a
 INSTANCE_TYPE_MAPPING = {str: AgentText}
 
 if is_vision_available():
-    INSTANCE_TYPE_MAPPING[PIL.Image] = AgentImage
+    INSTANCE_TYPE_MAPPING[PIL.Image.Image] = AgentImage
 
 
 def handle_agent_inputs(*args, **kwargs):

@@ -67,6 +67,7 @@ def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, s
             raise InterpretorError(msg)
         if line_result is not None:
             result = line_result
+            print(type(result))
 
     return result
 
@@ -399,6 +400,7 @@ def evaluate_call(call, state, tools):
         args = [evaluate_ast(arg, state, tools) for arg in call.args]
         kwargs = {keyword.arg: evaluate_ast(keyword.value, state, tools) for keyword in call.keywords}
         output = func(*args, **kwargs)
+        print("Function output type:", type(output))
 
         # store logs of print statements
         if func_name == "print":

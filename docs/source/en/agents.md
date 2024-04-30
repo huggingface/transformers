@@ -19,17 +19,6 @@ Large Language Models (LLMs) trained to perform [causal language modeling](./tas
 
 One approach to overcome this weakness is to create an *agent*, a program powered by an LLM. The agent is empowered by *tools* to help the agent perform an action.
 
-```python
-agent.run("Caption the following image", image=image)
-```
-
-```markdown
-| **Input**                                                                                                                   | **Output**                        |
-|-----------------------------------------------------------------------------------------------------------------------------|-----------------------------------|
-| <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/beaver.png" width=200> | A beaver is swimming in the water |
-```
-
----
 
 ```python
 agent.run("Read the following text out loud", text=text)
@@ -157,28 +146,26 @@ You also need a `tools` argument which accepts a list of `Tools`. You can provid
 Now you can create an agent, like `CodeAgent`, and run it. For convenience, we also provide the `HfEngine` class that uses `huggingface_hub.InferenceClient` under the hood.
 
 ```python
-from transformers import CodeAgent, HfEngine
+from transformers import ReactCodeAgent, HfEngine
 
 llm_engine = HfEngine(model="meta-llama/Meta-Llama-3-70B-Instruct")
+agent = ReactCodeAgent(tools=[], llm_engine=llm_engine, add_base_tools=True)
 
-agent = CodeAgent(llm_engine=llm_engine, tools=[], add_base_tools=True)
-
-agent.run("Please draw me a picture of rivers and lakes")
+agent.run("Could you translate this sentence from French and say it out loud: 'Où est la boulangerie la plus proche?'")
 ```
 
-You can even leave argument `llm_engine` undefined, and an `HfEngine` will be loaded by default.
+This will be handy in case of emergency baguette need!
+You can even leave argument `llm_engine` undefined, and an `HfEngine` will be created by default.
 
 ```python
-from transformers import CodeAgent
+from transformers import ReactCodeAgent, HfEngine
 
-agent = CodeAgent(tools=[], add_base_tools=True)
+agent = ReactCodeAgent(tools=[], add_base_tools=True)
 
-agent.run("Please draw me a picture of rivers and lakes")
+agent.run("Could you translate this sentence from French and say it out loud: 'Où est la boulangerie la plus proche?'")
 ```
 
 The prompt and output parser were automatically defined, but you can easily inspect them by calling the `system_prompt_template` on your agent.
-
-![Untitled](Doc%20agents%20ac753b9a3b934eaba22f659ba994c4bd/Untitled%201.png)
 
 ```python
 agent.system_prompt_template
@@ -275,14 +262,16 @@ When the agent is initialized, the tool attributes are used to generate a tool d
 
 ### Default toolbox
 
-Transformers comes with a default toolbox for empowering agents, that you can add to your agent upon initialization with argument `add_default_toolbox = True`:
+Transformers comes with a default toolbox for empowering agents, that you can add to your agent upon initialization with argument `add_base_tools = True`:
 
 - **Document question answering**: given a document (such as a PDF) in image format, answer a question on this document ([Donut](./model_doc/donut))
-- **Image captioning**: Caption the image! ([BLIP](./model_doc/blip))
 - **Image question answering**: given an image, answer a question on this image ([VILT](./model_doc/vilt))
-- **Image segmentation**: given an image and a prompt, output the segmentation mask of that prompt ([CLIPSeg](./model_doc/clipseg))
 - **Speech to text**: given an audio recording of a person talking, transcribe the speech into text ([Whisper](./model_doc/whisper))
 - **Text to speech**: convert text to speech ([SpeechT5](./model_doc/speecht5))
+- **Translation**: translates a given sentence from source language to target language.
+- **Calculator**: performs simple calculations.
+- **Python code evaluator**: runs your the LLM generated Python code in a secure environment.
+
 
 You can manually use a tool by calling the [`load_tool`] function and a task to perform.
 
@@ -434,7 +423,7 @@ Import and instantiate the tool:
 ```python
 from gradio_tools import StableDiffusionPromptGeneratorTool
 
-gradio_tool = StableDiffusionPromptGeneratorTool()
+gradio_prompt_generator_tool = StableDiffusionPromptGeneratorTool()
 ```
 
 Pass the tool to the `Tool.from_gradio` method:
@@ -442,7 +431,7 @@ Pass the tool to the `Tool.from_gradio` method:
 ```python
 from transformers import Tool
 
-tool = Tool.from_gradio(gradio_tool)
+prompt_generator_tool = Tool.from_gradio(gradio_prompt_generator_tool)
 ```
 
 Now you can use it just like any other tool. For example, let's improve the prompt  `a rabbit wearing a space suit`.
@@ -450,7 +439,8 @@ Now you can use it just like any other tool. For example, let's improve the prom
 ```python
 from transformers import CodeAgent
 
-agent = CodeAgent(llm_engine, tools=[tool], add_base_tools=True)
+image_generation_tool = load_tool('huggingface-tools/text-to-image')
+agent = CodeAgent(tools=[prompt_generator_tool, image_generation_tool], llm_engine=llm_engine)
 
 agent.run(
     "Improve this prompt: 'A rabbit wearing a space suit', then generate an image of it.",

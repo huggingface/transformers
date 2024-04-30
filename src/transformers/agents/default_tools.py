@@ -28,7 +28,7 @@ from ..utils import is_offline_mode
 from ..utils.import_utils import is_numexpr_available
 from .python_interpreter import evaluate_python_code
 from .tools import TASK_MAPPING, TOOL_CONFIG_FILE, Tool
-
+from .agent_types import handle_agent_inputs, AgentType, INSTANCE_TYPE_MAPPING
 
 if is_numexpr_available():
     import numexpr
@@ -206,11 +206,18 @@ class FinalAnswerTool(Tool):
     name = "final_answer"
     description = "Provides a final answer to the given problem"
     inputs = {"answer": {"type": "text", "description": "The final answer to the problem"}}
-    output_type = "text"
+    output_type = "any"
 
-    def forward(self, *args, **kwargs):
+    def __call__(self, *args, **kwargs):
         if args:
-            return args[0]
+            output = args[0]
         elif kwargs:
-            return next(iter(kwargs.values()))
-        return None
+            output = next(iter(kwargs.values()))
+        if isinstance(output, AgentType):
+            return output
+        else:
+            # If the class does not have defined output, then we map according to the type
+            for _k, _v in INSTANCE_TYPE_MAPPING.items():
+                if isinstance(output, _k):
+                    return _v(output)
+            return AgentType(output)
