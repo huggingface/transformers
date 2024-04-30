@@ -830,7 +830,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
 
         # `accelerate` device map
         hf_device_map = getattr(self.model, "hf_device_map", None)
-        model_device = getattr(self.model, "device", None)
 
         if hf_device_map is not None and device is not None:
             raise ValueError(
@@ -842,12 +841,12 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             if hf_device_map is not None:
                 # Take the first device used by `accelerate`.
                 device = next(iter(hf_device_map.values()))
-            elif model_device is not None:
-                device = model_device
             else:
                 device = -1
 
         if is_torch_available() and self.framework == "pt":
+            if device is None and self.model.device is not None:
+                device = self.model.device
             if isinstance(device, torch.device):
                 if device.type == "xpu" and not is_torch_xpu_available(check_device=True):
                     raise ValueError(f'{device} is not available, you should use device="cpu" instead')
@@ -874,14 +873,14 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             self.device = device if device is not None else -1
 
         self.binary_output = binary_output
-
         # We shouldn't call `model.to()` for models loaded with accelerate
         if (
             self.framework == "pt"
-            and self.device is not None
             and not (isinstance(self.device, int) and self.device < 0)
             and hf_device_map is None
+            and self.model.device != self.device
         ):
+            print("______MOVE_____")
             self.model.to(self.device)
 
         # Update config and generation_config with task specific parameters
