@@ -239,9 +239,9 @@ class JetMoeTopKGating(nn.Module):
                 router layer logits.
         """
 
-        logits = self.layer(x).float()
+        logits = self.layer(hidden_states).float()
         top_k_logits, top_k_indices = logits.topk(self.top_k, dim=1)
-        top_k_gates = torch.softmax(top_k_logits, dim=1).type_as(x)
+        top_k_gates = torch.softmax(top_k_logits, dim=1).type_as(hidden_states)
 
         if return_topo:
             return self.compute_topo(top_k_indices, top_k_gates) + (logits,)
