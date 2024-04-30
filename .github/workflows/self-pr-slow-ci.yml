@@ -4,6 +4,11 @@ on:
   pull_request:
     paths:
       - "src/transformers/models/*/modeling_*.py"
+      - "tests/models/*/test_*.py"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 env:
   HF_HOME: /mnt/cache
@@ -20,33 +25,48 @@ env:
   CUDA_VISIBLE_DEVICES: 0,1
 
 jobs:
-  check_for_new_model:
+  find_models_to_run:
       runs-on: ubuntu-22.04
-      name: Check if a PR is a new model PR
+      name: Find models to run slow tests
+      # Triggered only if the required label `run-slow` is added
+      if: ${{ contains(github.event.pull_request.labels.*.name, 'run-slow') }}
       outputs:
-        new_model: ${{ steps.check_new_model.outputs.new_model }}
+        models: ${{ steps.models_to_run.outputs.models }}
       steps:
         - uses: actions/checkout@v4
           with:
             fetch-depth: "0"
+            ref: ${{ github.event.pull_request.head.sha }}
 
-        - name: Check if there is a new model
-          id: check_new_model
+        - name: Get commit message
           run: |
+            echo "commit_message=$(git show -s --format=%s)" >> $GITHUB_ENV
+
+        - name: Get models to run slow tests
+          run: |
+            echo "${{ env.commit_message }}"
             python -m pip install GitPython
-            echo "new_model=$(python utils/check_if_new_model_added.py | tail -n 1)" >> $GITHUB_OUTPUT
+            python utils/pr_slow_ci_models.py --commit_message "${{ env.commit_message }}" | tee output.txt
+            echo "models=$(tail -n 1 output.txt)" >> $GITHUB_ENV
+
+        - name: Models to run slow tests
+          id: models_to_run
+          run: |
+            echo "${{ env.models }}"
+            echo "models=${{ env.models }}" >> $GITHUB_OUTPUT
 
   run_models_gpu:
-      name: Run all tests for the new model
-      # Triggered if it is a new model PR and the required label is added
-      if: ${{ needs.check_for_new_model.outputs.new_model != '' && contains(github.event.pull_request.labels.*.name, 'single-model-run-slow') }}
-      needs: check_for_new_model
+      name: Run all tests for the model
+      # Triggered only `find_models_to_run` is triggered (label `run-slow` is added) which gives the models to run
+      # (either a new model PR or via a commit message)
+      if: ${{ needs.find_models_to_run.outputs.models != '[]' }}
+      needs: find_models_to_run
       strategy:
         fail-fast: false
         matrix:
-          folders: ["${{ needs.check_for_new_model.outputs.new_model }}"]
+          folders: ${{ fromJson(needs.find_models_to_run.outputs.models) }}
           machine_type: [single-gpu, multi-gpu]
-      runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+      runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, ci]
       container:
         image: huggingface/transformers-all-latest-gpu
         options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -69,7 +89,7 @@ jobs:
 
       - name: Update clone
         working-directory: /transformers
-        run: git fetch && git checkout ${{ github.event.pull_request.head.sha }}
+        run: git fetch && git fetch origin pull/${{ github.event.pull_request.number }}/head:pull/${{ github.event.pull_request.number }}/merge && git checkout pull/${{ github.event.pull_request.number }}/merge
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
