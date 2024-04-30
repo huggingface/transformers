@@ -57,10 +57,6 @@ def repeat_key_value(x: torch.Tensor, num_heads: int, num_key_value_heads: int) 
     return x.repeat_interleave(num_groups, dim=1)
 
 
-##################################################
-# activation functions
-
-
 _GLU_BASE_MAPPING = {
     "geglu": "gelu",
     "miglu": "mish",
@@ -104,10 +100,6 @@ def get_activation_function(name: str) -> nn.Module:
     return activation_function
 
 
-##################################################
-# normalization functions
-
-
 class RMSNorm(nn.Module):
     def __init__(self, normalized_shape: int, eps: float = 1e-6) -> None:
         super().__init__()
@@ -146,10 +138,6 @@ def get_normalization_function(name: str, normalized_shape: int, eps: float = 1e
         return _NORMALIZATION_FUNCTIONS[name](normalized_shape, eps=eps)
 
     raise ValueError(f"unexpected `normalization_function` {name}")
-
-
-##################################################
-# attention modules
 
 
 class GraniteAttention(nn.Module):
@@ -217,16 +205,8 @@ class GraniteAttention(nn.Module):
         self.resid_dropout = nn.Identity() if self.resid_pdrop == 0 else nn.Dropout(self.resid_pdrop)
 
     def _prepare_qkv_for_forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # ==========================================================================================
-        # hidden_states -> (batch_size, query_length, num_heads * head_dim)
-        # ==========================================================================================
-
         # the output of following is a tuple if using MQA with tensor parallel
         hidden_states = self.c_attn(hidden_states)
-
-        # ==========================================================================================
-        # hidden_states -> (batch_size, query_length, [num_heads + num_key_value_heads * 2] * head_dim)
-        # ==========================================================================================
 
         # for MHA, we can get away with doing just 1 transpose which is not true for GQA
         if self.attention_head_type == AttentionHeadType.mha:
@@ -237,12 +217,6 @@ class GraniteAttention(nn.Module):
             query, key, value = self._prepare_qkv_for_forward_mqa(hidden_states)
         else:
             raise ValueError(f"unexpected attention_head_type ({self.attention_head_type})")
-
-        # ==========================================================================================
-        # query -> (batch_size, num_heads, query_length, head_dim)
-        # key -> (batch_size, num_key_value_heads, query_length, head_dim)
-        # value -> (batch_size, num_key_value_heads, query_length, head_dim)
-        # ==========================================================================================
 
         return query, key, value
 
@@ -300,17 +274,7 @@ class GraniteAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         rope_cos_sin: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> torch.Tensor:
-        # ==========================================================================================
-        # hidden_states -> (batch_size, query_length, num_heads * head_dim)
-        # ==========================================================================================
-
         query, key, value = self._prepare_qkv_for_forward(hidden_states)
-
-        # ==========================================================================================
-        # query -> (batch_size, num_heads, query_length, head_dim)
-        # key -> (batch_size, num_key_value_heads, query_length, head_dim)
-        # value -> (batch_size, num_key_value_heads, query_length, head_dim)
-        # ==========================================================================================
 
         if self.position_embedding_type == PositionEmbeddingType.rope:
             query = apply_rotary_pos_emb(query, rope_cos_sin)
@@ -318,12 +282,6 @@ class GraniteAttention(nn.Module):
 
         if past_key_values is not None:
             key, value = past_key_values.update(key, value, self.layer_idx)
-
-        # ==========================================================================================
-        # query -> (batch_size, num_heads, query_length, head_dim)
-        # key -> (batch_size, num_key_value_heads, key_length, head_dim)
-        # value -> (batch_size, num_key_value_heads, key_length, head_dim)
-        # ==========================================================================================
 
         key = key.transpose(-1, -2)
 
@@ -338,12 +296,6 @@ class GraniteAttention(nn.Module):
         else:
             scale_factor = 1
 
-        # ==========================================================================================
-        # query -> (batch_size, num_heads, query_length, head_dim)
-        # key -> (batch_size, num_key_value_heads, head_dim, key_length)
-        # value -> (batch_size, num_key_value_heads, key_length, head_dim)
-        # ==========================================================================================
-
         batch_size = query.shape[0]
         query_length = query.shape[2]
         key_length = key.shape[-1]
@@ -355,12 +307,6 @@ class GraniteAttention(nn.Module):
         query = query.reshape(batch_size * self.num_heads, query_length, self.head_dim)
         # No copy when layer_past is provided.
         key = key.reshape(batch_size * self.num_heads, self.head_dim, key_length)
-
-        # ==========================================================================================
-        # query -> (batch_size * num_heads, query_length, head_dim)
-        # key -> (batch_size * num_heads, head_dim, key_length)
-        # value -> (batch_size, num_heads, key_length, head_dim)
-        # ==========================================================================================
 
         if attention_mask is None:
             attn_weights = torch.empty(
@@ -378,23 +324,10 @@ class GraniteAttention(nn.Module):
         attn_weights = F.softmax(attn_weights.to(softmax_dtype), dim=-1).to(dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
-        # ==========================================================================================
-        # value -> (batch_size, num_heads, key_length, head_dim)
-        # attn_weights -> (batch_size, num_heads, query_length, key_length)
-        # ==========================================================================================
-
         attn_output = torch.matmul(attn_weights, value)
-
-        # ==========================================================================================
-        # attn_output -> (batch_size, num_heads, query_length, head_dim)
-        # ==========================================================================================
 
         attn_output = attn_output.transpose(1, 2)
         attn_output = attn_output.reshape(batch_size, -1, self.num_heads * self.head_dim)
-
-        # ==========================================================================================
-        # attn_output -> (batch_size, query_length, num_heads * head_dim)
-        # ==========================================================================================
 
         attn_output = self.c_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
@@ -410,17 +343,7 @@ class GraniteSDPA(GraniteAttention):
         attention_mask: Optional[torch.Tensor] = None,
         rope_cos_sin: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> torch.Tensor:
-        # ==========================================================================================
-        # hidden_states -> (batch_size, query_length, num_heads * head_dim)
-        # ==========================================================================================
-
         query, key, value = self._prepare_qkv_for_forward(hidden_states)
-
-        # ==========================================================================================
-        # query -> (batch_size, num_heads, query_length, head_dim)
-        # key -> (batch_size, num_key_value_heads, query_length, head_dim)
-        # value -> (batch_size, num_key_value_heads, query_length, head_dim)
-        # ==========================================================================================
 
         if self.position_embedding_type == PositionEmbeddingType.rope:
             query = apply_rotary_pos_emb(query, rope_cos_sin)
@@ -429,20 +352,8 @@ class GraniteSDPA(GraniteAttention):
         if past_key_values is not None:
             key, value = past_key_values.update(key, value, self.layer_idx)
 
-        # ==========================================================================================
-        # query -> (batch_size, num_heads, query_length, head_dim)
-        # key -> (batch_size, num_key_value_heads, key_length, head_dim)
-        # value -> (batch_size, num_key_value_heads, key_length, head_dim)
-        # ==========================================================================================
-
         key = repeat_key_value(key, self.num_heads, self.num_key_value_heads)
         value = repeat_key_value(value, self.num_heads, self.num_key_value_heads)
-
-        # ==========================================================================================
-        # query -> (batch_size, num_heads, query_length, head_dim)
-        # key -> (batch_size, num_heads, key_length, head_dim)
-        # value -> (batch_size, num_heads, key_length, head_dim)
-        # ==========================================================================================
 
         attn_output = F.scaled_dot_product_attention(
             query,
@@ -454,17 +365,9 @@ class GraniteSDPA(GraniteAttention):
             scale=self.attention_multiplier if self.scale_attn_weights else 1,
         )
 
-        # ==========================================================================================
-        # attn_output -> (batch_size, num_heads, query_length, head_dim)
-        # ==========================================================================================
-
         batch_size = attn_output.shape[0]
         attn_output = attn_output.transpose(1, 2)
         attn_output = attn_output.reshape(batch_size, -1, self.num_heads * self.head_dim)
-
-        # ==========================================================================================
-        # attn_output -> (batch_size, query_length, num_heads * head_dim)
-        # ==========================================================================================
 
         attn_output = self.c_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
@@ -480,17 +383,7 @@ class GraniteFlashAttention2(GraniteAttention):
         attention_mask: Optional[torch.Tensor] = None,
         rope_cos_sin: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> torch.Tensor:
-        # ==========================================================================================
-        # hidden_states -> (batch_size, query_length, num_heads * head_dim)
-        # ==========================================================================================
-
         query, key, value = self._prepare_qkv_for_forward(hidden_states)
-
-        # ==========================================================================================
-        # query -> (batch_size, num_heads, query_length, head_dim)
-        # key -> (batch_size, num_key_value_heads, query_length, head_dim)
-        # value -> (batch_size, num_key_value_heads, query_length, head_dim)
-        # ==========================================================================================
 
         if self.position_embedding_type == PositionEmbeddingType.rope:
             query = apply_rotary_pos_emb(query, rope_cos_sin)
@@ -498,12 +391,6 @@ class GraniteFlashAttention2(GraniteAttention):
 
         if past_key_values is not None:
             key, value = past_key_values.update(key, value, self.layer_idx)
-
-        # ==========================================================================================
-        # query -> (batch_size, num_heads, query_length, head_dim)
-        # key -> (batch_size, num_key_value_heads, key_length, head_dim)
-        # value -> (batch_size, num_key_value_heads, key_length, head_dim)
-        # ==========================================================================================
 
         # TODO avoid this extra transpose
         query = query.transpose(1, 2)
@@ -513,12 +400,6 @@ class GraniteFlashAttention2(GraniteAttention):
         else:
             key = key.transpose(1, 2)
             value = value.transpose(1, 2)
-
-        # ==========================================================================================
-        # query -> (batch_size, query_length, num_heads, head_dim)
-        # key -> (batch_size, key_length, num_heads, head_dim)
-        # value -> (batch_size, key_length, num_heads, head_dim)
-        # ==========================================================================================
 
         batch_size, query_length = query.shape[:2]
         key_length = key.shape[1]
@@ -550,12 +431,6 @@ class GraniteFlashAttention2(GraniteAttention):
             attention_mask = attention_mask[:, -query_length:]
             query, indices_q, cu_seqlens_q, max_seqlen_q = unpad_input(query, attention_mask)
 
-        # ==========================================================================================
-        # query -> (total_q, num_heads, head_dim)
-        # key -> (total_q, num_heads, head_dim)
-        # value -> (total_q, num_heads, head_dim)
-        # ==========================================================================================
-
         attn_output = flash_attn_varlen_func(
             query,
             key,
@@ -569,16 +444,8 @@ class GraniteFlashAttention2(GraniteAttention):
             causal=self.causal,
         )
 
-        # ==========================================================================================
-        # attn_output -> (total_q, num_heads, head_dim)
-        # ==========================================================================================
-
         attn_output = pad_input(attn_output, indices_q, batch_size, query_length)
         attn_output = attn_output.view(batch_size, query_length, -1)
-
-        # ==========================================================================================
-        # attn_output -> (batch_size, query_length, num_heads * head_dim)
-        # ==========================================================================================
 
         attn_output = self.c_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
@@ -599,10 +466,6 @@ def get_attention_module(
     if attention_implementation in _ATTENTION_MODULES:
         return _ATTENTION_MODULES[attention_implementation](config, causal=causal, layer_idx=layer_idx)
     raise ValueError(f"unexpected `attention_implementation` {attention_implementation}")
-
-
-##################################################
-# position embeddings
 
 
 class Alibi(nn.Module):
@@ -723,10 +586,6 @@ def _rotate_half(x: torch.Tensor) -> torch.Tensor:
     return torch.cat((-x2, x1), dim=-1)
 
 
-##################################################
-# MLP
-
-
 class GraniteMLP(nn.Module):
     def __init__(self, config: GraniteConfig) -> None:
         super().__init__()
@@ -752,10 +611,6 @@ class GraniteMLP(nn.Module):
         hidden_states = self.c_proj(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
-
-
-##################################################
-# transformer layer
 
 
 class GraniteBlock(nn.Module):
@@ -813,10 +668,6 @@ class GraniteBlock(nn.Module):
         hidden_states = residual + feed_forward_hidden_states
 
         return hidden_states
-
-
-##################################################
-# model classes
 
 
 class GranitePreTrainedModel(PreTrainedModel):
@@ -942,13 +793,6 @@ class GraniteModel(GranitePreTrainedModel):
             return_dict=return_dict,
         )
 
-        # ==========================================================================================
-        # flash:
-        #     attention_mask -> (batch_size, key_length)
-        # else:
-        #     attention_mask -> (batch_size, 1, query_length, key_length)
-        # ==========================================================================================
-
         output_shape = input_shape + (hidden_states.size(-1),)
 
         past_key_values = DynamicCache() if use_cache and past_key_values is None else past_key_values
@@ -1009,17 +853,9 @@ class GraniteModel(GranitePreTrainedModel):
 
         alibi_bias = self.alibi(attention_mask, batch_size, key_length, device, dtype)
 
-        # ==========================================================================================
-        # alibi_bias -> (batch_size, num_heads, key_length)
-        # ==========================================================================================
-
         alibi_bias = alibi_bias.unsqueeze(2)
         if query_length != 1:
             alibi_bias = alibi_bias.expand(-1, -1, query_length, -1)
-
-        # ==========================================================================================
-        # alibi_bias -> (batch_size, num_heads, query_length, key_length)
-        # ==========================================================================================
 
         return alibi_bias
 
@@ -1036,10 +872,6 @@ class GraniteModel(GranitePreTrainedModel):
         self, attention_mask: torch.Tensor, batch_size: int, query_length: int, key_length: int, device: torch.device
     ) -> torch.Tensor:
         past_length = key_length - query_length
-
-        # ==========================================================================================
-        # attention_mask -> (batch_size, key_length)
-        # ==========================================================================================
 
         if query_length > 1:
             # (query_length, key_length)
@@ -1068,15 +900,7 @@ class GraniteModel(GranitePreTrainedModel):
                 # (batch_size, query_length, key_length)
                 causal_mask = attention_mask.unsqueeze(1).to(dtype=torch.bool, device=device)
 
-        # ==========================================================================================
-        # attention_mask -> (batch_size, query_length, key_length)
-        # ==========================================================================================
-
         causal_mask = causal_mask.unsqueeze(1)
-
-        # ==========================================================================================
-        # attention_mask -> (batch_size, 1, query_length, key_length)
-        # ==========================================================================================
 
         return causal_mask
 
@@ -1149,12 +973,6 @@ class GraniteModel(GranitePreTrainedModel):
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
 
-        # ==========================================================================================
-        # input_ids -> (batch_size, query_length)
-        # attention_mask -> None or (batch_size, key_length)
-        # position_ids -> None or (batch_size, key_length)
-        # ==========================================================================================
-
         past_length = 0 if past_key_values is None else past_key_values.get_seq_length()
         query_length = input_shape[-1]
         key_length = past_length + query_length
@@ -1162,33 +980,15 @@ class GraniteModel(GranitePreTrainedModel):
         if position_ids is None:
             position_ids = self._get_position_ids(attention_mask, past_length, query_length, key_length, device)
 
-        # ==========================================================================================
-        # input_ids -> (batch_size, query_length)
-        # attention_mask -> None or (batch_size, key_length)
-        # position_ids -> (batch_size, query_length)
-        # ==========================================================================================
-
         hidden_states = self._get_initial_hidden_state(input_ids, inputs_embeds, position_ids, token_type_ids)
-
-        # ==========================================================================================
-        # hidden_states -> (batch_size, query_length, num_heads * head_dim)
-        # ==========================================================================================
 
         alibi_bias = self._get_alibi_bias(
             attention_mask, batch_size, query_length, key_length, device, hidden_states.dtype
         )
 
-        # ==========================================================================================
-        # alibi_bias -> (batch_size, num_heads, query_length, key_length)
-        # ==========================================================================================
-
         rope_cos_sin = self._get_rope_cos_sin(
             key_length, position_ids, dtype=hidden_states.dtype, device=hidden_states.device
         )
-
-        # ==========================================================================================
-        # rope_cos_sin -> 2 * (key_length, head_dim)
-        # ==========================================================================================
 
         # prepare causal mask only if not using flash attention
         if self._use_flash_attention_2:
@@ -1327,12 +1127,6 @@ class GraniteForCausalLM(GranitePreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # ==========================================================================================
-        # input_ids -> (batch_size, query_length)
-        # attention_mask -> None or (batch_size, key_length)
-        # position_ids -> None or (batch_size, key_length)
-        # ==========================================================================================
 
         transformer_outputs = self.transformer(
             input_ids,
