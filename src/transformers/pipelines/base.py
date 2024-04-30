@@ -876,11 +876,10 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         # We shouldn't call `model.to()` for models loaded with accelerate
         if (
             self.framework == "pt"
+            and self.model.device != self.device
             and not (isinstance(self.device, int) and self.device < 0)
             and hf_device_map is None
-            and self.model.device != self.device
         ):
-            print("______MOVE_____")
             self.model.to(self.device)
 
         # Update config and generation_config with task specific parameters
