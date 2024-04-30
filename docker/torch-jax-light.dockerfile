@@ -7,8 +7,6 @@ ENV VIRTUAL_ENV=/usr/local
 RUN pip --no-cache-dir install uv
 RUN uv venv
 RUN uv pip install --no-cache-dir -U pip setuptools accelerate
-RUN uv pip install --no-cache-dir "pytest<8.0.1" "fsspec>=2023.5.0,<2023.10.0" pytest-subtests pytest-xdist
-
 RUN pip install --no-cache-dir 'torch' 'torchvision' 'torchaudio' --index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --no-cache-dir "transformers[sklearn,flax,torch,testing,sentencepiece,vision]"
 
