@@ -865,7 +865,6 @@ DPT_INPUTS_DOCSTRING = r"""
     DPT_START_DOCSTRING,
 )
 class DPTModel(DPTPreTrainedModel):
-
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
