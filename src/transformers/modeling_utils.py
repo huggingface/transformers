@@ -3442,7 +3442,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 resolved_archive_file = archive_file
             else:
                 logger.info(f"loading weights file {filename} from cache at {resolved_archive_file}")
-        elif from_gguf is not None:
+        elif from_gguf:
             from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 
             # Case 1: the GGUF file is present locally
