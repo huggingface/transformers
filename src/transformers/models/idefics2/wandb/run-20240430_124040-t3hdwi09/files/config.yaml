@@ -9,14 +9,13 @@ _wandb:
     huggingface_version: 4.41.0.dev0
     is_jupyter_run: true
     is_kaggle_kernel: false
-    start_time: 1714462726.0
+    start_time: 1714473640.0
     t:
       1:
       - 1
       - 2
       - 3
       - 5
-      - 9
       - 11
       - 12
       - 49
@@ -25,13 +24,11 @@ _wandb:
       - 55
       - 71
       - 98
-      - 103
       2:
       - 1
       - 2
       - 3
       - 5
-      - 9
       - 11
       - 12
       - 49
@@ -40,7 +37,6 @@ _wandb:
       - 55
       - 71
       - 98
-      - 103
       3:
       - 7
       - 13
@@ -56,3 +52,11 @@ _wandb:
     - 1: trainer/global_step
       6:
       - 3
+    - 1: train_loss
+      5: 1
+      6:
+      - 1
+    - 1: epoch
+      5: 1
+      6:
+      - 1
