@@ -9,8 +9,6 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)
 
-# from .utils.fx import HFProxyableClassMeta
-
 
 @dataclass
 class Cache:

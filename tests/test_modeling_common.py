@@ -1252,7 +1252,6 @@ class ModelTesterMixin:
                     model.config.problem_type = "single_label_classification"
 
                 traced_model = symbolic_trace(model, input_names)
-                print(traced_model.graph)
 
                 with torch.no_grad():
                     traced_output = traced_model(**filtered_inputs)
@@ -1280,7 +1279,7 @@ class ModelTesterMixin:
                     )
 
                 # Test that the model can be serialized and restored properly
-                # TODO: fix that if possible AND relevent.
+                # TODO: fix that if possible AND relevant.
                 # with tempfile.TemporaryDirectory() as tmp_dir_name:
                 #     pkl_file_name = os.path.join(tmp_dir_name, "model.pkl")
                 #     try:

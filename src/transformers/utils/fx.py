@@ -1179,6 +1179,7 @@ class HFTracer(Tracer):
 
         yield
 
+        # Restoring patched functions and classes.
         for name, (_, orig) in self.patched_torch_methods.items():
             setattr(torch, name, orig)
         self.patched_torch_methods = {}
@@ -1276,24 +1277,6 @@ class HFTracer(Tracer):
             if param.kind == inspect.Parameter.VAR_KEYWORD and param.name not in input_names:
                 concrete_metas[f"**{param.name}"] = {}
         self.meta_args = concrete_metas
-        # self.patched_torch_methods = {
-        #     target: gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
-        # }
-
-        # self.orig_fns = set()
-
-        # for name, (wrapper, orig) in self.patched_torch_methods.items():
-        #     setattr(torch, name, wrapper)
-        #     self.orig_fns.add(orig)
-
-        # for cls in self._CLASSES_TO_PATCH:
-        # if issubclass(cls, Cache):
-
-        #     def proxy_factory_fn(n: Node):
-        #         return HFCacheProxy(n, self)
-        # else:
-        #     proxy_factory_fn = None
-        # patch_class(cls, proxy_factory_fn=proxy_factory_fn)
 
         global _CURRENT_TRACER
         _CURRENT_TRACER = self
@@ -1302,10 +1285,6 @@ class HFTracer(Tracer):
                 self.graph = super().trace(root, concrete_args=concrete_args)
             finally:
                 _CURRENT_TRACER = None
-            # for name, (_, orig) in self.patched_torch_methods.items():
-            #     setattr(torch, name, orig)
-            # for cls in self._CLASSES_TO_PATCH:
-            #     patch_class(cls, restore=True)
 
         # This is necessary because concrete args are added as input to the traced module since
         # https://github.com/pytorch/pytorch/pull/55888.
