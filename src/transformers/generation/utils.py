@@ -705,9 +705,9 @@ class GenerationMixin:
                 input_ids=input_ids,
                 assistant_model=assistant_model,
                 generation_config=generation_config,
-                logits_processor=logits_processor,
                 model_kwargs=model_kwargs,
                 inputs_tensor=inputs_tensor,
+                logits_processor=logits_processor,
             )
         return candidate_generator
 
@@ -4601,24 +4601,18 @@ class GenerationMixin:
         >>> model.generation_config.pad_token_id = model.generation_config.eos_token_id
         >>> input_prompt = "It might be possible to"
         >>> input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
-        >>> # instantiate logits processors
-        >>> logits_processor = LogitsProcessorList(
-        ...     [
-        ...         MinLengthLogitsProcessor(10, eos_token_id=model.generation_config.eos_token_id),
-        ...     ]
-        ... )
+        >>> model.generation_config.min_length = 10
+
         >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=20)])
         >>> candidate_generator = AssistedCandidateGenerator(
         ...     input_ids=input_ids,
         ...     assistant_model=assistant_model,
         ...     generation_config=model.generation_config,
-        ...     logits_processor=logits_processor,
         ...     model_kwargs={},
         ... )
         >>> outputs = model._assisted_decoding(
         ...     input_ids,
         ...     candidate_generator=candidate_generator,
-        ...     logits_processor=logits_processor,
         ...     stopping_criteria=stopping_criteria,
         ... )
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
