@@ -295,17 +295,19 @@ class SinkCache(Cache):
             self._seen_tokens += key_states.shape[-2]
 
         # Update the sin/cos cache, which holds sin/cos values for all possible positions
-        if using_rope and layer_idx==0:
-            # BC: some models still pass `sin`/`cos` with 2 dims. The expected is 3 dims, and no `if` to be needed.
-            if cos.dim() > 2:
-                cos = cos[..., :, :]
-                sin = sin[..., :, :]
-            if self._cos_cache is None:
+        if using_rope and layer_idx == 0:
+            # BC: some models still pass `sin`/`cos` with 2 dims. In those models, they are the full sin/cos. Remove
+            # after all RoPE models have a llama-like cache utilization.
+            if cos.dim() == 2:
                 self._cos_cache = cos
                 self._sin_cache = sin
-            elif self._cos_cache.shape[0] < self.window_length:
-                self._cos_cache = torch.cat([self._cos_cache, cos], dim=0)
-                self._sin_cache = torch.cat([self._sin_cache, sin], dim=0)
+            else:
+                if self._cos_cache is None:
+                    self._cos_cache = cos[0, ...]
+                    self._sin_cache = sin[0, ...]
+                elif self._cos_cache.shape[0] < self.window_length:
+                    self._cos_cache = torch.cat([self._cos_cache, cos[0, ...]], dim=0)
+                    self._sin_cache = torch.cat([self._sin_cache, sin[0, ...]], dim=0)
 
         # [bsz, num_heads, seq_len, head_dim]
         if len(self.key_cache) <= layer_idx:
