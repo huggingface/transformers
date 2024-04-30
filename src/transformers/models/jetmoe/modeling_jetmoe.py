@@ -1036,6 +1036,7 @@ class JetMoePreTrainedModel(PreTrainedModel):
         elif isinstance(module, JetMoeMoE):
             module.bias.data.zero_()
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel._setup_cache
     def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
         if self.config._attn_implementation == "flash_attention_2" and cache_cls == StaticCache:
             raise ValueError(
@@ -1053,6 +1054,7 @@ class JetMoePreTrainedModel(PreTrainedModel):
                 self.config, max_batch_size, max_cache_len, device=device, dtype=dtype
             )
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel._reset_cache
     def _reset_cache(self):
         for layer in self.model.layers:
             layer.self_attn.past_key_value = None
