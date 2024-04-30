@@ -243,10 +243,8 @@ class JetMoeTopKGating(nn.Module):
         top_k_logits, top_k_indices = logits.topk(self.top_k, dim=1)
         top_k_gates = torch.softmax(top_k_logits, dim=1).type_as(hidden_states)
 
-        if return_topo:
-            return self.compute_topo(top_k_indices, top_k_gates) + (logits,)
-        else:
-            return top_k_indices, top_k_gates, logits
+        outputs = self.compute_topo(top_k_indices, top_k_gates) + (logits,)
+        return outputs
 
 
 class JetMoeMoE(nn.Module):
