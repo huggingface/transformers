@@ -845,7 +845,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 device = -1
 
         if is_torch_available() and self.framework == "pt":
-            if device is None and self.model.device is not None:
+            if device == -1 and self.model.device is not None:
                 device = self.model.device
             if isinstance(device, torch.device):
                 if device.type == "xpu" and not is_torch_xpu_available(check_device=True):
