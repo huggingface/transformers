@@ -1997,7 +1997,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             vocab_files[file_id] = pretrained_model_name_or_path
             single_file_id = file_id
         else:
-            if not from_gguf:
+            if from_gguf:
+                vocab_files["vocab_file"] = from_gguf
+            else:
                 # At this point pretrained_model_name_or_path is either a directory or a model identifier name
                 additional_files_names = {
                     "added_tokens_file": ADDED_TOKENS_FILE,  # kept only for legacy
@@ -2033,9 +2035,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             tokenizer_config = json.load(reader)
                             if "fast_tokenizer_files" in tokenizer_config:
                                 fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
-                    vocab_files["tokenizer_file"] = fast_tokenizer_file
-            else:
-                vocab_files["vocab_file"] = from_gguf
+                    vocab_files["tokenizer_file"] = fast_tokenizer_file                
 
         # Get files from url, cache, or disk depending on the case
         resolved_vocab_files = {}
