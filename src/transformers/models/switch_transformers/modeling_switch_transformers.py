@@ -1720,7 +1720,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
                 remove_prefix_length = input_ids.shape[1] - 1
 
             input_ids = input_ids[:, remove_prefix_length:]
-        
+
         output_router_logits = kwargs.get("output_router_logits", True)
 
         return {
