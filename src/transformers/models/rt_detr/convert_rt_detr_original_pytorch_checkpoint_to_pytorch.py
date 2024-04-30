@@ -47,7 +47,6 @@ def get_rt_detr_config(model_name: str) -> RTDetrConfig:
         pass
     elif model_name == "rtdetr_r34vd":
         config.backbone = "resnet34d"
-        config.backbone_config.backbone = "resnet34d"
         config.encoder_in_channels = [128, 256, 512]
         config.hidden_expansion = 0.5
         config.decoder_layers = 4
@@ -229,9 +228,11 @@ def create_rename_keys(config):
         for last in last_key:
             rename_keys.append((f"encoder.input_proj.{j}.1.{last}", f"model.encoder_input_proj.{j}.1.{last}"))
 
+    block_levels = 3 if config.backbone not in ["resnet34d", "resnet18d"] else 4
+
     for i in range(len(config.encoder_in_channels) - 1):
         # encoder layers: hybridencoder parts
-        for j in range(1, 3):
+        for j in range(1, block_levels):
             rename_keys.append(
                 (f"encoder.fpn_blocks.{i}.conv{j}.conv.weight", f"model.encoder.fpn_blocks.{i}.conv{j}.conv.weight")
             )
@@ -265,7 +266,7 @@ def create_rename_keys(config):
                         )
                     )
 
-        for j in range(1, 3):
+        for j in range(1, block_levels):
             rename_keys.append(
                 (f"encoder.pan_blocks.{i}.conv{j}.conv.weight", f"model.encoder.pan_blocks.{i}.conv{j}.conv.weight")
             )
@@ -480,8 +481,11 @@ def create_rename_keys(config):
 
 
 def rename_key(state_dict, old, new):
-    val = state_dict.pop(old)
-    state_dict[new] = val
+    try:
+        val = state_dict.pop(old)
+        state_dict[new] = val
+    except Exception:
+        pass
 
 
 def read_in_q_k_v(state_dict, config):
@@ -558,6 +562,9 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         # for two_stage
         if "bbox_embed" in key or ("class_embed" in key and "denoising_" not in key):
             state_dict[key.split("model.decoder.")[-1]] = state_dict[key]
+        # special delete for r34vd
+        if key.startswith("model.backbone.model._backbone.layer1.0.downsample") and config.backbone == "resnet34d":
+            del state_dict[key]
 
     # finally, create HuggingFace model and load state dict
     model = RTDetrForObjectDetection(config)

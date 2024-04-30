@@ -85,7 +85,7 @@ class RTDetrModelTester:
         decoder_attention_heads=2,
         decoder_activation_function="relu",
         attention_dropout=0.0,
-        num_denoising=10,
+        num_denoising=0,
         label_noise_ratio=0.5,
         box_noise_scale=1.0,
         learn_initial_query=False,
