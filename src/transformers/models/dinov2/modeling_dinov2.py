@@ -481,6 +481,7 @@ class Dinov2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "dinov2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["Dinov2SwiGLUFFN"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""

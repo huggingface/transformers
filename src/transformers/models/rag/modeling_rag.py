@@ -506,12 +506,16 @@ class RagModel(RagPreTrainedModel):
         if question_encoder is None:
             from ..auto.modeling_auto import AutoModel
 
-            question_encoder = AutoModel.from_config(config.question_encoder)
+            question_encoder = AutoModel.from_config(
+                config.question_encoder, attn_implementation=config._attn_implementation
+            )
 
         if generator is None:
             from ..auto.modeling_auto import AutoModelForSeq2SeqLM
 
-            generator = AutoModelForSeq2SeqLM.from_config(config.generator)
+            generator = AutoModelForSeq2SeqLM.from_config(
+                config.generator, attn_implementation=config._attn_implementation
+            )
 
         self.retriever = retriever
         if self.retriever is not None:
