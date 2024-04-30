@@ -819,7 +819,7 @@ class AutoTokenizer:
         # If that did not work, let's try to use the config.
         if config_tokenizer_class is None:
             if not isinstance(config, PretrainedConfig):
-                if from_gguf is None:
+                if from_gguf is None or not from_gguf:
                     config = AutoConfig.from_pretrained(
                         pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                     )
