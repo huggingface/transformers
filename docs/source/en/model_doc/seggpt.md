@@ -26,7 +26,8 @@ The abstract from the paper is the following:
 
 Tips:
 - One can use [`SegGptImageProcessor`] to prepare image input, prompt and mask to the model.
-- It's highly advisable to pass `num_labels` (not considering background) during preprocessing and postprocessing with [`SegGptImageProcessor`] for your use case.
+- One can either use segmentation maps or RGB images as prompt masks. If using the latter make sure to set `do_convert_rgb=False` in the `preprocess` method.
+- It's highly advisable to pass `num_labels` when using `segmetantion_maps` (not considering background) during preprocessing and postprocessing with [`SegGptImageProcessor`] for your use case.
 - When doing inference with [`SegGptForImageSegmentation`] if your `batch_size` is greater than 1 you can use feature ensemble across your images by passing `feature_ensemble=True` in the forward method.
 
 Here's how to use the model for one-shot semantic segmentation:
@@ -36,7 +37,7 @@ import torch
 from datasets import load_dataset
 from transformers import SegGptImageProcessor, SegGptForImageSegmentation
 
-model_id = "BAAI/seggpt-vit-large"
+checkpoint = "BAAI/seggpt-vit-large"
 image_processor = SegGptImageProcessor.from_pretrained(checkpoint)
 model = SegGptForImageSegmentation.from_pretrained(checkpoint)
 
@@ -53,7 +54,7 @@ mask_prompt = ds[29]["label"]
 inputs = image_processor(
     images=image_input, 
     prompt_images=image_prompt,
-    prompt_masks=mask_prompt, 
+    segmentation_maps=mask_prompt, 
     num_labels=num_labels,
     return_tensors="pt"
 )

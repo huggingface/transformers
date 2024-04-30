@@ -301,6 +301,7 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
     config_class = ConvNextV2Config
     base_model_prefix = "convnextv2"
     main_input_name = "pixel_values"
+    _no_split_modules = ["ConvNextV2Layer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

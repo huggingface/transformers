@@ -42,6 +42,8 @@ class SwiftFormerConfig(PretrainedConfig):
 
 
     Args:
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels
         depths (`List[int]`, *optional*, defaults to `[3, 3, 6, 4]`):
@@ -62,6 +64,10 @@ class SwiftFormerConfig(PretrainedConfig):
             Padding in downsampling layers.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             Rate at which to increase dropout probability in DropPath.
+        drop_mlp_rate (`float`, *optional*, defaults to 0.0):
+            Dropout rate for the MLP component of SwiftFormer.
+        drop_conv_encoder_rate (`float`, *optional*, defaults to 0.0):
+            Dropout rate for the ConvEncoder component of SwiftFormer.
         use_layer_scale (`bool`, *optional*, defaults to `True`):
             Whether to scale outputs from token mixers.
         layer_scale_init_value (`float`, *optional*, defaults to 1e-05):
@@ -89,6 +95,7 @@ class SwiftFormerConfig(PretrainedConfig):
 
     def __init__(
         self,
+        image_size=224,
         num_channels=3,
         depths=[3, 3, 6, 4],
         embed_dims=[48, 56, 112, 220],
@@ -99,12 +106,15 @@ class SwiftFormerConfig(PretrainedConfig):
         down_stride=2,
         down_pad=1,
         drop_path_rate=0.0,
+        drop_mlp_rate=0.0,
+        drop_conv_encoder_rate=0.0,
         use_layer_scale=True,
         layer_scale_init_value=1e-5,
         batch_norm_eps=1e-5,
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.image_size = image_size
         self.num_channels = num_channels
         self.depths = depths
         self.embed_dims = embed_dims
@@ -115,6 +125,8 @@ class SwiftFormerConfig(PretrainedConfig):
         self.down_stride = down_stride
         self.down_pad = down_pad
         self.drop_path_rate = drop_path_rate
+        self.drop_mlp_rate = drop_mlp_rate
+        self.drop_conv_encoder_rate = drop_conv_encoder_rate
         self.use_layer_scale = use_layer_scale
         self.layer_scale_init_value = layer_scale_init_value
         self.batch_norm_eps = batch_norm_eps
