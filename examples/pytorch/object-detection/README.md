@@ -106,8 +106,7 @@ accelerate launch run_object_detection_no_trainer.py \
     --dataset_name cppe-5 \
     --output_dir "detr-resnet-50-finetuned" \
     --num_train_epochs 100 \
-    --shortest_edge 600 \
-    --longest_edge 600 \
+    --image_square_size 600 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 8 \
     --checkpointing_steps epoch \

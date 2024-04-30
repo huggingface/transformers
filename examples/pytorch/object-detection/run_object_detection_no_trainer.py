@@ -61,15 +61,15 @@ require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/sema
 
 # Copied from examples/pytorch/object-detection/run_object_detection.format_image_annotations_as_coco
 def format_image_annotations_as_coco(
-    image_id: str, category: List[int], area: List[float], bbox: List[Tuple[float]]
+    image_id: str, categories: List[int], areas: List[float], bboxes: List[Tuple[float]]
 ) -> dict:
-    """Format one image annotations to COCO format
+    """Format one set of image annotations to the COCO format
 
     Args:
         image_id (str): image id. e.g. "0001"
-        category (List[int]): list of categories/class labels corresponding to provided bounding boxes
-        area (List[float]): list of corresponding areas to provided bounding boxes
-        bbox (List[Tuple[float]]): list of bounding boxes provided in COCO format
+        categories (List[int]): list of categories/class labels corresponding to provided bounding boxes
+        areas (List[float]): list of corresponding areas to provided bounding boxes
+        bboxes (List[Tuple[float]]): list of bounding boxes provided in COCO format
             ([center_x, center_y, width, height] in absolute coordinates)
 
     Returns:
@@ -79,13 +79,13 @@ def format_image_annotations_as_coco(
         }
     """
     annotations = []
-    for i in range(len(category)):
+    for category, area, bbox in zip(categories, areas, bboxes):
         formatted_annotation = {
             "image_id": image_id,
-            "category_id": category[i],
+            "category_id": category,
             "iscrowd": 0,
-            "area": area[i],
-            "bbox": list(bbox[i]),
+            "area": area,
+            "bbox": list(bbox),
         }
         annotations.append(formatted_annotation)
 
@@ -187,7 +187,7 @@ def evaluation_loop(
         # 1. Collect predicted boxes, classes, scores
         # image_processor convert boxes from YOLO format to Pascal VOC format
         # ([x_min, y_min, x_max, y_max] in absolute coordinates)
-        image_size = torch.stack([example["size"] for example in batch["labels"]], dim=0)
+        image_size = torch.stack([example["orig_size"] for example in batch["labels"]], dim=0)
         predictions = image_processor.post_process_object_detection(outputs, threshold=0.0, target_sizes=image_size)
         predictions = nested_to_cpu(predictions)
 
@@ -196,7 +196,7 @@ def evaluation_loop(
         target = []
         for label in batch["labels"]:
             label = nested_to_cpu(label)
-            boxes = convert_bbox_yolo_to_pascal(label["boxes"], label["size"])
+            boxes = convert_bbox_yolo_to_pascal(label["boxes"], label["orig_size"])
             labels = label["class_labels"]
             target.append({"boxes": boxes, "labels": labels})
 
@@ -245,16 +245,10 @@ def parse_args():
         help="Ignore mismatched sizes between the model and the dataset.",
     )
     parser.add_argument(
-        "--longest_edge",
+        "--image_square_size",
         type=int,
         default=1333,
-        help="Longest edge of the image when resizing.",
-    )
-    parser.add_argument(
-        "--shortest_edge",
-        type=int,
-        default=800,
-        help="Shortest edge of the image when resizing.",
+        help="Image longest size will be resized to this value, then image will be padded to square.",
     )
     parser.add_argument(
         "--cache_dir",
@@ -277,6 +271,12 @@ def parse_args():
         type=int,
         default=8,
         help="Batch size (per device) for the evaluation dataloader.",
+    )
+    parser.add_argument(
+        "--dataloader_num_workers",
+        type=int,
+        default=4,
+        help="Number of workers to use for the dataloaders.",
     )
     parser.add_argument(
         "--learning_rate",
@@ -444,7 +444,7 @@ def main():
     # If we don't have a validation split, split off a percentage of train as validation.
     args.train_val_split = None if "validation" in dataset.keys() else args.train_val_split
     if isinstance(args.train_val_split, float) and args.train_val_split > 0.0:
-        split = dataset["train"].train_test_split(args.train_val_split)
+        split = dataset["train"].train_test_split(args.train_val_split, seed=args.seed)
         dataset["train"] = split["train"]
         dataset["validation"] = split["test"]
 
@@ -473,51 +473,78 @@ def main():
     )
     image_processor = AutoImageProcessor.from_pretrained(
         args.model_name_or_path,
-        size={"longest_edge": args.longest_edge, "shortest_edge": args.shortest_edge},
+        # At this moment we recommend using external transform to pad and resize images.
+        # It`s faster and yields much better results for object-detection models.
+        do_pad=False,
+        do_resize=False,
+        # We will save image size parameter in config just for reference
+        size={"longest_edge": args.image_square_size},
         **common_pretrained_args,
     )
 
     # ------------------------------------------------------------------------------------------------
     # Define image augmentations and dataset transforms
     # ------------------------------------------------------------------------------------------------
-
-    train_augmentation_transform = A.Compose(
+    max_size = args.image_square_size
+    basic_transforms = [
+        A.LongestMaxSize(max_size=max_size),
+        A.PadIfNeeded(max_size, max_size, border_mode=0, value=(128, 128, 128), position="top_left"),
+    ]
+    train_augment_and_transform = A.Compose(
         [
+            A.Compose(
+                [
+                    A.SmallestMaxSize(max_size=max_size, p=1.0),
+                    A.RandomSizedBBoxSafeCrop(height=max_size, width=max_size, p=1.0),
+                ],
+                p=0.2,
+            ),
+            A.OneOf(
+                [
+                    A.Blur(blur_limit=7, p=0.5),
+                    A.MotionBlur(blur_limit=7, p=0.5),
+                    A.Defocus(radius=(1, 5), alias_blur=(0.1, 0.25), p=0.1),
+                ],
+                p=0.1,
+            ),
+            A.Perspective(p=0.1),
             A.HorizontalFlip(p=0.5),
             A.RandomBrightnessContrast(p=0.5),
             A.HueSaturationValue(p=0.1),
+            *basic_transforms,
         ],
         bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True, min_area=25),
     )
-    valid_augmentation_transform = A.Compose(
-        [
-            # empty transform, but you can add something here, e.g. specific cropping/resizing/padding
-            A.NoOp(),
-        ],
+    validation_transform = A.Compose(
+        basic_transforms,
         bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True),
     )
 
     # Make transform functions for batch and apply for dataset splits
     train_transform_batch = partial(
-        augment_and_transform_batch, transform=train_augmentation_transform, image_processor=image_processor
+        augment_and_transform_batch, transform=train_augment_and_transform, image_processor=image_processor
     )
-    valid_transform_batch = partial(
-        augment_and_transform_batch, transform=valid_augmentation_transform, image_processor=image_processor
+    validation_transform_batch = partial(
+        augment_and_transform_batch, transform=validation_transform, image_processor=image_processor
     )
 
     with accelerator.main_process_first():
         train_dataset = dataset["train"].with_transform(train_transform_batch)
-        valid_dataset = dataset["validation"].with_transform(valid_transform_batch)
-        test_dataset = dataset["test"].with_transform(valid_transform_batch)
+        valid_dataset = dataset["validation"].with_transform(validation_transform_batch)
+        test_dataset = dataset["test"].with_transform(validation_transform_batch)
 
+    dataloader_common_args = {
+        "num_workers": args.dataloader_num_workers,
+        "collate_fn": collate_fn,
+    }
     train_dataloader = DataLoader(
-        train_dataset, shuffle=True, collate_fn=collate_fn, batch_size=args.per_device_train_batch_size
+        train_dataset, shuffle=True, batch_size=args.per_device_train_batch_size, **dataloader_common_args
     )
     valid_dataloader = DataLoader(
-        valid_dataset, shuffle=False, collate_fn=collate_fn, batch_size=args.per_device_eval_batch_size
+        valid_dataset, shuffle=False, batch_size=args.per_device_eval_batch_size, **dataloader_common_args
     )
     test_dataloader = DataLoader(
-        test_dataset, shuffle=False, collate_fn=collate_fn, batch_size=args.per_device_eval_batch_size
+        test_dataset, shuffle=False, batch_size=args.per_device_eval_batch_size, **dataloader_common_args
     )
 
     # ------------------------------------------------------------------------------------------------
