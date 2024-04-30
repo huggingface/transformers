@@ -4100,11 +4100,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 remove_prefix_from_model,
                 ignore_mismatched_sizes,
             )
-
-            if gguf_path is None:
-                error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+            
             # For GGUF models `state_dict` is never set to None as the state dict is always small
-            else:
+            if gguf_path:
                 error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                     model_to_load,
                     state_dict,
@@ -4122,6 +4120,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     keep_in_fp32_modules=keep_in_fp32_modules,
                     unexpected_keys=unexpected_keys,
                 )
+            else:
+                error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+
         else:
             # This should always be a list but, just to be sure.
             if not isinstance(resolved_archive_file, list):
