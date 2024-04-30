@@ -442,7 +442,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = [
             'USER:  What is the baby doing? ASSISTANT: The baby is sitting on a bed and reading a book.Ъ',
             'USER:  Who is sitting next to the woman? ASSISTANT: A small dog is sitting next to the woman.Ъ'
-            ]  # fmt: skip
+        ]  # fmt: skip
 
         self.assertEqual(processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
 
