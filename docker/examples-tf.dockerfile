@@ -7,8 +7,7 @@ ENV VIRTUAL_ENV=/usr/local
 RUN pip --no-cache-dir install uv
 RUN uv venv
 RUN uv pip install --no-cache-dir -U pip setuptools
-RUN uv pip install --no-cache-dir "fsspec>=2023.5.0,<2023.10.0" seqeval 
-RUN uv pip install --no-cache-dir "transformers[flax,testing,sentencepiece,vision]"
+RUN uv pip install --no-cache-dir "transformers[flax,testing,sentencepiece,vision]" seqeval
 
 
 RUN pip uninstall -y transformers
