@@ -1261,6 +1261,11 @@ explained here: https://www.tensorflow.org/text/guide/tf_text_intro.
 Please note that you may need to restart your runtime after installation.
 """
 
+# docstyle-ignore
+TORCHAUDIO_IMPORT_ERROR = """
+{0} requires the torchaudio library but it was not found in your environment. Please install it and restart your
+runtime.
+"""
 
 # docstyle-ignore
 PANDAS_IMPORT_ERROR = """
@@ -1430,6 +1435,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
         ("tensorflow_text", (is_tensorflow_text_available, TENSORFLOW_TEXT_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
+        ("torchaudio", (is_torchaudio_available, TORCHAUDIO_IMPORT_ERROR)),
         ("natten", (is_natten_available, NATTEN_IMPORT_ERROR)),
         ("nltk", (is_nltk_available, NLTK_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
@@ -1569,3 +1575,81 @@ def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
     spec.loader.exec_module(module)
     module = sys.modules[name]
     return module
+
+
+def register(*, backends=tuple()):
+    """
+    This method enables two things:
+    - Attaching a `__backends` tuple to an object to see what are the necessary backends for it
+      to execute correctly without instantiating it
+    - The '@register' string is used to dynamically import objects
+    """
+
+    if not isinstance(backends, tuple):
+        raise ValueError("Backends should be a tuple.")
+
+    def inner_fn(fun):
+        fun.__backends = backends
+        return fun
+
+    return inner_fn
+
+
+def define_import_structure(module_path):
+    directory = os.path.dirname(module_path)
+    adjacent_modules = [f for f in os.listdir(directory) if not os.path.isdir(os.path.join(directory, f))]
+
+    if "__init__.py" in adjacent_modules:
+        adjacent_modules.remove("__init__.py")
+
+    module_requirements = {}
+    for module_name in adjacent_modules:
+        with open(os.path.join(directory, module_name)) as f:
+            file_content = f.read()
+
+        # Remove the .py suffix
+        if module_name.endswith('.py'):
+            module_name = module_name[:-3]
+
+        previous_line = ""
+        for line in file_content.split("\n"):
+            # This allows registering items with other decorators. We'll take a look
+            # at the line that follows at the same indentation level.
+            if line.startswith((" ", "\t", "@", ")")) and not line.startswith("@register"):
+                continue
+
+            if "@register" in previous_line:
+                if "backends" in previous_line:
+                    backends_string = previous_line.split("backends=")[1].split("(")[1].split(")")[0]
+                    backends = tuple(sorted([b.strip("'\",") for b in backends_string.split(", ")]))
+                else:
+                    backends = tuple()
+
+                if backends not in module_requirements:
+                    module_requirements[backends] = {}
+                if module_name not in module_requirements[backends]:
+                    module_requirements[backends][module_name] = []
+
+                start_index = 6 if line.startswith('class') else 4
+                module_requirements[backends][module_name].append(line[start_index:].split("(")[0])
+            previous_line = line
+
+    _import_structure = module_requirements.pop((), {})
+
+    for backends, modules in module_requirements.items():
+        try:
+            for backend in backends:
+                is_backend_available, _ = BACKENDS_MAPPING[backend]
+
+                if not is_backend_available():
+                    raise OptionalDependencyNotAvailable()
+        except OptionalDependencyNotAvailable:
+            pass
+        else:
+            for module, objects in modules.items():
+                if module not in _import_structure:
+                    _import_structure[module] = objects
+                else:
+                    _import_structure[module].extend(objects)
+
+    return _import_structure
