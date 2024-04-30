@@ -21,6 +21,7 @@ import torch
 from ..cache_utils import DynamicCache
 from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor
 
+
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from .configuration_utils import GenerationConfig
