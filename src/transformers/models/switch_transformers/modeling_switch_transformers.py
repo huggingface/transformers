@@ -116,6 +116,7 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
 
 
+@register(backends=("torch",))
 class SwitchTransformersTop1Router(nn.Module):
     """
     Router using tokens choose top-1 experts assignment.
@@ -261,6 +262,7 @@ class SwitchTransformersDenseActDense(nn.Module):
         return hidden_states
 
 
+@register(backends=("torch",))
 class SwitchTransformersSparseMLP(nn.Module):
     r"""
     Implementation of the Switch Transformers Sparse MLP module.
@@ -1867,5 +1869,7 @@ __all__ = [
     "SwitchTransformersPreTrainedModel",
     "SwitchTransformersModel",
     "SwitchTransformersForConditionalGeneration",
-    "SwitchTransformersEncoderModel"
+    "SwitchTransformersEncoderModel",
+    "SwitchTransformersTop1Router",
+    "SwitchTransformersSparseMLP"
 ]

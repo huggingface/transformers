@@ -1412,6 +1412,7 @@ class TFRobertaPreLayerNormClassificationHead(keras.layers.Layer):
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRobertaPreLayerNormForSequenceClassification(
     TFRobertaPreLayerNormPreTrainedModel, TFSequenceClassificationLoss
 ):
@@ -1810,5 +1811,6 @@ __all__ = [
     "TFRobertaPreLayerNormForCausalLM",
     "TFRobertaPreLayerNormForMultipleChoice",
     "TFRobertaPreLayerNormForTokenClassification",
-    "TFRobertaPreLayerNormForQuestionAnswering"
+    "TFRobertaPreLayerNormForQuestionAnswering",
+    "TFRobertaPreLayerNormForSequenceClassification"
 ]

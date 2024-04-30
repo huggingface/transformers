@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_fastspeech2_conformer import *
     from .modeling_fastspeech2_conformer import *
+    from .tokenization_fastspeech2_conformer import *
 else:
     import sys
 
