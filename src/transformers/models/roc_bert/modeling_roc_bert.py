@@ -770,7 +770,6 @@ class RoCBertPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_roc_bert
     base_model_prefix = "roc_bert"
     supports_gradient_checkpointing = True
-    _no_split_modules = []
 
     def _init_weights(self, module):
         """Initialize the weights"""
