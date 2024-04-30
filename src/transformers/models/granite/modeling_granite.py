@@ -7,12 +7,12 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ...cache_utils import DynamicCache
-from ...modeling_utils import PreTrainedModel
-from ...activations import get_activation as get_base_activation
-from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
-from ...utils import is_flash_attn_2_available
 
+from ...activations import get_activation as get_base_activation
+from ...cache_utils import DynamicCache
+from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
+from ...modeling_utils import PreTrainedModel
+from ...utils import is_flash_attn_2_available
 from .configuration_granite import GraniteConfig
 
 
