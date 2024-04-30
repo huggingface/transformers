@@ -128,6 +128,7 @@ from . import (
     levit,
     lilt,
     llama,
+    granite,
     llava,
     llava_next,
     longformer,

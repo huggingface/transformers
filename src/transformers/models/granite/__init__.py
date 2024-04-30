@@ -1,4 +1,4 @@
-# Copyright 2022 EleutherAI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 EleutherAI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,8 +34,9 @@ else:
         "GraniteForCausalLM",
         "GraniteModel",
         "GranitePreTrainedModel",
+        "GraniteForSequenceClassification",
+        "GraniteForQuestionAnswering",
     ]
-
 
 if TYPE_CHECKING:
     from .configuration_granite import GraniteConfig
@@ -48,10 +49,11 @@ if TYPE_CHECKING:
     else:
         from .modeling_granite import (
             GraniteForCausalLM,
+            GraniteForQuestionAnswering,
+            GraniteForSequenceClassification,
             GraniteModel,
             GranitePreTrainedModel,
         )
-
 
 else:
     import sys
