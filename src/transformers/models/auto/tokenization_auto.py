@@ -819,14 +819,14 @@ class AutoTokenizer:
         # If that did not work, let's try to use the config.
         if config_tokenizer_class is None:
             if not isinstance(config, PretrainedConfig):
-                if from_gguf is None or not from_gguf:
-                    config = AutoConfig.from_pretrained(
-                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                    )
-                else:
+                if from_gguf:
                     gguf_path = cached_file(pretrained_model_name_or_path, from_gguf, **kwargs)
                     config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
                     config = AutoConfig.for_model(**config_dict)
+                else:
+                    config = AutoConfig.from_pretrained(
+                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    )
             config_tokenizer_class = config.tokenizer_class
             if hasattr(config, "auto_map") and "AutoTokenizer" in config.auto_map:
                 tokenizer_auto_map = config.auto_map["AutoTokenizer"]

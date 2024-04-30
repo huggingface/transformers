@@ -715,11 +715,11 @@ class PretrainedConfig(PushToHubMixin):
                 )
 
         try:
-            if from_gguf is None:
+            if from_gguf:
+                config_dict = load_gguf_checkpoint(resolved_config_file, return_tensors=False)["config"]
+            else:
                 # Load config dict
                 config_dict = cls._dict_from_json_file(resolved_config_file)
-            else:
-                config_dict = load_gguf_checkpoint(resolved_config_file, return_tensors=False)["config"]
 
             config_dict["_commit_hash"] = commit_hash
         except (json.JSONDecodeError, UnicodeDecodeError):
