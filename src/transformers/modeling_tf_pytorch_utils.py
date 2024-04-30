@@ -415,6 +415,14 @@ def load_pytorch_state_dict_in_tf2_model(
             else:
                 mismatched_keys.append((name, array.shape, symbolic_weight.shape))
                 continue
+        ############# adding this to debug CI test failure, will revert before merge ##
+        import numpy as np
+        tf_weight = symbolic_weight.numpy()
+        max_diff = np.max(np.abs(array - tf_weight))
+        if max_diff > 1e-5:
+            print(f"load pytorch in tf2: weight difference: {max_diff}")
+            print(f"TensorFlow weight name: {symbolic_weight.name}")
+        ##############################################################################
 
         tf_loaded_numel += tensor_size(array)
 
@@ -625,6 +633,19 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
             # Convert to torch tensor
             array = torch.from_numpy(array)
 
+        ############# adding this to debug CI test failure, will revert before merge ##
+        tf_weight = tf_weights_map[pt_weight_name_to_check][0]
+        # Apply transpose to align TensorFlow weights to PyTorch dimension ordering before comparison
+        if tf_weight.ndim == 4:
+            tf_weight = tf_weight.transpose(3, 2, 0, 1)
+        elif tf_weight.ndim == 2:
+            if tf_weight.shape != array.shape:
+                tf_weight = tf_weight.transpose()
+        max_diff = numpy.max(numpy.abs(array.numpy() - tf_weight))
+        if max_diff > 1e-5:
+            print(f"load tf2 weights in pytorch: weight difference: {max_diff}:")
+            print(f"pytorch weight name: {pt_weight_name}")
+        ###################################################################################
         new_pt_params_dict[pt_weight_name] = array
         loaded_pt_weights_data_ptr[pt_weight.data_ptr()] = array
         all_tf_weights.discard(pt_weight_name)
