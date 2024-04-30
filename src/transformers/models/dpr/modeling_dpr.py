@@ -102,6 +102,7 @@ class DPRQuestionEncoderOutput(ModelOutput):
 
 
 @dataclass
+@register(backends=("torch",))
 class DPRReaderOutput(ModelOutput):
     """
     Class for outputs of [`DPRQuestionEncoder`].
@@ -427,6 +428,7 @@ DPR_READER_INPUTS_DOCSTRING = r"""
     "The bare DPRContextEncoder transformer outputting pooler outputs as context representations.",
     DPR_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DPRContextEncoder(DPRPretrainedContextEncoder):
     def __init__(self, config: DPRConfig):
         super().__init__(config)
@@ -508,6 +510,7 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
     "The bare DPRQuestionEncoder transformer outputting pooler outputs as question representations.",
     DPR_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
     def __init__(self, config: DPRConfig):
         super().__init__(config)
@@ -590,6 +593,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
     "The bare DPRReader transformer outputting span predictions.",
     DPR_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DPRReader(DPRPretrainedReader):
     def __init__(self, config: DPRConfig):
         super().__init__(config)
@@ -665,5 +669,9 @@ __all__ = [
     "DPRPreTrainedModel",
     "DPRPretrainedContextEncoder",
     "DPRPretrainedQuestionEncoder",
-    "DPRPretrainedReader"
+    "DPRPretrainedReader",
+    "DPRContextEncoder",
+    "DPRQuestionEncoder",
+    "DPRReader",
+    "DPRReaderOutput"
 ]

@@ -2416,6 +2416,7 @@ class SeamlessM4TVariancePredictor(nn.Module):
         return self.proj(hidden_states).squeeze(dim=2)
 
 
+@register(backends=("torch",))
 class SeamlessM4THifiGan(nn.Module):
     def __init__(self, config: SeamlessM4TConfig):
         super().__init__()
@@ -4415,5 +4416,6 @@ __all__ = [
     "SeamlessM4TForSpeechToText",
     "SeamlessM4TForTextToSpeech",
     "SeamlessM4TForSpeechToSpeech",
-    "SeamlessM4TModel"
+    "SeamlessM4TModel",
+    "SeamlessM4THifiGan"
 ]

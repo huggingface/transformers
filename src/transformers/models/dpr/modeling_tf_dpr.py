@@ -539,6 +539,7 @@ TF_DPR_READER_INPUTS_DOCSTRING = r"""
     "The bare DPRContextEncoder transformer outputting pooler outputs as context representations.",
     TF_DPR_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
     def __init__(self, config: DPRConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
@@ -628,6 +629,7 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
     "The bare DPRQuestionEncoder transformer outputting pooler outputs as question representations.",
     TF_DPR_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
     def __init__(self, config: DPRConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
@@ -716,6 +718,7 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
     "The bare DPRReader transformer outputting span predictions.",
     TF_DPR_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFDPRReader(TFDPRPretrainedReader):
     def __init__(self, config: DPRConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
@@ -796,5 +799,8 @@ class TFDPRReader(TFDPRPretrainedReader):
 __all__ = [
     "TFDPRPretrainedContextEncoder",
     "TFDPRPretrainedQuestionEncoder",
-    "TFDPRPretrainedReader"
+    "TFDPRPretrainedReader",
+    "TFDPRContextEncoder",
+    "TFDPRQuestionEncoder",
+    "TFDPRReader"
 ]

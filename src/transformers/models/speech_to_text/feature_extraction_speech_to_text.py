@@ -34,7 +34,7 @@ if is_speech_available():
 logger = logging.get_logger(__name__)
 
 
-@register(backends=("speech",))
+@register()
 class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Speech2Text feature extractor.

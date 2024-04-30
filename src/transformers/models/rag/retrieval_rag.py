@@ -26,7 +26,7 @@ from ...tokenization_utils_base import BatchEncoding
 from ...utils import cached_file, is_datasets_available, is_faiss_available, logging, requires_backends, strtobool
 from .configuration_rag import RagConfig
 from .tokenization_rag import RagTokenizer
-
+from ...utils.import_utils import register
 
 if is_datasets_available():
     from datasets import Dataset, load_dataset, load_from_disk
@@ -341,6 +341,7 @@ class CustomHFIndex(HFIndexBase):
             self._index_initialized = True
 
 
+@register()
 class RagRetriever:
     """
     Retriever used to get documents from vector queries. It retrieves the documents embeddings as well as the documents
@@ -672,3 +673,8 @@ class RagRetriever:
                 },
                 tensor_type=return_tensors,
             )
+
+
+__all__ = [
+    "RagRetriever"
+]

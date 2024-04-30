@@ -631,6 +631,7 @@ class PvtV2ForImageClassification(PvtV2PreTrainedModel):
     """,
     PVT_V2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PvtV2Backbone(PvtV2Model, BackboneMixin):
     def __init__(self, config: PvtV2Config):
         super().__init__(config)
@@ -706,5 +707,6 @@ class PvtV2Backbone(PvtV2Model, BackboneMixin):
 __all__ = [
     "PvtV2PreTrainedModel",
     "PvtV2Model",
-    "PvtV2ForImageClassification"
+    "PvtV2ForImageClassification",
+    "PvtV2Backbone"
 ]

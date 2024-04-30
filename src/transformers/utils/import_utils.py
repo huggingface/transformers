@@ -1631,7 +1631,8 @@ def define_import_structure(module_path):
                     module_requirements[backends][module_name] = []
 
                 start_index = 6 if line.startswith('class') else 4
-                module_requirements[backends][module_name].append(line[start_index:].split("(")[0])
+                object_name = line[start_index:].split("(")[0].strip(':')
+                module_requirements[backends][module_name].append(object_name)
             previous_line = line
 
     _import_structure = module_requirements.pop((), {})

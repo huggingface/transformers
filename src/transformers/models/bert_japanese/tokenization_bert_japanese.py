@@ -374,6 +374,7 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
         return (vocab_file,)
 
 
+@register()
 class MecabTokenizer:
     """Runs basic tokenization with MeCab morphological parser."""
 
@@ -646,6 +647,7 @@ class JumanppTokenizer:
         return tokens
 
 
+@register()
 class CharacterTokenizer:
     """Runs Character tokenization."""
 
@@ -981,5 +983,7 @@ class SentencepieceTokenizer(object):
         return new_pieces
 
 __all__ = [
-    "BertJapaneseTokenizer"
+    "BertJapaneseTokenizer",
+    "CharacterTokenizer",
+    "MecabTokenizer"
 ]

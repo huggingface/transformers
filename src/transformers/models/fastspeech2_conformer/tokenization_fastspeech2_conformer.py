@@ -22,13 +22,14 @@ import regex
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging, requires_backends
-
+from ...utils.import_utils import register
 
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json"}
 
 
+@register()
 class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
     """
     Construct a FastSpeech2Conformer tokenizer.
@@ -183,3 +184,8 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
                 "You need to install g2p-en to use FastSpeech2ConformerTokenizer. "
                 "See https://pypi.org/project/g2p-en/ for installation."
             )
+
+
+__all__ = [
+    "FastSpeech2ConformerTokenizer"
+]

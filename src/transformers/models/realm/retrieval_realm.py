@@ -22,7 +22,7 @@ from huggingface_hub import hf_hub_download
 
 from ... import AutoTokenizer
 from ...utils import logging
-
+from ...utils.import_utils import register
 
 _REALM_BLOCK_RECORDS_FILENAME = "block_records.npy"
 
@@ -69,6 +69,7 @@ class ScaNNSearcher:
         return retrieved_block_ids.astype("int64")
 
 
+@register()
 class RealmRetriever:
     """The retriever of REALM outputting the retrieved evidence block and whether the block has answers as well as answer
     positions."
@@ -162,3 +163,8 @@ class RealmRetriever:
                 start_pos_ += padded
                 end_pos_ += padded
         return has_answers, start_pos, end_pos
+
+
+__all__ = [
+    "RealmRetriever"
+]

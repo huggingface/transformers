@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from .modeling_realm import *
     from .tokenization_realm import *
     from .tokenization_realm_fast import *
+    from .retrieval_realm import *
 else:
     import sys
 
