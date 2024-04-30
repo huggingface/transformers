@@ -13,15 +13,20 @@
 # limitations under the License.
 
 """
-This script is used to get the directory of the modeling file that is added in a pull request (i.e. a new model PR).
+This script is used to get the models for which to run slow CI.
+
+A new model added in a pull request will be included, as well as models specified in a commit message with a prefix
+`[run-slow]`, `[run_slow]` or `[run slow]`. For example, the commit message `[run_slow]bert, gpt2` will give `bert` and
+`gpt2`.
 
 Usage:
 
 ```bash
-python utils/check_if_new_model_added.py
+python utils/pr_slow_ci_models.py.py
 ```
 """
 
+import argparse
 import re
 from pathlib import Path
 from typing import List
@@ -82,7 +87,7 @@ def get_new_python_files() -> List[str]:
     return get_new_python_files_between_commits(repo.head.commit, branching_commits)
 
 
-if __name__ == "__main__":
+def get_new_model():
     new_files = get_new_python_files()
     reg = re.compile(r"src/transformers/(models/.*)/modeling_.*\.py")
 
@@ -93,4 +98,48 @@ if __name__ == "__main__":
             new_model = find_new_model[0]
             # It's unlikely we have 2 new modeling files in a pull request.
             break
-    print(new_model)
+    return new_model
+
+
+def parse_commit_message(commit_message: str) -> str:
+    """
+    Parses the commit message to find the models specified in it to run slow CI.
+
+    Args:
+        commit_message (`str`): The commit message of the current commit.
+
+    Returns:
+        `str`: The substring in `commit_message` after `[run-slow]`, [run_slow]` or [run slow]`. If no such prefix is
+         found, the empty string is returned.
+    """
+    if commit_message is None:
+        return ""
+
+    command_search = re.search(r"\[([^\]]*)\](.*)", commit_message)
+    if command_search is None:
+        return ""
+
+    command = command_search.groups()[0]
+    command = command.lower().replace("-", " ").replace("_", " ")
+    run_slow = command == "run slow"
+    if run_slow:
+        models = command_search.groups()[1].strip()
+        return models
+    else:
+        return ""
+
+
+def get_models(commit_message: str):
+    models = parse_commit_message(commit_message)
+    return [f"models/{x}" for x in models.replace(",", " ").split()]
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--commit_message", type=str, default="", help="The commit message.")
+    args = parser.parse_args()
+
+    new_model = get_new_model()
+    specified_models = get_models(args.commit_message)
+    models = ([] if new_model == "" else [new_model]) + specified_models
+    print(models)
