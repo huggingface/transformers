@@ -2074,6 +2074,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "files are necessary for the tokenizer to operate."
             )
 
+        # If one passes a GGUF file path to `from_gguf` there is no need for this check as the tokenizer will be
+        # loaded directly from the GGUF file.
         if all(full_file_name is None for full_file_name in resolved_vocab_files.values()) and not from_gguf:
             raise EnvironmentError(
                 f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
