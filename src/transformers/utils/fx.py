@@ -710,6 +710,10 @@ class MetaDeviceAttribute(HFAttribute):
 
 
 class HFCacheProxy(HFProxy):
+    """
+    Proxy that represents an instance of `transformers.cache_utils.Cache`.
+    """
+
     @property
     def __class__(self):
         return ProxyableCache
@@ -752,6 +756,10 @@ def create_wrapper(
 
 
 class HFProxyableClassMeta(type):
+    """
+    Metaclass that creates a class with its main methods wrapped to be proxyable.
+    """
+
     def __new__(
         cls,
         name: str,
@@ -780,6 +788,9 @@ class HFProxyableClassMeta(type):
 
 
 def gen_constructor_wrapper(target: Callable) -> Tuple[Callable, Callable]:
+    """
+    Wraps `target` to be proxyable. Used for tensor creators like `torch.ones`, `torch.arange` and so on.
+    """
     wrapper = create_wrapper(target, "call_function")
     return wrapper, target
 
@@ -795,20 +806,6 @@ def _proxies_to_metas(v):
     return v
 
 
-_ORIG_CLASS_METHODS: Dict[Type, Dict[str, Callable]] = collections.defaultdict(dict)
-
-# orig_from_legacy_cache = DynamicCache.from_legacy_cache
-
-
-# def from_legacy_cache(*args, **kwargs):
-#     return orig_from_legacy_cache(*args, **kwargs)
-
-
-# _PICKABLE_CLASS_METHODS: Dict[Callable[[Type], Type], Callable[[Type], Type]] = {
-#     DynamicCache.from_legacy_cache: from_legacy_cache
-# }
-
-
 def cache_proxy_factory_fn(n: Node) -> HFCacheProxy:
     global _CURRENT_TRACER
     if not isinstance(_CURRENT_TRACER, HFTracer):
@@ -816,6 +813,7 @@ def cache_proxy_factory_fn(n: Node) -> HFCacheProxy:
     return HFCacheProxy(n, _CURRENT_TRACER)
 
 
+# Proxyable equivalent of the cache classes defined in `transformers.cache_utils`.
 ProxyableCache = HFProxyableClassMeta("ProxyableCache", (Cache,), {}, proxy_factory_fn=cache_proxy_factory_fn)
 ProxyableDynamicCache = HFProxyableClassMeta(
     "ProxyableDynamicCache", (DynamicCache,), {}, proxy_factory_fn=cache_proxy_factory_fn
@@ -826,45 +824,6 @@ ProxyableSinkCache = HFProxyableClassMeta(
 ProxyableStaticCache = HFProxyableClassMeta(
     "ProxyableStaticCache", (StaticCache,), {}, proxy_factory_fn=cache_proxy_factory_fn
 )
-
-# def patch_class(
-#     cls: Type,
-#     method_names_to_wrap: Optional[List[str]] = None,
-#     special_method_names_to_wrap: Optional[List[str]] = None,
-#     restore: bool = False,
-#     proxy_factory_fn: Optional[Callable[[Node], Proxy]] = None,
-# ):
-#     if restore and cls not in _ORIG_CLASS_METHODS:
-#         raise ValueError(f"Cannot restore {cls} because it was never patched.")
-#
-#     def is_method(name: str):
-#         attribute = getattr(cls, name)
-#         return inspect.isfunction(attribute) or inspect.ismethod(attribute)
-#
-#     if method_names_to_wrap is None:
-#         method_names_to_wrap = [name for name in dir(cls) if not name.startswith("__") and is_method(name)]
-#
-#     if special_method_names_to_wrap is None:
-#         special_method_names_to_wrap = ["__init__", "__call__"]
-#
-#     names = set(method_names_to_wrap + special_method_names_to_wrap)
-#
-#     for name in names:
-#         if restore:
-#             orig_methods = _ORIG_CLASS_METHODS[cls]
-#             if name not in orig_methods:
-#                 raise ValueError(f"The method {name} was never patched in {cls}.")
-#             method = orig_methods[name]
-#         else:
-#             orig_method = getattr(cls, name)
-#             is_instance_method = inspect.isfunction(orig_method) and (name not in ["__init__", "__call__"])
-#             method = _PICKABLE_CLASS_METHODS.get(orig_method, orig_method)
-#             method = create_wrapper(
-#                 method, "call_method" if is_instance_method else "call_function", proxy_factory_fn=proxy_factory_fn
-#             )
-#             _ORIG_CLASS_METHODS[cls][name] = orig_method
-#
-#         setattr(cls, name, method)
 
 
 def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None):
@@ -1506,6 +1465,18 @@ def symbolic_trace(
 
     if not disable_check:
         check_if_model_is_supported(model)
+
+    if "past_key_values" in input_names and not model.config.use_cache:
+        logger.warning(
+            "`past_key_values` were specified as input names, but model.config.use_cache = False, this might lead to "
+            "unexpected behavior."
+        )
+    if "past_key_values" not in input_names and model.config.use_cache:
+        logger.warning(
+            "`past_key_values` were not specified as input names, but model.config.use_cache = True. Setting "
+            "model.config.use_cache = False."
+        )
+        model.config.use_cache = False
 
     # Tracing.
     tracer = tracer_cls()

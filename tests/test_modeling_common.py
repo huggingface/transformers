@@ -1252,6 +1252,7 @@ class ModelTesterMixin:
                     model.config.problem_type = "single_label_classification"
 
                 traced_model = symbolic_trace(model, input_names)
+                print(traced_model.graph)
 
                 with torch.no_grad():
                     traced_output = traced_model(**filtered_inputs)
