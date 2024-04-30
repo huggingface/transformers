@@ -1293,7 +1293,7 @@ class GenerationMixin:
 
     def _get_initial_cache_position(self, input_ids, model_kwargs):
         """Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length"""
-        if "use_cache" in model_kwargs and not model_kwargs["use_cache"]:
+        if not model_kwargs.get("use_cache", True):
             model_kwargs["cache_position"] = None
             return model_kwargs
 
