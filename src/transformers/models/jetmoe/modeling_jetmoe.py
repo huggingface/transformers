@@ -736,7 +736,7 @@ class JetMoeFlashAttention2(JetMoeAttention):
         """
         output_attentions = False
 
-        bsz, q_len, C = hidden_states.size()  # batch size, sequence length, embedding dimensionality (hidden_size)
+        bsz, q_len, _ = hidden_states.size()  # batch size, sequence length, embedding dimensionality (hidden_size)
 
         # calculate query, key, values
         query_states, router_logits = self.experts.map(hidden_states)
