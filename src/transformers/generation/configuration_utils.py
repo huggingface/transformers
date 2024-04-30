@@ -287,6 +287,15 @@ class GenerationConfig(PushToHubMixin):
         max_matching_ngram_size (`int`, *optional*, default to `None`):
             The maximum ngram size to be considered for matching in the prompt. Default to 2 if not provided.
 
+
+        > Gneration parameters for Pagedattention
+
+        num_blocks (`int`, *optional*, defaults to 256):
+            The number of blocks in the paged attention mechanism.
+        block_size (`int`, *optional*, defaults to 8):
+            The size of each block in the paged attention mechanism.
+
+
         > Parameters specific to the caching mechanism:
 
         cache_implementation (`str`, *optional*, default to `None`):
@@ -367,6 +376,10 @@ class GenerationConfig(PushToHubMixin):
 
         # Cache implementation
         self.cache_implementation = kwargs.pop("cache_implementation", None)
+
+        # PagedAttention
+        self.num_blocks = kwargs.pop("num_blocks", 256)
+        self.block_size = kwargs.pop("block_size", 8)
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)

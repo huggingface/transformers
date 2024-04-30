@@ -30,7 +30,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, PagedAttentionCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -364,6 +364,10 @@ class LlamaAttention(nn.Module):
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            if isinstance(past_key_value, PagedAttentionCache):
+                # The key/value cache is stored dicretely, so we need to retrieve the entire context
+                # We need an more effcient SDPA kernel to aware this chache
+                key_states, value_states = past_key_value.get_entire_context_states(key_states, value_states)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -651,6 +655,10 @@ class LlamaSdpaAttention(LlamaAttention):
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            if isinstance(past_key_value, PagedAttentionCache):
+                # The key/value cache is stored dicretely, so we need to retrieve the entire context
+                # We need an more effcient SDPA kernel to aware this chache
+                key_states, value_states = past_key_value.get_entire_context_states(key_states, value_states)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -811,22 +819,43 @@ class LlamaPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
-        if self.config._attn_implementation == "flash_attention_2" and cache_cls == StaticCache:
+    def _setup_cache(self, cache_cls, max_batch_size, generation_config):
+        if self.config._attn_implementation == "flash_attention_2" and (
+            cache_cls == StaticCache,
+            cache_cls == PagedAttentionCache,
+        ):
             raise ValueError(
                 "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
                 "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
             )
-
+            
         for layer in self.model.layers:
             device = layer.input_layernorm.weight.device
             if hasattr(self.config, "_pre_quantization_dtype"):
                 dtype = self.config._pre_quantization_dtype
             else:
                 dtype = layer.self_attn.o_proj.weight.dtype
-            layer.self_attn.past_key_value = cache_cls(
-                self.config, max_batch_size, max_cache_len, device=device, dtype=dtype
-            )
+            if cache_cls == StaticCache:
+                layer.self_attn.past_key_value = cache_cls(
+                    self.config,
+                    max_batch_size,
+                    generation_config.max_length,
+                    device=device,
+                    dtype=dtype,
+                )
+            elif cache_cls == PagedAttentionCache:
+                layer.self_attn.past_key_value = cache_cls(
+                    self.config,
+                    generation_config.num_blocks,
+                    generation_config.block_size,
+                    device=device,
+                    dtype=dtype,
+                )
+
+    def _prompt_sharing_with_paged_attention_cache(self, batch_size, beam_size):
+        for layer in self.model.layers:
+            if isinstance(layer.self_attn.past_key_value, PagedAttentionCache):
+                layer.self_attn.past_key_value.set_batch2seq_for_prompt_sharing(batch_size, beam_size)
 
     def _reset_cache(self):
         for layer in self.model.layers:
@@ -977,7 +1006,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
         past_seen_tokens = 0
         if use_cache:  # kept for BC (cache positions)
-            if not isinstance(past_key_values, StaticCache):
+            if not isinstance(past_key_values, StaticCache) or isinstance(past_key_values, PagedAttentionCache):
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
                 past_seen_tokens = past_key_values.get_seq_length()
 
