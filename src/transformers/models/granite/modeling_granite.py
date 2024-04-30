@@ -362,25 +362,20 @@ class GraniteAttention(nn.Module):
         # value -> (batch_size, num_heads, key_length, head_dim)
         # ==========================================================================================
 
-        attn_weights = torch.empty(
-            (batch_size * self.num_heads, query_length, key_length), device=query.device, dtype=query.dtype
-        )
+        if attention_mask is None:
+            attn_weights = torch.empty(
+                (batch_size * self.num_heads, query_length, key_length), device=query.device, dtype=query.dtype
+            )
+            beta = 0
+        else:
+            attn_weights = attention_mask.expand(-1, self.num_heads, -1, -1).reshape(-1, query_length, key_length)
+            beta = 1
 
-        attn_weights = torch.baddbmm(attn_weights, query, key, beta=0, alpha=scale_factor).view(
+        attn_weights = torch.baddbmm(attn_weights, query, key, beta=beta, alpha=scale_factor).view(
             batch_size, self.num_heads, query_length, key_length
         )
 
-        # ==========================================================================================
-        # attn_weights -> (batch_size, num_heads, query_length, key_length)
-        # ==========================================================================================
-
-        attn_weights = attn_weights.to(softmax_dtype)
-
-        if attention_mask is not None:
-            attn_weights = attn_weights + attention_mask
-
-        attn_weights = F.softmax(attn_weights, dim=-1).to(dtype)
-
+        attn_weights = F.softmax(attn_weights.to(softmax_dtype), dim=-1).to(dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
         # ==========================================================================================
