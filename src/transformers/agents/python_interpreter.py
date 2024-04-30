@@ -70,6 +70,19 @@ def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, s
 
     return result
 
+class BreakException(Exception):
+    pass
+
+class ContinueException(Exception):
+    pass
+
+def get_iterable(obj):
+    if isinstance(obj, list):
+        return obj
+    elif hasattr(obj, '__iter__'):
+        return list(obj)
+    else:
+        raise InterpretorError("Object is not iterable")
 
 def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Callable]):
     """
@@ -106,20 +119,14 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
     elif isinstance(expression, ast.ListComp):
         return evaluate_listcomp(expression, state, tools)
     elif isinstance(expression, ast.UnaryOp):
-        operand = evaluate_ast(expression.operand, state, tools)
-        if isinstance(expression.op, ast.USub):
-            return -operand
-        elif isinstance(expression.op, ast.UAdd):
-            return operand
-        elif isinstance(expression.op, ast.Not):
-            return not operand
-        elif isinstance(expression.op, ast.Invert):
-            return ~operand
-        else:
-            raise InterpretorError(f"Unary operation {expression.op.__class__.__name__} is not supported.")
+        return evaluate_unaryop(expression, state, tools)
     elif isinstance(expression, ast.BoolOp):
         # Boolean operation -> evaluate the operation
         return evaluate_boolop(expression, state, tools)
+    elif isinstance(expression, ast.Break):
+        raise BreakException()
+    elif isinstance(expression, ast.Continue):
+        raise ContinueException()
     elif isinstance(expression, ast.BinOp):
         # Binary operation -> execute operation
         return evaluate_binop(expression, state, tools)
@@ -128,22 +135,10 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
         return evaluate_condition(expression, state, tools)
     elif isinstance(expression, ast.Return):
         return evaluate_ast(expression.value, state, tools)
+    elif isinstance(expression, ast.Lambda):
+        return evaluate_lambda(expression, state, tools)
     elif isinstance(expression, ast.FunctionDef):
-
-        def create_function(func_def, state, tools):
-            def new_func(*args):
-                new_state = state.copy()
-                for arg, val in zip(func_def.args.args, args):
-                    new_state[arg.arg] = val
-                result = None
-                for node in func_def.body:
-                    result = evaluate_ast(node, new_state, tools)
-                return result
-
-            return new_func
-
-        tools[expression.name] = create_function(expression, state, tools)
-        return None
+        return evaluate_function_def(expression, state, tools)
     elif isinstance(expression, ast.Dict):
         # Dict -> evaluate all keys and values
         keys = [evaluate_ast(k, state, tools) for k in expression.keys]
@@ -201,6 +196,16 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
                     elem = evaluate_ast(expression.elt, {**state, **vars}, tools)
                     result.append(elem)
         return result
+    elif isinstance(expression, ast.DictComp):
+        result = {}
+        for gen in expression.generators:
+            for container in get_iterable(evaluate_ast(gen.iter, state, tools)):
+                state[gen.target.id] = container
+                key = evaluate_ast(expression.key, state, tools)
+                value = evaluate_ast(expression.value, state, tools)
+                result[key] = value
+        return result
+        return dict(zip(keys, values))
     elif isinstance(expression, ast.Import):
         for alias in expression.names:
             if alias.name in LIST_SAFE_MODULES:
@@ -221,6 +226,44 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
     else:
         # For now we refuse anything else. Let's add things as we need them.
         raise InterpretorError(f"{expression.__class__.__name__} is not supported.")
+
+
+def evaluate_unaryop(expression, state, tools):
+    operand = evaluate_ast(expression.operand, state, tools)
+    if isinstance(expression.op, ast.USub):
+        return -operand
+    elif isinstance(expression.op, ast.UAdd):
+        return operand
+    elif isinstance(expression.op, ast.Not):
+        return not operand
+    elif isinstance(expression.op, ast.Invert):
+        return ~operand
+    else:
+        raise InterpretorError(f"Unary operation {expression.op.__class__.__name__} is not supported.")
+
+def evaluate_lambda(lambda_expression, state, tools):
+    args = [arg.arg for arg in lambda_expression.args.args]
+    def lambda_func(*values):
+        new_state = state.copy()
+        for arg, value in zip(args, values):
+            new_state[arg] = value
+        return evaluate_ast(lambda_expression.body, new_state, tools)
+    return lambda_func
+
+
+def evaluate_function_def(function_def, state, tools):
+    def create_function(func_def, state, tools):
+        def new_func(*args):
+            new_state = state.copy()
+            for arg, val in zip(func_def.args.args, args):
+                new_state[arg.arg] = val
+            result = None
+            for node in func_def.body:
+                result = evaluate_ast(node, new_state, tools)
+            return result
+        return new_func
+    tools[function_def.name] = create_function(function_def, state, tools)
+    return None
 
 
 def evaluate_augassign(expression: ast.AugAssign, state: Dict[str, Any], tools: Dict[str, Callable]):
@@ -422,10 +465,18 @@ def evaluate_for(for_loop, state, tools):
     iterator = evaluate_ast(for_loop.iter, state, tools)
     for counter in iterator:
         state[for_loop.target.id] = counter
-        for expression in for_loop.body:
-            line_result = evaluate_ast(expression, state, tools)
-            if line_result is not None:
-                result = line_result
+        for node in for_loop.body:
+            try:
+                line_result = evaluate_ast(node, state, tools)
+                if line_result is not None:
+                    result = line_result
+            except BreakException:
+                break
+            except ContinueException:
+                continue
+        else:
+            continue
+        break
     return result
 
 

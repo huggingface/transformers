@@ -43,15 +43,18 @@ def parse_json_blob(json_blob: str) -> Dict[str, str]:
         json_blob = json_blob[first_accolade_index : last_accolade_index + 1].replace('\\"', "'")
         json_data = json.loads(json_blob, strict=False)
         return json_data
-    except Exception as e:
+    except json.JSONDecodeError as e:
+        place = e.pos
         raise ValueError(
-            f"The JSON blob you used is invalid: due to the following error: {e}. JSON blob was: {json_blob}"
+            f"The JSON blob you used is invalid: due to the following error: {e}. JSON blob was: {json_blob}, decoding failed at '{json_blob[place-4:place+5]}'."
         )
+    except Exception as e:
+        raise ValueError(f"Error in parsing the JSON blob: {e}.")
 
 
 def parse_code_blob(code_blob: str) -> str:
     try:
-        pattern = r"```(?:py)?\n(.*?)```"
+        pattern = r"```(?:py|python)?\n(.*?)```"
         match = re.search(pattern, code_blob, re.DOTALL)
         return match.group(1).strip()
     except Exception as e:
@@ -207,6 +210,12 @@ class AgentMaxIterationsError(AgentError):
     pass
 
 
+class AgentGenerationError(AgentError):
+    """Exception raised for errors in generation in the agent"""
+
+    pass
+
+
 class Agent:
     def __init__(
         self,
@@ -219,6 +228,7 @@ class Agent:
         tool_parser=parse_json_tool_call,
         add_base_tools: bool = False,
         verbose: int = 0,
+        memory_verbose: bool = False,
     ):
         self.agent_name = self.__class__.__name__
         self.llm_engine = llm_engine
@@ -239,6 +249,8 @@ class Agent:
         self.prompt = None
         self.logs = []
         self.agent_memory = []
+        self.task = None
+        self.memory_verbose = memory_verbose
 
         if verbose == 0:
             logging.set_verbosity_warning()
@@ -266,9 +278,10 @@ class Agent:
             "content": "Task: " + self.logs[0]["task"],
         }
         memory = [prompt_message, task_message]
-        for step_log in self.logs[1:]:
-            thought_message = {"role": MessageRole.ASSISTANT, "content": step_log["llm_output"] + "\n"}
-            memory.append(thought_message)
+        for i, step_log in enumerate(self.logs[1:]):
+            if "llm_output" in step_log:
+                thought_message = {"role": MessageRole.ASSISTANT, "content": step_log["llm_output"] + "\n"}
+                memory.append(thought_message)
 
             if "error" in step_log:
                 message_content = (
@@ -276,10 +289,27 @@ class Agent:
                     + str(step_log["error"])
                     + "\nNow let's retry: take care not to repeat previous errors! Try to adopt different approaches if you can.\n"
                 )
-            else:
+            elif "observation" in step_log:
                 message_content = f"Observation: {step_log['observation']}"
             tool_response_message = {"role": MessageRole.TOOL_RESPONSE, "content": message_content}
             memory.append(tool_response_message)
+
+            if len(memory) % 3 == 0:
+                reminder_content = "Reminder: you are working towards solving the following task: " + self.logs[0]["task"]
+                reminder_content += "\nHere is a summary of your past tool calls and their results:"
+                for j in range(i + 1):
+                    reminder_content += "\nStep " + str(j + 1)
+                    if "tool_call" in self.logs[j]:
+                        reminder_content += "\nTool call:" + str(self.logs[j]["tool_call"])
+                    if self.memory_verbose:
+                        if "observation" in self.logs[j]:
+                            reminder_content += "\nObservation:" + str(self.logs[j]["observation"])
+                    if "error" in self.logs[j]:
+                        reminder_content += "\nError:" + str(self.logs[j]["error"])
+                memory.append({
+                    "role": MessageRole.USER,
+                    "content": reminder_content,
+                })
         return memory
 
     def show_message_history(self) -> None:
@@ -511,11 +541,12 @@ class ReactAgent(Agent):
         self.state = kwargs.copy()
         self.system_prompt = add_additional_args_if_needed(self.system_prompt, self.state)
 
+        self.task = task
         self.log.warn("=====New task=====")
-        self.log.warn(task)
+        self.log.warn(self.task)
         self.log.debug("System prompt is as follows:")
         self.log.debug(self.system_prompt)
-        self.logs.append({"system_prompt": self.system_prompt, "task": task})
+        self.logs.append({"system_prompt": self.system_prompt, "task": self.task})
 
         final_answer = None
         iteration = 0
@@ -536,17 +567,20 @@ class ReactAgent(Agent):
             self.prompt = [
                 {
                     "role": MessageRole.SYSTEM,
-                    "content": "An agent tried to answer a user query but it failed to do so. You shall provide an answer instead. Here is the agent's memory:",
+                    "content": "An agent tried to answer a user query but it failed to do so. You are tasked with prviding an answer instead. Here is the agent's memory:",
                 }
             ]
             self.prompt += self.agent_memory[1:].copy()
             self.prompt += [
                 {
                     "role": MessageRole.USER,
-                    "content": f"Based on the above, please provide an answer to the following request:\n{task}",
+                    "content": f"Based on the above, please provide an answer to the following user request:\n{task}",
                 }
             ]
-            final_answer = self.llm_engine(self.prompt, stop=["Observation:"])
+            try:
+                final_answer = self.llm_engine(self.prompt, stop=["Observation:"])
+            except Exception as e:
+                final_answer = f"Error in generating final llm output: {e}."
 
         return final_answer
 
@@ -589,7 +623,10 @@ class ReactJSONAgent(ReactAgent):
         self.log.info("=====Calling LLM with this last message:=====")
         self.log.info(self.prompt[-1])
 
-        llm_output = self.llm_engine(self.prompt, stop=["Observation:"])
+        try:
+            llm_output = self.llm_engine(self.prompt, stop=["Observation:"])
+        except Exception as e:
+            raise AgentGenerationError(f"Error in generating llm output: {e}.")
         self.log.debug("=====Output message of the LLM:=====")
         self.log.debug(llm_output)
         self.logs[-1]["llm_output"] = llm_output
@@ -675,10 +712,14 @@ class ReactCodeAgent(ReactAgent):
         # Add new step in logs
         self.logs.append({})
 
-        self.log.info("=====Calling LLM with this last message:=====")
-        self.log.info(self.prompt[-1])
+        self.log.info("=====Calling LLM with these last messages:=====")
+        self.log.info(self.prompt[-2:])
 
-        llm_output = self.llm_engine(self.prompt, stop=["Observation:", "<end_code>"])
+        try:
+            llm_output = self.llm_engine(self.prompt, stop=["<end_code>", "Observation:"])
+        except Exception as e:
+            raise AgentGenerationError(f"Error in generating llm output: {e}.")
+
         self.log.debug("=====Output message of the LLM:=====")
         self.log.debug(llm_output)
         self.logs[-1]["llm_output"] = llm_output
@@ -705,7 +746,11 @@ class ReactCodeAgent(ReactAgent):
             self.log.info(information)
             self.logs[-1]["observation"] = information
         except Exception as e:
-            error_msg = f"Failed while trying to execute the code below:\n{code_action}\\Failed due to the following error:\n{str(e)}\nMake sure to provide correct code."
+            error_msg = f"Failed while trying to execute the code below:\n{code_action}\nThis failed due to the following error:\n{str(e)}"
+            if "'dict' object has no attribute 'read'" in str(e):
+                error_msg += (
+                    "\nYou get this error because you passed a dict as input for one of the arguments instead of a string."
+                )
             raise AgentExecutionError(error_msg)
         for line in code_action.split("\n"):
             if line[: len("final_answer")] == "final_answer":

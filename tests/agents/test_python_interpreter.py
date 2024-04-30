@@ -199,3 +199,27 @@ for block in text_block:
         code = "x = [i for i in range(3)]"
         result = evaluate_python_code(code, {"range": range}, state={})
         assert result == [0, 1, 2]
+
+    def test_break_continue(self):
+        code = "for i in range(10):\n    if i == 5:\n        break\ni"
+        result = evaluate_python_code(code, {"range": range}, state={})
+        assert result == 5
+
+        code = "for i in range(10):\n    if i == 5:\n        continue\ni"
+        result = evaluate_python_code(code, {"range": range}, state={})
+        assert result == 9
+
+    def test_call_int(self):
+        code = "import math\nstr(math.ceil(149))"
+        result = evaluate_python_code(code, {"str": lambda x: str(x)}, state={})
+        assert result == "149"
+
+    def test_lambda(self):
+        code = "f = lambda x: x + 2\nf(3)"
+        result = evaluate_python_code(code, {}, state={})
+        assert result == 5
+
+    def test_dictcomp(self):
+        code = "x = {i: i for i in range(3)}"
+        result = evaluate_python_code(code, {"range": range}, state={})
+        assert result == {0: 0, 1: 1, 2: 2}
