@@ -15,12 +15,14 @@
 
 import builtins
 import collections
+import contextlib
 import functools
 import inspect
 import math
 import operator
 import os
 import random
+import sys
 import warnings
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
@@ -32,8 +34,9 @@ from torch.fx._compatibility import compatibility
 from torch.fx._symbolic_trace import is_fx_tracing
 from torch.fx.proxy import ParameterProxy
 
-from .. import PretrainedConfig, PreTrainedModel, logging
+from .. import logging
 from ..cache_utils import Cache, DynamicCache, SinkCache, StaticCache
+from ..modeling_utils import PretrainedConfig, PreTrainedModel
 from ..models.auto import get_values
 from ..models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
@@ -58,7 +61,7 @@ from ..models.auto.modeling_auto import (
     MODEL_MAPPING_NAMES,
 )
 from ..pytorch_utils import is_torch_greater_or_equal_than_2_0
-from ..utils import (
+from .import_utils import (
     ENV_VARS_TRUE_VALUES,
     TORCH_FX_REQUIRED_VERSION,
     get_torch_version,
@@ -194,6 +197,8 @@ _SPECIAL_SUPPORTED_MODELS = [
     # XLNetForQuestionAnswering,
 ]
 _SUPPORTED_MODELS = tuple(sorted(set(_REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPORTED_MODELS)))
+
+_CURRENT_TRACER = None
 
 
 def torch_nn_embedding(self, input):
@@ -707,18 +712,7 @@ class MetaDeviceAttribute(HFAttribute):
 class HFCacheProxy(HFProxy):
     @property
     def __class__(self):
-        return Cache
-
-
-def _proxies_to_metas(v):
-    """Returns the underlying metadata for HFProxies, and behaves like the identity for the others."""
-    if isinstance(v, MetaDeviceAttribute):
-        return "meta"
-    if isinstance(v, torch.fx.Proxy):
-        if not (isinstance(v, HFProxy) and hasattr(v, "_metadata")):
-            raise RuntimeError(f"No metadata was found for {v}")
-        return v._metadata
-    return v
+        return ProxyableCache
 
 
 def create_wrapper(
@@ -757,63 +751,120 @@ def create_wrapper(
     return wrapper
 
 
+class HFProxyableClassMeta(type):
+    def __new__(
+        cls,
+        name: str,
+        bases: Tuple[Type, ...],
+        attrs: Dict[str, Any],
+        proxy_factory_fn: Optional[Callable[[Node], Proxy]] = None,
+    ):
+        cls = super().__new__(cls, name, bases, attrs)
+        for attr_name in dir(cls):
+            attr = getattr(cls, attr_name, None)
+            if attr is None:
+                continue
+            if attr_name == "__init__":
+                op_type = "call_function"
+            elif attr_name.startswith("__"):
+                op_type = None
+            elif inspect.ismethod(attr):
+                op_type = "call_function"
+            elif inspect.isfunction(attr):
+                op_type = "call_method"
+            else:
+                op_type = None
+            if op_type is not None:
+                setattr(cls, attr_name, create_wrapper(attr, op_type, proxy_factory_fn=proxy_factory_fn))
+        return cls
+
+
 def gen_constructor_wrapper(target: Callable) -> Tuple[Callable, Callable]:
     wrapper = create_wrapper(target, "call_function")
     return wrapper, target
 
 
+def _proxies_to_metas(v):
+    """Returns the underlying metadata for HFProxies, and behaves like the identity for the others."""
+    if isinstance(v, MetaDeviceAttribute):
+        return "meta"
+    if isinstance(v, torch.fx.Proxy):
+        if not (isinstance(v, HFProxy) and hasattr(v, "_metadata")):
+            raise RuntimeError(f"No metadata was found for {v}")
+        return v._metadata
+    return v
+
+
 _ORIG_CLASS_METHODS: Dict[Type, Dict[str, Callable]] = collections.defaultdict(dict)
 
-orig_from_legacy_cache = DynamicCache.from_legacy_cache
+# orig_from_legacy_cache = DynamicCache.from_legacy_cache
 
 
-def from_legacy_cache(*args, **kwargs):
-    return orig_from_legacy_cache(*args, **kwargs)
+# def from_legacy_cache(*args, **kwargs):
+#     return orig_from_legacy_cache(*args, **kwargs)
 
 
-_PICKABLE_CLASS_METHODS: Dict[Callable[[Type], Type], Callable[[Type], Type]] = {
-    DynamicCache.from_legacy_cache: from_legacy_cache
-}
+# _PICKABLE_CLASS_METHODS: Dict[Callable[[Type], Type], Callable[[Type], Type]] = {
+#     DynamicCache.from_legacy_cache: from_legacy_cache
+# }
 
 
-def patch_class(
-    cls: Type,
-    method_names_to_wrap: Optional[List[str]] = None,
-    special_method_names_to_wrap: Optional[List[str]] = None,
-    restore: bool = False,
-    proxy_factory_fn: Optional[Callable[[Node], Proxy]] = None,
-):
-    if restore and cls not in _ORIG_CLASS_METHODS:
-        raise ValueError(f"Cannot restore {cls} because it was never patched.")
+def cache_proxy_factory_fn(n: Node) -> HFCacheProxy:
+    global _CURRENT_TRACER
+    if not isinstance(_CURRENT_TRACER, HFTracer):
+        raise RuntimeError("Cannot create HFCacheProxy because there is no HFTracer currently tracing.")
+    return HFCacheProxy(n, _CURRENT_TRACER)
 
-    def is_method(name: str):
-        attribute = getattr(cls, name)
-        return inspect.isfunction(attribute) or inspect.ismethod(attribute)
 
-    if method_names_to_wrap is None:
-        method_names_to_wrap = [name for name in dir(cls) if not name.startswith("__") and is_method(name)]
+ProxyableCache = HFProxyableClassMeta("ProxyableCache", (Cache,), {}, proxy_factory_fn=cache_proxy_factory_fn)
+ProxyableDynamicCache = HFProxyableClassMeta(
+    "ProxyableDynamicCache", (DynamicCache,), {}, proxy_factory_fn=cache_proxy_factory_fn
+)
+ProxyableSinkCache = HFProxyableClassMeta(
+    "ProxyableSinkCache", (SinkCache,), {}, proxy_factory_fn=cache_proxy_factory_fn
+)
+ProxyableStaticCache = HFProxyableClassMeta(
+    "ProxyableStaticCache", (StaticCache,), {}, proxy_factory_fn=cache_proxy_factory_fn
+)
 
-    if special_method_names_to_wrap is None:
-        special_method_names_to_wrap = ["__init__", "__call__"]
-
-    names = set(method_names_to_wrap + special_method_names_to_wrap)
-
-    for name in names:
-        if restore:
-            orig_methods = _ORIG_CLASS_METHODS[cls]
-            if name not in orig_methods:
-                raise ValueError(f"The method {name} was never patched in {cls}.")
-            method = orig_methods[name]
-        else:
-            orig_method = getattr(cls, name)
-            is_instance_method = inspect.isfunction(orig_method) and (name not in ["__init__", "__call__"])
-            method = _PICKABLE_CLASS_METHODS.get(orig_method, orig_method)
-            method = create_wrapper(
-                method, "call_method" if is_instance_method else "call_function", proxy_factory_fn=proxy_factory_fn
-            )
-            _ORIG_CLASS_METHODS[cls][name] = orig_method
-
-        setattr(cls, name, method)
+# def patch_class(
+#     cls: Type,
+#     method_names_to_wrap: Optional[List[str]] = None,
+#     special_method_names_to_wrap: Optional[List[str]] = None,
+#     restore: bool = False,
+#     proxy_factory_fn: Optional[Callable[[Node], Proxy]] = None,
+# ):
+#     if restore and cls not in _ORIG_CLASS_METHODS:
+#         raise ValueError(f"Cannot restore {cls} because it was never patched.")
+#
+#     def is_method(name: str):
+#         attribute = getattr(cls, name)
+#         return inspect.isfunction(attribute) or inspect.ismethod(attribute)
+#
+#     if method_names_to_wrap is None:
+#         method_names_to_wrap = [name for name in dir(cls) if not name.startswith("__") and is_method(name)]
+#
+#     if special_method_names_to_wrap is None:
+#         special_method_names_to_wrap = ["__init__", "__call__"]
+#
+#     names = set(method_names_to_wrap + special_method_names_to_wrap)
+#
+#     for name in names:
+#         if restore:
+#             orig_methods = _ORIG_CLASS_METHODS[cls]
+#             if name not in orig_methods:
+#                 raise ValueError(f"The method {name} was never patched in {cls}.")
+#             method = orig_methods[name]
+#         else:
+#             orig_method = getattr(cls, name)
+#             is_instance_method = inspect.isfunction(orig_method) and (name not in ["__init__", "__call__"])
+#             method = _PICKABLE_CLASS_METHODS.get(orig_method, orig_method)
+#             method = create_wrapper(
+#                 method, "call_method" if is_instance_method else "call_function", proxy_factory_fn=proxy_factory_fn
+#             )
+#             _ORIG_CLASS_METHODS[cls][name] = orig_method
+#
+#         setattr(cls, name, method)
 
 
 def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None):
@@ -847,12 +898,12 @@ class HFTracer(Tracer):
         "finfo",
         "tril",
     ]
-    _CLASSES_TO_PATCH = [
-        Cache,
-        DynamicCache,
-        SinkCache,
-        StaticCache,
-    ]
+    _CLASSES_TO_PATCH = {
+        Cache: ProxyableCache,
+        DynamicCache: ProxyableDynamicCache,
+        SinkCache: ProxyableSinkCache,
+        StaticCache: ProxyableStaticCache,
+    }
 
     supported_archs = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
 
@@ -866,7 +917,7 @@ class HFTracer(Tracer):
             )
 
     def _generate_dummy_input(
-        self, model: PreTrainedModel, input_name: str, shape: List[int], input_names: List[str]
+        self, model: "PreTrainedModel", input_name: str, shape: List[int], input_names: List[str]
     ) -> Dict[str, torch.Tensor]:
         """Generates dummy input for model inference recording."""
         # Retrieving the model class, either from the "class_for_deserialization" attribute if the model was restored
@@ -1141,6 +1192,42 @@ class HFTracer(Tracer):
     def proxy(self, node):
         return HFProxy(node, self)
 
+    @contextlib.contextmanager
+    def patch_for_tracing(self, root: Union[torch.nn.Module, Callable[..., Any]]):
+        # Patching torch functions
+        self.patched_torch_methods = {
+            target: gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
+        }
+        self.orig_fns = set()
+
+        for name, (wrapper, orig) in self.patched_torch_methods.items():
+            setattr(torch, name, wrapper)
+            self.orig_fns.add(orig)
+
+        # Patching classes
+        patched = []
+        module_of_model = inspect.getmodule(root)
+        for name, mod in sys.modules.items():
+            if module_of_model is not None and mod is not module_of_model:
+                continue
+            if not name.startswith("transformers"):
+                continue
+            for orig_cls, patched_cls in self._CLASSES_TO_PATCH.items():
+                for attr_name, attr in mod.__dict__.items():
+                    if attr is orig_cls:
+                        patched.append((mod, attr_name, orig_cls))
+                        setattr(mod, attr_name, patched_cls)
+
+        yield
+
+        for name, (_, orig) in self.patched_torch_methods.items():
+            setattr(torch, name, orig)
+        self.patched_torch_methods = {}
+        self.orig_fns = set()
+
+        for mod, attr_name, orig_cls in patched:
+            setattr(mod, attr_name, orig_cls)
+
     def trace(
         self,
         root: Union[torch.nn.Module, Callable[..., Any]],
@@ -1230,32 +1317,36 @@ class HFTracer(Tracer):
             if param.kind == inspect.Parameter.VAR_KEYWORD and param.name not in input_names:
                 concrete_metas[f"**{param.name}"] = {}
         self.meta_args = concrete_metas
-        self.patched_torch_methods = {
-            target: gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
-        }
+        # self.patched_torch_methods = {
+        #     target: gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
+        # }
 
-        self.orig_fns = set()
+        # self.orig_fns = set()
 
-        for name, (wrapper, orig) in self.patched_torch_methods.items():
-            setattr(torch, name, wrapper)
-            self.orig_fns.add(orig)
+        # for name, (wrapper, orig) in self.patched_torch_methods.items():
+        #     setattr(torch, name, wrapper)
+        #     self.orig_fns.add(orig)
 
-        for cls in self._CLASSES_TO_PATCH:
-            if issubclass(cls, Cache):
+        # for cls in self._CLASSES_TO_PATCH:
+        # if issubclass(cls, Cache):
 
-                def proxy_factory_fn(n: Node):
-                    return HFCacheProxy(n, self)
-            else:
-                proxy_factory_fn = None
-            patch_class(cls, proxy_factory_fn=proxy_factory_fn)
+        #     def proxy_factory_fn(n: Node):
+        #         return HFCacheProxy(n, self)
+        # else:
+        #     proxy_factory_fn = None
+        # patch_class(cls, proxy_factory_fn=proxy_factory_fn)
 
-        try:
-            self.graph = super().trace(root, concrete_args=concrete_args)
-        finally:
-            for name, (_, orig) in self.patched_torch_methods.items():
-                setattr(torch, name, orig)
-            for cls in self._CLASSES_TO_PATCH:
-                patch_class(cls, restore=True)
+        global _CURRENT_TRACER
+        _CURRENT_TRACER = self
+        with self.patch_for_tracing(root):
+            try:
+                self.graph = super().trace(root, concrete_args=concrete_args)
+            finally:
+                _CURRENT_TRACER = None
+            # for name, (_, orig) in self.patched_torch_methods.items():
+            #     setattr(torch, name, orig)
+            # for cls in self._CLASSES_TO_PATCH:
+            #     patch_class(cls, restore=True)
 
         # This is necessary because concrete args are added as input to the traced module since
         # https://github.com/pytorch/pytorch/pull/55888.
@@ -1365,11 +1456,11 @@ def get_concrete_args(model: nn.Module, input_names: List[str]):
     return {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
 
 
-def is_model_supported(model: PreTrainedModel):
+def is_model_supported(model: "PreTrainedModel"):
     return model.__class__.__name__ in _SUPPORTED_MODELS
 
 
-def check_if_model_is_supported(model: PreTrainedModel):
+def check_if_model_is_supported(model: "PreTrainedModel"):
     if not is_model_supported(model):
         supported_model_names = ", ".join(_SUPPORTED_MODELS)
         raise NotImplementedError(
@@ -1378,7 +1469,7 @@ def check_if_model_is_supported(model: PreTrainedModel):
 
 
 def symbolic_trace(
-    model: PreTrainedModel,
+    model: "PreTrainedModel",
     input_names: Optional[List[str]] = None,
     disable_check: bool = False,
     tracer_cls: Type[HFTracer] = HFTracer,
