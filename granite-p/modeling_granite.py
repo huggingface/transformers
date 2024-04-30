@@ -1,5 +1,3 @@
-"""PyTorch Granite model."""
-
 import math
 import numbers
 import warnings
@@ -12,24 +10,15 @@ import torch.nn.functional as F
 
 from ...activations import get_activation as get_base_activation
 from ...cache_utils import DynamicCache
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-from ...utils import (
-    add_start_docstrings,
-    is_flash_attn_2_available,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import is_flash_attn_2_available
 from .configuration_granite import GraniteConfig
 
 
 if is_flash_attn_2_available():
-    from flash_attn import flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
-
-logger = logging.get_logger(__name__)
+    from flash_attn.bert_padding import IndexFirstAxis, pad_input, unpad_input
+    from flash_attn.flash_attn_interface import flash_attn_varlen_func
 
 
 class PositionEmbeddingType(Enum):
@@ -42,9 +31,6 @@ class AttentionHeadType(Enum):
     mha = "mha"
     mqa = "mqa"
     gqa = "gqa"
-
-
-_CONFIG_FOR_DOC = "GraniteConfig"
 
 
 def get_unpad_data(attention_mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -113,7 +99,7 @@ def get_activation_function(name: str) -> nn.Module:
     return activation_function
 
 
-class GraniteRMSNorm(nn.Module):
+class RMSNorm(nn.Module):
     def __init__(self, normalized_shape: int, eps: float = 1e-6) -> None:
         super().__init__()
 
@@ -140,12 +126,9 @@ class GraniteRMSNorm(nn.Module):
         nn.init.ones_(self.weight)
 
 
-ALL_LAYERNORM_LAYERS.append(GraniteRMSNorm)
-
-
 _NORMALIZATION_FUNCTIONS = {
     "layernorm": nn.LayerNorm,
-    "rmsnorm": GraniteRMSNorm,
+    "rmsnorm": RMSNorm,
 }
 
 
@@ -352,12 +335,6 @@ class GraniteAttention(nn.Module):
 
 
 class GraniteSDPA(GraniteAttention):
-    """
-    Granite attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `GraniteAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
-    SDPA API.
-    """
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -398,12 +375,6 @@ class GraniteSDPA(GraniteAttention):
 
 
 class GraniteFlashAttention2(GraniteAttention):
-    """
-    Granite flash attention module. This module inherits from `GraniteAttention` as the weights of the module stays
-    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
-    flash attention and deal with padding tokens in case the input contains any of them.
-    """
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -433,15 +404,15 @@ class GraniteFlashAttention2(GraniteAttention):
         key_length = key.shape[1]
         indices_k, cu_seqlens_k, max_seqlen_k = get_unpad_data(attention_mask)
 
-        key = index_first_axis(
+        key = IndexFirstAxis.apply(
             key.reshape(batch_size * key_length, self.num_key_value_heads, self.head_dim), indices_k
         )
-        value = index_first_axis(
+        value = IndexFirstAxis.apply(
             value.reshape(batch_size * key_length, self.num_key_value_heads, self.head_dim), indices_k
         )
 
         if query_length == key_length:
-            query = index_first_axis(
+            query = IndexFirstAxis.apply(
                 query.reshape(batch_size * key_length, self.num_heads, self.head_dim), indices_k
             )
             cu_seqlens_q = cu_seqlens_k
@@ -698,27 +669,6 @@ class GraniteBlock(nn.Module):
         return hidden_states
 
 
-GRANITE_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`GraniteConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare Granite Model outputting raw hidden-states without any specific head on top.",
-    GRANITE_START_DOCSTRING,
-)
 class GranitePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -745,7 +695,7 @@ class GranitePreTrainedModel(PreTrainedModel):
         self.initializer_range = config.initializer_range
 
     def _init_weights(self, module: nn.Module) -> None:
-        if isinstance(module, (nn.LayerNorm, GraniteRMSNorm, Alibi, RoPE)):
+        if isinstance(module, (nn.LayerNorm, RMSNorm, Alibi, RoPE)):
             module.reset_parameters()
         elif isinstance(module, nn.Linear):
             nn.init.normal_(module.weight, mean=0, std=self.initializer_range)
@@ -820,7 +770,7 @@ class GraniteModel(GranitePreTrainedModel):
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple]:
+    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         (
             output_hidden_states,
             use_cache,
@@ -868,7 +818,7 @@ class GraniteModel(GranitePreTrainedModel):
         if not return_dict:
             return tuple(v for v in [hidden_states, past_key_values, all_hidden_states] if v is not None)
 
-        return BaseModelOutputWithPast(
+        return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
             hidden_states=all_hidden_states,
@@ -1175,7 +1125,7 @@ class GraniteForCausalLM(GranitePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.transformer(
@@ -1207,7 +1157,7 @@ class GraniteForCausalLM(GranitePreTrainedModel):
             output = (lm_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return CausalLMOutputWithPast(
+        return CausalLMOutputWithCrossAttentions(
             loss=loss,
             logits=lm_logits,
             past_key_values=transformer_outputs.past_key_values,
