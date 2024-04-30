@@ -82,7 +82,6 @@ def check_forward(test_module, model, batch_size=1, context_size=1024):
 
 
 model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-# model_id ="mistralai/Mistral-7B-Instruct-v0.2"
 
 
 @require_torch_gpu
