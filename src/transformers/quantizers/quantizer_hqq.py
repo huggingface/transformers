@@ -78,7 +78,11 @@ class HQQHfQuantizer(HfQuantizer):
             raise RuntimeError("No GPU found. A GPU is needed for quantization.")
 
         if self.torch_dtype is None:
-            self.torch_dtype = kwargs.get("torch_dtype", torch.float16)
+            if "torch_dtype" in kwargs:
+                self.torch_dtype = kwargs["torch_dtype"]
+            else:
+                self.torch_dtype = torch.float32
+                logger.info("Setting torch_dtype to torch.float32 as the default value since it was not specified.")
 
         device_map = kwargs.get("device_map", None)
         if isinstance(device_map, dict):
