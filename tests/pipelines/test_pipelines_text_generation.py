@@ -176,10 +176,11 @@ class TextGenerationPipelineTests(unittest.TestCase):
                 [{"generated_text": expected_chat2}],
             ],
         )
-    
+
     @require_torch
     def test_small_chat_model_with_dataset_pt(self):
         from torch.utils.data import Dataset
+
         from transformers.pipelines.pt_utils import KeyDataset
 
         class MyDataset(Dataset):
@@ -196,7 +197,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
 
             def __getitem__(self, i):
                 return {"text": self.data[i]}
-
 
         text_generator = pipeline(
             task="text-generation", model="rocketknight1/tiny-gpt2-with-chatml-template", framework="pt"
@@ -218,7 +218,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
                     {"generated_text": expected_chat},
                 ],
             )
-
 
     @require_tf
     def test_small_model_tf(self):

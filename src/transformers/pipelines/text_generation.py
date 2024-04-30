@@ -3,8 +3,8 @@ import warnings
 from typing import Dict
 
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available
-from .pt_utils import KeyDataset
 from .base import Pipeline, build_pipeline_init_args
+from .pt_utils import KeyDataset
 
 
 if is_torch_available():
