@@ -220,7 +220,7 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "nielsr/zoedepth-nyu"
+        model_name = "Intel/zoedepth-nyu"
         model = ZoeDepthForDepthEstimation.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -236,9 +236,8 @@ def prepare_img():
 @slow
 class ZoeDepthModelIntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
-        # TODO update organization
-        image_processor = ZoeDepthImageProcessor.from_pretrained("nielsr/zoedepth-nyu")
-        model = ZoeDepthForDepthEstimation.from_pretrained("nielsr/zoedepth-nyu").to(torch_device)
+        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu")
+        model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu").to(torch_device)
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
@@ -254,6 +253,28 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor(
             [[1.0020, 1.0219, 1.0389], [1.0349, 1.0816, 1.1000], [1.0576, 1.1094, 1.1249]],
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
+
+    def test_inference_depth_estimation_multiple_heads(self):
+        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti")
+        model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
+
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+            predicted_depth = outputs.predicted_depth
+
+        # verify the predicted depth
+        expected_shape = torch.Size((1, 384, 512))
+        self.assertEqual(predicted_depth.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[1.1571, 1.1438, 1.1783], [1.2163, 1.2036, 1.2320], [1.2688, 1.2461, 1.2734]],
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))

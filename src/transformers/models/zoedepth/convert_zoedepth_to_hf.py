@@ -357,9 +357,9 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
 
         print("Pushing model and processor to the hub...")
         repo_id = model_name_to_repo_id[model_name]
-        model.push_to_hub(f"nielsr/{repo_id}")
+        model.push_to_hub(f"Intel/{repo_id}")
         image_processor = ZoeDepthImageProcessor()
-        image_processor.push_to_hub(f"nielsr/{repo_id}")
+        image_processor.push_to_hub(f"Intel/{repo_id}")
 
 
 if __name__ == "__main__":

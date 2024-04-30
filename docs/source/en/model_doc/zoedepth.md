@@ -32,6 +32,66 @@ alt="drawing" width="600"/>
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/isl-org/ZoeDepth).
 
+## Usage tips
+
+- ZoeDepth is an absolute (also called metric) depth estimation model, unlike DPT which is a relative depth estimation model. This means that ZoeDepth is able to estimate depth in metric units like meters.
+
+The easiest to perform inference with ZoeDepth is by leveraging the [pipeline API](../main_classes/pipelines.md):
+
+```python
+from transformers import pipeline
+from PIL import Image
+import requests
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+pipe = pipeline(task="depth-estimation", model="Intel/zoedepth-nyu-kitti")
+result = pipe(image)
+result["depth"]
+```
+
+Alternatively, one can also perform inference using the classes:
+
+```python
+>>> from transformers import AutoImageProcessor, ZoeDepthForDepthEstimation
+import torch
+import numpy as np
+from PIL import Image
+import requests
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+image_processor = AutoImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti")
+model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti")
+
+# prepare image for the model
+inputs = image_processor(images=image, return_tensors="pt")
+
+with torch.no_grad():
+    outputs = model(**inputs)
+    predicted_depth = outputs.predicted_depth
+
+# interpolate to original size
+prediction = torch.nn.functional.interpolate(
+    predicted_depth.unsqueeze(1),
+    size=image.size[::-1],
+    mode="bicubic",
+    align_corners=False,
+)
+
+# visualize the prediction
+output = prediction.squeeze().cpu().numpy()
+formatted = (output * 255 / np.max(output)).astype("uint8")
+depth = Image.fromarray(formatted)
+```
+
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ZoeDepth.
+
+- A demo notebook regarding inference with ZoeDepth models can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ZoeDepth). 🌎
 
 ## ZoeDepthConfig
 
