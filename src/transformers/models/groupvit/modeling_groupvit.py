@@ -752,7 +752,6 @@ class GroupViTPreTrainedModel(PreTrainedModel):
     config_class = GroupViTConfig
     base_model_prefix = "groupvit"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["GroupViTTextEmbeddings"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
