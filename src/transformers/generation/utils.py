@@ -80,12 +80,14 @@ from .stopping_criteria import (
     MaxTimeCriteria,
     StoppingCriteria,
     StoppingCriteriaList,
+    StopStringCriteria,
     validate_stopping_criteria,
 )
 
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..tokenization_utils_base import PreTrainedTokenizerBase
     from .streamers import BaseStreamer
 
 logger = logging.get_logger(__name__)
@@ -639,6 +641,7 @@ class GenerationMixin:
         model_kwargs: Dict[str, Any],
         is_encoder_decoder: bool = False,
         standardize_cache_format: bool = False,
+        num_new_tokens: int = 1,
     ) -> Dict[str, Any]:
         # update past_key_values
         model_kwargs["past_key_values"] = self._extract_past_from_model_output(
@@ -669,7 +672,7 @@ class GenerationMixin:
                 )
 
         if "cache_position" in model_kwargs and model_kwargs["cache_position"] is not None:
-            model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + 1
+            model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + num_new_tokens
 
         return model_kwargs
 
@@ -702,9 +705,9 @@ class GenerationMixin:
                 input_ids=input_ids,
                 assistant_model=assistant_model,
                 generation_config=generation_config,
-                logits_processor=logits_processor,
                 model_kwargs=model_kwargs,
                 inputs_tensor=inputs_tensor,
+                logits_processor=logits_processor,
             )
         return candidate_generator
 
@@ -885,7 +888,11 @@ class GenerationMixin:
         return processors
 
     def _get_stopping_criteria(
-        self, generation_config: GenerationConfig, stopping_criteria: Optional[StoppingCriteriaList]
+        self,
+        generation_config: GenerationConfig,
+        stopping_criteria: Optional[StoppingCriteriaList],
+        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
+        **kwargs,
     ) -> StoppingCriteriaList:
         criteria = StoppingCriteriaList()
         if generation_config.max_length is not None:
@@ -898,6 +905,14 @@ class GenerationMixin:
             )
         if generation_config.max_time is not None:
             criteria.append(MaxTimeCriteria(max_time=generation_config.max_time))
+        if generation_config.stop_strings is not None:
+            if tokenizer is None:
+                raise ValueError(
+                    "There are one or more stop strings, either in the arguments to `generate` or in the "
+                    "model's generation config, but we could not locate a tokenizer. When generating with "
+                    "stop strings, you must pass the model's tokenizer to the `tokenizer` argument of `generate`."
+                )
+            criteria.append(StopStringCriteria(stop_strings=generation_config.stop_strings, tokenizer=tokenizer))
         if generation_config.eos_token_id is not None:
             criteria.append(EosTokenCriteria(eos_token_id=generation_config.eos_token_id))
         criteria = self._merge_criteria_processor_list(criteria, stopping_criteria)
@@ -1280,6 +1295,49 @@ class GenerationMixin:
 
         return generation_config, model_kwargs
 
+    def _get_initial_cache_position(self, input_ids, model_kwargs):
+        """Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length"""
+        past_length = 0
+        if "past_key_values" in model_kwargs:
+            if isinstance(model_kwargs["past_key_values"], Cache):
+                past_length = model_kwargs["past_key_values"].get_seq_length()
+            else:
+                past_length = model_kwargs["past_key_values"][0][0].shape[2]
+        if "inputs_embeds" in model_kwargs:
+            cur_len = model_kwargs["inputs_embeds"].shape[1]
+        else:
+            cur_len = input_ids.shape[-1]
+        model_kwargs["cache_position"] = torch.arange(past_length, cur_len, device=input_ids.device)
+        return model_kwargs
+
+    def _get_static_cache(self, max_batch_size: int, max_cache_len: int) -> StaticCache:
+        """
+        Sets a static cache for `generate`, that will persist across calls. A new cache will only be initialized a
+        new `generate` call requires a larger cache.
+
+        Returns the resulting static cache object.
+        """
+        needs_new_cache = (
+            not hasattr(self, "_static_cache")
+            or self._static_cache.max_batch_size < max_batch_size
+            or self._static_cache.max_cache_len < max_cache_len
+        )
+        if needs_new_cache:
+            if hasattr(self.config, "_pre_quantization_dtype"):
+                cache_dtype = self.config._pre_quantization_dtype
+            else:
+                cache_dtype = self.dtype
+            self._static_cache = StaticCache(
+                config=self.config,
+                max_batch_size=max_batch_size,
+                max_cache_len=max_cache_len,
+                device=self.device,
+                dtype=cache_dtype,
+            )
+        else:
+            self._static_cache.reset()  # reset the cache for a new generation
+        return self._static_cache
+
     @torch.no_grad()
     def generate(
         self,
@@ -1380,6 +1438,7 @@ class GenerationMixin:
         """
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         self._validate_model_class()
+        tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         self._validate_model_kwargs(model_kwargs.copy())
 
@@ -1389,6 +1448,7 @@ class GenerationMixin:
                 synced_gpus = True
             else:
                 synced_gpus = False
+
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
 
@@ -1482,19 +1542,19 @@ class GenerationMixin:
             input_ids_length=input_ids_length,
         )
 
-        if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
+        if generation_config.cache_implementation is not None and model_kwargs.get("past_key_values") is not None:
+            raise ValueError(
+                "Passing both `cache_implementation` (used to initialize certain caches) and `past_key_values` (a "
+                "Cache object) is unsupported. Please use only one of the two."
+            )
+        elif generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
+            if not self._supports_cache_class:
+                raise ValueError(
+                    "This model does not support the `cache_implementation` argument. Please check the following "
+                    "issue: https://github.com/huggingface/transformers/issues/28981."
+                )
             if generation_config.cache_implementation == "static":
-                if model_kwargs.get("past_key_values", False) is not False:
-                    raise ValueError(
-                        "Using `past_key_values` argument with `generate()` when using a static KV cache is not supported. Please open an issue in Transformers GitHub repository."
-                    )
-                cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING["static"]
-                if not callable(getattr(self, "_setup_cache", None)):
-                    raise ValueError(
-                        "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
-                        " Make sure it has a `_setup_cache` function."
-                    )
-                self._setup_cache(cache_cls, max_batch_size=batch_size, max_cache_len=generation_config.max_length)
+                model_kwargs["past_key_values"] = self._get_static_cache(batch_size, generation_config.max_length)
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
@@ -1531,7 +1591,7 @@ class GenerationMixin:
 
         # 9. prepare stopping criteria
         prepared_stopping_criteria = self._get_stopping_criteria(
-            generation_config=generation_config, stopping_criteria=stopping_criteria
+            generation_config=generation_config, stopping_criteria=stopping_criteria, tokenizer=tokenizer, **kwargs
         )
         # 10. go into different generation modes
         if generation_mode == GenerationMode.ASSISTED_GENERATION:
@@ -1544,6 +1604,8 @@ class GenerationMixin:
                 raise ValueError("assisted generate is only supported for batch_size = 1")
             if not model_kwargs["use_cache"]:
                 raise ValueError("assisted generate requires `use_cache=True`")
+            if generation_config.cache_implementation == "static":
+                raise ValueError("assisted generate is not supported with `static_cache`")
 
             # 11. Get the candidate generator, given the parameterization
             candidate_generator = self._get_candidate_generator(
@@ -1810,14 +1872,6 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
-            if not callable(getattr(self, "_reset_cache", None)):
-                raise ValueError(
-                    "A `static_cache` was used to generate but there was a failure when trying to  release the cache. "
-                    " Make sure this model implements a `_reset_cache` function."
-                )
-            self._reset_cache()
-
         return result
 
     def _has_unfinished_sequences(self, this_peer_finished: bool, synced_gpus: bool, device: torch.device) -> bool:
@@ -2008,11 +2062,9 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        batch_size, cur_len = input_ids.shape
-        if "inputs_embeds" in model_kwargs:
-            cur_len = model_kwargs["inputs_embeds"].shape[1]
+        batch_size = input_ids.shape[0]
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
-        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
+        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         this_peer_finished = False
 
@@ -2479,12 +2531,10 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        batch_size, cur_len = input_ids.shape
-        if "inputs_embeds" in model_kwargs:
-            cur_len = model_kwargs["inputs_embeds"].shape[1]
+        batch_size = input_ids.shape[0]
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
-        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
+        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
@@ -2776,12 +2826,10 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        batch_size, cur_len = input_ids.shape
-        if "inputs_embeds" in model_kwargs:
-            cur_len = model_kwargs["inputs_embeds"].shape[1]
+        batch_size = input_ids.shape[0]
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
-        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
+        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
@@ -3092,9 +3140,7 @@ class GenerationMixin:
         num_beams = beam_scorer.num_beams
 
         batch_beam_size, cur_len = input_ids.shape
-        if "inputs_embeds" in model_kwargs:
-            cur_len = model_kwargs["inputs_embeds"].shape[1]
-        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
+        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         if num_beams * batch_size != batch_beam_size:
             raise ValueError(
@@ -3498,9 +3544,7 @@ class GenerationMixin:
         num_beams = beam_scorer.num_beams
 
         batch_beam_size, cur_len = input_ids.shape
-        if "inputs_embeds" in model_kwargs:
-            cur_len = model_kwargs["inputs_embeds"].shape[1]
-        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
+        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
@@ -3858,9 +3902,7 @@ class GenerationMixin:
         device = input_ids.device
 
         batch_beam_size, cur_len = input_ids.shape
-        if "inputs_embeds" in model_kwargs:
-            cur_len = model_kwargs["inputs_embeds"].shape[1]
-        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
+        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         if return_dict_in_generate and output_scores:
             beam_indices = [tuple(() for _ in range(num_sub_beams * batch_size)) for _ in range(num_beam_groups)]
@@ -4276,9 +4318,7 @@ class GenerationMixin:
         num_beams = constrained_beam_scorer.num_beams
 
         batch_beam_size, cur_len = input_ids.shape
-        if "inputs_embeds" in model_kwargs:
-            cur_len = model_kwargs["inputs_embeds"].shape[1]
-        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
+        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         if num_beams * batch_size != batch_beam_size:
             raise ValueError(
@@ -4561,24 +4601,18 @@ class GenerationMixin:
         >>> model.generation_config.pad_token_id = model.generation_config.eos_token_id
         >>> input_prompt = "It might be possible to"
         >>> input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
-        >>> # instantiate logits processors
-        >>> logits_processor = LogitsProcessorList(
-        ...     [
-        ...         MinLengthLogitsProcessor(10, eos_token_id=model.generation_config.eos_token_id),
-        ...     ]
-        ... )
+        >>> model.generation_config.min_length = 10
+
         >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=20)])
         >>> candidate_generator = AssistedCandidateGenerator(
         ...     input_ids=input_ids,
         ...     assistant_model=assistant_model,
         ...     generation_config=model.generation_config,
-        ...     logits_processor=logits_processor,
         ...     model_kwargs={},
         ... )
         >>> outputs = model._assisted_decoding(
         ...     input_ids,
         ...     candidate_generator=candidate_generator,
-        ...     logits_processor=logits_processor,
         ...     stopping_criteria=stopping_criteria,
         ... )
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -4639,11 +4673,9 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        batch_size, cur_len = input_ids.shape
-        if "inputs_embeds" in model_kwargs:
-            cur_len = model_kwargs["inputs_embeds"].shape[1]
+        batch_size = input_ids.shape[0]
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
-        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
+        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         this_peer_finished = False
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
@@ -4663,20 +4695,21 @@ class GenerationMixin:
             # we use this forward pass to also pick the subsequent logits in the original model.
 
             # 2.1. Prepare the model inputs
-            model_kwargs = _prepare_attention_mask(
-                model_kwargs, candidate_input_ids.shape[1], self.config.is_encoder_decoder
+            candidate_kwargs = copy.copy(model_kwargs)
+            candidate_kwargs = _prepare_attention_mask(
+                candidate_kwargs, candidate_input_ids.shape[1], self.config.is_encoder_decoder
             )
-            model_kwargs = _prepare_token_type_ids(model_kwargs, candidate_input_ids.shape[1])
-            if "cache_position" in model_kwargs:
-                model_kwargs["cache_position"] = torch.cat(
+            candidate_kwargs = _prepare_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
+            if "cache_position" in candidate_kwargs:
+                candidate_kwargs["cache_position"] = torch.cat(
                     (
-                        model_kwargs["cache_position"],
+                        candidate_kwargs["cache_position"],
                         torch.arange(cur_len, cur_len + candidate_length, device=input_ids.device, dtype=torch.long),
                     ),
                     dim=0,
                 )
 
-            model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **model_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
             if "num_logits_to_keep" in model_inputs:
                 model_inputs["num_logits_to_keep"] = candidate_length + 1
 
@@ -4795,6 +4828,7 @@ class GenerationMixin:
                 outputs,
                 model_kwargs,
                 is_encoder_decoder=self.config.is_encoder_decoder,
+                num_new_tokens=n_matches + 1,
             )
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
