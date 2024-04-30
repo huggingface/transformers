@@ -849,6 +849,7 @@ class BertModel(BertPreTrainedModel):
     to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
+
     _no_split_modules = ["BertEmbeddings"]
 
     def __init__(self, config, add_pooling_layer=True):
