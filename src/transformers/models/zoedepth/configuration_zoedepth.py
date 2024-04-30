@@ -83,10 +83,13 @@ class ZoeDepthConfig(PretrainedConfig):
             The number of features in the bottleneck layer.
         n_bins (`int`, *optional*, defaults to 64):
             The number of bins to use in the metric depth estimation head.
+            Only used in case `use_multiple_heads` is `False`.
         min_depth (`float`, *optional*, defaults to 0.001):
-            The minimum depth value to consider.
+            The minimum depth value in the metric depth estimation head.
+            Only used in case `use_multiple_heads` is `False`.
         max_depth (`float`, *optional*, defaults to 10):
-            The maximum depth value to consider.
+            The maximum depth value in the metric depth estimation head.
+            Only used in case `use_multiple_heads` is `False`.
         num_attractors (`List[int], *optional*, defaults to `[16, 8, 4, 1]`):
             The number of attractors to use in each stage.
         bin_embedding_dim (`int`, *optional*, defaults to 128):
@@ -195,6 +198,14 @@ class ZoeDepthConfig(PretrainedConfig):
 
         if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
             raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
+
+        if use_multiple_heads and bin_configurations is None:
+            raise ValueError("bin_configurations must be specified when use_multiple_heads is True.")
+
+        if use_multiple_heads:
+            n_bins = None
+            min_depth = None
+            max_depth = None
 
         self.backbone_config = backbone_config
         self.backbone = backbone
