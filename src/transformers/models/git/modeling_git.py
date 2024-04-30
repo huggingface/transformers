@@ -491,7 +491,6 @@ class GitPreTrainedModel(PreTrainedModel):
     config_class = GitConfig
     base_model_prefix = "git"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["GitVisionEmbeddings"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
