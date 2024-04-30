@@ -515,6 +515,8 @@ def main():
             input_ids = tokenized_examples["input_ids"][i]
             if tokenizer.cls_token_id in input_ids:
                 cls_index = input_ids.index(tokenizer.cls_token_id)
+            elif tokenizer.bos_token_id in input_ids:
+                cls_index = input_ids.index(tokenizer.bos_token_id)
             else:
                 cls_index = 0
 
