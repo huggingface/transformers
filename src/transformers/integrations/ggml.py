@@ -50,7 +50,7 @@ GGML_BLOCK_SIZES = {
     "Q8_0": 2 + 32,  # Q8_0 uses a blocksize of 32 (int8 tensors) + 2 bytes allocated for the scales
     "Q4_K": 144,
     # Q4_0 uses a blocksize of 32 but the 4-bit tensors are packed into 8-bit tensors + 2 bytes for the scales
-    "Q4_0": 2 + 16,  
+    "Q4_0": 2 + 16,
     "Q6_K": 210,
     # See: https://github.com/99991/pygguf/commit/a417edbfc029a1bc270f984a694f9128c5afa8b9
     "Q2_K": 256 // 16 + 256 // 4 + 2 + 2,

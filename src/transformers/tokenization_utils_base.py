@@ -2035,7 +2035,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             tokenizer_config = json.load(reader)
                             if "fast_tokenizer_files" in tokenizer_config:
                                 fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
-                    vocab_files["tokenizer_file"] = fast_tokenizer_file                
+                    vocab_files["tokenizer_file"] = fast_tokenizer_file
 
         # Get files from url, cache, or disk depending on the case
         resolved_vocab_files = {}
@@ -2127,7 +2127,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         from_slow = kwargs.get("from_slow", False)
         from_gguf = kwargs.get("from_gguf", False)
         has_tokenizer_file = resolved_vocab_files.get("tokenizer_file", None) is not None
-        
+
         # If one passes a GGUF file path to `from_gguf` there is no need for this check as the tokenizer will be
         # loaded directly from the GGUF file.
         if (from_slow or not has_tokenizer_file) and cls.slow_tokenizer_class is not None and not from_gguf:

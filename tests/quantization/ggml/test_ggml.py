@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import tempfile
 import unittest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -49,6 +50,23 @@ class GgufIntegrationTests(unittest.TestCase):
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = " Hello, World!\n\n[10:0"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_q2_k_serialization(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_gguf=self.q2_k_gguf_model_id)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, from_gguf=self.q2_k_gguf_model_id).to(torch_device)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            tokenizer.save_pretrained(tmpdirname)
+
+            model = AutoModelForCausalLM.from_pretrained(tmpdirname).to(torch_device)
+            tokenizer = AutoTokenizer.from_pretrained(tmpdirname)
+
+            text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+            out = model.generate(**text, max_new_tokens=10)
 
         EXPECTED_TEXT = " Hello, World!\n\n[10:0"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
