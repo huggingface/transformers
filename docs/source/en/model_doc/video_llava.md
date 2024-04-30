@@ -61,7 +61,7 @@ For multiple turns conversation:
 "USER: <video>\n<prompt1> ASSISTANT: <answer1></s>USER: <prompt2> ASSISTANT: <answer2></s>USER: <prompt3> ASSISTANT:"
 ```
 
-- Note that the video inputs should have exactly 8 frames at the input, since the models was trained in that setting.
+- Note that the video inputs should have exactly 8 frames at the input, since the models were trained in that setting.
 
 
 
