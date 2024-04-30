@@ -350,9 +350,7 @@ class JetMoeMoA(nn.Module):
         """
         bsz, length, emb_size = layer_input.size()
         layer_input = layer_input.reshape(-1, emb_size)
-        index_sorted_experts, batch_index, batch_gates, expert_size, router_logits = self.router(
-            layer_input
-        )
+        index_sorted_experts, batch_index, batch_gates, expert_size, router_logits = self.router(layer_input)
         self.topo_info = (index_sorted_experts, batch_index, batch_gates, expert_size)
 
         expert_inputs = layer_input[batch_index]
@@ -734,7 +732,9 @@ class JetMoeFlashAttention2(JetMoeAttention):
         """
         output_attentions = False
 
-        bsz, q_len, hidden_size = hidden_states.size()  # batch size, sequence length, embedding dimensionality (hidden_size)
+        bsz, q_len, hidden_size = (
+            hidden_states.size()
+        )  # batch size, sequence length, embedding dimensionality (hidden_size)
 
         # calculate query, key, values
         query_states, router_logits = self.experts.map(hidden_states)
@@ -1035,29 +1035,6 @@ class JetMoePreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
         elif isinstance(module, JetMoeMoE):
             module.bias.data.zero_()
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel._setup_cache
-    def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
-        if self.config._attn_implementation == "flash_attention_2" and cache_cls == StaticCache:
-            raise ValueError(
-                "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
-                "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
-            )
-
-        for layer in self.model.layers:
-            device = layer.input_layernorm.weight.device
-            if hasattr(self.config, "_pre_quantization_dtype"):
-                dtype = self.config._pre_quantization_dtype
-            else:
-                dtype = layer.self_attn.o_proj.weight.dtype
-            layer.self_attn.past_key_value = cache_cls(
-                self.config, max_batch_size, max_cache_len, device=device, dtype=dtype
-            )
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel._reset_cache
-    def _reset_cache(self):
-        for layer in self.model.layers:
-            layer.self_attn.past_key_value = None
 
 
 JETMOE_START_DOCSTRING = r"""
