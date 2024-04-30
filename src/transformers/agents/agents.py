@@ -525,11 +525,11 @@ class ReactAgent(Agent):
         Example:
 
         ```py
-        from transformers import ReactJSONAgent
+        from transformers import ReactJsonAgent
         from transformers.agents import CalculatorTool
 
         calculator = CalculatorTool()
-        agent = ReactJSONAgent(tools=[calculator])
+        agent = ReactJsonAgent(tools=[calculator])
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
@@ -585,7 +585,7 @@ class ReactAgent(Agent):
         return final_answer
 
 
-class ReactJSONAgent(ReactAgent):
+class ReactJsonAgent(ReactAgent):
     """
     This agent that solves the given task step by step, using the ReAct framework:
     While the objective is not reached, the agent will perform a cycle of thinking and acting.

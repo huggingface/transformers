@@ -54,7 +54,7 @@ These *tools* are functions for performing a task, and they contain all necessar
 
 The agent can be programmed to:
 - devise a series of actions/tools and run them all at once like the `CodeAgent` for example
-- plan and execute actions/tools one by one and wait for the outcome of each action before launching the next one like the `ReactJSONAgent` for example
+- plan and execute actions/tools one by one and wait for the outcome of each action before launching the next one like the `ReactJsonAgent` for example
 
 ### Types of agents
 
@@ -66,9 +66,9 @@ This agent has a planning step, then generates python code to execute all its ac
 
 This is the go-to agent to solve reasoning tasks, since the ReAct framework ([Yao et al., 2022](https://huggingface.co/papers/2210.03629)) makes it really efficient to think on the basis of its previous observations.
 
-We implement two versions of ReactJSONAgent: 
-- [`~ReactJSONAgent`] generates tool calls as a JSON in its output.
-- [`~ReactCodeAgent`] is a new type of ReactJSONAgent that generates its tool calls as blobs of code, which works really well for LLMs that have strong coding performance.
+We implement two versions of ReactJsonAgent: 
+- [`~ReactJsonAgent`] generates tool calls as a JSON in its output.
+- [`~ReactCodeAgent`] is a new type of ReactJsonAgent that generates its tool calls as blobs of code, which works really well for LLMs that have strong coding performance.
 
 > [!TIP]
 > Read [Open-source LLMs as LangChain Agents](https://huggingface.co/blog/open-source-llms-as-agents) blog post to learn more the ReAct agent.
@@ -255,10 +255,10 @@ You could improve the system prompt, for example, by adding an explanation of th
 For maximum flexibility, you can overwrite the whole system prompt template by passing your custom prompt as an argument to the `system_prompt` parameter.
 
 ```python
-from transformers import ReactJSONAgent
+from transformers import ReactJsonAgent
 from transformers.agents import CalculatorTool
 
-agent = ReactJSONAgent(tools = [CalculatorTool()], system_prompt="{your_custom_prompt}")
+agent = ReactJsonAgent(tools = [CalculatorTool()], system_prompt="{your_custom_prompt}")
 ```
 
 > [!WARNING]

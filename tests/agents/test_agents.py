@@ -17,7 +17,7 @@ import tempfile
 import unittest
 import uuid
 
-from transformers.agents.agents import AgentMaxIterationsError, CodeAgent, ReactCodeAgent, ReactJSONAgent
+from transformers.agents.agents import AgentMaxIterationsError, CodeAgent, ReactCodeAgent, ReactJsonAgent
 from transformers.agents.default_tools import CalculatorTool
 
 
@@ -83,7 +83,7 @@ print(result)
 
 class AgentTests(unittest.TestCase):
     def test_fake_react_json_agent(self):
-        agent = ReactJSONAgent(tools=[CalculatorTool()], llm_engine=fake_react_json_llm)
+        agent = ReactJsonAgent(tools=[CalculatorTool()], llm_engine=fake_react_json_llm)
         output = agent.run("What is 2 multiplied by 3.6452?")
         assert output == "7.2904"
         assert agent.logs[0]["task"] == "What is 2 multiplied by 3.6452?"
@@ -117,7 +117,7 @@ Action:
         assert output == "7.2904"
 
     def test_setup_agent_with_empty_toolbox(self):
-        ReactJSONAgent(llm_engine=fake_react_json_llm, tools=[])
+        ReactJsonAgent(llm_engine=fake_react_json_llm, tools=[])
 
     def test_react_fails_max_iterations(self):
         agent = ReactCodeAgent(

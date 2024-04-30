@@ -24,7 +24,7 @@ from ..utils import (
 
 
 _import_structure = {
-    "agents": ["Agent", "CodeAgent", "ReactAgent", "ReactCodeAgent", "ReactJSONAgent", "Toolbox"],
+    "agents": ["Agent", "CodeAgent", "ReactAgent", "ReactCodeAgent", "ReactJsonAgent", "Toolbox"],
     "llm_engine": ["HfEngine"],
     "tools": ["PipelineTool", "Tool", "launch_gradio_demo", "load_tool"],
 }
@@ -43,7 +43,7 @@ else:
     _import_structure["translation"] = ["TranslationTool"]
 
 if TYPE_CHECKING:
-    from .agents import Agent, CodeAgent, ReactAgent, ReactCodeAgent, ReactJSONAgent, Toolbox
+    from .agents import Agent, CodeAgent, ReactAgent, ReactCodeAgent, ReactJsonAgent, Toolbox
     from .llm_engine import HfEngine
     from .tools import PipelineTool, Tool, launch_gradio_demo, load_tool
 
