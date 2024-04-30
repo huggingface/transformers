@@ -116,15 +116,15 @@ def parse_commit_message(commit_message: str) -> str:
         return ""
 
     command_search = re.search(r"\[([^\]]*)\](.*)", commit_message)
-    if command_search is not None:
-        command = command_search.groups()[0]
-        command = command.lower().replace("-", " ").replace("_", " ")
-        run_slow = command == "run slow"
-        if run_slow:
-            models = command_search.groups()[1].strip()
-            return models
-        else:
-            return ""
+    if command_search is None:
+        return ""
+
+    command = command_search.groups()[0]
+    command = command.lower().replace("-", " ").replace("_", " ")
+    run_slow = command == "run slow"
+    if run_slow:
+        models = command_search.groups()[1].strip()
+        return models
     else:
         return ""
 
