@@ -23,6 +23,7 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+print(logger.handlers)
 
 
 from ..deprecated._archive_maps import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402

@@ -15,10 +15,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import json
+import logging
 import re
 from typing import Any, Callable, Dict, List, Tuple, Union
 
-from ..utils import logging
+from ..utils import logging as transformers_logging
 from .agent_types import AgentAudio, AgentImage, AgentText
 from .default_tools import BASE_PYTHON_TOOLS, FinalAnswerTool, setup_default_tools
 from .llm_engine import HfEngine, MessageRole
@@ -33,7 +34,32 @@ from .tools import (
 )
 
 
-logger = logging.get_logger(__name__)
+class CustomFormatter(logging.Formatter):
+    grey = "\x1b[38;20m"
+    yellow = "\x1b[33;20m"
+    red = "\x1b[31;20m"
+    bold_red = "\x1b[31;1m"
+    reset = "\x1b[0m"
+    format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s (%(filename)s:%(lineno)d)"
+
+    FORMATS = {
+        logging.DEBUG: grey + format + reset,
+        logging.INFO: bold_red + format + reset,
+        logging.WARNING: yellow + format + reset,
+        logging.ERROR: red + format + reset,
+        logging.CRITICAL: bold_red + format + reset,
+    }
+
+    def format(self, record):
+        log_fmt = self.FORMATS.get(record.levelno)
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
+
+
+logger = transformers_logging.get_logger(__name__)
+ch = logging.StreamHandler()
+ch.setFormatter(CustomFormatter())
+logger.addHandler(ch)
 
 
 def parse_json_blob(json_blob: str) -> Dict[str, str]:
@@ -110,6 +136,12 @@ _tools_are_initialized = False
 
 class Toolbox:
     def __init__(self, tools: List[Tool], add_base_tools: bool = False):
+        logger.debug("debug message")
+        logger.info("info message")
+        logger.warning("warning message")
+        logger.error("error message")
+        logger.critical("critical message")
+
         global _tools_are_initialized
         global HUGGINGFACE_DEFAULT_TOOLS
 
@@ -163,6 +195,12 @@ class Toolbox:
             if not isinstance(tool, Tool):
                 task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id
                 self._tools[name] = load_tool(task_or_repo_id)
+
+    def __repr__(self):
+        toolbox = "Toolbox contents:\n"
+        for tool in self._tools.values():
+            toolbox += f"\t{tool.name}: {tool.description}\n"
+        return toolbox
 
 
 def format_prompt_with_tools(toolbox: Toolbox, prompt_template: str, tool_description_template: str) -> str:
@@ -253,11 +291,11 @@ class Agent:
         self.memory_verbose = memory_verbose
 
         if verbose == 0:
-            logging.set_verbosity_warning()
+            logger.setLevel(logging.WARNING)
         elif verbose == 1:
-            logging.set_verbosity_info()
+            logger.setLevel(logging.INFO)
         elif verbose == 2:
-            logging.set_verbosity_debug()
+            logger.setLevel(logging.DEBUG)
 
     @property
     def toolbox(self) -> Dict[str, Tool]:
@@ -501,7 +539,8 @@ class ReactAgent(Agent):
             else self.default_tool_description_template,
             **kwargs,
         )
-        self._toolbox.add_tool(FinalAnswerTool())
+        if "final_answer" not in self._toolbox.tools:
+            self._toolbox.add_tool(FinalAnswerTool())
 
     @property
     def default_tool_description_template(self) -> str:

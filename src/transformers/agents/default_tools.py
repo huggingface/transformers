@@ -127,7 +127,7 @@ def setup_default_tools(logger):
     main_module = importlib.import_module("transformers")
     tools_module = main_module.agents
 
-    remote_tools = get_remote_tools(logger)
+    # remote_tools = get_remote_tools(logger)
     for task_name, tool_class_name in TASK_MAPPING.items():
         tool_class = getattr(tools_module, tool_class_name)
         default_tools[tool_class.name] = PreTool(
@@ -139,17 +139,17 @@ def setup_default_tools(logger):
             repo_id=None,
         )
 
-    if not is_offline_mode():
-        for task_name in HUGGINGFACE_DEFAULT_TOOLS_FROM_HUB:
-            found = False
-            for tool_name, tool in remote_tools.items():
-                if tool.task == task_name:
-                    default_tools[tool_name] = tool
-                    found = True
-                    break
-
-            if not found:
-                raise ValueError(f"{task_name} is not implemented on the Hub.")
+    # if not is_offline_mode():
+    #     for task_name in HUGGINGFACE_DEFAULT_TOOLS_FROM_HUB:
+    #         found = False
+    #         for tool_name, tool in remote_tools.items():
+    #             if tool.task == task_name:
+    #                 default_tools[tool_name] = tool
+    #                 found = True
+    #                 break
+    #
+    #         if not found:
+    #             raise ValueError(f"{task_name} is not implemented on the Hub.")
 
     return default_tools
 
