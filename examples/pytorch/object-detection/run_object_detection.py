@@ -59,15 +59,15 @@ class ModelOutput:
 
 
 def format_image_annotations_as_coco(
-    image_id: str, category: List[int], area: List[float], bbox: List[Tuple[float]]
+    image_id: str, categories: List[int], areas: List[float], bboxes: List[Tuple[float]]
 ) -> dict:
     """Format one set of image annotations to the COCO format
 
     Args:
         image_id (str): image id. e.g. "0001"
-        category (List[int]): list of categories/class labels corresponding to provided bounding boxes
-        area (List[float]): list of corresponding areas to provided bounding boxes
-        bbox (List[Tuple[float]]): list of bounding boxes provided in COCO format
+        categories (List[int]): list of categories/class labels corresponding to provided bounding boxes
+        areas (List[float]): list of corresponding areas to provided bounding boxes
+        bboxes (List[Tuple[float]]): list of bounding boxes provided in COCO format
             ([center_x, center_y, width, height] in absolute coordinates)
 
     Returns:
@@ -77,13 +77,13 @@ def format_image_annotations_as_coco(
         }
     """
     annotations = []
-    for i in range(len(category)):
+    for category, area, bbox in zip(categories, areas, bboxes):
         formatted_annotation = {
             "image_id": image_id,
-            "category_id": category[i],
+            "category_id": category,
             "iscrowd": 0,
-            "area": area[i],
-            "bbox": list(bbox[i]),
+            "area": area,
+            "bbox": list(bbox),
         }
         annotations.append(formatted_annotation)
 
@@ -182,14 +182,14 @@ def compute_metrics(
     # Collect targets in the required format for metric computation
     for batch in targets:
         # collect image sizes, we will need them for predictions post processing
-        batch_image_sizes = torch.tensor([x["size"] for x in batch])
+        batch_image_sizes = torch.tensor([x["orig_size"] for x in batch])
         image_sizes.append(batch_image_sizes)
         # collect targets in the required format for metric computation
         # boxes were converted to YOLO format needed for model training
         # here we will convert them to Pascal VOC format (x_min, y_min, x_max, y_max)
         for image_target in batch:
             boxes = torch.tensor(image_target["boxes"])
-            boxes = convert_bbox_yolo_to_pascal(boxes, image_target["size"])
+            boxes = convert_bbox_yolo_to_pascal(boxes, image_target["orig_size"])
             labels = torch.tensor(image_target["class_labels"])
             post_processed_targets.append({"boxes": boxes, "labels": labels})
 
@@ -242,8 +242,12 @@ class DataTrainingArguments:
     train_val_split: Optional[float] = field(
         default=0.15, metadata={"help": "Percent to split off of train for validation."}
     )
-    shortest_edge: Optional[int] = field(default=800, metadata={"help": "Processing image maximum shortest edge size"})
-    longest_edge: Optional[int] = field(default=1333, metadata={"help": "Processing image maximum longest edge size"})
+    image_square_size: Optional[int] = field(
+        default=600,
+        metadata={
+            "help": "Image longest size will be resized to this value, then image will be padded to square."
+        },
+    )
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
@@ -357,7 +361,7 @@ def main():
     checkpoint = None
     if training_args.resume_from_checkpoint is not None:
         checkpoint = training_args.resume_from_checkpoint
-    elif os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+    elif os.path.isdir(training_args.output_dir) and not training_args.overwrite_output_dir:
         checkpoint = get_last_checkpoint(training_args.output_dir)
         if checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
@@ -379,7 +383,7 @@ def main():
     # If we don't have a validation split, split off a percentage of train as validation
     data_args.train_val_split = None if "validation" in dataset.keys() else data_args.train_val_split
     if isinstance(data_args.train_val_split, float) and data_args.train_val_split > 0.0:
-        split = dataset["train"].train_test_split(data_args.train_val_split)
+        split = dataset["train"].train_test_split(data_args.train_val_split, seed=training_args.seed)
         dataset["train"] = split["train"]
         dataset["validation"] = split["test"]
 
@@ -412,41 +416,64 @@ def main():
     )
     image_processor = AutoImageProcessor.from_pretrained(
         model_args.image_processor_name or model_args.model_name_or_path,
-        size={"longest_edge": data_args.longest_edge, "shortest_edge": data_args.shortest_edge},
+        # At this moment we recommend using external transform to pad and resize images.
+        # It`s faster and yields much better results for object-detection models.
+        do_pad=False,
+        do_resize=False,
+        # We will save image size parameter in config just for reference
+        size={"longest_edge": data_args.image_square_size},
         **common_pretrained_args,
     )
 
     # ------------------------------------------------------------------------------------------------
     # Define image augmentations and dataset transforms
     # ------------------------------------------------------------------------------------------------
-
-    train_augmentation_transform = A.Compose(
+    max_size = data_args.image_square_size
+    basic_transforms = [
+        A.LongestMaxSize(max_size=max_size),
+        A.PadIfNeeded(max_size, max_size, border_mode=0, value=(128, 128, 128), position="top_left"),
+    ]
+    train_augment_and_transform = A.Compose(
         [
+            A.Compose(
+                [
+                    A.SmallestMaxSize(max_size=max_size, p=1.0),
+                    A.RandomSizedBBoxSafeCrop(height=max_size, width=max_size, p=1.0),
+                ],
+                p=0.2,
+            ),
+            A.OneOf(
+                [
+                    A.Blur(blur_limit=7, p=0.5),
+                    A.MotionBlur(blur_limit=7, p=0.5),
+                    A.Defocus(radius=(1, 5), alias_blur=(0.1, 0.25), p=0.1),
+                ],
+                p=0.1,
+            ),
+            A.Perspective(p=0.1),
             A.HorizontalFlip(p=0.5),
             A.RandomBrightnessContrast(p=0.5),
             A.HueSaturationValue(p=0.1),
+            *basic_transforms,
         ],
         bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True, min_area=25),
     )
-    valid_augmentation_transform = A.Compose(
-        [
-            # empty transform, but you can add something here, e.g. resizing/padding
-            A.NoOp(),
-        ],
+    validation_transform = A.Compose(
+        basic_transforms,
         bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True),
     )
 
     # Make transform functions for batch and apply for dataset splits
     train_transform_batch = partial(
-        augment_and_transform_batch, transform=train_augmentation_transform, image_processor=image_processor
+        augment_and_transform_batch, transform=train_augment_and_transform, image_processor=image_processor
     )
-    valid_transform_batch = partial(
-        augment_and_transform_batch, transform=valid_augmentation_transform, image_processor=image_processor
+    validation_transform_batch = partial(
+        augment_and_transform_batch, transform=validation_transform, image_processor=image_processor
     )
 
     dataset["train"] = dataset["train"].with_transform(train_transform_batch)
-    dataset["validation"] = dataset["validation"].with_transform(valid_transform_batch)
-    dataset["test"] = dataset["test"].with_transform(valid_transform_batch)
+    dataset["validation"] = dataset["validation"].with_transform(validation_transform_batch)
+    dataset["test"] = dataset["test"].with_transform(validation_transform_batch)
 
     # ------------------------------------------------------------------------------------------------
     # Model training and evaluation with Trainer API

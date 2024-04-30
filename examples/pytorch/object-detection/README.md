@@ -41,8 +41,7 @@ python run_object_detection.py \
     --do_eval true \
     --output_dir detr-finetuned-cppe-5-10k-steps \
     --num_train_epochs 100 \
-    --shortest_edge 600 \
-    --longest_edge 600 \
+    --image_square_size 600 \
     --fp16 true \
     --learning_rate 5e-5 \
     --weight_decay 1e-4 \
