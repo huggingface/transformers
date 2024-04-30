@@ -179,6 +179,7 @@ from . import (
     perceiver,
     persimmon,
     phi,
+    phi3,
     phobert,
     pix2struct,
     plbart,

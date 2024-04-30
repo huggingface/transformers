@@ -44,6 +44,7 @@ class Cache:
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        # TODO: deprecate this function in favor of `cache_position`
         raise NotImplementedError("Make sure to implement `get_seq_length` in a subclass.")
 
     def get_max_length(self) -> Optional[int]:
@@ -60,6 +61,14 @@ class Cache:
         if max_length is not None and previous_seq_length + new_seq_length > max_length:
             return max_length - new_seq_length
         return previous_seq_length
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        for layer_idx in range(len(self.key_cache)):
+            device = self.key_cache[layer_idx].device
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
+            device = self.value_cache[layer_idx].device
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
     @property
     def seen_tokens(self):
@@ -150,6 +159,7 @@ class DynamicCache(Cache):
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        # TODO: deprecate this function in favor of `cache_position`
         if len(self.key_cache) <= layer_idx:
             return 0
         return self.key_cache[layer_idx].shape[-2]
@@ -157,14 +167,6 @@ class DynamicCache(Cache):
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
         return None
-
-    def reorder_cache(self, beam_idx: torch.LongTensor):
-        """Reorders the cache for beam search, given the selected beam indices."""
-        for layer_idx in range(len(self.key_cache)):
-            device = self.key_cache[layer_idx].device
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-            device = self.value_cache[layer_idx].device
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
     def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
         """Converts the `DynamicCache` instance into the its equivalent in the legacy cache format."""
@@ -244,6 +246,7 @@ class SinkCache(Cache):
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        # TODO: deprecate this function in favor of `cache_position`
         # Workaround to make 'key_states.shape[-2] + past_key_value.get_seq_length(self.layer_idx)' <= window_length
         if len(self.key_cache) <= layer_idx:
             return 0
@@ -332,14 +335,6 @@ class SinkCache(Cache):
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
-    def reorder_cache(self, beam_idx: torch.LongTensor):
-        """Reorders the cache for beam search, given the selected beam indices."""
-        for layer_idx in range(len(self.key_cache)):
-            device = self.key_cache[layer_idx].device
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-            device = self.value_cache[layer_idx].device
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
-
 
 class StaticCache(Cache):
     """
@@ -347,8 +342,7 @@ class StaticCache(Cache):
 
     Parameters:
         config (`PretrainedConfig):
-            The configuration file defining the `max_position_embeddings`, `hidden_size` and `num_attention_heads`
-            required to initialize the static cache.
+            The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
             The maximum batch size with which the model will be used.
         max_cache_len (`int`):
@@ -373,9 +367,18 @@ class StaticCache(Cache):
             config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
         )
 
+        self.key_cache: List[torch.Tensor] = []
+        self.value_cache: List[torch.Tensor] = []
         cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
-        self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-        self.value_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+        for _ in range(config.num_hidden_layers):
+            # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
+            # breaks when updating the cache.
+            new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+            new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+            torch._dynamo.mark_static_address(new_layer_key_cache)
+            torch._dynamo.mark_static_address(new_layer_value_cache)
+            self.key_cache.append(new_layer_key_cache)
+            self.value_cache.append(new_layer_value_cache)
 
     def update(
         self,
@@ -394,42 +397,37 @@ class StaticCache(Cache):
             value_states (`torch.Tensor`):
                 The new value states to cache.
             layer_idx (`int`):
-                The index of the layer to cache the states for. Kept for backward compatibility
+                The index of the layer to cache the states for.
             cache_kwargs (`Dict[str, Any]`, `optional`):
-                Additional arguments for the cache subclass. The `StaticCache` just needs the `q_len`
-                to know how much of the cache it should overwrite.
+                Additional arguments for the cache subclass. The `StaticCache` needs the `cache_position` input
+                to know how where to write in the cache.
 
         Return:
             A tuple containing the updated key and value states.
         """
-        new_cache_positions = cache_kwargs.get("cache_position")
-        k_out = self.key_cache
-        v_out = self.value_cache
+        cache_position = cache_kwargs.get("cache_position")
+        k_out = self.key_cache[layer_idx]
+        v_out = self.value_cache[layer_idx]
 
-        k_out[:, :, new_cache_positions] = key_states
-        v_out[:, :, new_cache_positions] = value_states
+        k_out[:, :, cache_position] = key_states
+        v_out[:, :, cache_position] = value_states
 
         return k_out, v_out
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
-        """Returns the sequence length of the cached states that were seen by the model. `layer_idx` kept for BC"""
+        """Returns the sequence length of the cached states that were seen by the model."""
         # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
         # limit the check to the first batch member and head dimension.
-        # TODO: This is error prone, a filled cache may be `0.0`. Let's use a stateless integer instead, after
-        # https://github.com/pytorch/pytorch/issues/120248 is fixed
-        return (self.key_cache[0, 0].any(dim=-1)).sum()
+        # TODO: deprecate this function in favor of `cache_position`
+        return (self.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
 
     def get_max_length(self) -> Optional[int]:
-        """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
+        """Returns the maximum sequence length of the cached states."""
         return self.max_cache_len
 
-    def reorder_cache(self, beam_idx: torch.LongTensor):
-        """Reorders the cache for beam search, given the selected beam indices."""
-        device = self.key_cache.device
-        self.key_cache = self.key_cache.index_select(0, beam_idx.to(device))
-        device = self.value_cache.device
-        self.value_cache = self.value_cache.index_select(0, beam_idx.to(device))
-
-    def to_legacy_cache(self):
-        """Dummy function for BC. We have to keep it because otherwise the call in the forward of models will break it"""
-        return None
+    def reset(self):
+        """Resets the cache values while preserving the objects"""
+        for layer_idx in range(len(self.key_cache)):
+            # In-place ops prevent breaking the static address
+            self.key_cache[layer_idx].zero_()
+            self.value_cache[layer_idx].zero_()
