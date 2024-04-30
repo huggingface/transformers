@@ -81,15 +81,6 @@ class ZoeDepthConfig(PretrainedConfig):
             Whether to add a projection layer before the depth estimation head.
         bottleneck_features (`int`, *optional*, defaults to 256):
             The number of features in the bottleneck layer.
-        n_bins (`int`, *optional*, defaults to 64):
-            The number of bins to use in the metric depth estimation head.
-            Only used in case `use_multiple_heads` is `False`.
-        min_depth (`float`, *optional*, defaults to 0.001):
-            The minimum depth value in the metric depth estimation head.
-            Only used in case `use_multiple_heads` is `False`.
-        max_depth (`float`, *optional*, defaults to 10):
-            The maximum depth value in the metric depth estimation head.
-            Only used in case `use_multiple_heads` is `False`.
         num_attractors (`List[int], *optional*, defaults to `[16, 8, 4, 1]`):
             The number of attractors to use in each stage.
         bin_embedding_dim (`int`, *optional*, defaults to 128):
@@ -107,10 +98,14 @@ class ZoeDepthConfig(PretrainedConfig):
         bin_centers_type (`str`, *optional*, defaults to `"softplus"`):
             Activation type used for bin centers. Can be "normed" or "softplus". For "normed" bin centers, linear normalization trick
             is applied. This results in bounded bin centers. For "softplus", softplus activation is used and thus are unbounded.
-        use_multiple_heads (`bool`, *optional*, defaults to `False`):
-            Whether to use multiple heads in the depth estimation head.
-        bin_configurations (`List[dict]`, *optional*):
-            Configuration for the bin heads. Only used in case `use_multiple_heads` is `True`.
+        bin_configurations (`List[dict]`, *optional*, defaults to `[{'n_bins': 64, 'min_depth': 0.001, 'max_depth': 10.0}]`):
+            Configuration for the bin heads.
+            Each configuration should consist of the following keys:
+            - `n_bins` (`int`): The number of bins to use.
+            - `min_depth` (`float`): The minimum depth value to consider.
+            - `max_depth` (`float`): The maximum depth value to consider.
+            In case only a single configuration is passed, the model will use a single head with the specified configuration.
+            In case multiple configurations are passed, the model will use multiple heads with the specified configurations.
 
     Example:
 
@@ -147,9 +142,6 @@ class ZoeDepthConfig(PretrainedConfig):
         use_bias_in_fusion_residual=None,
         add_projection=False,
         bottleneck_features=256,
-        n_bins=64,
-        min_depth=0.001,
-        max_depth=10,
         num_attractors=[16, 8, 4, 1],
         bin_embedding_dim=128,
         attractor_alpha=1000,
@@ -158,17 +150,13 @@ class ZoeDepthConfig(PretrainedConfig):
         min_temp=0.0212,
         max_temp=50.0,
         bin_centers_type="softplus",
-        use_multiple_heads=False,
-        bin_configurations=None,
+        bin_configurations=[{"n_bins": 64, "min_depth": 0.001, "max_depth": 10.0}],
         **kwargs,
     ):
         super().__init__(**kwargs)
 
         if readout_type not in ["ignore", "add", "project"]:
             raise ValueError("Readout_type must be one of ['ignore', 'add', 'project']")
-
-        if use_multiple_heads and bin_configurations is None:
-            raise ValueError("bin_configurations must be specified when use_multiple_heads is True.")
 
         if attractor_kind not in ["mean", "sum"]:
             raise ValueError("Attractor_kind must be one of ['mean', 'sum']")
@@ -199,14 +187,6 @@ class ZoeDepthConfig(PretrainedConfig):
         if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
             raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
 
-        if use_multiple_heads and bin_configurations is None:
-            raise ValueError("bin_configurations must be specified when use_multiple_heads is True.")
-
-        if use_multiple_heads:
-            n_bins = None
-            min_depth = None
-            max_depth = None
-
         self.backbone_config = backbone_config
         self.backbone = backbone
         self.hidden_act = hidden_act
@@ -223,9 +203,6 @@ class ZoeDepthConfig(PretrainedConfig):
         self.add_projection = add_projection
 
         self.bottleneck_features = bottleneck_features
-        self.n_bins = n_bins
-        self.min_depth = min_depth
-        self.max_depth = max_depth
         self.num_attractors = num_attractors
         self.bin_embedding_dim = bin_embedding_dim
         self.attractor_alpha = attractor_alpha
@@ -234,5 +211,4 @@ class ZoeDepthConfig(PretrainedConfig):
         self.min_temp = min_temp
         self.max_temp = max_temp
         self.bin_centers_type = bin_centers_type
-        self.use_multiple_heads = use_multiple_heads
         self.bin_configurations = bin_configurations

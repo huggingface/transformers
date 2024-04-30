@@ -1057,10 +1057,11 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        n_bins = config.n_bins
+        bin_configuration = config.bin_configurations[0]
+        n_bins = bin_configuration["n_bins"]
+        min_depth = bin_configuration["min_depth"]
+        max_depth = bin_configuration["max_depth"]
         bin_embedding_dim = config.bin_embedding_dim
-        min_depth = config.min_depth
-        max_depth = config.max_depth
         n_attractors = config.num_attractors
         bin_centers_type = config.bin_centers_type
 
@@ -1227,7 +1228,7 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
 
         self.metric_head = (
             ZoeDepthMultipleMetricDepthEstimationHeads(config)
-            if config.use_multiple_heads
+            if len(config.bin_configurations) > 1
             else ZoeDepthMetricDepthEstimationHead(config)
         )
 

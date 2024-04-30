@@ -50,16 +50,19 @@ def get_zoedepth_config(model_name):
 
     neck_hidden_sizes = [256, 512, 1024, 1024]
     bin_centers_type = "softplus" if model_name in ["ZoeD_N", "ZoeD_NK"] else "normed"
-    use_multiple_heads = model_name == "ZoeD_NK"
-    bin_configurations = [
-        {"name": "nyu", "n_bins": 64, "min_depth": 1e-3, "max_depth": 10.0},
-        {"name": "kitti", "n_bins": 64, "min_depth": 1e-3, "max_depth": 80.0},
-    ]
+    if model_name == "ZoeD_NK":
+        bin_configurations = [
+            {"name": "nyu", "n_bins": 64, "min_depth": 1e-3, "max_depth": 10.0},
+            {"name": "kitti", "n_bins": 64, "min_depth": 1e-3, "max_depth": 80.0},
+        ]
+    elif model_name in ["ZoeD_N", "ZoeD_K"]:
+        bin_configurations = [
+            {"name": "nyu", "n_bins": 64, "min_depth": 1e-3, "max_depth": 10.0},
+        ]
     config = ZoeDepthConfig(
         backbone_config=backbone_config,
         neck_hidden_sizes=neck_hidden_sizes,
         bin_centers_type=bin_centers_type,
-        use_multiple_heads=use_multiple_heads,
         bin_configurations=bin_configurations,
     )
 
