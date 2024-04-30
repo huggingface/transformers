@@ -734,7 +734,7 @@ class JetMoeFlashAttention2(JetMoeAttention):
         """
         output_attentions = False
 
-        bsz, q_len, _ = hidden_states.size()  # batch size, sequence length, embedding dimensionality (hidden_size)
+        bsz, q_len, hidden_size = hidden_states.size()  # batch size, sequence length, embedding dimensionality (hidden_size)
 
         # calculate query, key, values
         query_states, router_logits = self.experts.map(hidden_states)
@@ -798,7 +798,7 @@ class JetMoeFlashAttention2(JetMoeAttention):
 
         # output projection
         attn_output = self.experts.reduce(attn_output.reshape(bsz, q_len, self.top_k, self.kv_projection_size))
-        attn_output = attn_output.view(bsz, q_len, C)  # re-assemble all head outputs side by side
+        attn_output = attn_output.view(bsz, q_len, hidden_size)  # re-assemble all head outputs side by side
 
         if not output_attentions:
             attn_weights = None
