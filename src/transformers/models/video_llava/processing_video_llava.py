@@ -107,15 +107,18 @@ class VideoLlavaProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+        data = {}
         if images is not None or videos is not None:
-            image_kwargs = self.image_processor(images=images, videos=videos, return_tensors=return_tensors)
-        else:
-            image_kwargs = {}
-        text_inputs = self.tokenizer(
-            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
-        )
+            encoded_images = self.image_processor(images=images, videos=videos, return_tensors=return_tensors)
+            data.update(encoded_images)
 
-        return BatchFeature(data={**text_inputs, **image_kwargs})
+        if text is not None: 
+            text_inputs = self.tokenizer(
+                text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+            )
+            data.update(text_inputs)
+
+        return BatchFeature(data=data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
