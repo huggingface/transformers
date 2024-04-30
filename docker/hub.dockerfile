@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 USER root
 RUN apt-get update && apt-get install -y time git pkg-config make
@@ -7,8 +7,10 @@ RUN pip install uv
 RUN uv venv
 RUN uv pip install --no-cache-dir -U pip setuptools GitPython
 RUN uv pip install --no-cache --upgrade 'torch' --index-url https://download.pytorch.org/whl/cpu
-RUN uv pip install --no-cache-dir tensorflow-cpu tf-keras accelerate
+RUN python3 -m pip install --no-cache-dir accelerate[testing,test_trackers] --extra-index-url https://download.pytorch.org/whl/cpu
+RUN uv pip install --no-cache-dir tensorflow-cpu tf-keras
 RUN uv pip install --no-cache-dir "transformers[flax,quality,vision,testing]"
+RUN git lfs install
 
 # Cleanup to reduce the size of the docker
 RUN pip cache remove "nvidia-*" || true

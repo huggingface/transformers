@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 USER root
 RUN apt-get update && apt-get install -y libsndfile1-dev espeak-ng time git
@@ -7,7 +7,7 @@ ENV VIRTUAL_ENV=/usr/local
 RUN pip --no-cache-dir install uv
 RUN uv venv
 RUN uv pip install --no-cache-dir -U pip setuptools
-RUN uv pip install --no-cache-dir "fsspec>=2023.5.0,<2023.10.0" seqeval
+RUN uv pip install --no-cache-dir "fsspec>=2023.5.0,<2023.10.0" seqeval 
 RUN uv pip install --no-cache-dir "transformers[flax,testing,sentencepiece,vision]"
 
 
