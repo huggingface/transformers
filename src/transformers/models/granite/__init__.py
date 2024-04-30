@@ -20,7 +20,9 @@ from ...utils import (
 )
 
 
-_import_structure = {}
+_import_structure = {
+    "configuration_granite": ["GraniteConfig"],
+}
 
 try:
     if not is_torch_available():
