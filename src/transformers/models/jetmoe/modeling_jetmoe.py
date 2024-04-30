@@ -220,7 +220,7 @@ class JetMoeTopKGating(nn.Module):
 
         return index_sorted_experts, batch_index, batch_gates, expert_size
 
-    def forward(self, x, return_topo=False):
+    def forward(self, x):
         """
         Compute the top-k gating for the input.
 
