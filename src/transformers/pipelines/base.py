@@ -873,7 +873,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             self.device = device if device is not None else -1
 
         self.binary_output = binary_output
-        # We shouldn't call `model.to()` for models loaded with accelerate
+        # We shouldn't call `model.to()` for models loaded with accelerate as well as the case that model is already on device
         if (
             self.framework == "pt"
             and self.model.device != self.device
