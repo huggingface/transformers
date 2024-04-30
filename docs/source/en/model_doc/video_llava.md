@@ -48,7 +48,7 @@ Tips:
 
 - Note the model has not been explicitly trained to process multiple images/videos in the same prompt, although this is technically possible, you may experience inaccurate results.
 
-- For better results, we recommend users to prompt the model with the correct prompt format:
+- For better results, we recommend users prompt the model with the correct prompt format:
 
 
 ```bash
