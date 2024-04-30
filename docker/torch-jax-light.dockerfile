@@ -1,8 +1,7 @@
 FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 USER root
-RUN apt-get update && apt-get install -y libsndfile1-dev espeak-ng time git
-RUN apt-get install -y g++ cmake
+RUN apt-get update && apt-get install -y libsndfile1-dev espeak-ng time git g++ cmake
 ENV VIRTUAL_ENV=/usr/local
 RUN pip --no-cache-dir install uv
 RUN uv venv
