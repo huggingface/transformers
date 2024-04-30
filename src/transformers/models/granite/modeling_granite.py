@@ -19,7 +19,6 @@ from ...utils import (
     add_start_docstrings,
     is_flash_attn_2_available,
     logging,
-    replace_return_docstrings,
 )
 from .configuration_granite import GraniteConfig
 
