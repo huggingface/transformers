@@ -290,7 +290,7 @@ class JetMoeMoE(nn.Module):
         """
         bsz, length, emb_size = layer_input.size()
         layer_input = layer_input.reshape(-1, emb_size)
-        _, batch_index, batch_gates, expert_size, router_logits = self.router(layer_input, return_topo=True)
+        _, batch_index, batch_gates, expert_size, router_logits = self.router(layer_input)
 
         expert_inputs = layer_input[batch_index]
         hidden_states = self.input_linear(expert_inputs, expert_size)
